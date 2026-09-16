@@ -1,0 +1,102 @@
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+import tempfile
+import unittest
+
+from storyloop.approvals import approve_change
+from storyloop.baseline import bootstrap_project
+from storyloop.changes import create_change
+from storyloop.project_loop import LoopServices, run_change
+from tests.support import product
+from tests.test_baseline_behavior import git, repository
+
+
+NOW = datetime(2026, 9, 16, tzinfo=timezone.utc)
+
+
+def smoke_payload(change_id: str) -> dict:
+    source = (
+        "from pathlib import Path\n"
+        "path = Path('modules/orders/service.py')\n"
+        "raise SystemExit(0 if path.is_file() and 'VALUE = 1' in path.read_text() else 1)\n"
+    )
+    return {
+        "files": [{"path": "flow.py", "content": source}],
+        "manifest": {"version": 1, "tests": [{
+            "id": "SMOKE-1", "criteria": ["AC-1"],
+            "command": ["{python}", f"acceptance/smoke/{change_id}/flow.py"],
+            "timeout_seconds": 10,
+        }]},
+    }
+
+
+class ProjectLoopTests(unittest.TestCase):
+    def _approved(self, add_core: bool = False):
+        temporary = tempfile.TemporaryDirectory()
+        root = Path(temporary.name)
+        repository(root)
+        if add_core:
+            (root / "core.py").write_text("STABLE = True\n", encoding="utf-8")
+            git(root, "add", "core.py")
+            git(root, "commit", "-q", "-m", "core")
+        bootstrap_project(root, {"test_commands": []})
+        state = create_change(root, "orders", product(), now=lambda: NOW)
+        approve_change(root, state["change_id"], now=lambda: NOW)
+        return temporary, root, state["change_id"]
+
+    def test_external_loop_proves_red_retries_then_merges_locally(self):
+        temporary, root, change_id = self._approved()
+        attempts = []
+
+        def implement(project, context):
+            attempts.append(context["attempt"])
+            if len(attempts) == 2:
+                target = project / "modules/orders/service.py"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("VALUE = 1\n", encoding="utf-8")
+            return {"summary": "attempted", "questions": []}
+
+        services = LoopServices(
+            generate_smoke=lambda project, state: smoke_payload(change_id),
+            implement=implement,
+            review=lambda project, context: {"verdict": "pass", "summary": "ok", "findings": [], "questions": []},
+        )
+        try:
+            source = git(root, "branch", "--show-current")
+            result = run_change(root, change_id, services)
+            self.assertEqual(result["status"], "PASSED")
+            self.assertEqual(attempts, [1, 2])
+            self.assertEqual(git(root, "branch", "--show-current"), source)
+            parents = git(
+                root, "rev-list", "--parents", "-n", "1", result["merge_commit"]
+            ).split()
+            self.assertEqual(len(parents), 3)
+            self.assertEqual(git(root, "rev-parse", "HEAD"), result["integration_commit"])
+            self.assertTrue((root / "modules/orders/service.py").is_file())
+        finally:
+            temporary.cleanup()
+
+    def test_base_change_pauses_on_feature_branch_and_creates_proposal(self):
+        temporary, root, change_id = self._approved(add_core=True)
+
+        def implement(project, context):
+            (project / "core.py").write_text("STABLE = False\n", encoding="utf-8")
+            return {"summary": "needs base", "questions": []}
+
+        services = LoopServices(
+            generate_smoke=lambda project, state: smoke_payload(change_id),
+            implement=implement,
+            review=lambda project, context: {"verdict": "pass", "summary": "ok", "findings": [], "questions": []},
+        )
+        try:
+            result = run_change(root, change_id, services)
+            self.assertEqual(result["status"], "BASE_CHANGE_REQUIRED")
+            self.assertTrue(git(root, "branch", "--show-current").startswith("feature/"))
+            self.assertTrue(Path(result["base_proposal"]).is_file())
+        finally:
+            temporary.cleanup()
+
+
+if __name__ == "__main__":
+    unittest.main()

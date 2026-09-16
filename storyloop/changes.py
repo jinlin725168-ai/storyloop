@@ -1,0 +1,171 @@
+"""OpenSpec-shaped product change drafts and revisions."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from datetime import datetime, timezone
+import hashlib
+import json
+from pathlib import Path
+from typing import Callable
+
+from .baseline import load_baseline
+from .models import identifier, require, text, validate_product
+from .storage import load_json, write_json, write_text_atomic
+
+Clock = Callable[[], datetime]
+
+
+def create_change(
+    project: Path, idea: str, product: dict, now: Clock | None = None,
+) -> dict:
+    """Create a local ignored draft from one short product idea."""
+    project = Path(project).resolve()
+    load_baseline(project)
+    idea = text(idea, "product idea")
+    canonical = _validated_copy(product)
+    moment = (now or _utc_now)()
+    change_id = _next_id(project, moment)
+    timestamp = _timestamp(moment)
+    state = {
+        "version": 1,
+        "change_id": change_id,
+        "status": "DRAFT",
+        "revision": 1,
+        "idea": idea,
+        "product": canonical,
+        "created_at": timestamp,
+        "updated_at": timestamp,
+        "history": [],
+        "approval": None,
+    }
+    _save(project, state)
+    return deepcopy(state)
+
+
+def load_change(project: Path, change_id: str) -> dict:
+    """Load a validated local product change state."""
+    change_id = identifier(change_id, "change id")
+    value = load_json(_state_path(Path(project).resolve(), change_id))
+    required = {
+        "version", "change_id", "status", "revision", "idea", "product",
+        "created_at", "updated_at", "history", "approval",
+    }
+    from .models import require
+    require(set(value) == required and value["version"] == 1, "Invalid change state")
+    require(value["change_id"] == change_id, "Change state identity mismatch")
+    require(value["status"] in {"DRAFT", "APPROVED", "RUNNING", "PASSED", "PAUSED", "FAILED"},
+            "Invalid change status")
+    require(type(value["revision"]) is int and value["revision"] > 0, "Invalid change revision")
+    text(value["idea"], "product idea")
+    validate_product(value["product"])
+    require(isinstance(value["history"], list), "Invalid change history")
+    return value
+
+
+def revise_change(
+    project: Path, change_id: str, product: dict, message: str = "",
+    now: Clock | None = None,
+) -> dict:
+    """Replace a draft only after validating the complete next product contract."""
+    project = Path(project).resolve()
+    current = load_change(project, change_id)
+    run_path = project / ".storyloop" / "state" / "runs" / f"{change_id}.json"
+    require(not run_path.exists(),
+            "A change cannot be revised after execution starts; create a new product change")
+    canonical = _validated_copy(product)
+    timestamp = _timestamp((now or _utc_now)())
+    prior = {
+        "revision": current["revision"],
+        "digest": contract_digest(current["product"]),
+        "message": message.strip(),
+        "replaced_at": timestamp,
+    }
+    updated = {
+        **current,
+        "status": "DRAFT",
+        "revision": current["revision"] + 1,
+        "product": canonical,
+        "updated_at": timestamp,
+        "history": [*current["history"], prior],
+        "approval": None,
+    }
+    _save(project, updated)
+    return deepcopy(updated)
+
+
+def contract_digest(product: dict) -> str:
+    """Fingerprint only the user-facing product contract."""
+    canonical = json.dumps(product, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def draft_directory(project: Path, change_id: str) -> Path:
+    return Path(project).resolve() / ".storyloop" / "drafts" / identifier(change_id, "change id")
+
+
+def _save(project: Path, state: dict) -> None:
+    write_json(_state_path(project, state["change_id"]), state, max_bytes=2_000_000)
+    write_change_preview(project, state)
+
+
+def write_change_preview(project: Path, state: dict) -> None:
+    """Regenerate every preview byte from the canonical product state."""
+    root = draft_directory(project, state["change_id"])
+    product = state["product"]
+    stories = []
+    criteria = []
+    links = []
+    for story in product["stories"]:
+        stories.append({key: deepcopy(value) for key, value in story.items() if key != "acceptance"})
+        for criterion in story["acceptance"]:
+            criteria.append({"story_id": story["id"], **deepcopy(criterion)})
+            links.append({"criterion_id": criterion["id"], "story_id": story["id"], "tests": []})
+    write_json(root / "stories.json", {"version": 1, "stories": stories}, max_bytes=1_000_000)
+    write_json(root / "acceptance.json", {"version": 1, "criteria": criteria}, max_bytes=1_000_000)
+    write_json(root / "traceability.json", {"version": 1, "criteria": links}, max_bytes=1_000_000)
+    non_goals = "\n".join(f"- {item}" for item in product["non_goals"]) or "- 无"
+    questions = "\n".join(f"- {item['id']}: {item['text']}" for item in product["questions"]) or "- 无"
+    proposal = (
+        f"# {state['change_id']}\n\n"
+        f"## 产品目标\n\n{product['goal']}\n\n"
+        f"## 非目标\n\n{non_goals}\n\n"
+        f"## 待决问题\n\n{questions}\n"
+    )
+    _write_text(root / "proposal.md", proposal)
+
+
+def _write_text(path: Path, content: str) -> None:
+    write_text_atomic(path, content)
+
+
+def _next_id(project: Path, moment: datetime) -> str:
+    prefix = "FEAT-" + moment.astimezone(timezone.utc).strftime("%Y%m%d") + "-"
+    root = project / ".storyloop" / "state" / "changes"
+    existing = {path.stem for path in root.glob(prefix + "*.json")} if root.is_dir() else set()
+    for number in range(1, 1000):
+        candidate = prefix + f"{number:03d}"
+        if candidate not in existing:
+            return candidate
+    from .models import StoryLoopError
+    raise StoryLoopError("Daily change ID capacity exhausted")
+
+
+def _state_path(project: Path, change_id: str) -> Path:
+    return project / ".storyloop" / "state" / "changes" / f"{change_id}.json"
+
+
+def _validated_copy(product: dict) -> dict:
+    value = deepcopy(product)
+    validate_product(value)
+    return value
+
+
+def _timestamp(moment: datetime) -> str:
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)

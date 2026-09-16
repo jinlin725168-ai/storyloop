@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools==84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "storyloop-engine"
+version = "0.1.0"
+description = "Product and QA driven engineering loops with durable acceptance evidence"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+storyloop = "storyloop.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["storyloop*"]

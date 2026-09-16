@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "agent": {
+    "default": "agent-a",
+    "adapters": {
+      "agent-a": {"kind": "command", "command": ["python", "agent.py", "agent-a"]},
+      "agent-b": {"kind": "command", "command": ["python", "agent.py", "agent-b"]}
+    },
+    "timeout_seconds": 30,
+    "environment_allowlist": ["PATH", "SYSTEMROOT"]
+  },
+  "budgets": {
+    "attempts_per_stage": 3,
+    "total_seconds": 60,
+    "repeated_failure_limit": 2,
+    "backoff_seconds": [0, 0]
+  },
+  "stages": [
+    {
+      "id": "demo",
+      "depends_on": [],
+      "specs": ["openspec/changes/demo/proposal.md"],
+      "write_paths": ["service/business/**"],
+      "protected_paths": ["acceptance/**", "openspec/**", "governance/**", "AGENTS.md", "CLAUDE.md"],
+      "judges": [
+        {"id": "red", "phase": "red", "command": ["python", "judge.py"]},
+        {"id": "core", "phase": "l1", "command": ["python", "judge.py"]},
+        {"id": "full", "phase": "l2", "command": ["python", "judge.py"]},
+        {"id": "release", "phase": "final", "command": ["python", "judge.py"]}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+"""Safe local Git lifecycle for approved product changes."""
+
+from __future__ import annotations
+
+from pathlib import Path
+import re
+
+from .baseline import _git
+from .models import StoryLoopError, identifier, require, text
+from .path_security import repository_relative
+
+FEATURE = re.compile(r"feature/[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
+BRANCH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,199}")
+
+
+def start_feature(project: Path, change_id: str) -> dict:
+    """Create a local feature branch from the current clean named branch."""
+    project = Path(project).resolve()
+    change_id = identifier(change_id, "change id")
+    _require_clean(project)
+    source = _git(project, "branch", "--show-current").strip()
+    require(_valid_branch(source), "Git repository must be on a safe named branch")
+    branch = f"feature/{change_id}"
+    require(FEATURE.fullmatch(branch) is not None, "Invalid feature branch")
+    existing = _git(project, "branch", "--list", branch).strip()
+    require(not existing, "Feature branch already exists; resume it explicitly")
+    _git(project, "switch", "-c", branch)
+    return {"status": "STARTED", "branch": branch, "source_branch": source,
+            "source_head": _git(project, "rev-parse", "HEAD").strip()}
+
+
+def commit_paths(project: Path, paths: list[str], message: str) -> dict:
+    """Stage only explicit safe paths and create a hook-free local commit."""
+    project = Path(project).resolve()
+    require(isinstance(paths, list) and bool(paths), "Commit needs explicit paths")
+    normalized = [_safe_path(item) for item in paths]
+    require(len(set(normalized)) == len(normalized), "Duplicate commit path")
+    message = text(message, "commit message")
+    _git(project, "add", "--", *normalized)
+    status = _git(project, "status", "--porcelain=v1", "--untracked-files=all")
+    require(bool(status.strip()), "Commit has no changes")
+    try:
+        _git(project, "-c", "user.name=StoryLoop", "-c",
+             "user.email=storyloop@localhost", "commit", "--no-verify", "-m", message)
+    except StoryLoopError as exc:
+        raise StoryLoopError("Local Git commit failed", code="GIT_BLOCKED") from exc
+    return {"status": "COMMITTED", "commit": _git(project, "rev-parse", "HEAD").strip(),
+            "branch": _git(project, "branch", "--show-current").strip()}
+
+
+def finish_feature(project: Path, feature_branch: str, target_branch: str) -> dict:
+    """Switch to the original branch and perform a local no-fast-forward merge."""
+    project = Path(project).resolve()
+    require(isinstance(feature_branch, str) and FEATURE.fullmatch(feature_branch) is not None,
+            "Invalid feature branch")
+    require(_valid_branch(target_branch), "Invalid target branch")
+    _require_clean(project)
+    current = _git(project, "branch", "--show-current").strip()
+    require(current == feature_branch, "Current branch is not the expected feature branch")
+    _git(project, "show-ref", "--verify", f"refs/heads/{target_branch}")
+    _git(project, "switch", target_branch)
+    try:
+        _git(project, "-c", "user.name=StoryLoop", "-c",
+             "user.email=storyloop@localhost", "merge", "--no-ff", "--no-edit",
+             "--no-verify", feature_branch)
+    except StoryLoopError as exc:
+        raise StoryLoopError("Git merge conflict or failure; feature branch was preserved",
+                             code="GIT_CONFLICT") from exc
+    return {"status": "MERGED", "source": feature_branch, "target": target_branch,
+            "merge_commit": _git(project, "rev-parse", "HEAD").strip()}
+
+
+def current_branch(project: Path) -> str:
+    return _git(Path(project).resolve(), "branch", "--show-current").strip()
+
+
+def _require_clean(project: Path) -> None:
+    status = _git(project, "status", "--porcelain=v1", "--untracked-files=all")
+    require(not status.strip(), "Git worktree must be clean")
+
+
+def _safe_path(value: object) -> str:
+    normalized = repository_relative(value, "commit path")
+    require(normalized.split("/", 1)[0] != ".git", "Unsafe commit path")
+    return normalized
+
+
+def _valid_branch(value: object) -> bool:
+    return (isinstance(value, str) and BRANCH.fullmatch(value) is not None
+            and ".." not in value and "//" not in value and not value.endswith("/"))
