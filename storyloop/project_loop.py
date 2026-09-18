@@ -451,7 +451,8 @@ def _default_services() -> LoopServices:
     from .project_agents import invoke_project_agent
     return LoopServices(
         generate_smoke=lambda project, state: invoke_project_agent(
-            project, "smoke", {"change": state}),
+            project, "smoke",
+            {"change": state, "suite_root": f"acceptance/smoke/{state['change_id']}"}),
         implement=lambda project, context: invoke_project_agent(project, "implement", context),
         review=lambda project, context: invoke_project_agent(project, "review", context),
     )

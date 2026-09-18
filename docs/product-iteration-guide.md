@@ -25,8 +25,10 @@ storyloop init C:\work\my-project
 Windows 上 `.cmd`、`.bat`、`.ps1` 包装器不会被自动执行；对应回归命令会显示 warning，并在报告中明确标记为 `SKIPPED`。如需指定安全的原生可执行程序或显式解释器 argv，可准备：
 
 ```json
-{"test_commands":[["{python}","-m","unittest","discover"]],"module_roots":["modules","features"],"integration_paths":["pyproject.toml"]}
+{"test_commands":[["{python}","-m","unittest","discover"]],"module_roots":["modules","features"],"integration_paths":["pyproject.toml"],"candidate_allow":["frontend/.env.production"]}
 ```
+
+`candidate_allow` 列出名字看起来敏感（`.env*`、`*.key`、`*.pem`、`credentials.json`、`secrets.yaml`）但确实是已跟踪配置的文件；未列出的这类文件不会进入冒烟和回归的隔离候选副本。
 
 然后一次初始化：
 
@@ -150,7 +152,7 @@ storyloop base-update C:\work\my-project --proposal BASE-20260916-001
 
 默认使用本机已安装并登录的 Codex CLI，不保存 API 密钥。`.storyloop/config.json` 也支持：
 
-- `command`：以 argv 数组启动可信本地代理，stdin 输入请求 JSON，stdout 返回一个 JSON。
+- `command`：以 argv 数组启动可信本地代理，stdin 输入请求 JSON，stdout 返回一个 JSON。`examples/claude-code/` 提供驱动 Claude Code 的现成适配器，`examples/tools/scratch_build.py` 让实现代理在临时目录构建而不污染工作区。
 - `manual`：请求写入 `.storyloop/requests/`，将匹配 `request_id` 的结果写到 `.storyloop/responses/` 后重跑原命令。
 
 实现代理具有仓库写权限，但外部 Loop 会在每次尝试后重新检查 Git 变化和保护摘要；代理自己的“已完成”声明不构成验收证据。

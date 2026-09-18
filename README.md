@@ -111,7 +111,7 @@ my-project/
 
 出现 `BASE_CHANGE_REQUIRED` 后，先在原分支把该 `BASE-*` 涉及的路径作为独立变更实现、审核并提交；工作树干净后执行 `storyloop base-update PATH --proposal BASE-ID`。命令要求提交路径与提案完全一致、至少一条回归命令真实通过且不含 CI 文件，然后将底座版本从例如 `1.0.0` 提升到 `1.0.1`。它不会替你丢弃或搬移功能分支上的未提交修改。
 
-默认使用本机已安装并登录的 Codex CLI。也可在 `.storyloop/config.json` 选择 `command` 或 `manual` 适配器。工具不保存 API 密钥；不要把生产凭证、PII、数据库连接或商业秘密放进目标仓库和 Agent 输入。
+默认使用本机已安装并登录的 Codex CLI。也可在 `.storyloop/config.json` 选择 `command` 或 `manual` 适配器；`examples/claude-code/` 提供驱动 Claude Code 的 `command` 适配器。工具不保存 API 密钥；不要把生产凭证、PII、数据库连接或商业秘密放进目标仓库和 Agent 输入。
 
 安全边界：自定义 agent 与 test command 是当前用户权限下的原生进程，必须是受信任命令。StoryLoop 能检测本地仓库/控制面篡改，但不能在操作系统层证明第三方进程没有访问网络或远端 Git；需要强隔离时，请在无网络、无 SSH/Token 凭证的容器或 CI 沙箱中运行。
 

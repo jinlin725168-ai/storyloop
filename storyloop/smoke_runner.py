@@ -10,7 +10,7 @@ import shutil
 import sys
 import tempfile
 
-from .baseline import _git
+from .baseline import _git, load_project_config
 from .boundaries import capture_snapshot, snapshot_changes
 from .models import StoryLoopError, require
 from .path_security import safe_target
@@ -94,18 +94,29 @@ def run_smoke_isolated(project: Path, change_id: str, expect_red: bool = False) 
 def _copy_candidate(project: Path, candidate: Path) -> list[str]:
     output = _git(project, "ls-files", "-co", "--exclude-standard", "-z")
     paths = sorted(set(filter(None, output.split("\0"))))
+    allowed = _candidate_allow(project)
     for relative in paths:
         source = safe_target(project, relative, "candidate source")
         require(source.is_file(), "Candidate contains an unsupported entry")
         name = source.name.casefold()
-        require(not name.startswith(".env") and not name.endswith((".key", ".pem"))
-                and name not in {"credentials.json", "secrets.yaml"},
+        require(relative in allowed or (
+                not name.startswith(".env") and not name.endswith((".key", ".pem"))
+                and name not in {"credentials.json", "secrets.yaml"}),
                 "Sensitive files cannot enter an acceptance candidate")
         target = safe_target(candidate, relative, "candidate target")
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
         shutil.copymode(source, target)
     return paths
+
+
+def _candidate_allow(project: Path) -> set[str]:
+    """Tracked paths the project explicitly cleared despite sensitive-looking names."""
+    profile = load_project_config(project).get("profile", {})
+    values = profile.get("candidate_allow", []) if isinstance(profile, dict) else []
+    require(isinstance(values, list) and all(isinstance(item, str) for item in values),
+            "candidate_allow must be a list of relative paths")
+    return set(values)
 
 
 def _copy_smoke_control(project: Path, candidate: Path, change_id: str) -> None:

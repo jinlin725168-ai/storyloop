@@ -51,6 +51,7 @@ def detect_project(root: Path) -> dict:
         "integration_paths": sorted(set(integration)),
         "protected_paths": _protected_files(root),
         "generated_paths": list(GENERATED_PATHS),
+        "candidate_allow": [],
         "warnings": warnings,
     }
 
@@ -60,11 +61,11 @@ def validate_project_settings(root: Path, overrides: dict | None = None) -> dict
     require(overrides is None or isinstance(overrides, dict), "Project overrides must be an object")
     profile = detect_project(root)
     overrides = overrides or {}
-    allowed = {"test_commands", "module_roots", "integration_paths"}
+    allowed = {"test_commands", "module_roots", "integration_paths", "candidate_allow"}
     require(set(overrides) <= allowed, "Unknown project setting")
     if "test_commands" in overrides:
         profile["test_commands"] = _commands(overrides["test_commands"])
-    for key in ("module_roots", "integration_paths"):
+    for key in ("module_roots", "integration_paths", "candidate_allow"):
         if key in overrides:
             profile[key] = _relative_paths(overrides[key], key)
     protected = set(profile["protected_paths"])
