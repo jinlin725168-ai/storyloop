@@ -148,6 +148,8 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 storyloop base-propose C:\work\my-project --path pom.xml --path docs/guide.md --reason "升级依赖"
 ```
 
+上游同步（如 `git subtree pull --squash`）会同时改动可变区里的上游文件，提案加 `--allow-mutable`，这些路径记为 `UPSTREAM_MUTABLE`；路径列表用同步前后的 `git diff --name-only` 得到。
+
 在原分支独立实现并提交提案中的底座路径，确认工作树干净后执行：
 
 ```powershell

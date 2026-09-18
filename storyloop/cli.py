@@ -59,6 +59,8 @@ def parser() -> argparse.ArgumentParser:
         elif command == "base-propose":
             child.add_argument("--path", dest="paths", action="append", default=[], required=True)
             child.add_argument("--reason", required=True)
+            child.add_argument("--allow-mutable", action="store_true",
+                               help="上游同步：允许提案包含可变区路径")
         elif command == "discuss":
             child.add_argument("--message", required=True)
         elif command == "run":
@@ -87,7 +89,7 @@ def dispatch(args) -> dict:
         return _change(project, args)
     if args.command == "base-propose":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
-        return propose_base_change(project, args.paths, args.reason)
+        return propose_base_change(project, args.paths, args.reason, allow_mutable=args.allow_mutable)
     if args.command == "base-update":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return upgrade_baseline(project, args.proposal)

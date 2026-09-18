@@ -16,8 +16,13 @@ from .smoke_runner import run_commands_isolated
 from .storage import load_json, locked, write_json
 
 
-def propose_base_change(project: Path, paths: list[str], reason: str) -> dict:
-    """Open a BASE proposal for a planned foundation change (no feature run needed)."""
+def propose_base_change(project: Path, paths: list[str], reason: str,
+                        allow_mutable: bool = False) -> dict:
+    """Open a BASE proposal for a planned foundation change (no feature run needed).
+
+    `allow_mutable` is for upstream synchronisation, where the imported tree legitimately
+    touches files inside module roots as well; such paths are recorded as UPSTREAM_MUTABLE.
+    """
     project = Path(project).resolve()
     baseline = load_baseline(project)
     reason = text(reason, "base change reason")
@@ -26,9 +31,16 @@ def propose_base_change(project: Path, paths: list[str], reason: str) -> dict:
     for item in paths:
         relative = repository_relative(item, "base path")
         require(not is_ci_path(relative), "CI configuration paths cannot be changed through StoryLoop")
-        require(not any(_inside(relative, root) for root in baseline["module_roots"]),
-                f"{relative} is inside a mutable module root; change it through a feature, not the base")
-        category = "INTEGRATION_CHANGE" if relative in baseline["integration_paths"] else "FOUNDATION_CHANGE"
+        mutable = any(_inside(relative, root) for root in baseline["module_roots"])
+        require(allow_mutable or not mutable,
+                f"{relative} is inside a mutable module root; change it through a feature, "
+                "or pass --allow-mutable for an upstream sync")
+        if mutable:
+            category = "UPSTREAM_MUTABLE"
+        elif relative in baseline["integration_paths"]:
+            category = "INTEGRATION_CHANGE"
+        else:
+            category = "FOUNDATION_CHANGE"
         changes.append({"path": relative, "category": category})
     path = _write_base_proposal(project, "manual", changes, baseline, reason)
     return {"status": "PROPOSED", "change_id": path.stem, "proposal": str(path),

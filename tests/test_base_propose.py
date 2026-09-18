@@ -42,6 +42,19 @@ class BaseProposeTests(unittest.TestCase):
             self.assertEqual(result["status"], "BASELINE_UPGRADED")
             self.assertEqual(load_baseline(root)["baseline_version"], "1.0.1")
 
+    def test_upstream_sync_may_include_mutable_paths_when_allowed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._project(root)
+            with self.assertRaises(StoryLoopError):
+                propose_base_change(root, ["core.py", "modules/orders/service.py"], "upstream")
+            proposed = propose_base_change(root, ["core.py", "modules/orders/service.py"], "upstream",
+                                           allow_mutable=True)
+            proposal = load_json(Path(proposed["proposal"]))
+            categories = {item["path"]: item["category"] for item in proposal["changes"]}
+            self.assertEqual(categories["modules/orders/service.py"], "UPSTREAM_MUTABLE")
+            self.assertEqual(categories["core.py"], "FOUNDATION_CHANGE")
+
     def test_rejects_ci_paths_mutable_paths_and_empty_input(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
