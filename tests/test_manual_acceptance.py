@@ -58,6 +58,7 @@ class ManualAcceptanceTests(unittest.TestCase):
 
             paused = run_change(root, change_id, services(change_id))
             self.assertEqual(paused["status"], "MANUAL_ACCEPTANCE_REQUIRED", paused)
+            self.assertNotIn("questions", load_run_state(root, change_id))
             self.assertEqual(paused["pending"], ["AC-2"])
             self.assertEqual(load_run_state(root, change_id)["status"], "MANUAL_ACCEPTANCE_REQUIRED")
 

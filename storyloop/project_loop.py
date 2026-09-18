@@ -134,6 +134,7 @@ def _run_attempt(
     services: LoopServices, config: dict,
 ) -> dict | None:
     change_id = change["change_id"]
+    state.pop("questions", None)  # answered by reaching a new attempt; never carry stale ones
     context = {"change": change, "attempt": state["attempt"],
                "max_attempts": config["max_attempts"],
                "failures": list(state["failures"])}
