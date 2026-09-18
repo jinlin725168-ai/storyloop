@@ -26,9 +26,3 @@ def validate_review(value: object) -> str:
         require(not value["findings"] and not value["questions"],
                 "Review cannot pass with findings or questions")
     return value["verdict"]
-
-
-def require_fully_automated(change: dict) -> None:
-    manual = [criterion["id"] for story in change["product"]["stories"]
-              for criterion in story["acceptance"] if criterion["kind"] == "manual"]
-    require(not manual, "Manual acceptance criteria require a separate human acceptance step")

@@ -16,32 +16,21 @@ CI_FILES = (
 GENERATED_PATHS = ("openspec/changes", "acceptance/smoke", "reports/storyloop")
 
 
+SKIP_DIRECTORIES = {"node_modules", "target", "build", "dist", "vendor", "venv", ".venv", "__pycache__"}
+
+
 def detect_project(root: Path) -> dict:
-    """Detect common build systems without assuming one implementation language."""
+    """Detect common build systems at the root and one level below, language-neutrally."""
     root = Path(root).resolve()
     require(root.is_dir(), "Project must be an existing directory")
     kinds: list[str] = []
     commands: list[list[str]] = []
     integration: list[str] = []
-    if (root / "pom.xml").is_file():
-        kinds.append("maven")
-        integration.append("pom.xml")
-        commands.append(["mvnw.cmd" if (root / "mvnw.cmd").is_file() else "mvn", "test"])
-    gradle_file = _first(root, "build.gradle", "build.gradle.kts")
-    if gradle_file:
-        kinds.append("gradle")
-        integration.extend(_existing(root, "settings.gradle", "settings.gradle.kts", gradle_file))
-        commands.append(["gradlew.bat" if (root / "gradlew.bat").is_file() else "gradle", "test"])
-    if (root / "package.json").is_file():
-        kinds.append("node")
-        integration.extend(_existing(root, "package.json", "pnpm-workspace.yaml"))
-        package = _json_object(root / "package.json")
-        if isinstance(package.get("scripts"), dict) and package["scripts"].get("test"):
-            commands.append([_package_manager(root), "test"])
-    if _first(root, "pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"):
-        kinds.append("python")
-        integration.extend(_existing(root, "pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"))
-        commands.append(["{python}", "-m", "unittest", "discover"])
+    for prefix in ["", *_subdirectories(root)]:
+        found_kinds, found_commands, found_integration = _detect_in(root, prefix)
+        kinds.extend(kind for kind in found_kinds if kind not in kinds)
+        commands.extend(found_commands)
+        integration.extend(found_integration)
     commands, warnings = _safe_detected_commands(root, commands)
     return {
         "version": 1,
@@ -52,6 +41,7 @@ def detect_project(root: Path) -> dict:
         "protected_paths": _protected_files(root),
         "generated_paths": list(GENERATED_PATHS),
         "candidate_allow": [],
+        "scratch_paths": [],
         "warnings": warnings,
     }
 
@@ -61,13 +51,16 @@ def validate_project_settings(root: Path, overrides: dict | None = None) -> dict
     require(overrides is None or isinstance(overrides, dict), "Project overrides must be an object")
     profile = detect_project(root)
     overrides = overrides or {}
-    allowed = {"test_commands", "module_roots", "integration_paths", "candidate_allow"}
+    allowed = {"test_commands", "module_roots", "integration_paths", "candidate_allow",
+               "scratch_paths"}
     require(set(overrides) <= allowed, "Unknown project setting")
     if "test_commands" in overrides:
         profile["test_commands"] = _commands(overrides["test_commands"])
     for key in ("module_roots", "integration_paths", "candidate_allow"):
         if key in overrides:
             profile[key] = _relative_paths(overrides[key], key)
+    if "scratch_paths" in overrides:
+        profile["scratch_paths"] = _relative_paths(overrides["scratch_paths"], "scratch_paths")
     protected = set(profile["protected_paths"])
     require(not protected.intersection(profile["module_roots"]),
             "Protected CI paths cannot be module roots")
@@ -151,6 +144,61 @@ def _deduplicate_commands(commands: list[list[str]]) -> list[list[str]]:
             seen.add(key)
             result.append(command)
     return result
+
+
+def _subdirectories(root: Path) -> list[str]:
+    """Immediate child directories that may hold a sub-project (monorepo layouts)."""
+    return sorted(
+        f"{path.name}/" for path in root.iterdir()
+        if path.is_dir() and not path.is_symlink() and not path.name.startswith(".")
+        and path.name not in SKIP_DIRECTORIES
+    )
+
+
+def _detect_in(root: Path, prefix: str) -> tuple[list[str], list[list[str]], list[str]]:
+    """Detect build systems in one directory; `prefix` is '' for the root or 'sub/'."""
+    base = root / prefix if prefix else root
+    kinds: list[str] = []
+    commands: list[list[str]] = []
+    integration: list[str] = []
+    if (base / "pom.xml").is_file():
+        kinds.append("maven")
+        integration.append(prefix + "pom.xml")
+        executable = "mvnw.cmd" if os.name == "nt" and (base / "mvnw.cmd").is_file() else "mvn"
+        commands.append([executable, "-f", prefix + "pom.xml", "test"] if prefix
+                        else [executable, "test"])
+    gradle_file = _first(base, "build.gradle", "build.gradle.kts")
+    if gradle_file:
+        kinds.append("gradle")
+        integration.extend(prefix + item for item in
+                           _existing(base, "settings.gradle", "settings.gradle.kts", gradle_file))
+        executable = "gradlew.bat" if os.name == "nt" and (base / "gradlew.bat").is_file() else "gradle"
+        commands.append([executable, "-p", prefix.rstrip("/"), "test"] if prefix
+                        else [executable, "test"])
+    if (base / "package.json").is_file():
+        kinds.append("node")
+        integration.extend(prefix + item for item in
+                           _existing(base, "package.json", "pnpm-workspace.yaml"))
+        package = _json_object(base / "package.json")
+        if isinstance(package.get("scripts"), dict) and package["scripts"].get("test"):
+            commands.append(_node_test_command(base, prefix))
+    if _first(base, "pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"):
+        kinds.append("python")
+        integration.extend(prefix + item for item in
+                           _existing(base, "pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"))
+        commands.append(["{python}", "-m", "unittest", "discover", "-s", prefix.rstrip("/"),
+                         "-t", prefix.rstrip("/")] if prefix
+                        else ["{python}", "-m", "unittest", "discover"])
+    return kinds, commands, integration
+
+
+def _node_test_command(base: Path, prefix: str) -> list[str]:
+    manager = _package_manager(base)
+    if not prefix:
+        return [manager, "test"]
+    directory = prefix.rstrip("/")
+    flags = {"pnpm": ["--dir", directory], "yarn": ["--cwd", directory], "npm": ["--prefix", directory]}
+    return [manager, *flags.get(manager, ["--prefix", directory]), "test"]
 
 
 def _safe_detected_commands(

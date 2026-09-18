@@ -25,8 +25,9 @@ def generate_change_report(
     regression: dict,
     smoke: dict,
     review: dict,
+    manual_acceptance: list[dict] | None = None,
 ) -> Path:
-    """Write a passing report only when every link has real green evidence."""
+    """Write a passing report only when every link has real green or human evidence."""
     project = Path(project).resolve()
     change = load_change(project, change_id)
     evidence_digest = _validate_gate(
@@ -34,7 +35,7 @@ def generate_change_report(
     )
     manifest = load_smoke_manifest(project, change_id)
     traceability = _build_traceability(
-        change, manifest, smoke.get("results", []), evidence_digest
+        change, manifest, smoke.get("results", []), evidence_digest, manual_acceptance or []
     )
     report = {
         "version": 1,
@@ -114,14 +115,23 @@ def _validate_gate(
 
 def _build_traceability(
     change: dict, manifest: dict, smoke_results: list, evidence_digest: str,
+    manual_acceptance: list[dict],
 ) -> list[dict]:
     results = {item.get("id"): item for item in smoke_results}
+    accepted = {record["criterion_id"]: record for record in manual_acceptance}
     traceability = []
     for story in change["product"]["stories"]:
         story_view = {key: story[key] for key in ("id", "title", "as_a", "want", "so_that")}
         for criterion in story["acceptance"]:
-            require(criterion["kind"] == "automated",
-                    "Manual acceptance needs explicit human evidence before a pass report")
+            if criterion["kind"] == "manual":
+                record = accepted.get(criterion["id"])
+                require(record is not None,
+                        "Manual acceptance needs explicit human evidence before a pass report")
+                traceability.append({
+                    "story": story_view, "criterion": dict(criterion),
+                    "tests": [_human_evidence(record)], "evidence_sha256": evidence_digest,
+                })
+                continue
             declared = [item for item in manifest["tests"] if criterion["id"] in item["criteria"]]
             require(bool(declared), "Automated acceptance criterion has no mapped test")
             tests = [_test_evidence(test, results.get(test["id"])) for test in declared]
@@ -133,6 +143,17 @@ def _build_traceability(
             })
     require(bool(traceability), "Acceptance report needs traceable acceptance criteria")
     return traceability
+
+
+def _human_evidence(record: dict) -> dict:
+    require(isinstance(record.get("note"), str) and record["note"].strip()
+            and isinstance(record.get("accepted_at"), str),
+            "Manual acceptance record is incomplete")
+    return {
+        "id": "human", "command": ["human"], "timeout_seconds": 0,
+        "result": {"status": "ACCEPTED", "returncode": 0, "timed_out": False},
+        "note": record["note"], "accepted_at": record["accepted_at"],
+    }
 
 
 def _test_evidence(test: dict, result: object) -> dict:

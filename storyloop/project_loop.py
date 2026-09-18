@@ -15,7 +15,8 @@ from .change_report import generate_change_report
 from .changes import load_change
 from .models import StoryLoopError, require
 from .project_boundaries import audit_project_changes
-from .project_contracts import (require_fully_automated, validate_agent_summary,
+from .manual_acceptance import load_manual_acceptance, pending_manual_criteria
+from .project_contracts import (validate_agent_summary,
                                 validate_review)
 from .project_git import commit_paths, current_branch, finish_feature, start_feature
 from .project_loop_support import (control_digest as _control_digest,
@@ -25,7 +26,7 @@ from .project_loop_support import (control_digest as _control_digest,
 from .project_receipt import (ensure_merge_receipt, recover_completed_merge,
                               verify_verified_artifacts)
 from .smoke import install_smoke_suite, load_smoke_manifest
-from .smoke_runner import run_commands_isolated, run_smoke_isolated
+from .smoke_runner import git_visible_digest, run_commands_isolated, run_smoke_isolated
 from .storage import load_json, locked
 
 
@@ -58,12 +59,13 @@ def _run_change_locked(
     require((change["status"] == "APPROVED" or
              (change["status"] == "PASSED" and finalizing)) and change["approval"],
             "Change must be approved before automatic execution")
-    require_fully_automated(change)
     services = services or _default_services()
     config = load_project_config(project)
     state, start_attempt, fresh = _open_run(project, change)
     if state["status"] == "VERIFIED":
         return _finish_verified(project, change, state)
+    if state["status"] == "MANUAL_ACCEPTANCE_REQUIRED":
+        return _resume_manual_acceptance(project, change, state)
     if state["status"] == "MERGED":
         return _finish_merged(project, change, state)
     if state["status"] == "RECEIPTING":
@@ -100,7 +102,8 @@ def _open_run(project: Path, change: dict) -> tuple[dict, int, bool]:
         resumable = {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED",
                      "IMPLEMENTING", "BASE_CHANGE_REQUIRED",
                      "BOUNDARY_VIOLATION", "NEEDS_INPUT", "BUDGET_EXHAUSTED",
-                     "VERIFIED", "MERGED", "RECEIPTING", "FINALIZING"}
+                     "VERIFIED", "MANUAL_ACCEPTANCE_REQUIRED", "MERGED", "RECEIPTING",
+                     "FINALIZING"}
         require(state.get("change_id") == change_id and state.get("status") in resumable,
                 "Run state cannot be resumed")
         require(state.get("contract_digest") == change["approval"]["contract_digest"],
@@ -161,7 +164,37 @@ def _run_attempt(
         state["failures"].append({"attempt": state["attempt"], "review": review})
         _save_run(project, state)
         return None
-    return _complete(project, change, state, boundary, regression, smoke, review)
+    verified = {"boundary": boundary, "regression": regression, "smoke": smoke, "review": review}
+    paused = _manual_acceptance_gate(project, change, state, verified)
+    if paused is not None:
+        return paused
+    return _complete(project, change, state, **verified)
+
+
+def _manual_acceptance_gate(project: Path, change: dict, state: dict, verified: dict) -> dict | None:
+    """Pause before the pass report until every manual criterion is accepted on this exact code."""
+    digest = git_visible_digest(project)
+    records = load_manual_acceptance(project, change["change_id"])
+    pending = pending_manual_criteria(change, records, digest)
+    if not pending:
+        return None
+    return _pause(project, state, "MANUAL_ACCEPTANCE_REQUIRED", pending=pending,
+                  candidate_sha256=digest, verified=verified,
+                  next=f"storyloop accept <project> --change {change['change_id']} "
+                       "--criterion <ID> --note <what you verified>, then storyloop run")
+
+
+def _resume_manual_acceptance(project: Path, change: dict, state: dict) -> dict:
+    """Continue a paused run once the human accepted the manual criteria on unchanged code."""
+    require(git_visible_digest(project) == state.get("candidate_sha256"),
+            "Workspace changed while waiting for manual acceptance; rerun the change")
+    verified = state.get("verified")
+    require(isinstance(verified, dict) and set(verified) == {"boundary", "regression", "smoke", "review"},
+            "Paused run lacks its verification evidence")
+    paused = _manual_acceptance_gate(project, change, state, verified)
+    if paused is not None:
+        return paused
+    return _complete(project, change, state, **verified)
 
 
 def _prepare_acceptance(
@@ -271,6 +304,7 @@ def _implement_safely(
 ) -> tuple[dict, list]:
     before = capture_snapshot(project, include_control=True, include_ignored=True)
     control = _control_digest(project, change_id)
+    staged = _staged_index(project)
     failure: BaseException | None = None
     try:
         response = services.implement(project, context)
@@ -281,8 +315,10 @@ def _implement_safely(
             _control_digest(project, change_id) == control,
             "Implementation agent modified the protected control plane",
         )
+        _require_control_unchanged(_staged_index(project) == staged,
+                                   "Implementation agent staged Git changes")
     after = capture_snapshot(project, include_control=True, include_ignored=True)
-    changes = snapshot_changes(before, after)
+    changes = _without_scratch(snapshot_changes(before, after), _scratch_paths(project))
     if failure is not None:
         if changes:
             raise StoryLoopError(
@@ -299,6 +335,7 @@ def _read_only_call(
 ) -> object:
     before = capture_snapshot(project, include_control=True, include_ignored=True)
     control = _control_digest(project, change_id, excluded_evidence=allowed_evidence)
+    staged = _staged_index(project)
     try:
         return operation()
     finally:
@@ -306,7 +343,10 @@ def _read_only_call(
                    if allowed_evidence else None)
         _verify_read_only_snapshot(
             before, capture_snapshot(project, include_control=True, include_ignored=True), allowed,
+            _scratch_paths(project),
         )
+        _require_control_unchanged(_staged_index(project) == staged,
+                                   "Read-only operation staged Git changes")
         _require_control_unchanged(
             _control_digest(project, change_id,
                             excluded_evidence=allowed_evidence) == control,
@@ -319,8 +359,9 @@ def _require_control_unchanged(condition: bool, message: str) -> None:
         raise StoryLoopError(message, code="WORKSPACE_TAINTED")
 
 
-def _verify_read_only_snapshot(before, after, allowed_path: str | None) -> None:
-    changes = snapshot_changes(before, after)
+def _verify_read_only_snapshot(before, after, allowed_path: str | None,
+                               scratch: list[str] | None = None) -> None:
+    changes = _without_scratch(snapshot_changes(before, after), scratch or [])
     unexpected = [item for item in changes
                   if item.path != allowed_path
                   and not _allowed_parent_directory(item.path, allowed_path)]
@@ -333,6 +374,50 @@ def _verify_read_only_snapshot(before, after, allowed_path: str | None) -> None:
 def _allowed_parent_directory(path: str, allowed_path: str | None) -> bool:
     return bool(path.endswith("/") and allowed_path
                 and allowed_path.startswith(path))
+
+
+def _scratch_paths(project: Path) -> list[str]:
+    """Ignored locations (names or relative paths) agents may write, e.g. build output."""
+    profile = load_project_config(project).get("profile", {})
+    values = profile.get("scratch_paths", []) if isinstance(profile, dict) else []
+    require(isinstance(values, list) and all(isinstance(item, str) and item for item in values),
+            "scratch_paths must be a list of names or relative paths")
+    return values
+
+
+def _staged_index(project: Path) -> str:
+    return _git(project, "diff", "--cached", "--name-status")
+
+
+def _is_scratch(path: str, scratch: list[str]) -> bool:
+    """Tolerated: .git/index refreshes, declared scratch names anywhere, declared relative paths."""
+    normalized = path.rstrip("/")
+    if normalized == ".git/index":
+        return True
+    parts = normalized.split("/")
+    return any(part == item for part in parts for item in scratch) or any(
+        normalized == item.rstrip("/") or normalized.startswith(item.rstrip("/") + "/")
+        for item in scratch if "/" in item)
+
+
+def _without_scratch(changes: list, scratch: list[str]) -> list:
+    """Drop tolerated file changes and directory entries whose only changes are tolerated."""
+    files = [item for item in changes if not item.path.endswith("/")]
+    kept = [item for item in files if not _is_scratch(item.path, scratch)]
+    dropped = [item for item in files if _is_scratch(item.path, scratch)]
+    directories = [item for item in changes if item.path.endswith("/")]
+    result = list(kept)
+    for entry in directories:
+        if _is_scratch(entry.path, scratch):
+            continue
+        prefix = "" if entry.path == "./" else entry.path
+        under_kept = any(item.path.startswith(prefix) for item in kept)
+        under_dropped = any(item.path.startswith(prefix) for item in dropped) or any(
+            other.path.startswith(prefix) and _is_scratch(other.path, scratch)
+            for other in directories)
+        if under_kept or not under_dropped:
+            result.append(entry)
+    return result
 
 
 def _require_git_visible(touched: list, boundary: dict) -> None:
@@ -361,12 +446,19 @@ def _complete(
             "Workspace changed after final boundary audit")
     changed_paths = [item["path"] for item in final_boundary["allowed"]]
     require(bool(changed_paths), "Passing implementation produced no auditable code changes")
+    digest = git_visible_digest(project)
+    manual = [record for record in load_manual_acceptance(project, change_id)
+              if record.get("candidate_sha256") == digest]
+    require(not pending_manual_criteria(change, manual, digest),
+            "Manual acceptance is missing for the code being reported")
     implementation = commit_paths(
         project, changed_paths, f"feat({change_id}): implement approved product change"
     )
     report_path = generate_change_report(
-        project, change_id, implementation["commit"], regression, smoke, review
+        project, change_id, implementation["commit"], regression, smoke, review,
+        manual_acceptance=manual,
     )
+    state["manual_acceptance"] = manual
     report_commit = commit_paths(
         project, [report_path.relative_to(project).as_posix(),
                   report_path.with_suffix(".md").relative_to(project).as_posix()],

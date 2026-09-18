@@ -18,7 +18,7 @@ storyloop init C:\work\my-project
 - 当前位于有名称的本地分支。
 - 已跟踪和未跟踪文件都为空，即工作树干净。
 
-命令会探测 Maven、Gradle、Node、Python 等常见工程，记录当前提交、已跟踪文件 SHA-256、模块根目录、构建集成点和回归命令。`.storyloop/` 写入 `.git/info/exclude`，所以本地控制状态不会污染业务提交。
+命令会在仓库根目录和一级子目录（monorepo 的 `backend/`、`frontend/` 等）探测 Maven、Gradle、Node、Python 等常见工程，子目录的回归命令自动带上 `-f sub/pom.xml`、`--dir sub` 等参数，记录当前提交、已跟踪文件 SHA-256、模块根目录、构建集成点和回归命令。`.storyloop/` 写入 `.git/info/exclude`，所以本地控制状态不会污染业务提交。
 
 默认业务扩展目录是 `modules/` 和 `features/`。初始化时已跟踪文件均属于稳定底座；常见构建清单（如 `pom.xml`、`build.gradle`、`package.json`、`pyproject.toml`）会被识别为集成点，但任何修改都会转入独立底座迭代，避免功能代理整体改写工程入口。
 
@@ -27,6 +27,8 @@ Windows 上 `.cmd`、`.bat`、`.ps1` 包装器不会被自动执行；对应回�
 ```json
 {"test_commands":[["{python}","-m","unittest","discover"]],"module_roots":["modules","features"],"integration_paths":["pyproject.toml"],"candidate_allow":["frontend/.env.production"]}
 ```
+
+`scratch_paths` 列出代理可以在工作区里产生的被忽略位置（目录名或相对路径，如 `target`、`node_modules`、`dist`、`__pycache__`），用于就地构建和测试；未列出的被忽略文件一旦出现即判 `WORKSPACE_TAINTED`。只读的 `git status`/`git diff` 造成的 `.git/index` 刷新总是被容忍，任何暂存、提交或切换分支都会被检测。
 
 `candidate_allow` 列出名字看起来敏感（`.env*`、`*.key`、`*.pem`、`credentials.json`、`secrets.yaml`）但确实是已跟踪配置的文件；未列出的这类文件不会进入冒烟和回归的隔离候选副本。
 
@@ -165,6 +167,7 @@ storyloop base-update C:\work\my-project --proposal BASE-20260916-001
 
 - `BASE_CHANGE_REQUIRED`：功能依赖底座修改。
 - `NEEDS_INPUT`：已批准合同仍出现真实产品歧义。
+- `MANUAL_ACCEPTANCE_REQUIRED`：自动验收、回归和独立审查都已通过，但合同里有 `manual` 验收条件。此时功能分支上的代码就是待验收版本；逐条执行 `storyloop accept PATH --change ID --criterion A2 --note "看到了什么"`，再 `storyloop run PATH --change ID` 生成报告并合并。验收记录与当时的代码指纹绑定，代码一变就失效。
 - `BOUNDARY_VIOLATION`：代理写到了未授权路径。
 - `BUDGET_EXHAUSTED`：达到自动尝试上限。
 - 存在 `manual` 验收条件：必须提供真实人工证据，不能由 AI 代签。

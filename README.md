@@ -81,7 +81,7 @@ my-project/
 └─ reports/storyloop/<change-id>/      JSON 与 Markdown 验收报告
 ```
 
-初始化时已跟踪文件都属于稳定底座；`pom.xml`、`package.json` 等构建集成点如需修改，会转成独立底座提案。`.storyloop` 被加入仓库本地 `.git/info/exclude`，不会修改项目的 `.gitignore`。
+初始化时可变区之外的已跟踪文件都属于稳定底座；可变区（`module_roots`）可以是任何目录，包括已有代码的目录。`pom.xml`、`package.json` 等构建集成点如需修改，会转成独立底座提案。构建系统在仓库根或一级子目录（monorepo）都能被探测到。`.storyloop` 被加入仓库本地 `.git/info/exclude`，不会修改项目的 `.gitignore`。
 
 ## 命令
 
@@ -96,6 +96,7 @@ my-project/
 | `ci PATH --change ID` | 独立运行核心流程冒烟测试 |
 | `report PATH --change ID` | 定位最终验收报告 |
 | `base-update PATH --proposal BASE-ID` | 校验独立底座提交、完整回归并提升底座版本 |
+| `accept PATH --change ID --criterion A1 --note TEXT` | 记录人工验收条件已由人确认（仅在 `MANUAL_ACCEPTANCE_REQUIRED` 停点可用） |
 
 退出码 `0` 表示命令成功，`2` 表示失败、受阻或待输入，`130` 表示中断。
 
@@ -107,7 +108,7 @@ my-project/
 - 已批准需求出现不可消解的业务歧义。
 - 代理写入未授权路径或修改保护文件。
 - 达到尝试预算。
-- 存在必须由人实际判断的手工验收条件。
+- 存在必须由人实际判断的手工验收条件：自动验收、回归和审查通过后停在 `MANUAL_ACCEPTANCE_REQUIRED`，用 `storyloop accept` 逐条记录后 `storyloop run` 继续；人工证据与代码指纹绑定并写入验收报告。
 
 出现 `BASE_CHANGE_REQUIRED` 后，先在原分支把该 `BASE-*` 涉及的路径作为独立变更实现、审核并提交；工作树干净后执行 `storyloop base-update PATH --proposal BASE-ID`。命令要求提交路径与提案完全一致、至少一条回归命令真实通过且不含 CI 文件，然后将底座版本从例如 `1.0.0` 提升到 `1.0.1`。它不会替你丢弃或搬移功能分支上的未提交修改。
 

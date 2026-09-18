@@ -11,8 +11,8 @@
 | review | 只读 + Bash（受限前缀） | 可运行测试，不可写文件 |
 | implement | 只读 + Edit/Write + Bash（受限前缀） | `--permission-mode acceptEdits` |
 
-Bash 默认只放行 `python3`、`python` 和常见只读命令；其他构建工具按项目追加，例如 `--bash "mvn:*"`。
-不放行 `git`：`git status` 会改写 `.git/index`，StoryLoop 会判定为 WORKSPACE_TAINTED。
+Bash 默认只放行 `python3`、`python`、常见只读命令和只读 git（status/diff/log/show）；其他构建工具按项目追加，例如 `--bash "mvn:*"`。`--guide FILE` 把项目规范附进每次提示。
+就地构建产生的 `target/`、`node_modules/` 等目录需要在 `storyloop init --settings` 的 `scratch_paths` 里声明，否则会判 WORKSPACE_TAINTED；不想声明时用 `examples/tools/scratch_build.py` 在临时目录构建。
 
 启用方式（`storyloop init` 之后编辑 `.storyloop/config.json`）：
 

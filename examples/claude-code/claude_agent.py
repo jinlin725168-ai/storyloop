@@ -30,10 +30,10 @@ ROLE_TOOLS = {
 # Bash prefixes pre-approved for roles that may run commands; extend per project with
 # `--bash "mvn:*"`. Claude Code checks every segment of a chained command against these
 # rules, so the prompt tells the agent to run plain single commands (no export/&&/pipes).
-# Git is deliberately absent: `git status` rewrites .git/index, which StoryLoop treats as
-# an ignored-file mutation (WORKSPACE_TAINTED).
+# Read-only git is allowed (StoryLoop tolerates the .git/index refresh it causes); anything
+# that stages, commits or switches branches is detected and fails the run.
 DEFAULT_BASH = ["python3:*", "python:*", "ls:*", "cat:*", "head:*", "tail:*", "find:*",
-                "grep:*", "wc:*", "diff:*"]
+                "grep:*", "wc:*", "diff:*", "git status:*", "git diff:*", "git log:*", "git show:*"]
 SCHEMA_HINTS = {
     "product": (
         "Exact shape: {version:1, goal:string, non_goals:[string], questions:[{id,text,options:[string]}], "
@@ -53,8 +53,9 @@ SCHEMA_HINTS = {
 }
 RULES = (
     "Final answer must be ONLY one JSON object, no markdown fences, no prose.\n"
-    "Never run git commands and never create Git-ignored files (build output, caches, logs): "
-    "StoryLoop snapshots the whole tree including .git and fails the run on any such change.\n"
+    "Only read-only git (status/diff/log/show); never add, commit, stash or switch branches. "
+    "Do not create Git-ignored files (build output, caches, logs) except under the project's "
+    "declared scratch paths: StoryLoop snapshots the whole tree and fails the run otherwise.\n"
     "Shell commands are pre-approved only as plain single commands: no `export`, `&&`, `;` or "
     "pipes. Nobody can answer permission prompts, so never ask for approval; if a command is "
     "denied, rerun it as one plain command.\n"

@@ -11,6 +11,7 @@ from .approvals import approve_change
 from .baseline import BASELINE_PATH, bootstrap_project
 from .base_upgrade import upgrade_baseline
 from .changes import create_change, load_change, revise_change
+from .manual_acceptance import record_manual_acceptance
 from .models import StoryLoopError, require
 from .processutil import redact
 from .project_agents import invoke_project_agent
@@ -35,7 +36,7 @@ def parser() -> argparse.ArgumentParser:
         "base-update": "按 BASE 提案校验独立底座提交并升级底座版本",
         "discuss": "旧实例：与 AI 共创故事和验收边界",
         "prepare": "旧实例：生成验收测试与初始骨架（不执行）",
-        "accept": "旧实例：记录人工验收",
+        "accept": "记录人工验收：产品变更用 --change 与 --criterion，旧实例用 --story",
         "demo": "运行自带脚本示例（不调用 AI）",
     }
     for command, help_text in descriptions.items():
@@ -60,7 +61,9 @@ def parser() -> argparse.ArgumentParser:
             child.add_argument("--change", dest="change_id")
             child.add_argument("--story")
         elif command == "accept":
-            child.add_argument("--story", required=True)
+            child.add_argument("--story")
+            child.add_argument("--change", dest="change_id")
+            child.add_argument("--criterion", dest="criteria", action="append", default=[])
             child.add_argument("--note", required=True)
     v2_cli.add_parsers(sub)
     return root
@@ -121,6 +124,9 @@ def _product_dispatch(project: Path, args) -> dict:
         return {"status": change["status"], "change_id": change_id,
                 "revision": change["revision"],
                 "run": load_run_state(project, change_id) if run_path.exists() else None}
+    if args.command == "accept":
+        require(change_id and args.criteria, "Manual acceptance needs --change and --criterion")
+        return record_manual_acceptance(project, change_id, args.criteria, args.note)
     if args.command == "report":
         require(change_id, "Product report needs --change")
         path = project / "reports" / "storyloop" / change_id / "report.md"
@@ -137,6 +143,7 @@ def _legacy_dispatch(project: Path, args) -> dict:
     if args.command == "approve":
         return {"status": "APPROVED", **engine.approve(project)}
     if args.command == "accept":
+        require(args.story, "Legacy acceptance needs --story")
         return engine.accept(project, args.story, args.note)
     if args.command == "report":
         return {"report": str(render(project))}
@@ -167,7 +174,7 @@ def display(result: dict, complete_json: bool) -> None:
             print(f"  ? {question['id']}: {question['text']}")
         return
     print(result.get("status", "REPORT"))
-    for key in ("change_id", "project", "next", "report", "demo"):
+    for key in ("change_id", "project", "next", "report", "demo", "pending", "accepted"):
         if key in result and result[key] is not None:
             print(f"{key}: {result[key]}")
     for warning in result.get("warnings", []):
