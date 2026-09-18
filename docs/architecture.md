@@ -29,7 +29,7 @@ flowchart TD
 | stage_agents | v2 选中项探测、统一 Agent 协议、manual 控制面与非终态分类 |
 | json_contract / stage_judges | 公共严格 JSON、Judge 执行、RED 分类、只读证据与命令/快照绑定 |
 | stage_runner | 单 Stage 单次闭环、Agent 全树写边界复核、L1/L2 顺序与短路 |
-| processutil / windows_job | 最小环境、输出与时间预算、Windows Job 进程树封闭、POSIX 协作清理 |
+| processutil / windows_job / linux_supervisor | 最小环境、输出与时间预算、Windows Job 和 Linux subreaper 进程树回收 |
 | verification | 解析真实退出码与命名测试结果 |
 | storage / evidence | 原子文件、操作系统锁、源与证据指纹、脱敏 |
 | engine / runner | 批准、恢复、修复、回归、独立 QA、人工验收 |
@@ -44,7 +44,7 @@ flowchart TD
 5. 实现尝试在调用前持久化；时间在调用前预留，正常结束后改成实际耗时。进程崩溃会保守地消耗已预留时间，防止反复重启绕过预算。
 6. 前一个故事通过且没有过期时可以跳过。后一个故事修改代码后，已有成功故事需重新验证并审查。首版采用保守的全工作区指纹，不做精细依赖影响分析。
 7. 人工 ACCEPTED 绑定当前代码。代码修改后重新验证会撤销旧人工确认，需重新确认。
-8. `run_process` 返回 `contained`。Windows 只有 bootstrap 在目标启动前进入 Job Object，且整个 Job 成功终止、等待成员清零并关闭后才为 `true`；POSIX process group 可被 `setsid()` 逃离，因此当前始终为 `false`，不能作为 v2 Stage 边界快照的安全前提。
+8. `run_process` 返回 `contained`。Windows 只有 bootstrap 在目标启动前进入 Job Object，且整个 Job 成功终止、等待成员清零并关闭后才为 `true`；Linux 使用独立 child subreaper 监督进程，回收包括 `setsid()` 脱离进程组的后代；只有 `waitpid` 确认没有剩余子进程并经专用管道确认后才为 `true`。其他 POSIX 平台仍返回 `false`。
 
 ## v2 Adapter 稳定合同
 
@@ -81,7 +81,7 @@ flowchart TD
 - Codex 适配器使用其现有 read-only/workspace-write 沙箱；Runner 不会以绕过沙箱参数启动 Codex，也不会自行提权。
 - command 模式和 QA 进程没有内建文件系统隔离，保留给受信任适配器。若需要处理不可信代码，应在独立低权限用户/隔离执行环境中使用。
 - Windows 进程执行使用 `KILL_ON_JOB_CLOSE` Job Object，并通过门闩保证目标在加入 Job 后才启动；正常退出、失败、超时、输出超限和中断都清理完整 Job，并等待 Job 内活动进程归零后才报告 containment。
-- POSIX 的 `start_new_session`/`killpg` 只用于兼容 v1 的可信命令清理，不声称安全 containment。v2 Stage Runner 必须显式检查 `contained is True`；在 cgroup v2、PID namespace 或等价内核能力接入前，POSIX 外部 Adapter 必须 fail-closed。
+- Linux 每次调用启动独立的 `PR_SET_CHILD_SUBREAPER` 监督进程，避免并发调用相互收养后代。正常结束、超时和输出超限后，监督进程反复终止并回收子进程及被收养的后代，再发送完成确认。缺少内核能力、`/proc` 不可读、监督进程崩溃或清理超时均 fail-closed。该机制管理受信任命令的进程生命周期，不隔离恶意同用户进程、外部服务或文件系统；需要强安全边界时仍应使用容器或独立低权限用户。其他 POSIX 平台仅清理进程组，不声称 containment。
 - 不读取鉴权文件。不将生产凭证、PII、payload 等敏感材料放进故事、上下文、检查输出。常见凭证格式会被脱敏，但通用文本脱敏不保证能识别所有敏感信息。
 - 不执行来源不明的安装脚本，不自动安装目标应用依赖，不执行生产数据库操作、提交、推送或部署。
 

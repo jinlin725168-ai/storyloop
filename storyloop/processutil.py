@@ -38,6 +38,14 @@ def _cleanup_call(action) -> bool:
 
 def _stop_tree(process: subprocess.Popen, job) -> tuple[bool, bool]:
     stopped = True
+    if sys.platform == "linux" and os.name != "nt" and job is not None:
+        try:
+            contained = job.finish(process)
+            return contained, contained
+        except BaseException:
+            # Failed supervision must never be reported as contained.
+            _stop_tree(process, None)
+            return False, False
     if os.name == "nt":
         terminated = _cleanup_call(job.terminate)
         stopped = terminated and stopped
@@ -159,6 +167,9 @@ def _cleanup_process(process, job, feeder) -> tuple[bool, bool]:
 def _start_process(command: list[str], cwd: Path, env: dict, source, output, error):
     if os.name == "nt":
         return _start_windows(command, cwd, env, source, output, error)
+    if sys.platform == "linux":
+        from .linux_job import start_linux
+        return start_linux(command, cwd, env, source, output, error)
     process = subprocess.Popen(command, cwd=cwd, env=env, stdin=source, stdout=output,
                                stderr=error, shell=False, start_new_session=True)
     return process, None, None

@@ -6,7 +6,9 @@ StoryLoop 是面向已有 Git 工程的产品需求—开发—验收闭环。�
 
 ## 快速开始
 
-要求 Python 3.11+、Git，以及干净的目标仓库。PowerShell：
+支持 Windows 和 Linux，要求 Python 3.11+、Git，以及干净的目标仓库。Linux 需要可读的 `/proc` 和内核 child subreaper 支持（启动时自动检查，无需 root）。以下命令以 PowerShell 路径为例；Linux 使用对应的本地路径。
+
+PowerShell：
 
 ```powershell
 python -m pip install .

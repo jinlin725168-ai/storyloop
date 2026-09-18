@@ -34,6 +34,58 @@ class ProcessContainmentTests(unittest.TestCase):
         self.assertIs(stopped, True)
         self.assertIs(contained, False)
 
+    @unittest.skipUnless(sys.platform == "linux", "Linux subreaper")
+    def test_detached_descendant_is_reaped_on_success_and_timeout(self):
+        for timeout in (0.5, 5):
+            with self.subTest(timeout=timeout), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                marker = root / "escaped.txt"
+                ready = root / "ready.txt"
+                child = (
+                    "import os,time; from pathlib import Path; os.setsid(); "
+                    f"Path({str(ready)!r}).write_text('ready'); time.sleep(1); "
+                    f"Path({str(marker)!r}).write_text('escaped')"
+                )
+                parent = (
+                    "import subprocess,sys,time; from pathlib import Path; "
+                    f"subprocess.Popen([sys.executable, '-c', {child!r}]); "
+                    f"ready=Path({str(ready)!r})\n"
+                    "while not ready.exists(): time.sleep(0.01)\n"
+                    + ("time.sleep(5)" if timeout < 1 else "")
+                )
+                result = run_process([sys.executable, "-c", parent], root, timeout)
+                self.assertTrue(ready.exists(), result)
+                self.assertTrue(result["contained"], result)
+                self.assertEqual(result["timed_out"], timeout < 1)
+                time.sleep(1.1)
+                self.assertFalse(marker.exists())
+
+    @unittest.skipUnless(sys.platform == "linux", "Linux subreaper")
+    def test_linux_supervisor_without_completion_fails_closed(self):
+        from storyloop.linux_job import LinuxJob
+        reader, writer = os.pipe()
+        os.close(writer)
+        process = MagicMock()
+        process.poll.return_value = 0
+        stopped, contained = _stop_tree(process, LinuxJob(reader))
+        self.assertFalse(stopped)
+        self.assertFalse(contained)
+
+    @unittest.skipUnless(sys.platform == "linux", "Linux subreaper")
+    def test_linux_subreaper_setup_failure_never_launches_command(self):
+        from storyloop.linux_supervisor import main
+        reader, writer = os.pipe()
+        try:
+            with patch("sys.argv", ["supervisor", str(writer), "untrusted"]), \
+                    patch("storyloop.linux_supervisor.ctypes.CDLL") as library, \
+                    patch("storyloop.linux_supervisor.subprocess.Popen") as launch:
+                library.return_value.prctl.return_value = -1
+                self.assertEqual(main(), 125)
+                launch.assert_not_called()
+        finally:
+            os.close(reader)
+            os.close(writer)
+
     def test_feeder_start_failure_stops_assigned_job(self):
         process = MagicMock(pid=123, stdin=io.BytesIO())
         job = MagicMock()
@@ -41,7 +93,8 @@ class ProcessContainmentTests(unittest.TestCase):
         feeder.start.side_effect = RuntimeError("thread unavailable")
         feeder.is_alive.return_value = False
 
-        with patch("storyloop.windows_job.WindowsJob", return_value=job), \
+        with patch("storyloop.processutil.subprocess.CREATE_NEW_PROCESS_GROUP", 512, create=True), \
+                patch("storyloop.windows_job.WindowsJob", return_value=job), \
                 patch("storyloop.processutil.subprocess.Popen", return_value=process), \
                 patch("storyloop.processutil.threading.Thread", return_value=feeder), \
                 patch("storyloop.processutil._stop_tree", return_value=(True, True)) as stop_tree:
@@ -146,7 +199,8 @@ class ProcessContainmentTests(unittest.TestCase):
         job = MagicMock()
         job.assign.side_effect = OSError("assignment failed")
 
-        with patch("storyloop.windows_job.WindowsJob", return_value=job), \
+        with patch("storyloop.processutil.subprocess.CREATE_NEW_PROCESS_GROUP", 512, create=True), \
+                patch("storyloop.windows_job.WindowsJob", return_value=job), \
                 patch("storyloop.processutil.subprocess.Popen", return_value=process):
             with self.assertRaises(OSError):
                 _start_windows([sys.executable, "-c", "pass"], Path.cwd(), {},
@@ -161,7 +215,8 @@ class ProcessContainmentTests(unittest.TestCase):
         job = MagicMock()
         job.assign.side_effect = RuntimeError("assignment interrupted")
 
-        with patch("storyloop.windows_job.WindowsJob", return_value=job), \
+        with patch("storyloop.processutil.subprocess.CREATE_NEW_PROCESS_GROUP", 512, create=True), \
+                patch("storyloop.windows_job.WindowsJob", return_value=job), \
                 patch("storyloop.processutil.subprocess.Popen", return_value=process):
             with self.assertRaises(RuntimeError) as caught:
                 _start_windows([sys.executable, "-c", "pass"], Path.cwd(), {},

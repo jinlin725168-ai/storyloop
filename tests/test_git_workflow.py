@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -64,7 +65,7 @@ class GitWorkflowTests(unittest.TestCase):
                     executable="git")
         self.assertEqual(
             calls[-1],
-            ["git", "-c", "core.hooksPath=nul", "merge", "--no-ff", "--no-edit",
+            ["git", "-c", f"core.hooksPath={os.devnull}", "merge", "--no-ff", "--no-edit",
              "--no-verify", "feature/safe-change"],
         )
         self.assertFalse(any("push" in call for call in calls))
