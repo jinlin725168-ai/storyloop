@@ -43,6 +43,9 @@ def _services(change_id: str, build_in_place: bool) -> LoopServices:
         if build_in_place:
             (project / "target").mkdir(exist_ok=True)
             (project / "target/App.class").write_bytes(b"\x00")
+            # Read-only git rewrites .git/index in real checkouts (stat cache refresh); force the
+            # same rewrite deterministically without staging anything.
+            subprocess.run(["git", "read-tree", "HEAD"], cwd=project, check=True, capture_output=True)
             subprocess.run(["git", "status", "--porcelain"], cwd=project, check=True,
                            capture_output=True)
         return {"summary": "done", "questions": []}

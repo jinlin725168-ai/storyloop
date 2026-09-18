@@ -13,7 +13,7 @@ from storyloop.boundaries import capture_snapshot
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import _default_services
 from storyloop.project_profile import detect_project, validate_project_settings
-from storyloop.smoke_runner import _copy_candidate
+from storyloop.smoke_runner import _copy_candidate, _copy_smoke_control
 
 
 def _repo(root: Path, allow: list[str]) -> None:
@@ -22,6 +22,7 @@ def _repo(root: Path, allow: list[str]) -> None:
                     "--allow-empty", "-m", "init"], cwd=root, check=True)
     (root / ".env.development").write_text("VITE_APP_TITLE=demo\n", encoding="utf-8")
     (root / "app.txt").write_text("app\n", encoding="utf-8")
+    (root / ".git/info/exclude").write_text(".storyloop/\n", encoding="utf-8")
     config = root / ".storyloop/config.json"
     config.parent.mkdir()
     config.write_text(json.dumps({"profile": {"candidate_allow": allow}}), encoding="utf-8")
@@ -49,6 +50,20 @@ class CandidateAllowTests(unittest.TestCase):
             paths = _copy_candidate(root, Path(target))
             self.assertIn(".env.development", paths)
             self.assertTrue((Path(target) / ".env.development").is_file())
+
+    def test_candidate_receives_project_config_so_snapshots_see_the_allow_list(self):
+        with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryDirectory() as target:
+            root = Path(folder)
+            _repo(root, [".env.development"])
+            for name in ("changes", "smoke"):
+                path = root / ".storyloop/state" / name / "FEAT-1.json"
+                path.parent.mkdir(parents=True)
+                path.write_text("{}", encoding="utf-8")
+            _copy_candidate(root, Path(target))
+            _copy_smoke_control(root, Path(target), "FEAT-1")
+            self.assertTrue((Path(target) / ".storyloop/config.json").is_file())
+            entries = dict(capture_snapshot(Path(target), include_control=True, include_ignored=True).entries)
+            self.assertIn(".env.development", entries)
 
     def test_workspace_snapshot_honours_the_same_allow_list(self):
         with tempfile.TemporaryDirectory() as folder:

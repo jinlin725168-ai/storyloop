@@ -12,8 +12,10 @@ from .storage import write_json
 def control_digest(
     project: Path, change_id: str, excluded_evidence: str | None = None,
 ) -> str:
+    # .git/index is deliberately absent: read-only git commands rewrite its stat cache.
+    # Staged content is covered semantically by `git diff --cached` below.
     relative_paths = [
-        ".git/HEAD", ".git/index", ".git/config", ".git/info/exclude", ".git/packed-refs",
+        ".git/HEAD", ".git/config", ".git/info/exclude", ".git/packed-refs",
         ".storyloop/config.json", ".storyloop/baseline.json",
         f".storyloop/state/changes/{change_id}.json",
         f".storyloop/state/smoke/{change_id}.json",
@@ -27,6 +29,7 @@ def control_digest(
     digest.update(_git(
         project, "for-each-ref", "--format=%(refname):%(objectname)"
     ).encode("utf-8"))
+    digest.update(_git(project, "diff", "--cached", "--name-status").encode("utf-8"))
     digest.update(_path_digest(project, relative_paths).encode("ascii"))
     return digest.hexdigest()
 
