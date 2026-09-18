@@ -95,6 +95,7 @@ my-project/
 | `status PATH --change ID --json` | 查看合同和外部 Loop 状态 |
 | `ci PATH --change ID` | 独立运行核心流程冒烟测试 |
 | `report PATH --change ID` | 定位最终验收报告 |
+| `base-propose PATH --path P [--path P2] --reason TEXT` | 为计划中的底座改动开 BASE 提案（无需先触发功能变更） |
 | `base-update PATH --proposal BASE-ID` | 校验独立底座提交、完整回归并提升底座版本 |
 | `accept PATH --change ID --criterion A1 --note TEXT` | 记录人工验收条件已由人确认（仅在 `MANUAL_ACCEPTANCE_REQUIRED` 停点可用） |
 

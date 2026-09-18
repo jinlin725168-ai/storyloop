@@ -9,7 +9,7 @@ import sys
 from . import __version__, discovery, engine, v2_cli
 from .approvals import approve_change
 from .baseline import BASELINE_PATH, bootstrap_project
-from .base_upgrade import upgrade_baseline
+from .base_upgrade import propose_base_change, upgrade_baseline
 from .changes import create_change, load_change, revise_change
 from .manual_acceptance import record_manual_acceptance
 from .models import StoryLoopError, require
@@ -33,6 +33,7 @@ def parser() -> argparse.ArgumentParser:
         "status": "查看产品变更或旧实例状态",
         "ci": "独立运行某次变更的核心流程冒烟测试",
         "report": "定位某次变更的验收报告或生成旧实例报告",
+        "base-propose": "为计划中的底座改动开一个 BASE 提案（无需先触发功能变更）",
         "base-update": "按 BASE 提案校验独立底座提交并升级底座版本",
         "discuss": "旧实例：与 AI 共创故事和验收边界",
         "prepare": "旧实例：生成验收测试与初始骨架（不执行）",
@@ -55,6 +56,9 @@ def parser() -> argparse.ArgumentParser:
             child.add_argument("--change", dest="change_id", required=command == "ci")
         elif command == "base-update":
             child.add_argument("--proposal", required=True)
+        elif command == "base-propose":
+            child.add_argument("--path", dest="paths", action="append", default=[], required=True)
+            child.add_argument("--reason", required=True)
         elif command == "discuss":
             child.add_argument("--message", required=True)
         elif command == "run":
@@ -81,6 +85,9 @@ def dispatch(args) -> dict:
         return {"status": "DRAFT", "project": str(project), "next": "discuss --message 你的想法"}
     if args.command == "change":
         return _change(project, args)
+    if args.command == "base-propose":
+        require(_is_product_project(project), "Run storyloop init on this Git project first")
+        return propose_base_change(project, args.paths, args.reason)
     if args.command == "base-update":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return upgrade_baseline(project, args.proposal)
@@ -174,7 +181,7 @@ def display(result: dict, complete_json: bool) -> None:
             print(f"  ? {question['id']}: {question['text']}")
         return
     print(result.get("status", "REPORT"))
-    for key in ("change_id", "project", "next", "report", "demo", "pending", "accepted"):
+    for key in ("change_id", "project", "next", "report", "demo", "pending", "accepted", "paths"):
         if key in result and result[key] is not None:
             print(f"{key}: {result[key]}")
     for warning in result.get("warnings", []):

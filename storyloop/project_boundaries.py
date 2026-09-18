@@ -78,6 +78,7 @@ def _category(relative: str, baseline: dict, change_id: str) -> str:
 
 def _write_base_proposal(
     project: Path, change_id: str, changes: list[dict], baseline: dict,
+    reason: str | None = None,
 ) -> Path:
     root = project / ".storyloop" / "base-proposals"
     root.mkdir(parents=True, exist_ok=True)
@@ -93,6 +94,7 @@ def _write_base_proposal(
         "baseline_source_head": baseline["source_head"],
         "source_branch": baseline["source_branch"],
         "changes": changes,
+        **({"reason": reason} if reason else {}),
     }, max_bytes=1_000_000)
     return path
 

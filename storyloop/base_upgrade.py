@@ -8,10 +8,39 @@ from pathlib import Path, PurePosixPath
 
 from .baseline import (_foundation_paths, _git, _sha256, _tracked_files,
                        load_baseline, load_project_config)
-from .models import identifier, require
+from .models import identifier, require, text
+from .path_security import repository_relative
+from .project_boundaries import _write_base_proposal
 from .project_profile import is_ci_path
 from .smoke_runner import run_commands_isolated
 from .storage import load_json, locked, write_json
+
+
+def propose_base_change(project: Path, paths: list[str], reason: str) -> dict:
+    """Open a BASE proposal for a planned foundation change (no feature run needed)."""
+    project = Path(project).resolve()
+    baseline = load_baseline(project)
+    reason = text(reason, "base change reason")
+    require(isinstance(paths, list) and bool(paths), "Base proposal needs at least one --path")
+    changes = []
+    for item in paths:
+        relative = repository_relative(item, "base path")
+        require(not is_ci_path(relative), "CI configuration paths cannot be changed through StoryLoop")
+        require(not any(_inside(relative, root) for root in baseline["module_roots"]),
+                f"{relative} is inside a mutable module root; change it through a feature, not the base")
+        category = "INTEGRATION_CHANGE" if relative in baseline["integration_paths"] else "FOUNDATION_CHANGE"
+        changes.append({"path": relative, "category": category})
+    path = _write_base_proposal(project, "manual", changes, baseline, reason)
+    return {"status": "PROPOSED", "change_id": path.stem, "proposal": str(path),
+            "paths": [item["path"] for item in changes],
+            "next": f"commit exactly these paths on {baseline['source_branch']}, then "
+                    f"storyloop base-update <project> --proposal {path.stem}"}
+
+
+def _inside(relative: str, root: str) -> bool:
+    normalized = root.rstrip("/")
+    return relative == normalized or relative.startswith(normalized + "/")
+
 
 
 def upgrade_baseline(project: Path, proposal_id: str) -> dict:

@@ -142,6 +142,12 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 
 底座变更应独立审核、跑完整回归并提升底座版本；处理完成后再回到原功能变更。CI 文件始终受保护，即使它在底座文件中也不会被普通功能代理修改。
 
+计划中的底座改动（升级上游、改构建配置、改代理规范等）不需要先让功能变更撞上边界，直接开提案：
+
+```powershell
+storyloop base-propose C:\work\my-project --path pom.xml --path docs/guide.md --reason "升级依赖"
+```
+
 在原分支独立实现并提交提案中的底座路径，确认工作树干净后执行：
 
 ```powershell
