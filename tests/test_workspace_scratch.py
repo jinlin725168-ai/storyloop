@@ -8,7 +8,11 @@ import subprocess
 import tempfile
 import unittest
 
+import json
+import os
+
 from storyloop.approvals import approve_change
+from storyloop.boundaries import capture_snapshot
 from storyloop.baseline import bootstrap_project
 from storyloop.changes import create_change
 from storyloop.models import StoryLoopError
@@ -54,6 +58,24 @@ def _services(change_id: str, build_in_place: bool) -> LoopServices:
 
 
 class WorkspaceScratchTests(unittest.TestCase):
+    def test_snapshot_skips_declared_scratch_directories_even_with_links(self):
+        for declared in ([], ["node_modules"]):
+            with tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                (root / "node_modules/.bin").mkdir(parents=True)
+                (root / "node_modules/pkg").mkdir()
+                (root / "node_modules/pkg/cli.js").write_text("", encoding="utf-8")
+                os.symlink("../pkg/cli.js", root / "node_modules/.bin/cli")
+                (root / ".storyloop").mkdir()
+                (root / ".storyloop/config.json").write_text(
+                    json.dumps({"profile": {"scratch_paths": declared}}), encoding="utf-8")
+                if declared:
+                    entries = dict(capture_snapshot(root, include_control=True, include_ignored=True).entries)
+                    self.assertFalse(any(path.startswith("node_modules/") for path in entries))
+                else:
+                    with self.assertRaises(StoryLoopError):
+                        capture_snapshot(root, include_control=True, include_ignored=True)
+
     def test_declared_scratch_paths_and_index_refresh_are_tolerated(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

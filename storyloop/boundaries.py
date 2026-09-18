@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import stat
 from dataclasses import dataclass
@@ -67,8 +68,10 @@ def capture_snapshot(root: Path, max_files: int = _DEFAULT_MAX_FILES,
     ignored = set() if include_ignored else (
         _READONLY_IGNORED if include_control else _CONTROL_IGNORED
     )
-    first = _scan_once(resolved, max_files, ignored, include_control)
-    second = _scan_once(resolved, max_files, ignored, include_control)
+    allowed = _sensitive_allow(resolved)
+    scratch = _scratch_skip(resolved) if include_ignored else frozenset()
+    first = _scan_once(resolved, max_files, ignored, include_control, allowed, scratch)
+    second = _scan_once(resolved, max_files, ignored, include_control, allowed, scratch)
     require(first == second, "Workspace changed while capturing snapshot")
     return WorkspaceSnapshot(resolved, first)
 
@@ -94,11 +97,17 @@ def _reject_linked_git_control(root: Path) -> None:
 
 
 def _scan_once(root: Path, max_files: int, ignored: set[str],
-               track_directories: bool) -> tuple[tuple[str, FileFingerprint], ...]:
+               track_directories: bool,
+               allowed: frozenset[str] = frozenset(),
+               scratch: frozenset[str] = frozenset()) -> tuple[tuple[str, FileFingerprint], ...]:
     entries: list[tuple[str, FileFingerprint]] = []
     for directory, names, files in os.walk(root, followlinks=False):
         current = Path(directory)
         require(not _is_link(current), "Links are not allowed in project snapshots")
+        if scratch:
+            base = "" if current == root else current.relative_to(root).as_posix() + "/"
+            names[:] = [name for name in names
+                        if name not in scratch and base + name not in scratch]
         _reject_links(current, [*names, *files])
         names[:] = sorted(name for name in names if name.casefold() not in ignored)
         if track_directories:
@@ -109,7 +118,8 @@ def _scan_once(root: Path, max_files: int, ignored: set[str],
             path = current / name
             if path.relative_to(root).as_posix() == ".storyloop/run.lock":
                 continue
-            _reject_sensitive(path)
+            if path.relative_to(root).as_posix() not in allowed:
+                _reject_sensitive(path)
             require(path.is_file(), "Unsupported filesystem entry in project")
             require(len(entries) < max_files, "Snapshot file limit exceeded")
             relative = path.relative_to(root).as_posix()
@@ -334,6 +344,32 @@ def _is_link(path: Path) -> bool:
         return True
     is_junction = getattr(path, "is_junction", None)
     return bool(is_junction and is_junction())
+
+
+def _sensitive_allow(root: Path) -> frozenset[str]:
+    """Tracked files the project cleared in `candidate_allow` despite sensitive-looking names."""
+    config = root / ".storyloop" / "config.json"
+    if not config.is_file():
+        return frozenset()
+    try:
+        profile = json.loads(config.read_text(encoding="utf-8")).get("profile", {})
+    except (OSError, ValueError):
+        return frozenset()
+    values = profile.get("candidate_allow", []) if isinstance(profile, dict) else []
+    return frozenset(item for item in values if isinstance(item, str))
+
+
+def _scratch_skip(root: Path) -> frozenset[str]:
+    """Declared scratch locations (names or relative paths) are never walked by full snapshots."""
+    config = root / ".storyloop" / "config.json"
+    if not config.is_file():
+        return frozenset()
+    try:
+        profile = json.loads(config.read_text(encoding="utf-8")).get("profile", {})
+    except (OSError, ValueError):
+        return frozenset()
+    values = profile.get("scratch_paths", []) if isinstance(profile, dict) else []
+    return frozenset(item.rstrip("/") for item in values if isinstance(item, str) and item)
 
 
 def _reject_sensitive(path: Path) -> None:

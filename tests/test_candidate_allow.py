@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from storyloop.boundaries import capture_snapshot
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import _default_services
 from storyloop.project_profile import detect_project, validate_project_settings
@@ -48,6 +49,18 @@ class CandidateAllowTests(unittest.TestCase):
             paths = _copy_candidate(root, Path(target))
             self.assertIn(".env.development", paths)
             self.assertTrue((Path(target) / ".env.development").is_file())
+
+    def test_workspace_snapshot_honours_the_same_allow_list(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            _repo(root, [])
+            with self.assertRaises(StoryLoopError):
+                capture_snapshot(root, include_control=True, include_ignored=True)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            _repo(root, [".env.development"])
+            snapshot = capture_snapshot(root, include_control=True, include_ignored=True)
+            self.assertIn(".env.development", dict(snapshot.entries))
 
     def test_smoke_agent_receives_suite_root(self):
         captured = {}
