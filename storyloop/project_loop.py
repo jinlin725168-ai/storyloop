@@ -188,7 +188,7 @@ def _manual_acceptance_gate(project: Path, change: dict, state: dict, verified: 
 def _resume_manual_acceptance(project: Path, change: dict, state: dict) -> dict:
     """Continue a paused run once the human accepted the manual criteria on unchanged code."""
     require(git_visible_digest(project) == state.get("candidate_sha256"),
-            "Workspace changed while waiting for manual acceptance; rerun the change")
+            "Workspace changed while waiting for manual acceptance; use `storyloop reset` to retry")
     verified = state.get("verified")
     require(isinstance(verified, dict) and set(verified) == {"boundary", "regression", "smoke", "review"},
             "Paused run lacks its verification evidence")

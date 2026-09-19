@@ -57,7 +57,7 @@ def record_manual_acceptance(
     commit = state.get("candidate_sha256")
     require(isinstance(commit, str) and bool(commit), "Paused run lacks its candidate digest")
     require(git_visible_digest(project) == commit,
-            "Workspace differs from the verified candidate; rerun the change before accepting")
+            "Workspace differs from the verified candidate; use `storyloop reset` and run again before accepting")
     moment = (now or _utc_now)().astimezone(timezone.utc).isoformat(timespec="seconds")
     records = [record for record in load_manual_acceptance(project, change_id)
                if not (record["criterion_id"] in ids and record.get("candidate_sha256") == commit)]

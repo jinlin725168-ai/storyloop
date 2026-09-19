@@ -175,6 +175,7 @@ storyloop base-update C:\work\my-project --proposal BASE-20260916-001
 
 - `BASE_CHANGE_REQUIRED`：功能依赖底座修改。
 - `NEEDS_INPUT`：已批准合同仍出现真实产品歧义。
+- `WORKSPACE_TAINTED`：代理或其他进程在工作区里产生了不该有的改动（未声明的被忽略文件、暂存、控制面文件）。这是终态：人先判断原因（常见：残留的 dev server、未声明的构建目录），处理后执行 `storyloop reset PATH --change ID --reason "…"` 再 `storyloop run`。复位不动任何文件，被中断的那一轮不计入尝试预算，理由写入运行状态。
 - `MANUAL_ACCEPTANCE_REQUIRED`：自动验收、回归和独立审查都已通过，但合同里有 `manual` 验收条件。此时功能分支上的代码就是待验收版本；逐条执行 `storyloop accept PATH --change ID --criterion A2 --note "看到了什么"`，再 `storyloop run PATH --change ID` 生成报告并合并。验收记录与当时的代码指纹绑定，代码一变就失效。
 - `BOUNDARY_VIOLATION`：代理写到了未授权路径。
 - `BUDGET_EXHAUSTED`：达到自动尝试上限。

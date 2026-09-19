@@ -17,6 +17,7 @@ from .processutil import redact
 from .project_agents import invoke_project_agent
 from .project_loop import load_run_state, run_change
 from .report import render
+from .run_recovery import reset_run
 from .smoke_runner import run_smoke_isolated
 from .storage import initialize, load_json
 
@@ -38,6 +39,7 @@ def parser() -> argparse.ArgumentParser:
         "discuss": "旧实例：与 AI 共创故事和验收边界",
         "prepare": "旧实例：生成验收测试与初始骨架（不执行）",
         "accept": "记录人工验收：产品变更用 --change 与 --criterion，旧实例用 --story",
+        "reset": "人工复位卡住的运行（WORKSPACE_TAINTED 或工作区已变的人工验收等待），需说明理由",
         "demo": "运行自带脚本示例（不调用 AI）",
     }
     for command, help_text in descriptions.items():
@@ -56,6 +58,9 @@ def parser() -> argparse.ArgumentParser:
             child.add_argument("--change", dest="change_id", required=command == "ci")
         elif command == "base-update":
             child.add_argument("--proposal", required=True)
+        elif command == "reset":
+            child.add_argument("--change", dest="change_id", required=True)
+            child.add_argument("--reason", required=True)
         elif command == "base-propose":
             child.add_argument("--path", dest="paths", action="append", default=[], required=True)
             child.add_argument("--reason", required=True)
@@ -133,6 +138,8 @@ def _product_dispatch(project: Path, args) -> dict:
         return {"status": change["status"], "change_id": change_id,
                 "revision": change["revision"],
                 "run": load_run_state(project, change_id) if run_path.exists() else None}
+    if args.command == "reset":
+        return reset_run(project, change_id, args.reason)
     if args.command == "accept":
         require(change_id and args.criteria, "Manual acceptance needs --change and --criterion")
         return record_manual_acceptance(project, change_id, args.criteria, args.note)
