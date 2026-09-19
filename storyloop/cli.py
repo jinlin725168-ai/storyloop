@@ -21,6 +21,7 @@ from .report import render
 from .run_recovery import reset_run
 from .smoke_runner import run_smoke_isolated
 from .storage import initialize, load_json
+from .telemetry import adopt_pending, summarize
 
 
 def parser() -> argparse.ArgumentParser:
@@ -121,7 +122,9 @@ def _change(project: Path, args) -> dict:
         require(not args.change_id and not args.message,
                 "Use --idea for a new change, or --change with --message for a revision")
         product = invoke_project_agent(project, "product", {"idea": args.idea})
-        return create_change(project, args.idea, product)
+        created = create_change(project, args.idea, product)
+        adopt_pending(project, created["change_id"])
+        return created
     require(args.change_id and args.message,
             "Revision needs both --change and --message")
     current = load_change(project, args.change_id)
@@ -149,7 +152,8 @@ def _product_dispatch(project: Path, args) -> dict:
         run_path = project / ".storyloop/state/runs" / f"{change_id}.json"
         return {"status": change["status"], "change_id": change_id,
                 "revision": change["revision"],
-                "run": load_run_state(project, change_id) if run_path.exists() else None}
+                "run": load_run_state(project, change_id) if run_path.exists() else None,
+                "telemetry": summarize(project, change_id)}
     if args.command == "reset":
         return reset_run(project, change_id, args.reason)
     if args.command == "accept":

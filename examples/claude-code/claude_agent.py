@@ -122,10 +122,24 @@ def main() -> int:
     if result is None:
         print("claude result was not a JSON object", file=sys.stderr)
         return 1
-    print(f"claude {role}: cost=${envelope.get('total_cost_usd', 0):.4f} "
-          f"turns={envelope.get('num_turns')}", file=sys.stderr)
+    result["_telemetry"] = _telemetry(envelope)  # StoryLoop strips and records this
+    print(f"claude {role}: cost=${result['_telemetry'].get('cost_usd', 0):.4f} "
+          f"turns={result['_telemetry'].get('turns')}", file=sys.stderr)
     print(json.dumps(result, ensure_ascii=False))
     return 0
+
+
+def _telemetry(envelope: dict) -> dict:
+    """Cost, turns, duration, tokens and models from the claude -p JSON envelope."""
+    usage = envelope.get("usage") or {}
+    models = [name for name in (envelope.get("modelUsage") or {}) if "haiku" not in name]
+    value = {"cost_usd": envelope.get("total_cost_usd"), "turns": envelope.get("num_turns"),
+             "duration_ms": envelope.get("duration_ms"),
+             "input_tokens": (usage.get("input_tokens") or 0) + (usage.get("cache_read_input_tokens") or 0)
+             + (usage.get("cache_creation_input_tokens") or 0),
+             "output_tokens": usage.get("output_tokens"),
+             "model": ",".join(models) if models else None}
+    return {key: item for key, item in value.items() if item is not None}
 
 
 def _prompt(request: dict, role: str, guides: list[str]) -> str:

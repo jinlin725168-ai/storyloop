@@ -26,6 +26,7 @@ def generate_change_report(
     smoke: dict,
     review: dict,
     manual_acceptance: list[dict] | None = None,
+    telemetry: dict | None = None,
 ) -> Path:
     """Write a passing report only when every link has real green or human evidence."""
     project = Path(project).resolve()
@@ -51,6 +52,7 @@ def generate_change_report(
         "regression": regression,
         "review": review,
         "traceability": traceability,
+        "telemetry": _telemetry_view(telemetry),
     }
     root = project / "reports" / "storyloop" / change_id
     path = root / "report.json"
@@ -196,7 +198,38 @@ def _render_markdown(report: dict) -> str:
             f"{statuses} | `{item['evidence_sha256']}` |"
         )
     lines.extend(["", "## 独立审查", "", _markdown(report["review"]["summary"]), ""])
+    lines.extend(_telemetry_markdown(report.get("telemetry") or {}))
     return "\n".join(lines)
+
+
+def _telemetry_view(value: dict | None) -> dict:
+    base = {"calls": 0, "agent_ms": 0, "cost_usd": None, "by_role": {}, "attempts": None, "loop_ms": 0}
+    if isinstance(value, dict):
+        base.update({key: value[key] for key in base if key in value})
+    return base
+
+
+def _telemetry_markdown(telemetry: dict) -> list[str]:
+    cost = telemetry.get("cost_usd")
+    lines = ["## 成本与耗时", "",
+             f"- 代理调用：{telemetry.get('calls', 0)} 次，代理累计 {_minutes(telemetry.get('agent_ms', 0))}",
+             f"- 闭环墙钟：{_minutes(telemetry.get('loop_ms', 0))}，实现尝试 {telemetry.get('attempts') or '-'} 轮",
+             f"- 费用：{'未报告' if cost is None else f'{cost:.4f} USD'}", ""]
+    by_role = telemetry.get("by_role") or {}
+    if by_role:
+        lines += ["| 角色 | 调用 | 轮数 | 耗时 | 费用 |", "|---|---|---|---|---|"]
+        for role, item in sorted(by_role.items()):
+            role_cost = item.get("cost_usd")
+            lines.append(f"| {role} | {item.get('calls', 0)} | {item.get('turns', 0)} | "
+                         f"{_minutes(item.get('agent_ms', 0))} | "
+                         f"{'-' if role_cost is None else f'{role_cost:.4f}'} |")
+        lines.append("")
+    return lines
+
+
+def _minutes(milliseconds: object) -> str:
+    seconds = int(milliseconds or 0) // 1000
+    return f"{seconds // 60} 分 {seconds % 60} 秒"
 
 
 def _markdown(value: object) -> str:

@@ -8,12 +8,14 @@ from pathlib import Path
 import shutil
 import sys
 import tempfile
+import time
 
 from .agents import _codex_executable
 from .baseline import load_project_config
 from .models import StoryLoopError, require
 from .processutil import run_process
 from .storage import load_json, write_json
+from .telemetry import record_call
 
 ROLES = {"product", "smoke", "implement", "review"}
 INSTRUCTIONS = {
@@ -56,12 +58,26 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
     }
     _bounded_json(request)
     adapter = config.get("adapter")
+    started = time.monotonic()
     if adapter == "manual":
-        return _manual(project, request)
-    if adapter == "command":
-        return _command(project, request, config)
-    require(adapter == "codex", "Unknown project agent adapter")
-    return _codex(project, request, config)
+        result = _manual(project, request)
+    elif adapter == "command":
+        result = _command(project, request, config)
+    else:
+        require(adapter == "codex", "Unknown project agent adapter")
+        result = _codex(project, request, config)
+    telemetry = result.pop("_telemetry", None) if isinstance(result, dict) else None
+    record_call(project, role, _change_id(payload), telemetry,
+                int((time.monotonic() - started) * 1000))
+    return result
+
+
+def _change_id(payload: dict) -> str | None:
+    value = payload.get("change_id")
+    if not isinstance(value, str):
+        change = payload.get("change")
+        value = change.get("change_id") if isinstance(change, dict) else None
+    return value if isinstance(value, str) and value else None
 
 
 def _manual(project: Path, request: dict) -> dict:

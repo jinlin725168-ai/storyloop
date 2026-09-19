@@ -169,6 +169,8 @@ storyloop base-update C:\work\my-project --proposal BASE-20260916-001
 
 `command` 适配器和项目回归命令是当前用户权限下的原生进程，必须来自可信来源。StoryLoop 可检测本地文件与 Git 状态变化，但不能替代操作系统级网络隔离；如需证明进程无法访问远端，请在无网络且不挂载 SSH/API 凭证的容器或 CI 沙箱中运行。
 
+每次代理调用的墙钟时间都会记录；适配器若在结果里附带 `_telemetry`（费用、轮数、时长、token、模型，`examples/claude-code` 已实现），引擎会剥离并一起记录到 `.storyloop/state/telemetry/<change-id>.json`。验收报告的『成本与耗时』一节汇总每个角色的调用次数、轮数、耗时和费用，以及闭环墙钟和实现尝试轮数；`status --json` 的 `telemetry` 字段给出同样的数据。
+
 ## 9. 明确停止点
 
 只有以下情况需要人工介入：

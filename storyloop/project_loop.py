@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import hashlib
 from pathlib import Path
 from typing import Callable
@@ -16,6 +17,7 @@ from .changes import load_change
 from .models import StoryLoopError, require
 from .project_boundaries import audit_project_changes
 from .answers import load_answers, _pending as _unanswered
+from .telemetry import summarize
 from .manual_acceptance import load_manual_acceptance, pending_manual_criteria
 from .project_contracts import (validate_agent_summary,
                                 validate_review)
@@ -463,11 +465,14 @@ def _complete(
     implementation = commit_paths(
         project, changed_paths, f"feat({change_id}): implement approved product change"
     )
+    telemetry = {**summarize(project, change_id), "attempts": state["attempt"],
+                 "loop_ms": _loop_ms(state)}
     report_path = generate_change_report(
         project, change_id, implementation["commit"], regression, smoke, review,
-        manual_acceptance=manual,
+        manual_acceptance=manual, telemetry=telemetry,
     )
     state["manual_acceptance"] = manual
+    state["telemetry"] = telemetry
     report_commit = commit_paths(
         project, [report_path.relative_to(project).as_posix(),
                   report_path.with_suffix(".md").relative_to(project).as_posix()],
@@ -520,6 +525,17 @@ def _finalize_change(project: Path, change: dict, state: dict) -> dict:
     return _passed_result(state)
 
 
+def _loop_ms(state: dict) -> int:
+    started = state.get("started_at")
+    if not isinstance(started, str):
+        return 0
+    try:
+        begun = datetime.fromisoformat(started)
+    except ValueError:
+        return 0
+    return max(int((datetime.now(timezone.utc) - begun).total_seconds() * 1000), 0)
+
+
 def _passed_result(state: dict) -> dict:
     return {"status": "PASSED", "change_id": state["change_id"],
             "attempts": state["attempt"],
@@ -545,6 +561,7 @@ def _new_run_state(change_id: str, started: dict, contract_digest: str) -> dict:
     return {"version": 1, "change_id": change_id, "status": "PREPARING", "attempt": 0,
             "feature_branch": started["branch"], "source_branch": started["source_branch"],
             "source_head": started["source_head"], "contract_digest": contract_digest,
+            "started_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "failures": []}
 
 
