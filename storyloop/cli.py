@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 
 from . import __version__, discovery, engine, v2_cli
+from .answers import pending_questions, record_answers
 from .approvals import approve_change
 from .baseline import BASELINE_PATH, bootstrap_project
 from .base_upgrade import propose_base_change, upgrade_baseline
@@ -38,6 +39,7 @@ def parser() -> argparse.ArgumentParser:
         "base-update": "按 BASE 提案校验独立底座提交并升级底座版本",
         "discuss": "旧实例：与 AI 共创故事和验收边界",
         "prepare": "旧实例：生成验收测试与初始骨架（不执行）",
+        "answer": "回答代理在 NEEDS_INPUT 停点提出的问题（--answer 可重复，按问题顺序）",
         "accept": "记录人工验收：产品变更用 --change 与 --criterion，旧实例用 --story",
         "reset": "人工复位卡住的运行（WORKSPACE_TAINTED 或工作区已变的人工验收等待），需说明理由",
         "demo": "运行自带脚本示例（不调用 AI）",
@@ -56,6 +58,12 @@ def parser() -> argparse.ArgumentParser:
             child.add_argument("--message")
         elif command in {"approve", "status", "report", "ci"}:
             child.add_argument("--change", dest="change_id", required=command == "ci")
+            if command == "approve":
+                child.add_argument("--no-interactive", action="store_true",
+                                   help="停在 NEEDS_INPUT 时不在终端提问")
+        elif command == "answer":
+            child.add_argument("--change", dest="change_id", required=True)
+            child.add_argument("--answer", dest="answers", action="append", default=[], required=True)
         elif command == "base-update":
             child.add_argument("--proposal", required=True)
         elif command == "reset":
@@ -71,6 +79,8 @@ def parser() -> argparse.ArgumentParser:
         elif command == "run":
             child.add_argument("--change", dest="change_id")
             child.add_argument("--story")
+            child.add_argument("--no-interactive", action="store_true",
+                               help="停在 NEEDS_INPUT 时不在终端提问")
         elif command == "accept":
             child.add_argument("--story")
             child.add_argument("--change", dest="change_id")
@@ -127,10 +137,12 @@ def _product_dispatch(project: Path, args) -> dict:
     if args.command == "approve":
         require(change_id, "Product approval needs --change")
         approve_change(project, change_id)
-        return run_change(project, change_id)
+        return run_with_answers(project, change_id, interactive=not args.no_interactive)
     if args.command == "run":
         require(change_id, "Product execution needs --change")
-        return run_change(project, change_id)
+        return run_with_answers(project, change_id, interactive=not args.no_interactive)
+    if args.command == "answer":
+        return record_answers(project, change_id, args.answers)
     if args.command == "status":
         require(change_id, "Product status needs --change")
         change = load_change(project, change_id)
@@ -172,6 +184,36 @@ def _legacy_dispatch(project: Path, args) -> dict:
         result["demo"] = "Scripted fixture; external checks and code changes are real. No AI model was called."
         return result
     return engine.run(project, args.story) if args.command == "run" else engine.status(project)
+
+
+def run_with_answers(project: Path, change_id: str, interactive: bool,
+                     runner=None) -> dict:
+    """Run the change; when it pauses for input and a terminal is present, ask right here.
+
+    Answers are recorded exactly as `storyloop answer` would record them, then the run
+    continues. Without a terminal (CI, pipes) the NEEDS_INPUT result is returned unchanged.
+    """
+    runner = runner or run_change  # resolved at call time so tests can patch cli.run_change
+    result = runner(project, change_id)
+    while result.get("status") == "NEEDS_INPUT" and interactive and _terminal():
+        questions = pending_questions(project, change_id)
+        if not questions:
+            break
+        print(f"代理有 {len(questions)} 个问题需要你决定（直接回车表示让代理自行决定）：")
+        answers = []
+        for index, question in enumerate(questions, 1):
+            reply = input(f"[{index}/{len(questions)}] {question}\n> ").strip()
+            answers.append(reply or "由人确认：此问题无特别要求，由代理按现有约定自行决定")
+        record_answers(project, change_id, answers)
+        result = runner(project, change_id)
+    return result
+
+
+def _terminal() -> bool:
+    try:
+        return sys.stdin.isatty() and sys.stdout.isatty()
+    except (AttributeError, ValueError):
+        return False
 
 
 def _is_product_project(project: Path) -> bool:

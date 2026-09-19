@@ -62,6 +62,8 @@ RULES = (
     "Questions are only for genuine product ambiguities. Never ask about tooling, permissions or "
     "the environment: skip the affected check, say so in the summary, and let the external "
     "acceptance run verify the result.\n"
+    "payload.answers lists human decisions on questions raised in earlier attempts "
+    "({attempt, question, answer}); follow them and never ask an answered question again.\n"
 )
 
 

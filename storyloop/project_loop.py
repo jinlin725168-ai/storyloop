@@ -15,6 +15,7 @@ from .change_report import generate_change_report
 from .changes import load_change
 from .models import StoryLoopError, require
 from .project_boundaries import audit_project_changes
+from .answers import load_answers, _pending as _unanswered
 from .manual_acceptance import load_manual_acceptance, pending_manual_criteria
 from .project_contracts import (validate_agent_summary,
                                 validate_review)
@@ -62,6 +63,10 @@ def _run_change_locked(
     services = services or _default_services()
     config = load_project_config(project)
     state, start_attempt, fresh = _open_run(project, change)
+    if state["status"] == "NEEDS_INPUT":
+        require(not _unanswered(state, load_answers(project, change_id)),
+                "Answer the pending questions first: storyloop answer <project> --change "
+                f"{change_id} --answer ..., or run interactively in a terminal")
     if state["status"] == "VERIFIED":
         return _finish_verified(project, change, state)
     if state["status"] == "MANUAL_ACCEPTANCE_REQUIRED":
@@ -135,9 +140,11 @@ def _run_attempt(
 ) -> dict | None:
     change_id = change["change_id"]
     state.pop("questions", None)  # answered by reaching a new attempt; never carry stale ones
+    answers = load_answers(project, change_id)
+    state["answers"] = answers
     context = {"change": change, "attempt": state["attempt"],
                "max_attempts": config["max_attempts"],
-               "failures": list(state["failures"])}
+               "failures": list(state["failures"]), "answers": answers}
     response, touched = _implement_safely(project, change_id, services, context)
     validate_agent_summary(response)
     if response["questions"]:
@@ -293,7 +300,8 @@ def _perform_review(
     boundary: dict, regression: dict, smoke: dict,
 ) -> dict:
     context = {"change": change, "attempt": state["attempt"],
-               "regression": regression, "smoke": smoke, "boundary": boundary}
+               "regression": regression, "smoke": smoke, "boundary": boundary,
+               "answers": load_answers(project, change["change_id"])}
     return _read_only_call(
         project, change["change_id"], lambda: services.review(project, context)
     )
