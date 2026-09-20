@@ -12,7 +12,9 @@ from storyloop.baseline import bootstrap_project, load_project_config
 from storyloop.project_agents import invoke_project_agent
 from storyloop.project_loop import load_run_state, run_change
 from storyloop.storage import write_json
-from storyloop.telemetry import adopt_pending, summarize
+from storyloop.project_loop import LoopServices
+from storyloop.telemetry import adopt_pending, record_call, summarize
+from tests.test_project_loop import smoke_payload
 from tests.test_baseline_behavior import repository
 from tests.test_workspace_scratch import _approved, _services
 
@@ -40,6 +42,31 @@ def _command_project(root: Path) -> None:
 
 
 class TelemetryTests(unittest.TestCase):
+    def test_recording_telemetry_inside_read_only_calls_does_not_taint(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = _approved(root, {})
+            base = _services(change_id, build_in_place=False)
+
+            def generate_smoke(project, state):
+                record_call(project, "smoke", change_id, {"cost_usd": 0.5, "turns": 2}, 1200)
+                return smoke_payload(change_id)
+
+            def review(project, context):
+                record_call(project, "review", change_id, {"cost_usd": 0.2, "turns": 1}, 800)
+                return base.review(project, context)
+
+            def implement(project, context):
+                record_call(project, "implement", change_id, None, 3000)
+                return base.implement(project, context)
+
+            services = LoopServices(generate_smoke=generate_smoke, implement=implement, review=review)
+            done = run_change(root, change_id, services)
+            self.assertEqual(done["status"], "PASSED", done)
+            telemetry = load_run_state(root, change_id)["telemetry"]
+            self.assertEqual(telemetry["calls"], 3)
+            self.assertAlmostEqual(telemetry["cost_usd"], 0.7)
+
     def test_adapter_telemetry_is_stripped_from_results_and_recorded(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
