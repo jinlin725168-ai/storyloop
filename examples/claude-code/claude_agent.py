@@ -70,7 +70,9 @@ RULES = (
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default=None)
-    parser.add_argument("--max-turns", type=int, default=60)
+    # A full-stack feature (backend + SQL + frontend) takes well over 60 agentic turns; a cap
+    # that is too low kills the call mid-edit and wastes the whole attempt.
+    parser.add_argument("--max-turns", type=int, default=200)
     parser.add_argument("--bash", action="append", default=[], help="extra Bash(prefix:*) allow rule")
     parser.add_argument("--guide", action="append", default=[],
                         help="project guidance file appended to every prompt (repeatable)")

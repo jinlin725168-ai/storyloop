@@ -13,7 +13,7 @@ import time
 from .agents import _codex_executable
 from .baseline import load_project_config
 from .models import StoryLoopError, require
-from .processutil import run_process
+from .processutil import redact, run_process
 from .storage import load_json, write_json
 from .telemetry import record_call
 
@@ -146,7 +146,14 @@ def _check_process(result: dict) -> None:
     if (result.get("contained") is not True or result.get("timed_out")
             or result.get("truncated") or result.get("error")
             or result.get("returncode") != 0):
-        raise StoryLoopError("Project agent process failed safely")
+        reasons = [name for name in ("timed_out", "truncated", "error") if result.get(name)]
+        if result.get("contained") is not True:
+            reasons.append("not contained")
+        if result.get("returncode") not in (0, None):
+            reasons.append(f"exit {result['returncode']}")
+        tail = redact(str(result.get("stderr") or "")).strip().splitlines()[-3:]
+        detail = "; ".join(reasons) + (" | " + " / ".join(tail)[:600] if tail else "")
+        raise StoryLoopError(f"Project agent process failed safely ({detail})")
 
 
 def _parse(output: str) -> dict:

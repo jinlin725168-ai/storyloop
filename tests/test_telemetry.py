@@ -48,8 +48,9 @@ class TelemetryTests(unittest.TestCase):
             root = Path(folder)
             _command_project(root)
             script = root / ".storyloop/echo_agent.py"
-            script.write_text("import sys; sys.exit(3)\n", encoding="utf-8")
-            with self.assertRaises(StoryLoopError):
+            script.write_text("import sys; print('claude ended with error_max_turns', file=sys.stderr); sys.exit(3)\n",
+                              encoding="utf-8")
+            with self.assertRaisesRegex(StoryLoopError, "error_max_turns"):
                 invoke_project_agent(root, "review", {"change": {"change_id": "FEAT-3"}})
             summary = summarize(root, "FEAT-3")
             self.assertEqual(summary["calls"], 1)
