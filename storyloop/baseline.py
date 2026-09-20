@@ -41,7 +41,7 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
         "adapter": "codex",
         "agent_command": [],
         "max_attempts": 3,
-        "agent_timeout_seconds": 900,
+        "agent_timeout_seconds": 14400,  # liveness guard only; the budget is max_attempts
         "check_timeout_seconds": 300,
         "profile": profile,
     }

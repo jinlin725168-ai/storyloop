@@ -22,23 +22,31 @@ INSTRUCTIONS = {
     "product": (
         "Co-create only product-level intent. Return the complete StoryLoop product v1 JSON: "
         "goal, non_goals, unresolved business questions, user stories, and observable Given/When/Then "
-        "acceptance criteria. Preserve stable IDs and never invent answers to unresolved questions."
+        "acceptance criteria. Preserve stable IDs and never invent answers to unresolved questions. "
+        "Exact shape: {version:1, goal:string, non_goals:[string], questions:[{id,text,options:[string]}], "
+        "stories:[{id,title,as_a,want,so_that,rules:[string],out_of_scope:[string],depends_on:[string],"
+        "acceptance:[{id,given,when,then,kind:'automated'|'manual'}]}]}; every key is required even "
+        "when empty, IDs are unique across the product, no extra keys."
     ),
     "smoke": (
         "Act as independent external acceptance QA. Return exactly {files:[{path,content}],manifest}. "
-        "Generate a small core-flow smoke suite under the supplied relative suite root. Every automated "
-        "criterion must be linked by ID. Tests must fail when behavior is absent and must not edit CI files."
+        "Generate a small core-flow smoke suite under payload.suite_root. Every automated "
+        "criterion must be linked by ID. Tests must fail when behavior is absent and must not edit CI files. "
+        "Exact shape: {files:[{path,content}], manifest:{version:1, tests:[{id, criteria:[string], "
+        "command:[string], timeout_seconds:int}]}}; `path` is relative to the suite root, `command` "
+        "runs from the repository root with a minimal environment, use \"{python}\" for the interpreter."
     ),
     "implement": (
         "Implement the approved change in this repository. Modify only new files under configured module "
         "roots. If an integration or foundation file must change, explain that need without editing it. "
         "Never edit the foundation, OpenSpec contract, acceptance "
-        "tests, reports, CI, or .storyloop. Do not commit or push. Run useful local checks. Return exactly "
-        "{summary:string,questions:[string]}."
+        "tests, reports, CI, or .storyloop. Do not commit or push. Run useful local checks. "
+        "payload.answers lists human decisions on earlier questions; follow them and never re-ask. "
+        "Return exactly {summary:string,questions:[string]}; questions only for genuine product ambiguities."
     ),
     "review": (
         "Independently review the real implementation against the approved stories and acceptance evidence. "
-        "Do not edit files. Return exactly {verdict:'pass'|'fail'|'needs_input',summary:string," 
+        "Do not edit files. Return exactly {verdict:'pass'|'fail'|'needs_input',summary:string,"
         "findings:[object],questions:[string]}. Pass only with no findings or questions."
     ),
 }
@@ -123,23 +131,75 @@ def _command(project: Path, request: dict, config: dict) -> dict:
     return _parse(result.get("stdout", ""))
 
 
+CODEX_REPAIR_LIMIT = 2                 # resumes allowed to turn a prose ending into JSON
+CODEX_MAX_OUTPUT = 16 * 1024 * 1024    # --json streams every event; far above the default cap
+CODEX_REPAIR_PROMPT = (
+    "上一条回复不是合法的 JSON 对象。不要再修改任何文件，也不要重复说明；"
+    "只按原始要求输出一个 JSON 对象。"
+)
+
+
 def _codex(project: Path, request: dict, config: dict) -> dict:
-    root = project / ".storyloop"
-    with tempfile.NamedTemporaryFile(dir=root, suffix=".response", delete=False) as handle:
-        output = Path(handle.name)
+    """Run Codex in a persistent session; resume it to repair a non-JSON final message.
+
+    Codex has no turn cap, so a long task simply runs; the recoverable failure is the agent
+    ending in prose. Sessions are kept on disk (no --ephemeral) so `codex exec resume` can
+    finish the same thread with its context intact. Usage comes from the --json event stream.
+    """
     sandbox = "workspace-write" if request["role"] == "implement" else "read-only"
-    command = _codex_executable() + [
-        "exec", "--sandbox", sandbox, "--ephemeral", "--ignore-user-config",
-        "--color", "never", "-C", str(project), "--output-last-message", str(output), "-",
-    ]
+    common = ["--ignore-user-config", "--color", "never", "--json"]
     prompt = INSTRUCTIONS[request["role"]] + "\nRequest:\n" + json.dumps(request, ensure_ascii=False)
+    telemetry = {"turns": 0, "input_tokens": 0, "output_tokens": 0, "segments": 0}
+    thread: str | None = None
+    for repair in range(CODEX_REPAIR_LIMIT + 1):
+        if repair == 0:
+            argv = _codex_executable() + ["exec", "--sandbox", sandbox, "-C", str(project), *common]
+        else:
+            argv = _codex_executable() + ["exec", "resume", thread, *common]
+        content = _codex_once(project, argv, CODEX_REPAIR_PROMPT if repair else prompt,
+                              config["agent_timeout_seconds"], telemetry)
+        thread = telemetry.pop("thread", None) or thread
+        try:
+            result = _parse(content)
+        except StoryLoopError:
+            if not thread or repair == CODEX_REPAIR_LIMIT:
+                raise
+            continue
+        result["_telemetry"] = dict(telemetry)
+        return result
+    raise StoryLoopError("Project agent did not return a JSON object")  # unreachable
+
+
+def _codex_once(project: Path, argv: list[str], prompt: str, timeout: int, telemetry: dict) -> str:
+    with tempfile.NamedTemporaryFile(dir=project / ".storyloop", suffix=".response",
+                                     delete=False) as handle:
+        output = Path(handle.name)
     try:
-        result = run_process(command, project, config["agent_timeout_seconds"], input_text=prompt)
+        result = run_process(argv + ["--output-last-message", str(output), "-"], project, timeout,
+                             input_text=prompt, max_output=CODEX_MAX_OUTPUT)
         _check_process(result)
+        _codex_events(result.get("stdout", ""), telemetry)
         require(output.stat().st_size <= 2_000_000, "Agent response exceeded the size limit")
-        return _parse(output.read_text(encoding="utf-8"))
+        return output.read_text(encoding="utf-8")
     finally:
         output.unlink(missing_ok=True)
+
+
+def _codex_events(stream: str, telemetry: dict) -> None:
+    """Fold the --json event stream into telemetry (thread id, turns, tokens)."""
+    telemetry["segments"] += 1
+    for line in stream.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if event.get("type") == "thread.started" and isinstance(event.get("thread_id"), str):
+            telemetry["thread"] = event["thread_id"]
+        elif event.get("type") == "turn.completed":
+            usage = event.get("usage") or {}
+            telemetry["turns"] += 1
+            telemetry["input_tokens"] += int(usage.get("input_tokens") or 0)
+            telemetry["output_tokens"] += int(usage.get("output_tokens") or 0)
 
 
 def _check_process(result: dict) -> None:

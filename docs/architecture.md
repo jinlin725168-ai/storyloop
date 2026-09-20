@@ -78,7 +78,7 @@ flowchart TD
 
 - 外部 QA 脚本及 command 适配器必须可信。批准命令意味着允许执行相应程序。
 - 指纹检测可发现修改，不是 OS 沙箱，不能阻止同用户权限下的恶意进程读取宿主机文件。不要用它执行未知代码。
-- Codex 适配器使用其现有 read-only/workspace-write 沙箱；Runner 不会以绕过沙箱参数启动 Codex，也不会自行提权。
+- Codex 适配器使用其现有 read-only/workspace-write 沙箱；Runner 不会以绕过沙箱参数启动 Codex，也不会自行提权。产品模式的 Codex 会话落盘以便 `exec resume` 修复非 JSON 结尾；恢复调用不重新指定沙箱，沿用会话原有沙箱。
 - command 模式和 QA 进程没有内建文件系统隔离，保留给受信任适配器。若需要处理不可信代码，应在独立低权限用户/隔离执行环境中使用。
 - Windows 进程执行使用 `KILL_ON_JOB_CLOSE` Job Object，并通过门闩保证目标在加入 Job 后才启动；正常退出、失败、超时、输出超限和中断都清理完整 Job，并等待 Job 内活动进程归零后才报告 containment。
 - Linux 每次调用启动独立的 `PR_SET_CHILD_SUBREAPER` 监督进程，避免并发调用相互收养后代。正常结束、超时和输出超限后，监督进程反复终止并回收子进程及被收养的后代，再发送完成确认。缺少内核能力、`/proc` 不可读、监督进程崩溃或清理超时均 fail-closed。该机制管理受信任命令的进程生命周期，不隔离恶意同用户进程、外部服务或文件系统；需要强安全边界时仍应使用容器或独立低权限用户。其他 POSIX 平台仅清理进程组，不声称 containment。

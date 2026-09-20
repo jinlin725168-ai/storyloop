@@ -160,7 +160,7 @@ storyloop base-update C:\work\my-project --proposal BASE-20260916-001
 
 ## 8. 适配器
 
-默认使用本机已安装并登录的 Codex CLI，不保存 API 密钥。`.storyloop/config.json` 也支持：
+默认使用本机已安装并登录的 Codex CLI，不保存 API 密钥。Codex 会话持久化在本机（不再 `--ephemeral`），代理以非 JSON 文本结束时引擎用 `codex exec resume` 在同一会话里让它补出 JSON，最多两次；token 用量从事件流记入成本账本（Codex 不报告金额）。`.storyloop/config.json` 也支持：
 
 - `command`：以 argv 数组启动可信本地代理，stdin 输入请求 JSON，stdout 返回一个 JSON。`examples/claude-code/` 提供驱动 Claude Code 的现成适配器，`examples/tools/scratch_build.py` 让实现代理在临时目录构建而不污染工作区。
 - `manual`：请求写入 `.storyloop/requests/`，将匹配 `request_id` 的结果写到 `.storyloop/responses/` 后重跑原命令。
@@ -170,6 +170,8 @@ storyloop base-update C:\work\my-project --proposal BASE-20260916-001
 `command` 适配器和项目回归命令是当前用户权限下的原生进程，必须来自可信来源。StoryLoop 可检测本地文件与 Git 状态变化，但不能替代操作系统级网络隔离；如需证明进程无法访问远端，请在无网络且不挂载 SSH/API 凭证的容器或 CI 沙箱中运行。
 
 每次代理调用的墙钟时间都会记录；适配器若在结果里附带 `_telemetry`（费用、轮数、时长、token、模型，`examples/claude-code` 已实现），引擎会剥离并一起记录到 `.storyloop/state/telemetry/<change-id>.json`。验收报告的『成本与耗时』一节汇总每个角色的调用次数、轮数、耗时和费用，以及闭环墙钟和实现尝试轮数；`status --json` 的 `telemetry` 字段给出同样的数据。
+
+预算的含义：`max_attempts` 是唯一的质量预算，连续几轮完整尝试都过不了验收就停下来交给人；`agent_timeout_seconds` 只是进程挂死保护（默认 4 小时），不是用来判断代理能不能做完的；适配器内部的圈数上限是检查点，到上限续同一会话而不是失败。
 
 ## 9. 明确停止点
 

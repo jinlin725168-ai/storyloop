@@ -73,14 +73,14 @@ def _output_size(output, error) -> int:
     return os.fstat(output.fileno()).st_size + os.fstat(error.fileno()).st_size
 
 
-def _wait(process, output, error, deadline: float) -> tuple[bool, bool]:
+def _wait(process, output, error, deadline: float, limit: int = MAX_OUTPUT) -> tuple[bool, bool]:
     while process.poll() is None:
         timed_out = time.monotonic() >= deadline
-        truncated = _output_size(output, error) > MAX_OUTPUT
+        truncated = _output_size(output, error) > limit
         if timed_out or truncated:
             return timed_out, truncated
         time.sleep(0.05)
-    return False, _output_size(output, error) > MAX_OUTPUT
+    return False, _output_size(output, error) > limit
 
 
 def _feed_stdin(handle, source) -> None:
@@ -192,8 +192,13 @@ def run_process(command: list[str], cwd: Path, timeout: int | float,
                 input_text: str | None = None,
                 environment_allowlist: Sequence[str] | None = None,
                 source_environment: Mapping[str, str] | None = None,
-                absolute_deadline: float | None = None) -> dict:
-    """Execute argv, clean its tree, and report whether containment was secure."""
+                absolute_deadline: float | None = None,
+                max_output: int | None = None) -> dict:
+    """Execute argv, clean its tree, and report whether containment was secure.
+
+    `max_output` raises the combined stdout/stderr cap for callers that stream events.
+    """
+    limit = int(max_output) if max_output else MAX_OUTPUT
     env = _environment(environment_allowlist, source_environment)
     result = {"returncode": None, "stdout": "", "stderr": "", "timed_out": False,
               "truncated": False, "error": "", "contained": False}
@@ -211,6 +216,7 @@ def run_process(command: list[str], cwd: Path, timeout: int | float,
                 process, output, error,
                 min(time.monotonic() + timeout, absolute_deadline)
                 if absolute_deadline is not None else time.monotonic() + timeout,
+                limit,
             )
         except BaseException as exc:
             stopped, contained = _cleanup_process(process, job, feeder)
@@ -222,12 +228,12 @@ def run_process(command: list[str], cwd: Path, timeout: int | float,
                 ) from exc
             raise
         stopped, contained = _cleanup_process(process, job, feeder)
-        result["truncated"] = result["truncated"] or _output_size(output, error) > MAX_OUTPUT
+        result["truncated"] = result["truncated"] or _output_size(output, error) > limit
         result["contained"] = contained
         result["returncode"] = process.returncode
         if not stopped:
             result["error"] = "Unable to close external process tree"
         for key, handle in (("stdout", output), ("stderr", error)):
             handle.seek(0)
-            result[key] = handle.read(MAX_OUTPUT).decode("utf-8", errors="replace")
+            result[key] = handle.read(limit).decode("utf-8", errors="replace")
     return result
