@@ -59,17 +59,23 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
     _bounded_json(request)
     adapter = config.get("adapter")
     started = time.monotonic()
-    if adapter == "manual":
-        result = _manual(project, request)
-    elif adapter == "command":
-        result = _command(project, request, config)
-    else:
-        require(adapter == "codex", "Unknown project agent adapter")
-        result = _codex(project, request, config)
-    telemetry = result.pop("_telemetry", None) if isinstance(result, dict) else None
-    record_call(project, role, _change_id(payload), telemetry,
-                int((time.monotonic() - started) * 1000))
-    return result
+    failed = True
+    result = None
+    try:
+        if adapter == "manual":
+            result = _manual(project, request)
+        elif adapter == "command":
+            result = _command(project, request, config)
+        else:
+            require(adapter == "codex", "Unknown project agent adapter")
+            result = _codex(project, request, config)
+        failed = False
+        return result
+    finally:
+        telemetry = result.pop("_telemetry", None) if isinstance(result, dict) else None
+        # A manual adapter waiting for input is not a failed call; everything else that raised is.
+        record_call(project, role, _change_id(payload), telemetry,
+                    int((time.monotonic() - started) * 1000), failed=failed and adapter != "manual")
 
 
 def _change_id(payload: dict) -> str | None:

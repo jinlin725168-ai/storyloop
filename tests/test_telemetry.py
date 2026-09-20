@@ -9,6 +9,7 @@ import tempfile
 import unittest
 
 from storyloop.baseline import bootstrap_project, load_project_config
+from storyloop.models import StoryLoopError
 from storyloop.project_agents import invoke_project_agent
 from storyloop.project_loop import load_run_state, run_change
 from storyloop.storage import write_json
@@ -42,6 +43,19 @@ def _command_project(root: Path) -> None:
 
 
 class TelemetryTests(unittest.TestCase):
+    def test_failed_agent_calls_are_metered_too(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            _command_project(root)
+            script = root / ".storyloop/echo_agent.py"
+            script.write_text("import sys; sys.exit(3)\n", encoding="utf-8")
+            with self.assertRaises(StoryLoopError):
+                invoke_project_agent(root, "review", {"change": {"change_id": "FEAT-3"}})
+            summary = summarize(root, "FEAT-3")
+            self.assertEqual(summary["calls"], 1)
+            self.assertEqual(summary["by_role"]["review"]["failed"], 1)
+            self.assertIsNone(summary["cost_usd"])
+
     def test_recording_telemetry_inside_read_only_calls_does_not_taint(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

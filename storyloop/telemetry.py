@@ -15,11 +15,13 @@ NUMERIC = ("cost_usd", "turns", "duration_ms", "input_tokens", "output_tokens")
 
 
 def record_call(project: Path, role: str, change_id: str | None, telemetry: object,
-                wall_ms: int, now: Clock | None = None) -> dict:
+                wall_ms: int, now: Clock | None = None, failed: bool = False) -> dict:
     """Append one agent call; adapter telemetry is optional and only known keys are kept."""
     project = Path(project).resolve()
     entry = {"role": role, "wall_ms": int(wall_ms),
              "at": (now or _utc_now)().astimezone(timezone.utc).isoformat(timespec="seconds")}
+    if failed:
+        entry["failed"] = True
     if isinstance(telemetry, dict):
         for key in NUMERIC:
             value = telemetry.get(key)
@@ -52,14 +54,17 @@ def summarize(project: Path, change_id: str) -> dict:
     entries = _entries(Path(project).resolve(), change_id)
     by_role: dict[str, dict] = {}
     for entry in entries:
-        role = by_role.setdefault(entry["role"], {"calls": 0, "agent_ms": 0, "cost_usd": None, "turns": 0})
+        role = by_role.setdefault(entry["role"], {"calls": 0, "failed": 0, "agent_ms": 0,
+                                                  "cost_usd": None, "turns": 0})
         role["calls"] += 1
+        role["failed"] += 1 if entry.get("failed") else 0
         role["agent_ms"] += int(entry.get("wall_ms", 0))
         role["turns"] += int(entry.get("turns", 0))
         if "cost_usd" in entry:
             role["cost_usd"] = round((role["cost_usd"] or 0.0) + float(entry["cost_usd"]), 4)
     costs = [role["cost_usd"] for role in by_role.values() if role["cost_usd"] is not None]
-    return {"calls": len(entries), "agent_ms": sum(int(e.get("wall_ms", 0)) for e in entries),
+    return {"calls": len(entries), "failed": sum(1 for e in entries if e.get("failed")),
+            "agent_ms": sum(int(e.get("wall_ms", 0)) for e in entries),
             "cost_usd": round(sum(costs), 4) if costs else None, "by_role": by_role}
 
 

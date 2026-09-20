@@ -203,7 +203,8 @@ def _render_markdown(report: dict) -> str:
 
 
 def _telemetry_view(value: dict | None) -> dict:
-    base = {"calls": 0, "agent_ms": 0, "cost_usd": None, "by_role": {}, "attempts": None, "loop_ms": 0}
+    base = {"calls": 0, "failed": 0, "agent_ms": 0, "cost_usd": None, "by_role": {}, "attempts": None,
+            "loop_ms": 0}
     if isinstance(value, dict):
         base.update({key: value[key] for key in base if key in value})
     return base
@@ -212,7 +213,8 @@ def _telemetry_view(value: dict | None) -> dict:
 def _telemetry_markdown(telemetry: dict) -> list[str]:
     cost = telemetry.get("cost_usd")
     lines = ["## 成本与耗时", "",
-             f"- 代理调用：{telemetry.get('calls', 0)} 次，代理累计 {_minutes(telemetry.get('agent_ms', 0))}",
+             f"- 代理调用：{telemetry.get('calls', 0)} 次（失败 {telemetry.get('failed', 0)} 次），"
+             f"代理累计 {_minutes(telemetry.get('agent_ms', 0))}",
              f"- 闭环墙钟：{_minutes(telemetry.get('loop_ms', 0))}，实现尝试 {telemetry.get('attempts') or '-'} 轮",
              f"- 费用：{'未报告' if cost is None else f'{cost:.4f} USD'}", ""]
     by_role = telemetry.get("by_role") or {}
