@@ -72,6 +72,15 @@ def materialize_approved_change(project: Path, change_id: str) -> Path:
                     "Existing OpenSpec contract differs from the approval")
         else:
             _write_bytes(target, content)
+    for source_file in sorted((source / "specs").rglob("spec.md")) if (source / "specs").is_dir() else []:
+        relative = source_file.relative_to(source)
+        target = destination / relative
+        content = source_file.read_bytes()
+        if target.exists():
+            require(target.is_file() and target.read_bytes() == content,
+                    "Existing OpenSpec delta spec differs from the approval")
+        else:
+            _write_bytes(target, content)
     write_json(destination / "approval.json", deepcopy(state["approval"]), max_bytes=64_000)
     return destination
 

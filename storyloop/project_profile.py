@@ -13,7 +13,7 @@ from .path_security import repository_relative
 CI_FILES = (
     ".gitlab-ci.yml", "Jenkinsfile", "azure-pipelines.yml", ".circleci/config.yml",
 )
-GENERATED_PATHS = ("openspec/changes", "acceptance/smoke", "reports/storyloop")
+GENERATED_PATHS = ("openspec/changes", "openspec/specs", "acceptance/smoke", "reports/storyloop")
 
 
 SKIP_DIRECTORIES = {"node_modules", "target", "build", "dist", "vendor", "venv", ".venv", "__pycache__"}

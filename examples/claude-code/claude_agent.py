@@ -55,7 +55,8 @@ SCHEMA_HINTS = {
         "reference files as <suite_root>/<file> and use \"{python}\" for the interpreter. "
         "Every automated criterion id must appear in some test's criteria. No extra fields."
     ),
-    "implement": "Exact shape: {summary:string, questions:[string]}.",
+    "implement": ("Exact shape: {summary:string, questions:[string], design:string}; design is Markdown with "
+                  "## Context, ## Goals, ## Decisions (Choice/Rationale/Alternatives), ## Risks And Trade-Offs, ## Files."),
     "review": "Exact shape: {verdict:'pass'|'fail'|'needs_input', summary:string, findings:[object], questions:[string]}.",
 }
 RULES = (

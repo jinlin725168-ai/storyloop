@@ -60,7 +60,10 @@ INSTRUCTIONS = {
         "Never edit the foundation, OpenSpec contract, acceptance "
         "tests, reports, CI, or .storyloop. Do not commit or push. Run useful local checks. "
         "payload.answers lists human decisions on earlier questions; follow them and never re-ask. "
-        "Return exactly {summary:string,questions:[string]}; questions only for genuine product ambiguities."
+        "Return exactly {summary:string,questions:[string],design:string}. `design` is a Markdown design "
+        "record of what you actually built, with sections ## Context, ## Goals, ## Decisions (each: Choice, "
+        "Rationale, Alternatives considered), ## Risks And Trade-Offs, ## Files (path: responsibility); "
+        "questions only for genuine product ambiguities."
     ),
     "review": (
         "Independently review the real implementation against the approved stories and acceptance evidence. "

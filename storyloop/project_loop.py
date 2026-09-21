@@ -18,6 +18,7 @@ from .models import StoryLoopError, require
 from .project_boundaries import audit_project_changes
 from .answers import load_answers, _pending as _unanswered
 from .telemetry import summarize
+from .openspec_docs import capability_of, merge_into_main_spec, render_decisions
 from .manual_acceptance import load_manual_acceptance, pending_manual_criteria
 from .project_contracts import (validate_agent_summary,
                                 validate_review)
@@ -149,6 +150,8 @@ def _run_attempt(
                "failures": list(state["failures"]), "answers": answers}
     response, touched = _implement_safely(project, change_id, services, context)
     validate_agent_summary(response)
+    if response.get("design"):
+        state["design"] = response["design"]
     if response["questions"]:
         return _pause(project, state, "NEEDS_INPUT", questions=response["questions"])
     boundary = audit_project_changes(project, change_id)
@@ -476,9 +479,10 @@ def _complete(
     )
     state["manual_acceptance"] = manual
     state["telemetry"] = telemetry
+    documents = _write_openspec_artifacts(project, change, state, manual)
     report_commit = commit_paths(
         project, [report_path.relative_to(project).as_posix(),
-                  report_path.with_suffix(".md").relative_to(project).as_posix()],
+                  report_path.with_suffix(".md").relative_to(project).as_posix(), *documents],
         f"docs({change_id}): add acceptance evidence report",
     )
     state.update({"status": "VERIFIED", "implementation_commit": implementation["commit"],
@@ -526,6 +530,29 @@ def _finalize_change(project: Path, change: dict, state: dict) -> dict:
     state["status"] = "PASSED"
     _save_run(project, state)
     return _passed_result(state)
+
+
+def _write_openspec_artifacts(project: Path, change: dict, state: dict, manual: list[dict]) -> list[str]:
+    """design.md, decisions.md and the living spec merge; returns the paths to commit."""
+    change_id = change["change_id"]
+    base = project / "openspec" / "changes" / change_id
+    written: list[str] = []
+    if state.get("design"):
+        (base / "design.md").write_text(state["design"].rstrip("\n") + "\n", encoding="utf-8")
+        written.append(f"openspec/changes/{change_id}/design.md")
+    decisions = render_decisions(change, load_answers(project, change_id), manual, state.get("resets") or [])
+    (base / "decisions.md").write_text(decisions, encoding="utf-8")
+    written.append(f"openspec/changes/{change_id}/decisions.md")
+    capability = capability_of(change["product"], change_id)
+    delta_path = base / "specs" / capability / "spec.md"
+    if delta_path.is_file():
+        main_path = project / "openspec" / "specs" / capability / "spec.md"
+        current = main_path.read_text(encoding="utf-8") if main_path.is_file() else None
+        main_path.parent.mkdir(parents=True, exist_ok=True)
+        main_path.write_text(merge_into_main_spec(current, delta_path.read_text(encoding="utf-8"),
+                                                  capability, change_id), encoding="utf-8")
+        written.append(f"openspec/specs/{capability}/spec.md")
+    return written
 
 
 def _loop_ms(state: dict) -> int:

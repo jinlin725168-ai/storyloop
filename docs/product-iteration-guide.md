@@ -127,6 +127,14 @@ storyloop ci C:\work\my-project --change FEAT-20260916-001
 
 命令退出码为 `0` 时冒烟通过；失败、环境错误、超时、测试篡改或缺少证据时返回 `2`。执行使用由 Git 可见且未被忽略的文件构成的隔离副本，测试对候选代码的任何写入都会被视为污染，不能通过“先改实现再断言”的方式制造假绿。
 
+## 5b. 每个变更留下的文档（OpenSpec 格式）
+
+- `openspec/changes/<id>/proposal.md`：目标、非目标、用户故事（优先级、独立验证）、澄清记录、待决问题。
+- `openspec/changes/<id>/specs/<capability>/spec.md`：批准时生成的增量规格，OpenSpec 格式（`## ADDED/MODIFIED Requirements`，每个故事一个 `### Requirement`，规则为 SHALL 语句，每条验收条件一个 `#### Scenario` 带 GIVEN/WHEN/THEN）。它随合同一起提交并受保护。
+- `openspec/changes/<id>/design.md`：实现代理完工时写的方案记录（Context、Goals、Decisions 含备选方案、Risks、Files），随报告一起提交。
+- `openspec/changes/<id>/decisions.md`：引擎生成的人为决策归档：产品修订消息、澄清回答、代理提问的回答、人工验收备注、复位记录。
+- `openspec/specs/<capability>/spec.md`：活规格。完成时引擎把增量并入（新增追加、同名需求替换并标注来源变更），格式与 `openspec archive` 的产物一致，`openspec list --specs`、`openspec validate` 可直接使用。变更目录不会被移动到 archive，因为它是受保护的合同与追溯锚点。
+
 ## 6. 查看状态与报告
 
 ```powershell

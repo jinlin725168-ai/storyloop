@@ -6,9 +6,11 @@ from .models import require
 
 
 def validate_agent_summary(value: object) -> None:
-    require(isinstance(value, dict) and set(value) == {"summary", "questions"},
+    require(isinstance(value, dict) and {"summary", "questions"} <= set(value)
+            and set(value) <= {"summary", "questions", "design"},
             "Implementation agent returned an invalid contract")
     require(isinstance(value["summary"], str), "Implementation summary must be text")
+    require(isinstance(value.get("design", ""), str), "Implementation design must be markdown text")
     require(isinstance(value["questions"], list)
             and all(isinstance(item, str) for item in value["questions"]),
             "Implementation questions must be a list")
