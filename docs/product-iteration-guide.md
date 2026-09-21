@@ -135,6 +135,14 @@ storyloop ci C:\work\my-project --change FEAT-20260916-001
 - `openspec/changes/<id>/decisions.md`：引擎生成的人为决策归档：产品修订消息、澄清回答、代理提问的回答、人工验收备注、复位记录。
 - `openspec/specs/<capability>/spec.md`：活规格。完成时引擎把增量并入（新增追加、同名需求替换并标注来源变更），格式与 `openspec archive` 的产物一致，`openspec list --specs`、`openspec validate` 可直接使用。变更目录不会被移动到 archive，因为它是受保护的合同与追溯锚点。
 
+### 规格的一致性：三道门与两条出路
+
+- **需求质量门**（批准时）：引擎按 spec-kit 的 checklist 思路对合同做确定性检查，结果写入 `openspec/changes/<id>/checklist.md`（`- [x]` 自动通过，`- [ ]` 需要人判断）。阻断项（未解决的 `[NEEDS CLARIFICATION]`、没有验收条件的故事、未回答的问题）会让 `approve` 拒绝；警告项（缺优先级、缺独立验证方式、规则不是 SHALL 语句、结果含"适当/尽快"之类含糊词、只有单一场景、只有人工条件）记录在案，由批准者权衡。
+- **OpenSpec 结构门**（运行时）：装了 `openspec` CLI 时，合同物化后校验增量规格，完成时校验并入后的活规格，不通过就停下不提交；没装则跳过并在运行状态里记为 skipped。
+- **取代记录**（完成时）：一个变更修改既有需求（同标题）时，增量规格里的 Scenario 名固定为验收条件 ID，新块没有重述的旧 Scenario 由引擎原样带过来并标注来源；被重述的旧 Scenario 在旧变更的 traceability.json 里记 `superseded_by`，它们的冒烟用例不再代表当前行为。
+
+事后发现规格与代码不一致只有两条出路，引擎不会自动改规格去迁就代码：代码错了，开一个功能变更修；规格过时了，开一个文档型底座变更（`storyloop document` 重新生成后走 `base-propose` / `base-update`）。
+
 ## 6. 查看状态与报告
 
 ```powershell

@@ -12,6 +12,7 @@ from typing import Callable
 from .baseline import load_baseline
 from .models import identifier, require, text, validate_product
 from .openspec_docs import capability_of, render_delta_spec
+from .requirement_checklist import evaluate_checklist, render_checklist
 from .storage import load_json, write_json, write_text_atomic
 
 Clock = Callable[[], datetime]
@@ -173,6 +174,7 @@ def write_change_preview(project: Path, state: dict) -> None:
     main_spec = main_path.read_text(encoding="utf-8") if main_path.is_file() else None
     _write_text(root / "specs" / capability / "spec.md",
                 render_delta_spec(product, state["change_id"], main_spec))
+    _write_text(root / "checklist.md", render_checklist(evaluate_checklist(product)))
 
 
 def _question_line(item: dict) -> str:

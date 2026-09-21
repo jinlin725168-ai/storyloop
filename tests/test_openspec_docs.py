@@ -34,16 +34,32 @@ class RenderTests(unittest.TestCase):
         self.assertIn("#### Scenario: AC-1", delta)
         self.assertIn("- **WHEN** another overlaps", delta)
         self.assertIn("- **THEN** reject it", delta)
-        main = merge_into_main_spec(None, delta, "room-booking", "FEAT-1")
+        main, replaced = merge_into_main_spec(None, delta, "room-booking", "FEAT-1")
+        self.assertEqual(replaced, [])
         self.assertTrue(main.startswith("# room-booking Specification"))
         self.assertIn("## Requirements", main)
         self.assertIn("### Requirement: Reserve a room", main)
         again = render_delta_spec(value, "FEAT-2", main_spec=main)
         self.assertIn("## MODIFIED Requirements", again)
         self.assertNotIn("## ADDED Requirements", again)
-        merged = merge_into_main_spec(main, again, "room-booking", "FEAT-2")
+        merged, replaced = merge_into_main_spec(main, again, "room-booking", "FEAT-2")
+        self.assertEqual(replaced, [{"change_id": "FEAT-1", "story_id": "ST-1", "requirement": "Reserve a room",
+                                     "superseded": ["AC-1"]}])
         self.assertEqual(merged.count("### Requirement: Reserve a room"), 1)
         self.assertIn("FEAT-2", merged)
+
+    def test_modified_requirement_carries_over_scenarios_it_does_not_restate(self):
+        first = rich_product()
+        first["stories"][0]["acceptance"].append({"id": "AC-2", "given": "g", "when": "w", "then": "t",
+                                                  "kind": "automated"})
+        main, _ = merge_into_main_spec(None, render_delta_spec(first, "FEAT-1", None), "room-booking", "FEAT-1")
+        second = rich_product()  # only AC-1 restated
+        delta = render_delta_spec(second, "FEAT-2", main)
+        self.assertIn("#### Scenario: AC-2", delta)
+        self.assertIn("carried over unchanged from FEAT-1", delta)
+        merged, replaced = merge_into_main_spec(main, delta, "room-booking", "FEAT-2")
+        self.assertEqual(replaced[0]["superseded"], ["AC-1"])
+        self.assertEqual(merged.count("#### Scenario: AC-2"), 1)
 
     def test_decisions_document_lists_every_human_input_in_order(self):
         change = {"change_id": "FEAT-1", "idea": "book rooms", "history": [

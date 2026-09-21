@@ -11,6 +11,7 @@ from .changes import (contract_digest, draft_directory, load_change,
                       write_change_preview)
 from .models import require, text
 from .path_security import safe_target
+from .requirement_checklist import blocking_items, evaluate_checklist
 from .storage import write_bytes_atomic, write_json
 
 Clock = Callable[[], datetime]
@@ -26,6 +27,9 @@ def approve_change(
     product = state["product"]
     require(not product["questions"], "Resolve all product questions before approval")
     require(bool(product["stories"]), "Approval requires at least one user story")
+    blocking = blocking_items(evaluate_checklist(product))
+    require(not blocking, "Requirement checklist has blocking items; revise the contract: "
+            + "; ".join(item["text"] for item in blocking[:3]))
     approved_by = text(approved_by, "approver")
     digest = contract_digest(product)
     if state["status"] == "APPROVED":
@@ -61,7 +65,7 @@ def materialize_approved_change(project: Path, change_id: str) -> Path:
                               target_directory=True)
     require(source.is_dir(), "Approved draft files are missing")
     destination.mkdir(parents=True, exist_ok=True)
-    for name in ("proposal.md", "stories.json", "acceptance.json", "traceability.json"):
+    for name in ("proposal.md", "stories.json", "acceptance.json", "traceability.json", "checklist.md"):
         source_file = source / name
         target = destination / name
         require(source_file.is_file() and not source_file.is_symlink(),

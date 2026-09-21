@@ -18,7 +18,7 @@ from .models import StoryLoopError, require
 from .project_boundaries import audit_project_changes
 from .answers import load_answers, _pending as _unanswered
 from .telemetry import summarize
-from .openspec_docs import capability_of, merge_into_main_spec, render_decisions
+from .openspec_docs import capability_of, merge_into_main_spec, render_decisions, validate_with_cli
 from .manual_acceptance import load_manual_acceptance, pending_manual_criteria
 from .project_contracts import (validate_agent_summary,
                                 validate_review)
@@ -31,7 +31,7 @@ from .project_receipt import (ensure_merge_receipt, recover_completed_merge,
                               verify_verified_artifacts)
 from .smoke import install_smoke_suite, load_smoke_manifest
 from .smoke_runner import git_visible_digest, run_commands_isolated, run_smoke_isolated
-from .storage import load_json, locked
+from .storage import load_json, locked, write_json
 
 
 @dataclass(frozen=True)
@@ -215,6 +215,7 @@ def _prepare_acceptance(
 ) -> None:
     change_id = change["change_id"]
     contract_root = materialize_approved_change(project, change_id)
+    state.setdefault("openspec", {})["delta"] = validate_with_cli(project, "change", change_id)
     smoke_state = project / ".storyloop/state/smoke" / f"{change_id}.json"
     if smoke_state.exists():
         load_smoke_manifest(project, change_id)
@@ -548,10 +549,35 @@ def _write_openspec_artifacts(project: Path, change: dict, state: dict, manual: 
     if delta_path.is_file():
         main_path = project / "openspec" / "specs" / capability / "spec.md"
         current = main_path.read_text(encoding="utf-8") if main_path.is_file() else None
+        merged, replaced = merge_into_main_spec(current, delta_path.read_text(encoding="utf-8"),
+                                                capability, change_id)
         main_path.parent.mkdir(parents=True, exist_ok=True)
-        main_path.write_text(merge_into_main_spec(current, delta_path.read_text(encoding="utf-8"),
-                                                  capability, change_id), encoding="utf-8")
+        main_path.write_text(merged, encoding="utf-8")
         written.append(f"openspec/specs/{capability}/spec.md")
+        state.setdefault("openspec", {})["spec"] = validate_with_cli(project, "spec", capability)
+        state["superseded"] = replaced
+        written.extend(_mark_superseded(project, replaced, change_id))
+    return written
+
+
+def _mark_superseded(project: Path, replaced: list[dict], change_id: str) -> list[str]:
+    """Record in older changes which of their scenarios the new change replaced."""
+    written: list[str] = []
+    for item in replaced:
+        path = project / "openspec" / "changes" / item["change_id"] / "traceability.json"
+        if not path.is_file():
+            continue
+        trace = load_json(path)
+        touched = False
+        names = set(item.get("superseded") or [])
+        for entry in trace.get("criteria", []):
+            if (entry.get("story_id") == item["story_id"] and entry.get("criterion_id") in names
+                    and entry.get("superseded_by") != change_id):
+                entry["superseded_by"] = change_id
+                touched = True
+        if touched:
+            write_json(path, trace, max_bytes=1_000_000)
+            written.append(f"openspec/changes/{item['change_id']}/traceability.json")
     return written
 
 

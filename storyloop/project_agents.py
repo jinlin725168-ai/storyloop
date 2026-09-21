@@ -44,7 +44,10 @@ INSTRUCTIONS = {
         "independent_test:string,as_a,want,so_that,rules:[string],out_of_scope:[string],"
         "depends_on:[string],acceptance:[{id,given,when,then,kind:'automated'|'manual'}]}]}; "
         "every non-optional key is required even when empty, IDs unique across the product, no extra keys. "
-        "Write all human-facing text (goal, stories, rules, criteria, questions) in the language of the request."
+        "Write all human-facing text (goal, stories, rules, criteria, questions) in the language of the request. "
+        "If openspec/specs/<capability>/spec.md exists, it is the current behavior: a story that changes an "
+        "existing requirement must reuse that requirement's title, restate every existing scenario with its "
+        "original criterion id (updating steps where behavior changes), and add new ids only for new scenarios."
     ),
     "smoke": (
         "Act as independent external acceptance QA. Return exactly {files:[{path,content}],manifest}. "
