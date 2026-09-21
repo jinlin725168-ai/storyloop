@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import unittest
 
-from storyloop.answers import record_answers
+from storyloop.models import StoryLoopError
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
 from storyloop.changes import create_change
@@ -102,6 +102,8 @@ class ArchiveTests(unittest.TestCase):
             (root / base / "design.md").write_text("stale\n", encoding="utf-8")
             extra = root / ".storyloop/new-design.md"
             extra.write_text("## Context\nrewritten\n", encoding="utf-8")
+            with self.assertRaises(StoryLoopError):
+                document_change(root, change_id, capability="other-name")  # contract already names one
             result = document_change(root, change_id, design_path=extra)
             self.assertEqual(set(result["written"]), {f"{base}/decisions.md", f"{base}/design.md",
                                                      "openspec/specs/room-booking/spec.md"})

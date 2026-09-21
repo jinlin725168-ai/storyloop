@@ -128,7 +128,8 @@ def _replace_block(main: str, name: str, block: str) -> str:
     return main
 
 
-def document_change(project: Path, change_id: str, design_path: Path | None = None) -> dict:
+def document_change(project: Path, change_id: str, design_path: Path | None = None,
+                    capability: str | None = None) -> dict:
     """Regenerate the OpenSpec artifacts of a finished change from recorded state (no agent call).
 
     Used to backfill changes completed before these artifacts existed, or to attach a design
@@ -155,7 +156,11 @@ def document_change(project: Path, change_id: str, design_path: Path | None = No
     (base / "decisions.md").write_text(
         render_decisions(change, answers, manual, state.get("resets") or []), encoding="utf-8")
     written.append(f"openspec/changes/{change_id}/decisions.md")
-    capability = capability_of(change["product"], change_id)
+    if capability:
+        require("capability" not in change["product"], "The contract already names its capability")
+        capability = identifier(capability, "capability")
+    else:
+        capability = capability_of(change["product"], change_id)
     delta_path = base / "specs" / capability / "spec.md"
     main_path = project / "openspec" / "specs" / capability / "spec.md"
     current = main_path.read_text(encoding="utf-8") if main_path.is_file() else None

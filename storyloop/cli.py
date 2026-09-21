@@ -74,6 +74,7 @@ def parser() -> argparse.ArgumentParser:
         elif command == "document":
             child.add_argument("--change", dest="change_id", required=True)
             child.add_argument("--design", type=Path)
+            child.add_argument("--capability", help="合同未命名能力时指定活规格名称")
         elif command == "reset":
             child.add_argument("--change", dest="change_id", required=True)
             child.add_argument("--reason", required=True)
@@ -222,7 +223,8 @@ def _product_dispatch(project: Path, args) -> dict:
     if args.command == "reset":
         return reset_run(project, change_id, args.reason)
     if args.command == "document":
-        return document_change(project, change_id, args.design.resolve() if args.design else None)
+        return document_change(project, change_id, args.design.resolve() if args.design else None,
+                               capability=args.capability)
     if args.command == "accept":
         require(change_id and args.criteria, "Manual acceptance needs --change and --criterion")
         return record_manual_acceptance(project, change_id, args.criteria, args.note)
