@@ -65,16 +65,24 @@ def load_change(project: Path, change_id: str) -> dict:
 
 def revise_change(
     project: Path, change_id: str, product: dict, message: str = "",
-    now: Clock | None = None,
+    now: Clock | None = None, clarifications: list[dict] | None = None,
 ) -> dict:
-    """Replace a draft only after validating the complete next product contract."""
+    """Replace a draft only after validating the complete next product contract.
+
+    `clarifications` are human answers given in this revision; they are appended to the
+    contract's clarification record (never dropped by later revisions) and dated by session.
+    """
     project = Path(project).resolve()
     current = load_change(project, change_id)
     run_path = project / ".storyloop" / "state" / "runs" / f"{change_id}.json"
     require(not run_path.exists(),
             "A change cannot be revised after execution starts; create a new product change")
     canonical = _validated_copy(product)
-    timestamp = _timestamp((now or _utc_now)())
+    moment = (now or _utc_now)()
+    canonical["clarifications"] = _merge_clarifications(
+        current["product"].get("clarifications", []), canonical.get("clarifications", []),
+        clarifications or [], moment.strftime("%Y-%m-%d"))
+    timestamp = _timestamp(moment)
     prior = {
         "revision": current["revision"],
         "digest": contract_digest(current["product"]),
@@ -92,6 +100,24 @@ def revise_change(
     }
     _save(project, updated)
     return deepcopy(updated)
+
+
+def _merge_clarifications(previous: list[dict], returned: list[dict], answered: list[dict],
+                          session: str) -> list[dict]:
+    """Keep every earlier Q→A, add what the agent preserved and what the human just answered."""
+    merged: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for item in [*previous, *returned]:
+        key = (item["question"], item["answer"])
+        if key not in seen:
+            seen.add(key)
+            merged.append(dict(item))
+    for item in answered:
+        question, answer = text(item.get("question"), "question"), text(item.get("answer"), "answer")
+        if (question, answer) not in seen:
+            seen.add((question, answer))
+            merged.append({"session": session, "question": question, "answer": answer})
+    return merged
 
 
 def contract_digest(product: dict) -> str:
@@ -125,14 +151,42 @@ def write_change_preview(project: Path, state: dict) -> None:
     write_json(root / "acceptance.json", {"version": 1, "criteria": criteria}, max_bytes=1_000_000)
     write_json(root / "traceability.json", {"version": 1, "criteria": links}, max_bytes=1_000_000)
     non_goals = "\n".join(f"- {item}" for item in product["non_goals"]) or "- 无"
-    questions = "\n".join(f"- {item['id']}: {item['text']}" for item in product["questions"]) or "- 无"
+    questions = "\n".join(_question_line(item) for item in product["questions"]) or "- 无"
+    story_lines = "\n".join(
+        f"- {story['id']} [{story.get('priority', '-')}] {story['title']}"
+        + (f"（独立验证：{story['independent_test']}）" if story.get("independent_test") else "")
+        for story in product["stories"]) or "- 无"
+    capability = product.get("capability")
     proposal = (
         f"# {state['change_id']}\n\n"
-        f"## 产品目标\n\n{product['goal']}\n\n"
+        + (f"能力：`{capability}`\n\n" if capability else "")
+        + f"## 产品目标\n\n{product['goal']}\n\n"
         f"## 非目标\n\n{non_goals}\n\n"
+        f"## 用户故事\n\n{story_lines}\n\n"
+        f"## 澄清记录\n\n{_clarification_lines(product.get('clarifications', []))}\n\n"
         f"## 待决问题\n\n{questions}\n"
     )
     _write_text(root / "proposal.md", proposal)
+
+
+def _question_line(item: dict) -> str:
+    options = " / ".join(
+        f"{option}（推荐）" if option == item.get("recommended") else option for option in item["options"])
+    why = f" 为什么重要：{item['why']}" if item.get("why") else ""
+    return f"- {item['id']}: {item['text']} 选项：{options}{why}"
+
+
+def _clarification_lines(entries: list[dict]) -> str:
+    if not entries:
+        return "- 无"
+    lines = []
+    session = None
+    for item in entries:
+        if item["session"] != session:
+            session = item["session"]
+            lines.append(f"### Session {session}")
+        lines.append(f"- {item['question']} → {item['answer']}")
+    return "\n".join(lines)
 
 
 def _write_text(path: Path, content: str) -> None:

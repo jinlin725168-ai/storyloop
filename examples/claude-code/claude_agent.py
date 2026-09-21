@@ -41,9 +41,11 @@ DEFAULT_BASH = ["python3:*", "python:*", "ls:*", "cat:*", "head:*", "tail:*", "f
                 "grep:*", "wc:*", "diff:*", "git status:*", "git diff:*", "git log:*", "git show:*"]
 SCHEMA_HINTS = {
     "product": (
-        "Exact shape: {version:1, goal:string, non_goals:[string], questions:[{id,text,options:[string]}], "
-        "stories:[{id,title,as_a,want,so_that,rules:[string],out_of_scope:[string],depends_on:[string],"
-        "acceptance:[{id,given,when,then,kind:'automated'|'manual'}]}]}. "
+        "Exact shape: {version:1, goal:string, non_goals:[string], capability?:slug, "
+        "clarifications?:[{session,question,answer}], questions:[{id,text,options:[string],"
+        "recommended?:string,why?:string}], stories:[{id,title,priority:'P1'|'P2'|'P3',"
+        "independent_test:string,as_a,want,so_that,rules:[string],out_of_scope:[string],"
+        "depends_on:[string],acceptance:[{id,given,when,then,kind:'automated'|'manual'}]}]}. "
         "IDs like S1/A1/Q1 must be unique across the whole product. No extra fields anywhere."
     ),
     "smoke": (

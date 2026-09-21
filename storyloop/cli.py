@@ -57,6 +57,8 @@ def parser() -> argparse.ArgumentParser:
             child.add_argument("--idea")
             child.add_argument("--change", dest="change_id")
             child.add_argument("--message")
+            child.add_argument("--no-interactive", action="store_true",
+                               help="有待决问题时不在终端逐条澄清")
         elif command in {"approve", "status", "report", "ci"}:
             child.add_argument("--change", dest="change_id", required=command == "ci")
             if command == "approve":
@@ -118,21 +120,79 @@ def dispatch(args) -> dict:
 
 def _change(project: Path, args) -> dict:
     require(_is_product_project(project), "Run storyloop init on this Git project first")
+    interactive = not getattr(args, "no_interactive", False)
     if args.idea:
         require(not args.change_id and not args.message,
                 "Use --idea for a new change, or --change with --message for a revision")
         product = invoke_project_agent(project, "product", {"idea": args.idea})
         created = create_change(project, args.idea, product)
         adopt_pending(project, created["change_id"])
-        return created
+        return clarify_interactively(project, created["change_id"], _revise_with_agent, interactive)
     require(args.change_id and args.message,
             "Revision needs both --change and --message")
-    current = load_change(project, args.change_id)
+    revised = _revise_with_agent(project, args.change_id, args.message, [])
+    return clarify_interactively(project, args.change_id, _revise_with_agent, interactive)
+
+
+def _revise_with_agent(project: Path, change_id: str, message: str, answers: list[dict]) -> dict:
+    """One product revision: the agent rewrites the contract, the engine records the answers."""
+    current = load_change(project, change_id)
     product = invoke_project_agent(project, "product", {
-        "change_id": args.change_id, "message": args.message,
+        "change_id": change_id, "message": message,
+        "answers": [{"question_id": a["question_id"], "question": a["question"], "answer": a["answer"]}
+                    for a in answers],
         "current_product": current["product"],
     })
-    return revise_change(project, args.change_id, product, args.message)
+    return revise_change(project, change_id, product, message,
+                         clarifications=[{"question": a["question"], "answer": a["answer"]} for a in answers])
+
+
+def clarify_interactively(project: Path, change_id: str, reviser, interactive: bool,
+                          per_round: int = 5) -> dict:
+    """Spec-kit style clarification: up to five multiple-choice questions per round, on the record.
+
+    Empty input takes the recommended option; a number picks an option; free text is accepted;
+    `q` stops the round and leaves the remaining questions open. Without a terminal the draft is
+    returned untouched so the questions can be answered later with `change --message`.
+    """
+    state = load_change(project, change_id)
+    while state["product"]["questions"] and interactive and _terminal():
+        questions = state["product"]["questions"][:per_round]
+        print(f"草案有 {len(state['product']['questions'])} 个待决问题，本轮澄清 {len(questions)} 个"
+              "（回车选推荐项，输入序号或自由文本，q 结束本轮）：")
+        answers = []
+        stopped = False
+        for index, question in enumerate(questions, 1):
+            print(f"\n[{question['id']}] {question['text']}")
+            for number, option in enumerate(question["options"], 1):
+                marker = "（推荐）" if option == question.get("recommended") else ""
+                print(f"  {number}. {option}{marker}")
+            if question.get("why"):
+                print(f"  为什么重要：{question['why']}")
+            reply = input("> ").strip()
+            if reply.lower() == "q":
+                stopped = True
+                break
+            answer = _pick_answer(reply, question)
+            if answer is None:
+                continue
+            answers.append({"question_id": question["id"], "question": question["text"], "answer": answer})
+        if not answers:
+            break
+        message = "澄清回答（请据此更新故事、规则和验收条件，删除已回答的问题，并保留 clarifications）：\n" + \
+            "\n".join(f"{a['question_id']} {a['question']} → {a['answer']}" for a in answers)
+        state = reviser(project, change_id, message, answers)
+        if stopped:
+            break
+    return state
+
+
+def _pick_answer(reply: str, question: dict) -> str | None:
+    if not reply:
+        return question.get("recommended")
+    if reply.isdigit() and 1 <= int(reply) <= len(question["options"]):
+        return question["options"][int(reply) - 1]
+    return reply
 
 
 def _product_dispatch(project: Path, args) -> dict:
