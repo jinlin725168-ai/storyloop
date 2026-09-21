@@ -19,6 +19,7 @@ from .project_boundaries import audit_project_changes
 from .answers import load_answers, _pending as _unanswered
 from .telemetry import summarize
 from .openspec_docs import capability_of, merge_into_main_spec, render_decisions, validate_with_cli
+from .ui_regression import generate_ui_assets, install_ui_assets
 from .manual_acceptance import load_manual_acceptance, pending_manual_criteria
 from .project_contracts import (validate_agent_summary,
                                 validate_review)
@@ -481,6 +482,7 @@ def _complete(
     state["manual_acceptance"] = manual
     state["telemetry"] = telemetry
     documents = _write_openspec_artifacts(project, change, state, manual)
+    documents += _ui_regression_assets(project, change, state)
     report_commit = commit_paths(
         project, [report_path.relative_to(project).as_posix(),
                   report_path.with_suffix(".md").relative_to(project).as_posix(), *documents],
@@ -531,6 +533,20 @@ def _finalize_change(project: Path, change: dict, state: dict) -> dict:
     state["status"] = "PASSED"
     _save_run(project, state)
     return _passed_result(state)
+
+
+def _ui_regression_assets(project: Path, change: dict, state: dict) -> list[str]:
+    """Regression assets from the finished UI; the generator may not touch the workspace itself."""
+    capability = capability_of(change["product"], change["change_id"])
+    config = load_project_config(project)
+    outcome = _read_only_call(project, change["change_id"],
+                              lambda: generate_ui_assets(project, change, capability, config))
+    if outcome["status"] != "GENERATED":
+        state["ui_regression"] = outcome
+        return []
+    written = install_ui_assets(project, capability, outcome["payload"])
+    state["ui_regression"] = {"status": "GENERATED", "files": len(written), "paths": written}
+    return written
 
 
 def _write_openspec_artifacts(project: Path, change: dict, state: dict, manual: list[dict]) -> list[str]:

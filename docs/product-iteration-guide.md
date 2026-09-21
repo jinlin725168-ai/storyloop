@@ -143,6 +143,18 @@ storyloop ci C:\work\my-project --change FEAT-20260916-001
 
 事后发现规格与代码不一致只有两条出路，引擎不会自动改规格去迁就代码：代码错了，开一个功能变更修；规格过时了，开一个文档型底座变更（`storyloop document` 重新生成后走 `base-propose` / `base-update`）。
 
+### 5c. 实现后的 UI 回归资产（可选）
+
+Playwright Test Agents 这类"对着运行中的应用探索并生成用例"的工具，产出的用例第一次执行必然通过，因此不能作为验收证据；它们的位置是回归资产和页面行为的活文档。引擎提供一个通用挂点：
+
+```json
+"ui_regression": {"command": ["{python}", "acceptance/tools/ui_regression.py"], "timeout_seconds": 3600}
+```
+
+审查通过、实现提交之后，引擎以只读调用运行该命令（stdin 为 `storyloop.ui-regression.v1` 请求：变更、能力、suite_root、故事），命令返回 `{files:[{path,content}]}`，引擎把文件写到 `acceptance/ui/<capability>/` 并与报告一起提交。命令内部怎么起应用、怎么驱动 planner/generator/healer 由项目自定；命令本身不得改动工作区。未配置时跳过。
+
+约束：healer 只能修 `acceptance/ui/` 下的回归用例，绝不能碰 `acceptance/smoke/` 里的合同用例；冒烟角色会把 `acceptance/ui/` 里已验证的页面事实（定位器、文案、流程）当作盲写时的素材。
+
 ## 6. 查看状态与报告
 
 ```powershell

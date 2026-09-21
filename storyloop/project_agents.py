@@ -51,7 +51,8 @@ INSTRUCTIONS = {
     ),
     "smoke": (
         "Act as independent external acceptance QA. Return exactly {files:[{path,content}],manifest}. "
-        "Generate a small core-flow smoke suite under payload.suite_root. Every automated "
+        "Generate a small core-flow smoke suite under payload.suite_root. If acceptance/ui/ exists it holds "
+        "verified plans and Playwright specs of existing screens: reuse their locators, texts and flows. Every automated "
         "criterion must be linked by ID. Tests must fail when behavior is absent and must not edit CI files. "
         "Exact shape: {files:[{path,content}], manifest:{version:1, tests:[{id, criteria:[string], "
         "command:[string], timeout_seconds:int}]}}; `path` is relative to the suite root, `command` "
