@@ -17,6 +17,7 @@ from .baseline import _git, load_project_config
 from .boundaries import capture_snapshot, snapshot_changes
 from .models import StoryLoopError, require
 from .path_security import safe_target
+from .project_profile import GENERATED_PATHS
 from .processutil import redact, run_process
 from .smoke import load_smoke_manifest, smoke_digests
 from .storage import load_json, write_json
@@ -234,6 +235,15 @@ def git_visible_digest(project: Path) -> str:
     project = Path(project).resolve()
     output = _git(project, "ls-files", "-co", "--exclude-standard", "-z")
     return _files_digest(project, sorted(set(filter(None, output.split("\0")))))
+
+
+def implementation_digest(project: Path) -> str:
+    """What a human accepts: Git-visible files minus engine outputs (openspec, ui assets, reports)."""
+    project = Path(project).resolve()
+    output = _git(project, "ls-files", "-co", "--exclude-standard", "-z")
+    paths = sorted(path for path in set(filter(None, output.split("\0")))
+                   if not any(path.startswith(root + "/") for root in GENERATED_PATHS))
+    return _files_digest(project, paths)
 
 
 def candidate_digest(project: Path) -> str:

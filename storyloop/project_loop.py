@@ -31,7 +31,7 @@ from .project_loop_support import (control_digest as _control_digest,
 from .project_receipt import (ensure_merge_receipt, recover_completed_merge,
                               verify_verified_artifacts)
 from .smoke import install_smoke_suite, load_smoke_manifest
-from .smoke_runner import git_visible_digest, run_commands_isolated, run_smoke_isolated
+from .smoke_runner import implementation_digest, run_commands_isolated, run_smoke_isolated
 from .storage import load_json, locked, write_json
 
 
@@ -253,7 +253,7 @@ def _run_attempt(
 
 def _manual_acceptance_gate(project: Path, change: dict, state: dict, verified: dict) -> dict | None:
     """Pause before the pass report until every manual criterion is accepted on this exact code."""
-    digest = git_visible_digest(project)
+    digest = implementation_digest(project)
     records = load_manual_acceptance(project, change["change_id"])
     pending = pending_manual_criteria(change, records, digest)
     if not pending:
@@ -266,7 +266,7 @@ def _manual_acceptance_gate(project: Path, change: dict, state: dict, verified: 
 
 def _resume_manual_acceptance(project: Path, change: dict, state: dict) -> dict:
     """Continue a paused run once the human accepted the manual criteria on unchanged code."""
-    require(git_visible_digest(project) == state.get("candidate_sha256"),
+    require(implementation_digest(project) == state.get("candidate_sha256"),
             "Workspace changed while waiting for manual acceptance; use `storyloop reset` to retry")
     verified = state.get("verified")
     require(isinstance(verified, dict) and set(verified) == {"boundary", "regression", "smoke", "review"},
@@ -527,8 +527,12 @@ def _complete(
 ) -> dict:
     change_id = change["change_id"]
     subject = f"feat({change_id}): implement approved product change"
-    final_boundary = audit_project_changes(project, change_id)
-    digest = git_visible_digest(project)
+    # A completion that crashed after writing docs, specs, UI assets or reports left engine
+    # outputs behind; discard them so this attempt regenerates everything from the same state.
+    _discard_engine_outputs(project, change_id)
+    final_boundary = _without_engine_outputs(audit_project_changes(project, change_id), change_id)
+    boundary = _without_engine_outputs(boundary, change_id)
+    digest = implementation_digest(project)
     manual = [record for record in load_manual_acceptance(project, change_id)
               if record.get("candidate_sha256") == digest]
     require(not pending_manual_criteria(change, manual, digest),
@@ -553,8 +557,8 @@ def _complete(
     documents = _write_openspec_artifacts(project, change, state, manual)
     documents += _ui_regression_assets(project, change, state)
     report_commit = commit_paths(
-        project, [report_path.relative_to(project).as_posix(),
-                  report_path.with_suffix(".md").relative_to(project).as_posix(), *documents],
+        project, list(dict.fromkeys([report_path.relative_to(project).as_posix(),
+                                     report_path.with_suffix(".md").relative_to(project).as_posix(), *documents])),
         f"docs({change_id}): add acceptance evidence report",
     )
     state.update({"status": "VERIFIED", "implementation_commit": implementation["commit"],
@@ -602,6 +606,45 @@ def _finalize_change(project: Path, change: dict, state: dict) -> dict:
     state["status"] = "PASSED"
     _save_run(project, state)
     return _passed_result(state)
+
+
+def _engine_output_roots(change_id: str) -> tuple[str, ...]:
+    return (f"openspec/changes/{change_id}/design.md", f"openspec/changes/{change_id}/decisions.md",
+            "openspec/specs/", "acceptance/ui/", f"reports/storyloop/{change_id}/")
+
+
+def _discard_engine_outputs(project: Path, change_id: str) -> None:
+    """Restore tracked engine outputs and delete untracked ones (they are regenerated on completion)."""
+    roots = _engine_output_roots(change_id)
+    status = _git(project, "status", "--porcelain=v1", "--untracked-files=all", "-z")
+    for entry in filter(None, status.split("\0")):
+        code, path = entry[:2], entry[3:]
+        engine_owned = any(path == root or path.startswith(root) for root in roots) or (
+            path.startswith("openspec/changes/") and path.endswith("/traceability.json")
+            and not path.startswith(f"openspec/changes/{change_id}/"))
+        if not engine_owned:
+            continue
+        target = project / path
+        if code.strip() == "??":
+            target.unlink(missing_ok=True)
+        else:
+            _git(project, "checkout", "--", path)
+    for root in ("acceptance/ui", f"reports/storyloop/{change_id}"):
+        directory = project / root
+        for empty in sorted((p for p in directory.rglob("*") if p.is_dir()), reverse=True) if directory.is_dir() else []:
+            if not any(empty.iterdir()):
+                empty.rmdir()
+
+
+def _without_engine_outputs(boundary: dict, change_id: str) -> dict:
+    roots = _engine_output_roots(change_id)
+    keep = lambda item: not any(item["path"] == root or item["path"].startswith(root) for root in roots)  # noqa: E731
+    allowed = [i for i in boundary["allowed"] if keep(i)]
+    violations = [i for i in boundary["violations"] if keep(i)]
+    status = ("CLEAN" if not allowed and not violations else "ALLOWED" if not violations
+              else boundary["status"])
+    return {**boundary, "allowed": allowed, "violations": violations, "status": status,
+            "base_proposal": boundary.get("base_proposal") if violations else None}
 
 
 def _implementation_already_committed(project: Path, subject: str, boundary: dict) -> str | None:
@@ -672,9 +715,11 @@ def _mark_superseded(project: Path, replaced: list[dict], change_id: str) -> lis
                     and entry.get("superseded_by") != change_id):
                 entry["superseded_by"] = change_id
                 touched = True
+        relative = f"openspec/changes/{item['change_id']}/traceability.json"
         if touched:
             write_json(path, trace, max_bytes=1_000_000)
-            written.append(f"openspec/changes/{item['change_id']}/traceability.json")
+        if relative not in written and (touched or _git(project, "status", "--porcelain", "--", relative).strip()):
+            written.append(relative)
     return written
 
 

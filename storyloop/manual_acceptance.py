@@ -8,7 +8,7 @@ from typing import Callable
 
 from .changes import load_change
 from .models import StoryLoopError, identifier, require, text
-from .smoke_runner import git_visible_digest
+from .smoke_runner import implementation_digest
 from .storage import load_json, write_json
 
 Clock = Callable[[], datetime]
@@ -56,7 +56,7 @@ def record_manual_acceptance(
             "Manual acceptance is only possible while the run waits for it (MANUAL_ACCEPTANCE_REQUIRED)")
     commit = state.get("candidate_sha256")
     require(isinstance(commit, str) and bool(commit), "Paused run lacks its candidate digest")
-    require(git_visible_digest(project) == commit,
+    require(implementation_digest(project) == commit,
             "Workspace differs from the verified candidate; use `storyloop reset` and run again before accepting")
     moment = (now or _utc_now)().astimezone(timezone.utc).isoformat(timespec="seconds")
     records = [record for record in load_manual_acceptance(project, change_id)
