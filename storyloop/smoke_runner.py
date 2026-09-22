@@ -59,7 +59,7 @@ def run_smoke(
         "started_at": started,
         "finished_at": _timestamp(),
         "head_commit": head_commit or _git(project, "rev-parse", "HEAD").strip(),
-        "workspace_sha256": workspace_sha256 or git_visible_digest(project),
+        "workspace_sha256": workspace_sha256 or candidate_digest(project),
         "suite_digests": suite,
         "results": results,
     }
@@ -230,10 +230,18 @@ def run_commands_isolated(
 
 
 def git_visible_digest(project: Path) -> str:
-    """Bind every tracked or unignored candidate file, regardless of directory name."""
+    """Bind every tracked or unignored file, regardless of directory name (whole working tree)."""
     project = Path(project).resolve()
     output = _git(project, "ls-files", "-co", "--exclude-standard", "-z")
     return _files_digest(project, sorted(set(filter(None, output.split("\0")))))
+
+
+def candidate_digest(project: Path) -> str:
+    """The digest an acceptance candidate of this tree would carry (regression assets excluded)."""
+    project = Path(project).resolve()
+    output = _git(project, "ls-files", "-co", "--exclude-standard", "-z")
+    paths = sorted(path for path in set(filter(None, output.split("\0"))) if not _is_regression_asset(path))
+    return _files_digest(project, paths)
 
 
 def _files_digest(root: Path, paths: list[str]) -> str:

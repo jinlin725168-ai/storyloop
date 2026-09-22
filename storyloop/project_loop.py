@@ -526,19 +526,22 @@ def _complete(
     regression: dict, smoke: dict, review: dict,
 ) -> dict:
     change_id = change["change_id"]
+    subject = f"feat({change_id}): implement approved product change"
     final_boundary = audit_project_changes(project, change_id)
-    require(final_boundary == boundary and not final_boundary["violations"],
-            "Workspace changed after final boundary audit")
-    changed_paths = [item["path"] for item in final_boundary["allowed"]]
-    require(bool(changed_paths), "Passing implementation produced no auditable code changes")
     digest = git_visible_digest(project)
     manual = [record for record in load_manual_acceptance(project, change_id)
               if record.get("candidate_sha256") == digest]
     require(not pending_manual_criteria(change, manual, digest),
             "Manual acceptance is missing for the code being reported")
-    implementation = commit_paths(
-        project, changed_paths, f"feat({change_id}): implement approved product change"
-    )
+    already = _implementation_already_committed(project, subject, final_boundary)
+    if already:
+        implementation = {"commit": already}  # crash after the commit: adopt it, do not demand new changes
+    else:
+        require(final_boundary == boundary and not final_boundary["violations"],
+                "Workspace changed after final boundary audit")
+        changed_paths = [item["path"] for item in final_boundary["allowed"]]
+        require(bool(changed_paths), "Passing implementation produced no auditable code changes")
+        implementation = commit_paths(project, changed_paths, subject)
     telemetry = {**summarize(project, change_id), "attempts": state["attempt"],
                  "loop_ms": _loop_ms(state)}
     report_path = generate_change_report(
@@ -599,6 +602,17 @@ def _finalize_change(project: Path, change: dict, state: dict) -> dict:
     state["status"] = "PASSED"
     _save_run(project, state)
     return _passed_result(state)
+
+
+def _implementation_already_committed(project: Path, subject: str, boundary: dict) -> str | None:
+    """HEAD is the implementation commit of this change and nothing is left to commit."""
+    if boundary["allowed"] or boundary["violations"]:
+        return None
+    if _git(project, "log", "-1", "--format=%s").strip() != subject:
+        return None
+    if _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip():
+        return None
+    return _git(project, "rev-parse", "HEAD").strip()
 
 
 def _ui_regression_assets(project: Path, change: dict, state: dict) -> list[str]:

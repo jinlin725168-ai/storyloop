@@ -12,7 +12,7 @@ from .baseline import _git
 from .changes import load_change
 from .models import require
 from .smoke import load_smoke_manifest, smoke_digests
-from .smoke_runner import git_visible_digest
+from .smoke_runner import candidate_digest
 from .storage import load_json, write_bytes_atomic, write_json, write_text_atomic
 
 COMMIT = re.compile(r"[0-9a-fA-F]{40,64}")
@@ -110,7 +110,7 @@ def _validate_gate(
             "Smoke evidence does not match the protected evidence file")
     require(evidence.get("suite_digests") == smoke_digests(project, change["change_id"]),
             "Smoke evidence is not bound to the protected test bytes")
-    require(evidence.get("workspace_sha256") == git_visible_digest(project),
+    require(evidence.get("workspace_sha256") == candidate_digest(project),
             "Smoke evidence is not bound to the implementation workspace")
     return evidence_digest
 
