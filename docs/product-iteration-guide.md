@@ -6,6 +6,8 @@
 
 StoryLoop 不会推送远端、不部署，也不会创建或覆盖 GitHub Actions、GitLab CI、Jenkins 等流水线文件。
 
+下文命令以 PowerShell 路径为例；Linux / WSL2 把路径换成本地路径即可（例如 `storyloop init ~/work/my-project`），入口是虚拟环境里的 `storyloop` 或 `python -m storyloop`。
+
 ## 2. 一次初始化
 
 ```powershell
@@ -79,19 +81,23 @@ storyloop change C:\work\my-project `
 storyloop approve C:\work\my-project --change FEAT-20260916-001
 ```
 
-批准是唯一的人工闸门。执行后 StoryLoop 自动：
+批准是主要的人工闸门（合同里有 `manual` 验收条件时还会停一次）。执行后 StoryLoop 自动：
 
-1. 锁定产品合同摘要。
+1. 需求质量门：确定性 checklist 检查合同，阻断项让批准失败；锁定产品合同摘要。
 2. 建立 `feature/<change-id>` 本地分支。
-3. 将批准合同物化到 `openspec/changes/<change-id>/`。
-4. 生成 `acceptance/smoke/<change-id>/` 核心流程测试。
+3. 将批准合同物化到 `openspec/changes/<change-id>/`（含增量规格），装了 `openspec` CLI 时校验结构。
+4. 生成 `acceptance/smoke/<change-id>/` 核心流程测试（接口优先，浏览器用例只覆盖核心链路），与合同一起提交。
 5. 先证明测试因功能缺失而失败（RED）。
-6. 调用实现代理，运行项目回归和外部冒烟测试，失败则自动重试。
+6. 调用实现代理，运行项目回归和外部冒烟测试，失败则带着证据自动重试；代理提出真实产品歧义时停在 `NEEDS_INPUT`。
 7. 审计底座、模块、集成点、测试和 CI 边界；集成点变化转为底座提案。
 8. 进行独立审查。
-9. 生成 `reports/storyloop/<change-id>/report.json` 和 `report.md`。
-10. 自动提交，并切回原分支执行本地 `--no-ff` 合并。
-11. 将合并提交写回验收报告，提交合并回执并推进基线血缘；中断后可幂等恢复。
+9. 有 `manual` 验收条件时停在 `MANUAL_ACCEPTANCE_REQUIRED`，等人 `accept` 后 `run` 继续。
+10. 提交实现；写 design.md、decisions.md，把增量并入活规格并校验；运行可选的 `ui_regression` 生成器产出 `acceptance/ui/<capability>/` 回归资产。
+11. 生成 `reports/storyloop/<change-id>/report.json` 和 `report.md`（含追溯与成本），与上述文档一起提交。
+12. 切回原分支执行本地 `--no-ff` 合并。
+13. 将合并提交写回验收报告，提交合并回执并推进基线血缘。
+
+第 10 步之后的完成阶段是幂等的：任何一步崩溃后再次 `storyloop run`，引擎会采纳已存在的实现提交，丢弃上次留下的引擎产物（文档、活规格、UI 资产、报告）并重新生成，不会再次调用实现代理，也不会重复提交。
 
 StoryLoop 控制器本身不执行 `git push`。
 
@@ -170,6 +176,8 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 
 任何验收条件没有真实通过证据，报告都不能标记为 `PASSED`。
 
+指纹的口径：冒烟证据和人工验收记录绑定的都是**实现指纹**，即 Git 可见文件减去引擎自己的产物（`openspec/changes/<id>/` 下的 design.md 和 decisions.md、`openspec/specs/`、`acceptance/ui/`、`reports/storyloop/<id>/`）。因此完成阶段生成文档不会让证据失效；改动任何业务或测试文件都会。
+
 ## 7. 底座变更如何处理
 
 普通功能迭代修改初始化时的底座文件会暂停为 `BASE_CHANGE_REQUIRED`，并在 `.storyloop/base-proposals/` 生成独立 `BASE-*` 提案。它不会自动把底座路径放宽成业务路径。
@@ -214,10 +222,27 @@ storyloop base-update C:\work\my-project --proposal BASE-20260916-001
 - `BASE_CHANGE_REQUIRED`：功能依赖底座修改。
 - `NEEDS_INPUT`：已批准合同仍出现真实产品歧义。在终端里执行 `run` 或 `approve` 时会直接逐条提问并继续（回车表示让代理按现有约定自行决定）；非交互环境用 `storyloop answer PATH --change ID --answer "…"`。回答按尝试号记录在 `.storyloop/state/answers/`，随后的实现和审查都能看到问答配对；问题未回答前 `run` 拒绝续跑，`--no-interactive` 可关闭终端提问。
 - `WORKSPACE_TAINTED`：代理或其他进程在工作区里产生了不该有的改动（未声明的被忽略文件、暂存、控制面文件）。这是终态：人先判断原因（常见：残留的 dev server、未声明的构建目录），处理后执行 `storyloop reset PATH --change ID --reason "…"` 再 `storyloop run`。复位不动任何文件，被中断的那一轮不计入尝试预算，理由写入运行状态。
-- 冒烟用例本身有缺陷（定位器、时序、数据准备）而实现无法通过时：由人判断并执行 `storyloop smoke-repair PATH --change ID --reason "…"`。冒烟角色带着失败证据修复自己的套件（不得放宽行为断言），新套件提交到功能分支后，引擎从合同提交重建候选副本重新证明 RED，之前的尝试作废、预算归零，理由写入 decisions.md。实现代理永远不能改验收用例。
+- 冒烟用例本身有缺陷（定位器、时序、数据准备）而实现无法通过时：由人判断并执行 `storyloop smoke-repair PATH --change ID --reason "…"`。只在 `IMPLEMENTING`、`BUDGET_EXHAUSTED`、`NEEDS_INPUT` 状态可用。冒烟角色拿到现有套件文件和最近的失败证据修复自己的套件（不得放宽行为断言；`manifest.json` 由引擎重建，代理不用返回），新套件以 `test(<id>): repair smoke suite` 提交到功能分支后，引擎从合同提交重建候选副本（`git archive` + 当前套件）重新证明 RED，之前的尝试作废、预算归零，修复记录写入运行状态和 decisions.md。实现代理永远不能改验收用例。
 - `MANUAL_ACCEPTANCE_REQUIRED`：自动验收、回归和独立审查都已通过，但合同里有 `manual` 验收条件。此时功能分支上的代码就是待验收版本；逐条执行 `storyloop accept PATH --change ID --criterion A2 --note "看到了什么"`，再 `storyloop run PATH --change ID` 生成报告并合并。验收记录与当时的代码指纹绑定，代码一变就失效。
 - `BOUNDARY_VIOLATION`：代理写到了未授权路径。
 - `BUDGET_EXHAUSTED`：达到自动尝试上限。
 - 存在 `manual` 验收条件：必须提供真实人工证据，不能由 AI 代签。
 
 失败时功能分支和本地状态保留，StoryLoop 不删除分支、不重写历史、不丢弃用户文件。
+
+## 10. 运行状态一览
+
+`storyloop status --json` 的 `run.status`：
+
+| 状态 | 含义 | 下一步 |
+|---|---|---|
+| `PREPARING` / `CONTRACT_READY` / `CONTRACT_COMMITTED` | 建分支、物化合同、生成并提交冒烟套件 | 自动 |
+| `IMPLEMENTING` | RED 已证明，实现—回归—冒烟—审查循环中 | 自动；可 `smoke-repair` |
+| `SMOKE_REPAIRED` | 套件已修复并重新证明 RED | `run` |
+| `NEEDS_INPUT` | 代理提出真实产品歧义 | 终端提问或 `answer`，再 `run` |
+| `MANUAL_ACCEPTANCE_REQUIRED` | 自动验收全部通过，等人工条件 | `accept` 逐条，再 `run` |
+| `VERIFIED` / `FINALIZING` / `RECEIPTING` / `MERGED` | 完成阶段各步（幂等） | 自动；崩溃后 `run` |
+| `PASSED` | 已合并，报告含合并回执 | 无 |
+| `BASE_CHANGE_REQUIRED` | 功能触碰底座 | 独立提交后 `base-update`，再 `run` |
+| `BOUNDARY_VIOLATION` / `BUDGET_EXHAUSTED` | 越界写入 / 尝试用尽 | 人工判断；可 `smoke-repair` 或修订合同 |
+| `WORKSPACE_TAINTED` | 工作区出现不该有的改动 | 清理后 `reset`，再 `run` |

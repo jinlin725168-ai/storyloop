@@ -1,6 +1,77 @@
 # 集成协议
 
-本页描述 StoryLoop v1 的实例文件与适配器协议。所有文件为 UTF-8 JSON。未知字段、错误类型或缺失必需字段会被拒绝。
+本页描述 StoryLoop 的适配器协议。所有文件为 UTF-8 JSON。未知字段、错误类型或缺失必需字段会被拒绝。
+
+第一部分是通用工程模式（`storyloop init <已有 Git 仓库>`）使用的 `storyloop.project-agent.v1`；后面的"产品对象/检查清单/Agent 请求"属于早期独立实例模式，v2 Stage 协议在最后。
+
+## 通用工程模式代理协议（storyloop.project-agent.v1）
+
+`.storyloop/config.json` 的 `adapter` 为 `codex`（默认）、`command` 或 `manual`。四个角色都是无状态调用：每次启动新进程，stdin 收到一个请求，stdout 必须只输出一个 JSON 对象，退出码 0。
+
+```json
+{
+  "protocol": "storyloop.project-agent.v1",
+  "role": "implement",
+  "project": "/home/me/work/my-project",
+  "payload": {"change": {}, "attempt": 1, "failures": [], "answers": []},
+  "instructions": "<角色说明，command/manual 适配器附带>"
+}
+```
+
+| 角色 | payload | 必须返回 |
+|---|---|---|
+| `product` | 新建：`{idea}`；修订：`{change_id, message, answers:[{question_id,question,answer}], current_product}` | 完整产品对象（spec-kit 结构，见下） |
+| `smoke` | `{change, suite_root}`；修复模式 `change.repair` 为 `{reason, existing_files:[{path,content}], manifest, failure_evidence}` | `{files:[{path,content}], manifest}` |
+| `implement` | `{change, attempt, failures:[{attempt, regression?, smoke?, review?}], answers:[{attempt,question,answer}]}` | `{summary, questions:[string], design}`；通过直接改工作区实现 |
+| `review` | `{change, attempt, regression, smoke, boundary, answers}` | `{verdict:'pass'|'fail'|'needs_input', summary, findings:[object], questions:[string]}` |
+
+产品对象：
+
+```json
+{
+  "version": 1, "goal": "…", "non_goals": ["…"], "capability": "supplier-management",
+  "clarifications": [{"session": "2026-09-21", "question": "…", "answer": "…"}],
+  "questions": [{"id": "Q1", "text": "…", "options": ["A", "B"], "recommended": "A", "why": "…"}],
+  "stories": [{
+    "id": "S1", "title": "…", "priority": "P1", "independent_test": "…",
+    "as_a": "…", "want": "…", "so_that": "…",
+    "rules": ["WHEN … THE SYSTEM SHALL …"], "out_of_scope": [], "depends_on": [],
+    "acceptance": [{"id": "A1", "given": "…", "when": "…", "then": "…", "kind": "automated"}]
+  }]
+}
+```
+
+- `capability` 是活规格的名字（`openspec/specs/<capability>/spec.md`）；修改既有需求时沿用旧的需求标题，引擎据此做取代记录。
+- `questions` 每轮最多 5 个选择题；`clarifications` 由引擎写入，代理修订时必须保留。
+- `kind: manual` 只用于机器无法判断的条件；实现前它们会让运行停在 `MANUAL_ACCEPTANCE_REQUIRED`。
+
+冒烟套件：`files` 的 `path` 相对 `payload.suite_root`（`acceptance/smoke/<change-id>`）。`manifest` 为
+
+```json
+{"version": 1, "tests": [{"id": "core", "criteria": ["A1", "A2"], "command": ["{python}", "acceptance/smoke/FEAT-1/test_core.py"], "timeout_seconds": 900}]}
+```
+
+每个 `automated` 验收条件必须出现在某个测试的 `criteria` 里。命令在仓库的隔离候选副本根目录执行，环境只有 PATH 和临时目录变量；副本由 Git 可见且未忽略的文件构成（`candidate_allow` 例外），不含 `acceptance/ui/`，写入副本即判失败。退出码 0 通过、1 行为失败、其他为环境错误；RED 阶段只有行为失败算有效红灯。
+
+`implement` 的 `design` 是 Markdown（Context、Goals、Decisions 含备选方案、Risks And Trade-Offs、Files），完成时写入 `openspec/changes/<id>/design.md`。`questions` 非空会让运行停在 `NEEDS_INPUT`，人的回答以 `answers` 形式出现在后续调用里。
+
+`review` 的 `pass` 不能同时带 findings 或 questions；`fail` 的 findings 会作为下一次实现尝试的输入。审查角色只读，可运行受限的构建/测试命令。
+
+`_telemetry`（可选）：任何角色的返回对象里可以附带 `{"cost_usd", "turns", "duration_ms", "input_tokens", "output_tokens", "segments", "model"}`，引擎剥离后记入 `.storyloop/state/telemetry/<change-id>.json`；没有它时只记录墙钟时间。
+
+`manual` 适配器：请求写到 `.storyloop/requests/project-<role>.json`，把 `{request_id, result}` 写到 `.storyloop/responses/project-<role>.json` 后重跑原命令。
+
+### UI 回归资产生成器（storyloop.ui-regression.v1，可选）
+
+`config.json` 的 `ui_regression.command` 在审查通过、实现提交之后被只读调用一次：
+
+```json
+{"protocol": "storyloop.ui-regression.v1", "role": "ui_regression", "project": "…",
+ "payload": {"change_id": "FEAT-1", "capability": "supplier-management", "suite_root": "acceptance/ui/supplier-management",
+             "goal": "…", "stories": []}}
+```
+
+返回 `{files:[{path,content}]}`，路径相对 `suite_root`，最多 200 个文件、每个 512 KB。引擎写入后与报告一起提交。生成器不得改动工作区，退出码非 0 使完成阶段失败（可重跑）。
 
 ## 产品对象
 
