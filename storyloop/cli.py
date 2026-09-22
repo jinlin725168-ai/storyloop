@@ -339,3 +339,7 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("Interrupted; state saved. Resume with run.", file=sys.stderr)
         return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())
