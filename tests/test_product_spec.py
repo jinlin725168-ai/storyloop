@@ -112,7 +112,8 @@ class ProductSpecTests(unittest.TestCase):
 
     def test_product_instructions_carry_the_spec_discipline(self):
         text = INSTRUCTIONS["product"]
-        for token in ("EARS", "SHALL", "Given", "5", "recommended", "priority", "P1", "clarifications"):
+        for token in ("EARS", "SHALL", "Given", "5", "recommended", "priority", "P1", "clarifications",
+                      "API", "core flow", "at most three"):
             self.assertIn(token, text)
 
 

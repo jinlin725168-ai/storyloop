@@ -26,6 +26,9 @@ INSTRUCTIONS = {
         "written as EARS statements (\"WHEN <trigger> THE SYSTEM SHALL <behavior>\" or "
         "\"THE SYSTEM SHALL ...\", one testable obligation each) and Given/When/Then acceptance "
         "criteria that follow Gherkin discipline: one observable behavior per criterion, declarative "
+        "and verifiable through the product's API wherever the behavior is not inherently visual; UI-only "
+        "criteria (a page is reachable, the primary action completes, the primary validation shows) are the "
+        "core flow only, at most three per story, because browser tests written before the UI exists are fragile; "
         "wording (what happens, never which button or SQL), Given for state, When for exactly one "
         "action, Then for the observable outcome. Cover the primary path, alternates, and failure "
         "cases that matter; kind is 'manual' only when no machine can observe the outcome. "
@@ -51,12 +54,17 @@ INSTRUCTIONS = {
     ),
     "smoke": (
         "Act as independent external acceptance QA. Return exactly {files:[{path,content}],manifest}. "
-        "Generate a small core-flow smoke suite under payload.suite_root. If acceptance/ui/ exists it holds "
+        "Generate a small core-flow smoke suite under payload.suite_root: verify every criterion that can be "
+        "observed through the API with API tests, and use a browser only for criteria that are inherently visual. "
+        "If acceptance/ui/ exists it holds "
         "verified plans and Playwright specs of existing screens: reuse their locators, texts and flows. Every automated "
         "criterion must be linked by ID. Tests must fail when behavior is absent and must not edit CI files. "
         "Exact shape: {files:[{path,content}], manifest:{version:1, tests:[{id, criteria:[string], "
         "command:[string], timeout_seconds:int}]}}; `path` is relative to the suite root, `command` "
-        "runs from the repository root with a minimal environment, use \"{python}\" for the interpreter."
+        "runs from the repository root with a minimal environment, use \"{python}\" for the interpreter. "
+        "When payload.change.repair is present you are repairing your own suite: fix only the test defects "
+        "shown in failure_evidence (locators, timing, data setup), keep every criterion covered, never weaken "
+        "an assertion about product behavior, and return the complete suite (all files and the manifest)."
     ),
     "implement": (
         "Implement the approved change in this repository. Modify only new files under configured module "

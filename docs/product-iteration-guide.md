@@ -153,7 +153,7 @@ Playwright Test Agents 这类"对着运行中的应用探索并生成用例"的�
 
 审查通过、实现提交之后，引擎以只读调用运行该命令（stdin 为 `storyloop.ui-regression.v1` 请求：变更、能力、suite_root、故事），命令返回 `{files:[{path,content}]}`，引擎把文件写到 `acceptance/ui/<capability>/` 并与报告一起提交。命令内部怎么起应用、怎么驱动 planner/generator/healer 由项目自定；命令本身不得改动工作区。未配置时跳过。
 
-约束：healer 只能修 `acceptance/ui/` 下的回归用例，绝不能碰 `acceptance/smoke/` 里的合同用例；冒烟角色会把 `acceptance/ui/` 里已验证的页面事实（定位器、文案、流程）当作盲写时的素材。
+约束：healer 只能修 `acceptance/ui/` 下的回归用例，绝不能碰 `acceptance/smoke/` 里的合同用例；冒烟角色会把 `acceptance/ui/` 里已验证的页面事实（定位器、文案、流程）当作盲写时的素材。回归资产不进入冒烟候选副本，也不作为任何变更的门：冒烟只包含本次变更的核心链路验收和不该坏的基础功能；验收条件以接口可观察的行为为主，浏览器用例只覆盖核心链路。
 
 ## 6. 查看状态与报告
 
@@ -214,6 +214,7 @@ storyloop base-update C:\work\my-project --proposal BASE-20260916-001
 - `BASE_CHANGE_REQUIRED`：功能依赖底座修改。
 - `NEEDS_INPUT`：已批准合同仍出现真实产品歧义。在终端里执行 `run` 或 `approve` 时会直接逐条提问并继续（回车表示让代理按现有约定自行决定）；非交互环境用 `storyloop answer PATH --change ID --answer "…"`。回答按尝试号记录在 `.storyloop/state/answers/`，随后的实现和审查都能看到问答配对；问题未回答前 `run` 拒绝续跑，`--no-interactive` 可关闭终端提问。
 - `WORKSPACE_TAINTED`：代理或其他进程在工作区里产生了不该有的改动（未声明的被忽略文件、暂存、控制面文件）。这是终态：人先判断原因（常见：残留的 dev server、未声明的构建目录），处理后执行 `storyloop reset PATH --change ID --reason "…"` 再 `storyloop run`。复位不动任何文件，被中断的那一轮不计入尝试预算，理由写入运行状态。
+- 冒烟用例本身有缺陷（定位器、时序、数据准备）而实现无法通过时：由人判断并执行 `storyloop smoke-repair PATH --change ID --reason "…"`。冒烟角色带着失败证据修复自己的套件（不得放宽行为断言），新套件提交到功能分支后，引擎从合同提交重建候选副本重新证明 RED，之前的尝试作废、预算归零，理由写入 decisions.md。实现代理永远不能改验收用例。
 - `MANUAL_ACCEPTANCE_REQUIRED`：自动验收、回归和独立审查都已通过，但合同里有 `manual` 验收条件。此时功能分支上的代码就是待验收版本；逐条执行 `storyloop accept PATH --change ID --criterion A2 --note "看到了什么"`，再 `storyloop run PATH --change ID` 生成报告并合并。验收记录与当时的代码指纹绑定，代码一变就失效。
 - `BOUNDARY_VIOLATION`：代理写到了未授权路径。
 - `BUDGET_EXHAUSTED`：达到自动尝试上限。

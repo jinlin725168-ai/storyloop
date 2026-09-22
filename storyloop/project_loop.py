@@ -14,7 +14,7 @@ from .baseline import (_git, advance_repository_head, load_project_config,
 from .boundaries import capture_snapshot, snapshot_changes
 from .change_report import generate_change_report
 from .changes import load_change
-from .models import StoryLoopError, require
+from .models import StoryLoopError, identifier, require, text
 from .project_boundaries import audit_project_changes
 from .answers import load_answers, _pending as _unanswered
 from .telemetry import summarize
@@ -97,6 +97,70 @@ def _run_change_locked(
         if outcome is not None:
             return outcome
     return _pause(project, state, "BUDGET_EXHAUSTED")
+
+
+REPAIRABLE = {"IMPLEMENTING", "BUDGET_EXHAUSTED", "NEEDS_INPUT"}
+
+
+def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServices | None = None,
+                 now=None) -> dict:
+    """Let the smoke owner fix test defects in its own suite, then re-prove RED at the contract commit.
+
+    The implementer never touches the suite; a human must judge that the failure is a test
+    defect and say why. The reason is recorded, the old attempts are voided, and the new suite
+    must still fail on the tree as it was before any implementation.
+    """
+    project = Path(project).resolve()
+    change_id = identifier(change_id, "change id")
+    reason = text(reason, "repair reason")
+    change = load_change(project, change_id)
+    path = _run_path(project, change_id)
+    require(path.exists(), "Repair needs a started run with a committed contract")
+    state = load_json(path)
+    require(state.get("status") in REPAIRABLE and state.get("contract_commit"),
+            f"Smoke repair is only possible while implementing (current: {state.get('status')})")
+    require(current_branch(project) == state["feature_branch"], "Check out the run's feature branch first")
+    services = services or _default_services()
+    suite_root = project / "acceptance" / "smoke" / change_id
+    existing = [{"path": p.relative_to(suite_root).as_posix(), "content": p.read_text(encoding="utf-8")}
+                for p in sorted(suite_root.rglob("*")) if p.is_file()]
+    evidence = _last_smoke_evidence(project, change_id, state)
+    request = {**change, "repair": {"reason": reason, "existing_files": existing,
+                                    "manifest": load_json(suite_root / "manifest.json"),
+                                    "failure_evidence": evidence}}
+    generated = _read_only_call(project, change_id, lambda: services.generate_smoke(project, request))
+    require(isinstance(generated, dict) and set(generated) == {"files", "manifest"},
+            "Smoke agent returned an invalid contract")
+    install_smoke_suite(project, change_id, generated["files"], generated["manifest"], replace=True)
+    for name in ("smoke-red.json", "smoke-result.json"):
+        (project / ".storyloop/evidence" / change_id / name).unlink(missing_ok=True)
+    paths = _relative_files(project, [suite_root])
+    commit = commit_paths(project, paths, f"test({change_id}): repair smoke suite")
+    red = _read_only_call(
+        project, change_id,
+        lambda: run_smoke_isolated(project, change_id, expect_red=True, at_commit=state["contract_commit"]),
+        allowed_evidence="smoke-red.json",
+    )
+    moment = (now or (lambda: datetime.now(timezone.utc)))().astimezone(timezone.utc).isoformat(timespec="seconds")
+    state.setdefault("repairs", []).append({"at": moment, "reason": reason, "commit": commit["commit"],
+                                            "voided_attempts": int(state.get("attempt", 0))})
+    for key in ("questions", "error", "pending"):
+        state.pop(key, None)
+    state.update({"status": "IMPLEMENTING", "attempt": 0, "red_evidence_sha256": red["evidence_sha256"]})
+    _save_run(project, state)
+    return {"status": "SMOKE_REPAIRED", "change_id": change_id, "commit": commit["commit"],
+            "next": f"storyloop run <project> --change {change_id}"}
+
+
+def _last_smoke_evidence(project: Path, change_id: str, state: dict) -> dict:
+    """Tails of the latest smoke output, so the repairing agent sees what actually failed."""
+    for failure in reversed(state.get("failures") or []):
+        smoke = failure.get("smoke")
+        if isinstance(smoke, dict) and smoke.get("results"):
+            return {"status": smoke.get("status"), "results": [
+                {"id": r.get("id"), "status": r.get("status"), "stdout": str(r.get("stdout", ""))[-6000:],
+                 "stderr": str(r.get("stderr", ""))[-6000:]} for r in smoke["results"]]}
+    return {}
 
 
 def load_run_state(project: Path, change_id: str) -> dict:
@@ -557,7 +621,8 @@ def _write_openspec_artifacts(project: Path, change: dict, state: dict, manual: 
     if state.get("design"):
         (base / "design.md").write_text(state["design"].rstrip("\n") + "\n", encoding="utf-8")
         written.append(f"openspec/changes/{change_id}/design.md")
-    decisions = render_decisions(change, load_answers(project, change_id), manual, state.get("resets") or [])
+    decisions = render_decisions(change, load_answers(project, change_id), manual, state.get("resets") or [],
+                                 state.get("repairs") or [])
     (base / "decisions.md").write_text(decisions, encoding="utf-8")
     written.append(f"openspec/changes/{change_id}/decisions.md")
     capability = capability_of(change["product"], change_id)

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
+import io
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
+import tarfile
 import tempfile
 
 from .baseline import _git, load_project_config
@@ -67,13 +70,18 @@ def run_smoke(
     return {**evidence, "evidence_path": str(path), "evidence_sha256": _sha256(path)}
 
 
-def run_smoke_isolated(project: Path, change_id: str, expect_red: bool = False) -> dict:
-    """Run smoke from a clean candidate copy that excludes every Git-ignored file."""
+def run_smoke_isolated(project: Path, change_id: str, expect_red: bool = False,
+                       at_commit: str | None = None) -> dict:
+    """Run smoke from a clean candidate copy that excludes every Git-ignored file.
+
+    With `at_commit`, the candidate is the tree at that commit plus the current smoke suite.
+    """
     project = Path(project).resolve()
-    head = _git(project, "rev-parse", "HEAD").strip()
+    head = at_commit or _git(project, "rev-parse", "HEAD").strip()
     with tempfile.TemporaryDirectory(prefix="storyloop-smoke-") as folder:
         candidate = Path(folder)
-        paths = _copy_candidate(project, candidate)
+        paths = (_copy_candidate_from_commit(project, candidate, at_commit, change_id) if at_commit
+                 else _copy_candidate(project, candidate))
         _copy_smoke_control(project, candidate, change_id)
         before = capture_snapshot(candidate, include_control=True, include_ignored=True)
         digest = _files_digest(candidate, paths)
@@ -93,7 +101,7 @@ def run_smoke_isolated(project: Path, change_id: str, expect_red: bool = False) 
 
 def _copy_candidate(project: Path, candidate: Path) -> list[str]:
     output = _git(project, "ls-files", "-co", "--exclude-standard", "-z")
-    paths = sorted(set(filter(None, output.split("\0"))))
+    paths = sorted(path for path in set(filter(None, output.split("\0"))) if not _is_regression_asset(path))
     allowed = _candidate_allow(project)
     for relative in paths:
         source = safe_target(project, relative, "candidate source")
@@ -108,6 +116,42 @@ def _copy_candidate(project: Path, candidate: Path) -> list[str]:
         shutil.copyfile(source, target)
         shutil.copymode(source, target)
     return paths
+
+
+UI_ASSETS = "acceptance/ui/"
+
+
+def _is_regression_asset(path: str) -> bool:
+    """UI regression assets document current screens; they are never acceptance evidence."""
+    return path.startswith(UI_ASSETS)
+
+
+def _copy_candidate_from_commit(project: Path, candidate: Path, commit: str, change_id: str) -> list[str]:
+    """Rebuild the tree as it was at `commit`, overlaid with the change's current smoke suite.
+
+    Used to re-prove RED after a suite repair: the implementation may already exist in the
+    working tree, but at the contract commit it does not, so a correct suite must fail there.
+    """
+    archive = subprocess.run(["git", "archive", "--format=tar", commit], cwd=project,
+                             capture_output=True, check=True).stdout
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+        members = [m for m in tar.getmembers() if m.isfile() and not _is_regression_asset(m.name)]
+        for member in members:
+            safe_target(candidate, member.name, "candidate target")
+        tar.extractall(candidate, members=members, filter="data")
+    paths = {member.name for member in members}
+    suite = project / "acceptance" / "smoke" / change_id
+    for stale in sorted((candidate / "acceptance" / "smoke" / change_id).rglob("*"), reverse=True):
+        if stale.is_file():
+            stale.unlink()
+    paths = {path for path in paths if not path.startswith(f"acceptance/smoke/{change_id}/")}
+    for source in sorted(path for path in suite.rglob("*") if path.is_file()):
+        relative = source.relative_to(project).as_posix()
+        target = safe_target(candidate, relative, "candidate target")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+        paths.add(relative)
+    return sorted(paths)
 
 
 def _candidate_allow(project: Path) -> set[str]:

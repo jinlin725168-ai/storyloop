@@ -13,9 +13,13 @@ from .storage import load_json, write_json, write_text_atomic
 
 
 def install_smoke_suite(
-    project: Path, change_id: str, files: list[dict], manifest: dict,
+    project: Path, change_id: str, files: list[dict], manifest: dict, replace: bool = False,
 ) -> dict:
-    """Validate then atomically install an externally owned smoke suite."""
+    """Validate then atomically install an externally owned smoke suite.
+
+    `replace` is for a repair by the suite's owner: the previous files are removed first, and
+    the caller must re-prove RED for the new suite before any green run counts.
+    """
     project = Path(project).resolve()
     change = load_change(project, change_id)
     require(change["status"] in {"APPROVED", "RUNNING"} and change["approval"],
@@ -25,6 +29,12 @@ def install_smoke_suite(
     root_relative = f"acceptance/smoke/{identifier(change_id, 'change id')}"
     root = safe_target(project, root_relative, "smoke root", target_directory=True)
     root.mkdir(parents=True, exist_ok=True)
+    if replace:
+        for stale in sorted(root.rglob("*"), reverse=True):
+            if stale.is_file() or stale.is_symlink():
+                stale.unlink()
+            elif stale.is_dir():
+                stale.rmdir()
     for relative, content in sources:
         target = safe_target(root, relative, "smoke path")
         if target.exists():

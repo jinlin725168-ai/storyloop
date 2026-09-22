@@ -98,7 +98,8 @@ def validate_with_cli(project: Path, kind: str, identifier_: str) -> dict:
     return {"status": "valid", "kind": kind, "id": identifier_}
 
 
-def render_decisions(change: dict, answers: list[dict], manual: list[dict], resets: list[dict]) -> str:
+def render_decisions(change: dict, answers: list[dict], manual: list[dict], resets: list[dict],
+                     repairs: list[dict] | None = None) -> str:
     """Every human input that shaped the change, in order, for later readers and reviewers."""
     lines = [f"# Decisions for {change['change_id']}", "", "## Idea", "", change.get("idea", "") or "-", ""]
     lines += ["## Product revisions", ""]
@@ -117,6 +118,9 @@ def render_decisions(change: dict, answers: list[dict], manual: list[dict], rese
     lines += ["", "## Resets", ""]
     lines += [f"- {item.get('at', '')}: from {item.get('from_status')} at attempt {item.get('attempt')} — {item.get('reason')}"
               for item in resets] or ["- none"]
+    lines += ["", "## Smoke suite repairs", ""]
+    lines += [f"- {item.get('at', '')} ({str(item.get('commit', ''))[:9]}): {item.get('reason')}"
+              for item in (repairs or [])] or ["- none"]
     return "\n".join(lines) + "\n"
 
 
@@ -232,7 +236,8 @@ def document_change(project: Path, change_id: str, design_path: Path | None = No
         (base / "design.md").write_text(design.rstrip("\n") + "\n", encoding="utf-8")
         written.append(f"openspec/changes/{change_id}/design.md")
     (base / "decisions.md").write_text(
-        render_decisions(change, answers, manual, state.get("resets") or []), encoding="utf-8")
+        render_decisions(change, answers, manual, state.get("resets") or [], state.get("repairs") or []),
+        encoding="utf-8")
     written.append(f"openspec/changes/{change_id}/decisions.md")
     if capability:
         require("capability" not in change["product"], "The contract already names its capability")

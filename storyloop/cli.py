@@ -17,7 +17,7 @@ from .openspec_docs import document_change
 from .models import StoryLoopError, require
 from .processutil import redact
 from .project_agents import invoke_project_agent
-from .project_loop import load_run_state, run_change
+from .project_loop import load_run_state, repair_smoke, run_change
 from .report import render
 from .run_recovery import reset_run
 from .smoke_runner import run_smoke_isolated
@@ -44,6 +44,7 @@ def parser() -> argparse.ArgumentParser:
         "answer": "回答代理在 NEEDS_INPUT 停点提出的问题（--answer 可重复，按问题顺序）",
         "accept": "记录人工验收：产品变更用 --change 与 --criterion，旧实例用 --story",
         "reset": "人工复位卡住的运行（WORKSPACE_TAINTED 或工作区已变的人工验收等待），需说明理由",
+        "smoke-repair": "冒烟用例本身有缺陷时，让冒烟角色修复自己的套件并从合同提交重新证明 RED，需说明理由",
         "document": "为已完成的变更（重新）生成 OpenSpec 文档：增量规格、decisions.md、活规格；--design 附加方案文件",
         "demo": "运行自带脚本示例（不调用 AI）",
     }
@@ -75,7 +76,7 @@ def parser() -> argparse.ArgumentParser:
             child.add_argument("--change", dest="change_id", required=True)
             child.add_argument("--design", type=Path)
             child.add_argument("--capability", help="合同未命名能力时指定活规格名称")
-        elif command == "reset":
+        elif command in {"reset", "smoke-repair"}:
             child.add_argument("--change", dest="change_id", required=True)
             child.add_argument("--reason", required=True)
         elif command == "base-propose":
@@ -222,6 +223,8 @@ def _product_dispatch(project: Path, args) -> dict:
                 "telemetry": summarize(project, change_id)}
     if args.command == "reset":
         return reset_run(project, change_id, args.reason)
+    if args.command == "smoke-repair":
+        return repair_smoke(project, change_id, args.reason)
     if args.command == "document":
         return document_change(project, change_id, args.design.resolve() if args.design else None,
                                capability=args.capability)
