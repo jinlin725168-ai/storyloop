@@ -79,13 +79,16 @@ class SmokeRepairTests(unittest.TestCase):
 
             def repaired_smoke(project, change):
                 seen["repair"] = change.get("repair")
-                return good_payload(change_id)
+                payload = good_payload(change_id)
+                payload["files"].append({"path": "manifest.json", "content": "{}"})  # echoed back; must be ignored
+                return payload
 
             result = repair_smoke(root, change_id, "loading-mask locator is a test defect",
                                   services(change_id, repaired_smoke), now=lambda: NOW)
             self.assertEqual(result["status"], "SMOKE_REPAIRED", result)
             self.assertEqual(seen["repair"]["reason"], "loading-mask locator is a test defect")
             self.assertTrue(any(f["path"] == "flow.py" for f in seen["repair"]["existing_files"]))
+            self.assertFalse(any(f["path"] == "manifest.json" for f in seen["repair"]["existing_files"]))
             self.assertIn("failure_evidence", seen["repair"])
             new_state = load_run_state(root, change_id)
             self.assertEqual(new_state["status"], "IMPLEMENTING")

@@ -123,7 +123,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     services = services or _default_services()
     suite_root = project / "acceptance" / "smoke" / change_id
     existing = [{"path": p.relative_to(suite_root).as_posix(), "content": p.read_text(encoding="utf-8")}
-                for p in sorted(suite_root.rglob("*")) if p.is_file()]
+                for p in sorted(suite_root.rglob("*")) if p.is_file() and p.name != "manifest.json"]
     evidence = _last_smoke_evidence(project, change_id, state)
     request = {**change, "repair": {"reason": reason, "existing_files": existing,
                                     "manifest": load_json(suite_root / "manifest.json"),
@@ -131,7 +131,9 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     generated = _read_only_call(project, change_id, lambda: services.generate_smoke(project, request))
     require(isinstance(generated, dict) and set(generated) == {"files", "manifest"},
             "Smoke agent returned an invalid contract")
-    install_smoke_suite(project, change_id, generated["files"], generated["manifest"], replace=True)
+    files = [item for item in generated["files"]
+             if not (isinstance(item, dict) and item.get("path") == "manifest.json")]  # manifest travels separately
+    install_smoke_suite(project, change_id, files, generated["manifest"], replace=True)
     for name in ("smoke-red.json", "smoke-result.json"):
         (project / ".storyloop/evidence" / change_id / name).unlink(missing_ok=True)
     paths = _relative_files(project, [suite_root])
