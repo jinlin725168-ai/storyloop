@@ -86,8 +86,8 @@ class CandidateAllowTests(unittest.TestCase):
 
         with patch("storyloop.project_agents.invoke_project_agent", fake):
             _default_services().generate_smoke(Path("/tmp/p"), {"change_id": "FEAT-1"})
-        self.assertEqual(captured["role"], "smoke")
-        self.assertEqual(captured["payload"]["suite_root"], "acceptance/smoke/FEAT-1")
+        self.assertEqual(captured["role"], "acceptance")
+        self.assertEqual(captured["payload"]["suite_root"], "acceptance/changes/FEAT-1")
         self.assertEqual(captured["payload"]["change"], {"change_id": "FEAT-1"})
 
 

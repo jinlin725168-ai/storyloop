@@ -21,8 +21,8 @@ class ProjectProfileBehaviorTests(unittest.TestCase):
 
             self.assertEqual(profile["version"], 1)
             self.assertEqual(profile["kinds"], ["maven", "python"])
-            self.assertIn(["{python}", "-m", "unittest", "discover"], profile["test_commands"])
-            self.assertTrue(["mvn", "test"] in profile["test_commands"]
+            self.assertIn(["{python}", "-m", "unittest", "discover"], profile["unit_commands"])
+            self.assertTrue(["mvn", "test"] in profile["unit_commands"]
                             or any("mvn" in item for item in profile["warnings"]))
             self.assertIn("pom.xml", profile["integration_paths"])
             self.assertIn(".github/workflows/ci.yml", profile["protected_paths"])
@@ -39,7 +39,7 @@ class ProjectProfileBehaviorTests(unittest.TestCase):
             profile = detect_project(root)
 
             self.assertIn("node", profile["kinds"])
-            self.assertTrue(["pnpm", "test"] in profile["test_commands"]
+            self.assertTrue(["pnpm", "test"] in profile["unit_commands"]
                             or any("pnpm" in item for item in profile["warnings"]))
 
     def test_rejects_shell_string_command_override(self):

@@ -21,9 +21,10 @@
 | 角色 | payload | 必须返回 |
 |---|---|---|
 | `product` | 新建：`{idea}`；修订：`{change_id, message, answers:[{question_id,question,answer}], current_product}` | 完整产品对象（spec-kit 结构，见下） |
-| `smoke` | `{change, suite_root}`；修复模式 `change.repair` 为 `{reason, existing_files:[{path,content}], manifest, failure_evidence}` | `{files:[{path,content}], manifest}` |
-| `implement` | `{change, attempt, failures:[{attempt, regression?, smoke?, review?}], answers:[{attempt,question,answer}]}` | `{summary, questions:[string], design}`；通过直接改工作区实现 |
-| `review` | `{change, attempt, regression, smoke, boundary, answers, design}` | `{verdict:'pass'|'fail'|'needs_input', summary, findings:[object], questions:[string]}` |
+| `acceptance` | `{change, suite_root}`；修复模式 `change.repair` 为 `{reason, existing_files:[{path,content}], manifest, failure_evidence}`；冒烟维护模式 `{mode:'smoke-maintenance', change, acceptance_suite, system_smoke, smoke_root}` | 前两种：`{files:[{path,content}], manifest}`；维护模式：`{files, manifest:{tests:[{id,description,command,timeout_seconds}]}, rationale}` |
+| `characterize` | `{change, test_roots, extend:[path], characterization}` | `{summary, touched:[path], tests:[path], questions:[]}`；只能写 `test_roots` 内的文件 |
+| `implement` | `{change, attempt, failures:[{attempt, unit?, integration?, acceptance?, smoke?, checks?, review?, characterization?}], answers, characterization:{touched, tests}}` | `{summary, questions:[string], design}`；通过直接改工作区实现，只能改 `touched` 里的既有文件和新文件 |
+| `review` | `{change, attempt, layers:{unit,integration,acceptance,smoke,checks}, boundary, answers, design}` | `{verdict:'pass'|'fail'|'needs_input', summary, findings:[object], questions:[string]}` |
 | `survey` | `{baseline_version, foundation_root, required_documents, module_roots, integration_paths, reason}` | `{documents:[{path,content}]}`，路径相对 `openspec/foundation/`，只读探索 |
 
 `survey` 的 `instructions` 由 `foundation-survey` 技能包生成：引擎把 SKILL.md 与 references 原文附在角色说明后（优先项目里 `.claude/skills/` 或 `.codex/skills/` 的副本，否则用引擎打包的副本），三种适配器拿到的说明相同。
@@ -50,13 +51,13 @@
 - `questions` 每轮最多 5 个选择题；`clarifications` 由引擎写入，代理修订时必须保留。
 - `kind: manual` 只用于机器无法判断的条件；实现前它们会让运行停在 `MANUAL_ACCEPTANCE_REQUIRED`。
 
-冒烟套件：`files` 的 `path` 相对 `payload.suite_root`（`acceptance/smoke/<change-id>`）。`manifest` 为
+变更验收套件：`files` 的 `path` 相对 `payload.suite_root`（`acceptance/changes/<change-id>`；改名前的仓库是 `acceptance/smoke/<change-id>`）。`manifest` 为
 
 ```json
-{"version": 1, "tests": [{"id": "core", "criteria": ["A1", "A2"], "command": ["{python}", "acceptance/smoke/FEAT-1/test_core.py"], "timeout_seconds": 900}]}
+{"version": 1, "tests": [{"id": "core", "criteria": ["A1", "A2"], "command": ["{python}", "acceptance/changes/FEAT-1/test_core.py"], "timeout_seconds": 900}]}
 ```
 
-每个 `automated` 验收条件必须出现在某个测试的 `criteria` 里。命令在仓库的隔离候选副本根目录执行，环境只有 PATH 和临时目录变量；副本由 Git 可见且未忽略的文件构成（`candidate_allow` 例外），不含 `acceptance/ui/`，写入副本即判失败。退出码 0 通过、1 行为失败、其他为环境错误；RED 阶段只有行为失败算有效红灯。
+每个 `automated` 验收条件必须出现在某个测试的 `criteria` 里。命令在仓库的隔离候选副本根目录执行，环境只有 PATH 和临时目录变量；副本由 Git 可见且未忽略的文件构成（`candidate_allow` 例外），不含 `acceptance/ui/`，写入副本即判失败。项目级系统冒烟的清单在 `acceptance/smoke/manifest.json`，条目为 `{id, description, command, timeout_seconds}`，同样在候选副本里跑。退出码 0 通过、1 行为失败、其他为环境错误；RED 阶段只有行为失败算有效红灯。
 
 `implement` 角色被要求测试先行：每个行为先写单元测试、看到它因预期原因失败、再写最小实现、绿灯后重构。`design` 是 Markdown（Context、Goals、Tests First 记录每个测试先失败后通过的运行、Decisions 含备选方案、Risks And Trade-Offs、Files），完成时写入 `openspec/changes/<id>/design.md`。引擎不验证 Tests First 的真实性，只验收回归、冒烟和审查结果。`questions` 非空会让运行停在 `NEEDS_INPUT`，人的回答以 `answers` 形式出现在后续调用里。
 
@@ -65,18 +66,6 @@
 `_telemetry`（可选）：任何角色的返回对象里可以附带 `{"cost_usd", "turns", "duration_ms", "input_tokens", "output_tokens", "segments", "model"}`，引擎剥离后记入 `.storyloop/state/telemetry/<change-id>.json`；没有它时只记录墙钟时间。
 
 `manual` 适配器：请求写到 `.storyloop/requests/project-<role>.json`，把 `{request_id, result}` 写到 `.storyloop/responses/project-<role>.json` 后重跑原命令。
-
-### UI 回归资产生成器（storyloop.ui-regression.v1，可选）
-
-`config.json` 的 `ui_regression.command` 在审查通过、实现提交之后被只读调用一次：
-
-```json
-{"protocol": "storyloop.ui-regression.v1", "role": "ui_regression", "project": "…",
- "payload": {"change_id": "FEAT-1", "capability": "supplier-management", "suite_root": "acceptance/ui/supplier-management",
-             "goal": "…", "stories": []}}
-```
-
-返回 `{files:[{path,content}]}`，路径相对 `suite_root`，最多 200 个文件、每个 512 KB。引擎写入后与报告一起提交。生成器不得改动工作区，退出码非 0 使完成阶段失败（可重跑）。
 
 ## 产品对象
 

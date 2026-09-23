@@ -11,32 +11,32 @@ import re
 from .baseline import _git
 from .changes import load_change
 from .models import require
-from .smoke import load_smoke_manifest, smoke_digests
+from .smoke import RESULT_EVIDENCE, load_smoke_manifest, smoke_digests
 from .smoke_runner import candidate_digest
 from .storage import load_json, write_bytes_atomic, write_json, write_text_atomic
 
 COMMIT = re.compile(r"[0-9a-fA-F]{40,64}")
 
 
+LAYERS = ("unit", "integration", "acceptance", "smoke", "checks")
+
+
 def generate_change_report(
     project: Path,
     change_id: str,
     implementation_commit: str,
-    regression: dict,
-    smoke: dict,
+    layers: dict,
     review: dict,
     manual_acceptance: list[dict] | None = None,
     telemetry: dict | None = None,
 ) -> Path:
-    """Write a passing report only when every link has real green or human evidence."""
+    """Write a passing report only when every layer is green and every criterion has real evidence."""
     project = Path(project).resolve()
     change = load_change(project, change_id)
-    evidence_digest = _validate_gate(
-        project, change, implementation_commit, regression, smoke, review
-    )
+    evidence_digest = _validate_gate(project, change, implementation_commit, layers, review)
     manifest = load_smoke_manifest(project, change_id)
     traceability = _build_traceability(
-        change, manifest, smoke.get("results", []), evidence_digest, manual_acceptance or []
+        change, manifest, layers["acceptance"].get("results", []), evidence_digest, manual_acceptance or []
     )
     report = {
         "version": 1,
@@ -49,7 +49,7 @@ def generate_change_report(
             "revision": change["revision"],
         },
         "implementation_commit": implementation_commit,
-        "regression": regression,
+        "layers": layers,
         "review": review,
         "traceability": traceability,
         "telemetry": _telemetry_view(telemetry),
@@ -87,21 +87,23 @@ def merge_receipt_bytes(report: dict, merge_commit: str) -> tuple[bytes, bytes]:
 
 
 def _validate_gate(
-    project: Path, change: dict, implementation_commit: str, regression: dict,
-    smoke: dict, review: dict,
+    project: Path, change: dict, implementation_commit: str, layers: dict, review: dict,
 ) -> str:
+    require(isinstance(layers, dict) and set(layers) == set(LAYERS), "Report needs every verification layer")
+    smoke = layers["acceptance"]
     require(change["approval"], "Acceptance report requires an approved contract")
     require(isinstance(implementation_commit, str)
             and COMMIT.fullmatch(implementation_commit) is not None,
             "Acceptance report requires a valid implementation commit")
     require(_git(project, "rev-parse", "HEAD").strip() == implementation_commit,
             "Implementation commit is not the tested current candidate")
-    require(regression.get("status") in {"PASSED", "SKIPPED"}, "Regression did not pass")
-    require(smoke.get("status") == "PASSED", "Smoke acceptance did not pass")
+    for name in ("unit", "integration", "smoke", "checks"):
+        require(layers[name].get("status") in {"PASSED", "SKIPPED"}, f"{name} layer did not pass")
+    require(smoke.get("status") == "PASSED", "Change acceptance did not pass")
     require(review.get("verdict") == "pass"
             and not review.get("findings") and not review.get("questions"),
             "Independent review did not pass")
-    evidence_path = project / ".storyloop/evidence" / change["change_id"] / "smoke-result.json"
+    evidence_path = project / ".storyloop/evidence" / change["change_id"] / RESULT_EVIDENCE
     evidence = load_json(evidence_path)
     evidence_digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
     supplied = {key: value for key, value in smoke.items()
@@ -197,6 +199,14 @@ def _render_markdown(report: dict) -> str:
             f"{_markdown(item['criterion']['id'])} {_markdown(item['criterion']['then'])} | {tests} | "
             f"{statuses} | `{item['evidence_sha256']}` |"
         )
+    lines.extend(["", "## 分层验证", "", "| 层 | 状态 | 命令 / 用例 | 说明 |", "|---|---|---|---|"])
+    names = {"unit": "单元测试", "integration": "集成测试", "acceptance": "变更验收", "smoke": "系统冒烟", "checks": "静态检查"}
+    for name in LAYERS:
+        layer = report["layers"].get(name) or {}
+        results = layer.get("results") or []
+        passed = sum(1 for r in results if r.get("status") in {"PASS", "PASSED"})
+        lines.append(f"| {name}（{names[name]}） | {layer.get('status', '-')} | {passed}/{len(results)} | "
+                     f"{_markdown(layer.get('reason', ''))} |")
     lines.extend(["", "## 独立审查", "", _markdown(report["review"]["summary"]), ""])
     lines.extend(_telemetry_markdown(report.get("telemetry") or {}))
     return "\n".join(lines)

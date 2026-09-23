@@ -96,10 +96,10 @@ class ProjectSecurityGateTests(unittest.TestCase):
                 {"path": "pass.py", "content": "raise SystemExit(0)\n"},
             ], {"version": 1, "tests": [
                 {"id": "S1", "criteria": ["AC-1"],
-                 "command": ["{python}", f"acceptance/smoke/{change_id}/fail.py"],
+                 "command": ["{python}", f"acceptance/changes/{change_id}/fail.py"],
                  "timeout_seconds": 10},
                 {"id": "S2", "criteria": ["AC-2"],
-                 "command": ["{python}", f"acceptance/smoke/{change_id}/pass.py"],
+                 "command": ["{python}", f"acceptance/changes/{change_id}/pass.py"],
                  "timeout_seconds": 10},
             ]})
             with self.assertRaisesRegex(StoryLoopError, "every automated criterion"):

@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
-from .baseline import _git, load_baseline
+from .baseline import _git, load_baseline, load_project_config
 from .models import identifier, require
-from .project_profile import CI_FILES
+from .project_profile import CI_FILES, matches_test_root
+from .system_smoke import is_system_smoke_path
 from .storage import write_json
 
 
@@ -16,17 +17,18 @@ def audit_project_changes(project: Path, change_id: str) -> dict:
     project = Path(project).resolve()
     change_id = identifier(change_id, "change id")
     baseline = load_baseline(project)
+    test_roots = _test_roots(project)
     changed = _changed_paths(project)
     allowed: list[dict] = []
     violations: list[dict] = []
     for relative in changed:
         path = project / relative
-        record = {"path": relative, "category": _category(relative, baseline, change_id)}
+        record = {"path": relative, "category": _category(relative, baseline, change_id, test_roots)}
         if path.exists() and (path.is_symlink()
                               or (hasattr(path, "is_junction") and path.is_junction())):
             record["category"] = "UNSAFE_LINK"
             violations.append(record)
-        elif record["category"] in {"FEATURE", "REPORT"}:
+        elif record["category"] in {"FEATURE", "TEST", "REPORT"}:
             allowed.append(record)
         else:
             violations.append(record)
@@ -59,16 +61,27 @@ def _changed_paths(project: Path) -> list[str]:
     return sorted(result, key=str.casefold)
 
 
-def _category(relative: str, baseline: dict, change_id: str) -> str:
+def _test_roots(project: Path) -> list[str]:
+    profile = load_project_config(project).get("profile") or {}
+    roots = profile.get("test_roots") or []
+    return [root for root in roots if isinstance(root, str)]
+
+
+def _category(relative: str, baseline: dict, change_id: str, test_roots: list[str] = ()) -> str:
     if _is_ci_path(relative):
         return "CI_PROTECTED"
     if (_inside(relative, f"openspec/changes/{change_id}")
-            or _inside(relative, f"acceptance/smoke/{change_id}")):
+            or _inside(relative, f"acceptance/smoke/{change_id}")
+            or _inside(relative, f"acceptance/changes/{change_id}")):
         return "CONTRACT_PROTECTED"
+    if is_system_smoke_path(relative):
+        return "SMOKE_PROTECTED"
     if relative in baseline["integration_paths"]:
         return "INTEGRATION_CHANGE"
     if any(_inside(relative, root) for root in baseline["module_roots"]):
         return "FEATURE"
+    if matches_test_root(relative, list(test_roots)):
+        return "TEST"  # declared test layout: implement and characterize may write it
     if relative in baseline["foundation_paths"]:
         return "FOUNDATION_CHANGE"
     if _inside(relative, f"reports/storyloop/{change_id}"):

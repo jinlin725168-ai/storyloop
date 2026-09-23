@@ -9,6 +9,7 @@ from pathlib import Path
 from .baseline import _git
 from .change_report import merge_receipt_bytes, record_merge_commit
 from .models import require
+from .smoke import RESULT_EVIDENCE
 from .project_git import commit_paths, current_branch
 
 
@@ -55,10 +56,10 @@ def recover_completed_merge(project: Path, state: dict) -> str:
 
 
 def verify_evidence_digest(project: Path, state: dict) -> None:
-    evidence = project / ".storyloop/evidence" / state["change_id"] / "smoke-result.json"
+    evidence = project / ".storyloop/evidence" / state["change_id"] / RESULT_EVIDENCE
     require(evidence.is_file()
             and hashlib.sha256(evidence.read_bytes()).hexdigest()
-            == state["smoke_evidence_sha256"],
+            == state["acceptance_evidence_sha256"],
             "Verified smoke evidence changed before merge")
 
 

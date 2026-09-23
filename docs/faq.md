@@ -14,7 +14,7 @@
 看提案里的路径分类：`FOUNDATION_CHANGE` 是 init 时锁定的已跟踪文件，`INTEGRATION` 是构建清单。要么把该目录加进 `module_roots`（BASE 迭代改 settings 后重新 init 只在没有变更时可行），要么按提案走一次独立底座提交。
 
 **`BUDGET_EXHAUSTED`，失败原因都是同一个用例**
-先看 `.storyloop/evidence/<id>/smoke-result.json` 的 stderr。若是用例缺陷（严格模式定位器匹配到两个元素、加载遮罩过渡、时钟回拨导致雪花 ID 报错），走 `smoke-repair`；若是实现问题，修订合同或提高 `max_attempts`。
+先看 `.storyloop/evidence/<id>/smoke-result.json` 的 stderr。若是用例缺陷（严格模式定位器匹配到两个元素、加载遮罩过渡、时钟回拨导致雪花 ID 报错），走 `acceptance-repair`；若是实现问题，修订合同或提高 `max_attempts`。
 
 **`MANUAL_ACCEPTANCE_REQUIRED` 后 `run` 报"Workspace changed"**
 人工核对时本地启动了应用并生成了文件，或者改了代码。清理后 `reset`；如果代码确实改了，需要重新走实现（reset 后 run 会重新验证）。
@@ -33,8 +33,8 @@
 **名字敏感的配置文件没进候选副本**
 `.env*`、`*.key`、`*.pem`、`credentials.json`、`secrets.yaml` 默认排除。确实是已跟踪配置的加进 `candidate_allow`；真正的密钥不要进仓库。
 
-**冒烟里的浏览器用例第一次总是失败**
-写盲测时定位器猜错很常见。让冒烟角色优先写接口用例，浏览器用例只覆盖核心链路，并在指南里指向 `acceptance/ui/<capability>/` 的页面事实。失败后用 `smoke-repair`。
+**变更验收里的浏览器用例第一次总是失败**
+写盲测时定位器猜错很常见。让acceptance 角色优先写接口用例，浏览器用例只覆盖核心链路，并在指南里指向 `acceptance/ui/<capability>/` 的页面事实。失败后用 `acceptance-repair`。
 
 **`survey` 报 "copies a configured secret"**
 摸底文档里出现了配置文件中 password/secret/token 类键的实际值，或带口令的连接串。原始返回保存在 `.storyloop/state/foundation/last-survey.json`，把对应值改成"见 `<文件>` 的 `<键>`"这样的描述后 `storyloop survey PATH --from <该文件>` 安装，不用重新摸底。

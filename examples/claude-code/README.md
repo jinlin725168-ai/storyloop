@@ -36,8 +36,6 @@ RuoYi 底座上验证过的配置（`agent_timeout_seconds` 14400、`max_attempt
   "adapter": "command",
   "agent_command": ["{python}", "/abs/path/storyloop/examples/claude-code/claude_agent.py",
                     "--bash", "mvn:*", "--bash", "pnpm:*", "--bash", "npx:*",
-                    "--guide", "/abs/path/my-project/acceptance/AGENT_GUIDE.md"],
-  "ui_regression": {"command": ["{python}", "acceptance/tools/ui_regression.py", "--max-scenarios", "3"],
-                    "timeout_seconds": 7200}
+                    "--guide", "/abs/path/my-project/acceptance/AGENT_GUIDE.md"]
 }
 ```

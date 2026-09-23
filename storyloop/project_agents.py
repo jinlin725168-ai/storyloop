@@ -19,7 +19,7 @@ from .processutil import redact, run_process
 from .storage import load_json, write_json
 from .telemetry import record_call
 
-ROLES = {"product", "smoke", "implement", "review", "survey"}
+ROLES = {"product", "acceptance", "implement", "review", "survey", "characterize"}
 FOUNDATION_NOTE = (
     "payload.foundation (when present) lists the protected knowledge base under openspec/foundation/ "
     "(modules, architecture, extension mechanism, API surface, capabilities, building blocks, testing). "
@@ -62,7 +62,7 @@ INSTRUCTIONS = {
         "existing requirement must reuse that requirement's title, restate every existing scenario with its "
         "original criterion id (updating steps where behavior changes), and add new ids only for new scenarios."
     ),
-    "smoke": (
+    "acceptance": (
         "Act as independent external acceptance QA. Return exactly {files:[{path,content}],manifest}. "
         + FOUNDATION_NOTE + "Use testing.md and building-blocks.md for the acceptance client, how the "
         "app is started, and the API conventions. "
@@ -74,6 +74,13 @@ INSTRUCTIONS = {
         "Exact shape: {files:[{path,content}], manifest:{version:1, tests:[{id, criteria:[string], "
         "command:[string], timeout_seconds:int}]}}; `path` is relative to the suite root, `command` "
         "runs from the repository root with a minimal environment, use \"{python}\" for the interpreter. "
+        "When payload.mode is 'smoke-maintenance' you are proposing an update to the PROJECT-LEVEL system smoke "
+        "suite (payload.smoke_root) after the change merged: from payload.acceptance_suite pick only the change's "
+        "core flow and must-not-break basics, merge them into payload.system_smoke (keep every existing test whose "
+        "behaviour is still valid, update those the contract legitimately changed, never duplicate), and return "
+        "{files:[{path,content}], manifest:{version:1, tests:[{id, description, command:[string], timeout_seconds}]}, "
+        "rationale:string} where paths are relative to payload.smoke_root and commands run from the repository "
+        "root; a human reviews and applies it. "
         "When payload.change.repair is present you are repairing your own suite: fix only the test defects "
         "shown in failure_evidence (locators, timing, data setup), keep every criterion covered, never weaken "
         "an assertion about product behavior, and return the complete suite (all files and the manifest)."
@@ -104,6 +111,20 @@ INSTRUCTIONS = {
         "hollow Tests First section as a finding. "
         "Do not edit files. Return exactly {verdict:'pass'|'fail'|'needs_input',summary:string,"
         "findings:[object],questions:[string]}. Pass only with no findings or questions."
+    ),
+    "characterize": (
+        "Before any implementation, lock the existing behaviour of the code this change is about to modify. "
+        + FOUNDATION_NOTE + "Read payload.change (the approved contract) and, using extension.md and "
+        "building-blocks.md, decide which EXISTING non-test files the implementation will have to modify; list "
+        "them in `touched` as repository-relative paths (files that will merely be added are not listed). For "
+        "each touched path write characterization tests in the project's own unit-test layout (only paths under "
+        "payload.test_roots may be created or changed): assert only behaviour that MUST NOT change, use "
+        "contains-style assertions for lists or fields that the change will extend, never assert the new "
+        "behaviour. Run the tests: they must pass on the current code. payload.extend lists paths the engine "
+        "found modified without a lock; when present, characterize exactly those (payload.characterization "
+        "shows what is already locked). If nothing existing will change, return touched: [] and tests: []. "
+        "Do not modify non-test files, do not commit. Return exactly {summary:string, touched:[string], "
+        "tests:[string], questions:[]}."
     ),
     "survey": (
         "Survey this repository's foundation by following the foundation-survey skill below exactly, in "
@@ -225,7 +246,7 @@ def _codex(project: Path, request: dict, config: dict) -> dict:
     ending in prose. Sessions are kept on disk (no --ephemeral) so `codex exec resume` can
     finish the same thread with its context intact. Usage comes from the --json event stream.
     """
-    sandbox = "workspace-write" if request["role"] == "implement" else "read-only"
+    sandbox = "workspace-write" if request["role"] in {"implement", "characterize"} else "read-only"
     common = ["--ignore-user-config", "--color", "never", "--json"]
     prompt = instructions_for(project, request["role"]) + "\nRequest:\n" + json.dumps(request, ensure_ascii=False)
     telemetry = {"turns": 0, "input_tokens": 0, "output_tokens": 0, "segments": 0}

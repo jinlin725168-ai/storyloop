@@ -162,7 +162,7 @@ class ProjectLoopRecoverySecurityTests(unittest.TestCase):
                        "manifest": {"version": 1, "tests": [{
                            "id": "SMOKE-1", "criteria": ["AC-1"],
                            "command": ["{python}",
-                                       f"acceptance/smoke/{change_id}/flow.py"],
+                                       f"acceptance/changes/{change_id}/flow.py"],
                            "timeout_seconds": 10}]}}
 
             def implement(project, context):

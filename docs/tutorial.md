@@ -32,13 +32,14 @@ README.md  .gitignore
 
 ```json
 {
-  "test_commands": [["{python}", "-m", "unittest", "discover", "-s", "tests"]],
-  "module_roots": ["app", "tests"],
+  "unit_commands": [["{python}", "-m", "unittest", "discover", "-s", "tests"]],
+  "module_roots": ["app"],
+  "test_roots": ["tests"],
   "scratch_paths": ["__pycache__"]
 }
 ```
 
-`module_roots` 是功能变更可以改的目录，把 `tests` 也放进去，否则代理加测试就会撞底座；`scratch_paths` 声明代理跑测试时允许产生的被忽略文件。
+`module_roots` 是功能变更可以改的目录，`test_roots` 是测试文件的位置（implement 和 characterize 都可以写，也是特征化门判断"只改了测试"的依据）；`scratch_paths` 声明代理跑测试时允许产生的被忽略文件。
 
 ## 1. 锁定底座
 
@@ -133,11 +134,11 @@ $SL approve /tmp/todo-demo --change FEAT-20260923-001
 这是本教程唯一需要人的地方（合同里没有 `manual` 条件）。接下来引擎自动做的事，按时间顺序：
 
 1. 锁定合同指纹，建分支 `feature/FEAT-20260923-001`，把合同物化到 `openspec/changes/FEAT-20260923-001/`（含增量规格 `specs/todo-completion/spec.md`）。
-2. 冒烟角色**只看合同**盲写 `acceptance/smoke/FEAT-20260923-001/`：`_todo.py`（调用 CLI 的辅助）、`test_mark.py`、`test_list.py` 和 `manifest.json`。manifest 把 4 个测试映射到 12 条验收条件：
+2. acceptance 角色**只看合同**盲写 `acceptance/changes/FEAT-20260923-001/`：`_todo.py`（调用 CLI 的辅助）、`test_mark.py`、`test_list.py` 和 `manifest.json`。manifest 把 4 个测试映射到 12 条验收条件：
 
    ```json
    {"id": "s1-reject-completed", "criteria": ["A4", "A5"],
-    "command": ["{python}", "acceptance/smoke/FEAT-20260923-001/test_mark.py", "RejectCompletedTest"],
+    "command": ["{python}", "acceptance/changes/FEAT-20260923-001/test_mark.py", "RejectCompletedTest"],
     "timeout_seconds": 120}
    ```
 
@@ -149,9 +150,9 @@ $SL approve /tmp/todo-demo --change FEAT-20260923-001
    usage: todo [-h] --store STORE {add,list} ...
    ```
 
-   注意盲写的用例不知道子命令会叫什么，所以它从 `--help` 里找。这是冒烟角色自己的策略，合同只说了行为。
+   注意盲写的用例不知道子命令会叫什么，所以它从 `--help` 里找。这是 acceptance 角色自己的策略，合同只说了行为。
 5. 实现代理拿到合同，改了 `app/store.py`、`app/cli.py`，加了 `tests/test_completion.py`，返回 summary 和一份 design。
-6. 引擎跑回归（`unittest discover`，9 个测试）、冒烟（12 个测试全绿）、边界审计（只动了可变区的 3 个文件）。
+6. 引擎跑单元回归（`unittest discover`，9 个测试）、变更验收（12 个测试全绿）、边界审计（只动了可变区的 3 个文件）。这次运行时引擎还没有特征化门、系统冒烟和集成/静态层，它们的位置见使用指南 5c。
 7. 审查角色独立读代码和证据，给出 `pass`。
 8. 提交实现，写 `design.md`、`decisions.md`，把增量并入活规格 `openspec/specs/todo-completion/spec.md`，生成报告，提交文档，切回 `main` 做 no-ff 合并，写回执。
 
@@ -185,7 +186,7 @@ Git 历史：
 仓库里新长出的文件：
 
 ```text
-acceptance/smoke/FEAT-20260923-001/   _todo.py manifest.json test_list.py test_mark.py
+acceptance/changes/FEAT-20260923-001/   _todo.py manifest.json test_list.py test_mark.py
 openspec/changes/FEAT-20260923-001/   proposal.md stories.json acceptance.json traceability.json
                                       checklist.md approval.json specs/todo-completion/spec.md
                                       design.md decisions.md
@@ -200,7 +201,7 @@ reports/storyloop/FEAT-20260923-001/  report.json report.md
 | S2 列出待办时显示状态 | A9 输出中有一行为"1 [x] 买牛奶"           | s2-list-status      | PASS | a6ce1c49… |
 ```
 
-`design.md` 是实现代理写的方案，例如它为什么选了 `done` 布尔字段而不是 `status` 文本、为什么在写入前检查以保证拒绝时文件字节不变。`decisions.md` 是引擎汇总的人为决策：三条澄清回答、修订消息，以及（这次没有的）代理提问回答、人工验收备注、复位和 smoke-repair 记录。
+`design.md` 是实现代理写的方案，例如它为什么选了 `done` 布尔字段而不是 `status` 文本、为什么在写入前检查以保证拒绝时文件字节不变。`decisions.md` 是引擎汇总的人为决策：三条澄清回答、修订消息，以及（这次没有的）代理提问回答、人工验收备注、复位和 acceptance-repair 记录。
 
 成本一节：
 
@@ -208,7 +209,7 @@ reports/storyloop/FEAT-20260923-001/  report.json report.md
 - 代理调用：5 次（失败 0 次），代理累计 3 分 33 秒
 - 费用：1.1420 USD
 | product | 2 | 10 | 0 分 59 秒 | 0.3021 |
-| smoke   | 1 |  9 | 1 分 21 秒 | 0.3336 |
+| acceptance | 1 |  9 | 1 分 21 秒 | 0.3336 |
 | implement | 1 | 18 | 0 分 54 秒 | 0.3458 |
 | review  | 1 |  7 | 0 分 18 秒 | 0.1605 |
 ```
@@ -242,7 +243,9 @@ change_id: FEAT-20260923-001
 
 - **触发一次停点**：把 `tests` 从 `module_roots` 拿掉重新 init（没有变更时 `rm -rf .storyloop`），再跑一个会加测试的变更，看 `BASE_CHANGE_REQUIRED` 和 `base-propose` / `base-update`。
 - **人工验收**：在意图里写一条机器判断不了的要求（"错误提示要让人看得懂"），产品角色会把它标成 `manual`，运行会停在 `MANUAL_ACCEPTANCE_REQUIRED`，用 `accept --criterion A13 --note "…"` 再 `run`。
-- **smoke-repair**：故意把套件里的一个断言写错再批准，观察实现过不了后用 `smoke-repair --reason "…"` 修套件并重证 RED。
+- **acceptance-repair**：故意把套件里的一个断言写错再批准，观察实现过不了后用 `acceptance-repair --reason "…"` 修套件并重证 RED。
+- **系统冒烟**：`smoke-propose --change FEAT-20260923-001` 看 acceptance 角色提议把哪条核心链路并入 `acceptance/smoke/`，审核后 `smoke-apply`。
+- **特征化门**：在 settings 里加 `"test_roots": ["tests"]`，再跑一个会修改 `app/store.py` 的变更，看 characterize 角色先写锁定现有行为的测试并跑绿。
 - **第二个变更**：再来一句"待办可以撤销完成"，看它如何修改既有需求并在活规格里做取代记录。
 
 然后读 [使用指南](product-iteration-guide.md) 了解每个停点，按 [接入手册](onboarding-a-repository.md) 把自己的仓库接进来。

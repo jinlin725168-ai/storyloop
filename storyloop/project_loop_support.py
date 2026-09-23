@@ -6,6 +6,7 @@ import hashlib
 from pathlib import Path
 
 from .baseline import _git
+from .smoke import RED_EVIDENCE, RESULT_EVIDENCE
 from .storage import write_json
 
 
@@ -19,9 +20,10 @@ def control_digest(
         ".storyloop/config.json", ".storyloop/baseline.json",
         f".storyloop/state/changes/{change_id}.json",
         f".storyloop/state/smoke/{change_id}.json",
+        f".storyloop/state/suites/{change_id}.json",
         f".storyloop/state/runs/{change_id}.json",
     ]
-    for name in ("smoke-red.json", "smoke-result.json"):
+    for name in (RED_EVIDENCE, RESULT_EVIDENCE):
         if name != excluded_evidence:
             relative_paths.append(f".storyloop/evidence/{change_id}/{name}")
     digest = hashlib.sha256(_git(project, "rev-parse", "HEAD").encode("utf-8"))

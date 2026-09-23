@@ -25,7 +25,7 @@ class CiRunnerTests(unittest.TestCase):
         state = create_change(root, "idea", product(), now=lambda: NOW)
         change_id = state["change_id"]
         approve_change(root, change_id, now=lambda: NOW)
-        path = f"acceptance/smoke/{change_id}/smoke.py"
+        path = f"acceptance/changes/{change_id}/smoke.py"
         install_smoke_suite(root, change_id, [{"path": "smoke.py", "content": f"raise SystemExit({exit_code})\n"}], {
             "version": 1,
             "tests": [{"id": "SMOKE-1", "criteria": ["AC-1"],
@@ -50,7 +50,7 @@ class CiRunnerTests(unittest.TestCase):
         try:
             result = run_smoke(root, change_id, expect_red=True)
             self.assertEqual(result["status"], "RED")
-            suite = root / "acceptance/smoke" / change_id / "smoke.py"
+            suite = root / "acceptance/changes" / change_id / "smoke.py"
             suite.write_text("raise SystemExit(0)\n", encoding="utf-8")
             with self.assertRaisesRegex(StoryLoopError, "modified"):
                 run_smoke(root, change_id)

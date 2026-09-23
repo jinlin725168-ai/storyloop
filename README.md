@@ -49,7 +49,7 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 - 底座知识库：`foundation-survey` 技能包（随引擎维护，`storyloop skills` 装进任何项目，Claude Code 与 Codex 通用）摸清底座的模块组成、架构与运行机制、扩展机制、接口与能力、可复用积木和测试基础设施，产物挂在底座受保护；product 据此不重复建设，implement 据此复用而不是重写，review 据此核对。
 - 需求质量门：合同采用 spec-kit 结构（优先级、独立验证方式、EARS 规则、Gherkin 验收条件），澄清问题以选择题形式逐条回答并入合同；批准前有确定性 checklist 把关。
 - OpenSpec 管理：批准合同、增量规格、实现方案（design.md）和人为决策（decisions.md）进入 `openspec/changes/<change-id>/`，完成时并入 `openspec/specs/<capability>/spec.md` 活规格；装了 `openspec` CLI 时结构校验是门。
-- 外部验收：实现代理不能修改或自行通过 OpenSpec、冒烟测试和报告；冒烟只包含本次变更的核心链路与不该坏的基础功能，用例缺陷走 `smoke-repair` 通道并从合同提交重新证明 RED。
+- 测试分层：变更验收套件（`acceptance/changes/<id>/`，acceptance 角色盲写、先红、受保护）、项目级系统冒烟（`acceptance/smoke/`，跨变更累积、只能经人批准更新）、实现前的特征化测试门（锁定将被修改路径的现有行为，在旧代码上跑绿才开工，机器验证）、单元与集成分开的回归命令、静态检查。每层各自出结论，任何一层红都不能过。用例缺陷走 `acceptance-repair` 通道并从合同提交重新证明 RED。
 - 人工验收：合同里的 `manual` 条件停在 `MANUAL_ACCEPTANCE_REQUIRED`，人用 `accept` 逐条留痕，记录与实现指纹绑定。
 - 单仓库底座：初始化提交和文件摘要构成逻辑底座；普通业务新增只进入 `modules/` 或 `features/`。
 - 底座独立演进：普通功能触碰底座会暂停并产生 `BASE-*` 提案。
@@ -62,9 +62,10 @@ flowchart TD
     A[干净的单一 Git 仓库] --> B[锁定底座]
     B --> C[产品故事与验收条件共创]
     C --> D{用户批准}
-    D --> E[外部冒烟测试先 RED]
-    E --> F[AI 自动实现和修复]
-    F --> G[项目回归 + 冒烟 + 独立审查]
+    D --> E[变更验收套件盲写并证明 RED]
+    E --> E2[特征化测试锁定将改动的现有行为]
+    E2 --> F[AI 实现：TDD 先红后绿]
+    F --> G[单元 + 集成 + 变更验收 + 系统冒烟 + 静态检查 + 独立审查]
     G -->|失败| F
     G -->|底座影响| H[独立 BASE 变更提案]
     G -->|全部通过| H2{有 manual 条件?}
@@ -75,13 +76,13 @@ flowchart TD
     J --> K[写入合并回执并推进基线]
 ```
 
-## CI 冒烟入口
+## CI 入口
 
 ```powershell
 storyloop ci C:\work\my-project --change FEAT-20260916-001
 ```
 
-CI 平台只需增加这一普通命令步骤。命令会从 Git 可见、非忽略文件构造隔离候选副本；冒烟测试若修改候选代码或产生未声明文件会失败。冒烟清单、测试源文件和执行证据均有 SHA-256 保护；行为失败、错误、超时、跳过、篡改或缺失结果都不能算通过。
+CI 平台只需增加这一普通命令步骤。它从 Git 可见、非忽略文件构造隔离候选副本，跑该变更的验收套件和项目级系统冒烟；测试若修改候选代码或产生未声明文件会失败。套件清单、测试源文件和执行证据均有 SHA-256 保护；行为失败、错误、超时、跳过、篡改或缺失结果都不能算通过。
 
 ## 目录结构
 
@@ -101,8 +102,9 @@ my-project/
 │  │                                    design.md（实现方案）、decisions.md（人为决策）
 │  └─ specs/<capability>/spec.md       活规格，完成时由引擎并入增量
 ├─ acceptance/
-│  ├─ smoke/<change-id>/               外部核心流程测试（合同的一部分，受保护）
-│  └─ ui/<capability>/                 可选：实现后生成的 UI 回归资产与页面测试计划，不进冒烟
+│  ├─ changes/<change-id>/             变更验收套件（合同的一部分，受保护；旧仓库的 smoke/<id>/ 仍被识别）
+│  ├─ smoke/                           项目级系统冒烟：manifest.json + 核心链路用例，跨变更累积，只经人批准更新
+│  └─ ui/<capability>/                 历史遗留的 UI 回归资产（不进冒烟、不是证据）
 ├─ modules/ 或 features/               新业务模块（module_roots 可配置为任何目录）
 └─ reports/storyloop/<change-id>/      JSON 与 Markdown 验收报告，含成本与耗时
 ```
@@ -119,14 +121,16 @@ my-project/
 | `approve PATH --change ID` | 批准并自动跑完后续闭环 |
 | `run PATH --change ID [--no-interactive]` | 继续一个已批准的变更；终端里遇到 `NEEDS_INPUT` 会直接提问 |
 | `status PATH --change ID --json` | 查看合同和外部 Loop 状态 |
-| `ci PATH --change ID` | 独立运行核心流程冒烟测试 |
+| `ci PATH --change ID` | CI 入口：隔离运行该变更的验收套件和项目级系统冒烟 |
 | `report PATH --change ID` | 定位最终验收报告 |
 | `base-propose PATH --path P [--path P2] --reason TEXT` | 为计划中的底座改动开 BASE 提案（无需先触发功能变更） |
 | `base-update PATH --proposal BASE-ID` | 校验独立底座提交、完整回归并提升底座版本 |
 | `accept PATH --change ID --criterion A1 --note TEXT` | 记录人工验收条件已由人确认（仅在 `MANUAL_ACCEPTANCE_REQUIRED` 停点可用） |
 | `answer PATH --change ID --answer TEXT [--answer TEXT]` | 回答 `NEEDS_INPUT` 停点的问题（按顺序；只给一个答案则适用于全部）。在终端里 `run`/`approve` 会直接提问，无需此命令 |
 | `reset PATH --change ID --reason TEXT` | 人工复位卡住的运行（`WORKSPACE_TAINTED`，或人工验收等待期间工作区已变）；不动文件，被中断的一轮不计预算，理由留痕 |
-| `smoke-repair PATH --change ID --reason TEXT` | 冒烟用例本身有缺陷时，让冒烟角色修自己的套件并从合同提交重新证明 RED；之前的尝试作废，理由写入 decisions.md |
+| `acceptance-repair PATH --change ID --reason TEXT` | 变更验收用例本身有缺陷时，让 acceptance 角色修自己的套件并从合同提交重新证明 RED；之前的尝试作废，理由写入 decisions.md（旧名 `smoke-repair`） |
+| `smoke-propose PATH --change ID` | 变更合并后，acceptance 角色提议把哪些核心链路并入或更新项目级系统冒烟，草案写到 `.storyloop/drafts/smoke/<id>/` |
+| `smoke-apply PATH --change ID` | 人审核草案后安装到 `acceptance/smoke/`，隔离跑绿才提交；红的草案不留任何改动 |
 | `skills PATH` | 把引擎自带的技能包（`foundation-survey`）安装或刷新到项目的 `.claude/skills/` 与 `.codex/skills/`，Claude Code 与 Codex 都能直接用；已初始化的项目自动开 BASE 提案 |
 | `survey PATH [--reason TEXT] [--from FILE]` | 底座摸底：survey 角色只读探索仓库，写出 `openspec/foundation/` 知识库（模块、架构、扩展机制、接口、能力、积木、测试）并开 BASE 提案；提交后 `base-update` 即受保护，之后每个角色起手先读它 |
 | `document PATH --change ID [--design FILE] [--capability NAME]` | 为已 PASSED 的变更补生成 design.md、decisions.md 和活规格（配合 `base-propose`/`base-update` 提交） |
@@ -142,7 +146,8 @@ my-project/
 - 代理写入未授权路径或修改保护文件。
 - 达到尝试预算。
 - 存在必须由人实际判断的手工验收条件：自动验收、回归和审查通过后停在 `MANUAL_ACCEPTANCE_REQUIRED`，用 `storyloop accept` 逐条记录后 `storyloop run` 继续；人工证据与实现指纹绑定并写入验收报告。
-- 冒烟用例本身有缺陷（定位器、时序、数据准备）：由人判断后执行 `storyloop smoke-repair`，实现代理永远不能改验收用例。
+- 变更验收用例本身有缺陷（定位器、时序、数据准备）：由人判断后执行 `storyloop acceptance-repair`，实现代理永远不能改验收用例。
+- 特征化测试在旧代码上不绿（`CHARACTERIZATION_FAILED`）：锁定现有行为的测试写错了，修正后 `storyloop run`。
 
 完成阶段（实现提交、文档归档、UI 回归资产、报告、合并、回执）是幂等的：中途崩溃后再次 `storyloop run` 会采纳已存在的实现提交、丢弃上次留下的引擎产物并重新生成，不会重复调用实现代理。
 
@@ -155,7 +160,7 @@ my-project/
 Windows 上自动探测到的 `.cmd`、`.bat`、`.ps1` 包装器不会被直接执行。初始化会给出 warning，回归项在没有安全命令时明确记为 `SKIPPED`，核心冒烟仍正常运行。可传入例如 `settings.json`：
 
 ```json
-{"test_commands":[["{python}","-m","unittest","discover"]],"module_roots":["modules","features"],"integration_paths":["pyproject.toml"]}
+{"unit_commands":[["{python}","-m","unittest","discover","-s","tests/unit"]],"integration_commands":[["{python}","-m","unittest","discover","-s","tests/integration"]],"check_commands":[["ruff","check","."]],"test_roots":["tests"],"module_roots":["modules","features"],"integration_paths":["pyproject.toml"]}
 ```
 
 ```powershell

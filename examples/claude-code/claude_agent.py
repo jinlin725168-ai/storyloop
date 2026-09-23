@@ -28,9 +28,11 @@ import sys
 READ_ONLY = ["Read", "Grep", "Glob"]
 ROLE_TOOLS = {
     "product": READ_ONLY,
-    "smoke": READ_ONLY,
+    "acceptance": READ_ONLY,
+    "smoke": READ_ONLY,  # pre-rename engines
     "review": READ_ONLY + ["Bash"],
     "implement": READ_ONLY + ["Edit", "Write", "MultiEdit", "Bash"],
+    "characterize": READ_ONLY + ["Edit", "Write", "MultiEdit", "Bash"],
     "survey": READ_ONLY + ["Bash"],
 }
 # Bash prefixes pre-approved for roles that may run commands; extend per project with
@@ -49,7 +51,7 @@ SCHEMA_HINTS = {
         "depends_on:[string],acceptance:[{id,given,when,then,kind:'automated'|'manual'}]}]}. "
         "IDs like S1/A1/Q1 must be unique across the whole product. No extra fields anywhere."
     ),
-    "smoke": (
+    "acceptance": (
         "Exact shape: {files:[{path,content}], manifest:{version:1, tests:[{id, criteria:[string], "
         "command:[string], timeout_seconds:int}]}}. The suite root is payload.suite_root; `path` is "
         "relative to it. `command` runs from the repository root with a minimal environment, so "
@@ -59,6 +61,7 @@ SCHEMA_HINTS = {
     "implement": ("Exact shape: {summary:string, questions:[string], design:string}; design is Markdown with "
                   "## Context, ## Goals, ## Tests First (each test: observed failure, then green), "
                   "## Decisions (Choice/Rationale/Alternatives), ## Risks And Trade-Offs, ## Files."),
+    "characterize": "Exact shape: {summary:string, touched:[string], tests:[string], questions:[]}; no extra fields.",
     "review": "Exact shape: {verdict:'pass'|'fail'|'needs_input', summary:string, findings:[object], questions:[string]}.",
     "survey": ("Exact shape: {documents:[{path,content}]}; path relative to payload.foundation_root, Markdown only, "
                "every name in payload.required_documents present. No extra fields."),
@@ -169,7 +172,7 @@ def _base_command(claude: str, role: str, segment_turns: int, extra_bash: list[s
         "--permission-prompts", "none", "--max-turns", str(segment_turns),
         "--tools", ",".join(tools), "--allowedTools", *allowed,
     ]
-    if role == "implement":
+    if role in {"implement", "characterize"}:
         command += ["--permission-mode", "acceptEdits"]
     if model:
         command += ["--model", model]
@@ -200,7 +203,7 @@ def _finish(telemetry: dict) -> dict:
 
 
 def _prompt(request: dict, role: str, guides: list[str]) -> str:
-    parts = [request.get("instructions", ""), SCHEMA_HINTS[role], RULES]
+    parts = [request.get("instructions", ""), SCHEMA_HINTS.get(role) or SCHEMA_HINTS["acceptance"], RULES]
     for guide in guides:
         path = Path(guide)
         if path.is_file():

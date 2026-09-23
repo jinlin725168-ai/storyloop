@@ -38,7 +38,13 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 
 **能力（capability）**：一组变更共同演进的业务能力名，也是活规格的文件名。修改既有需求时沿用旧的需求标题，引擎据此做取代记录。
 
-**冒烟套件（smoke suite）**：`acceptance/smoke/<id>/` 下由冒烟角色盲写的用例和 `manifest.json`。只含本次变更的核心链路和不该坏的基础功能，接口优先、浏览器用例只覆盖核心链路。它是合同的一部分，实现代理永远不能改。
+**变更验收套件（acceptance suite）**：`acceptance/changes/<id>/` 下由 acceptance 角色盲写的用例和 `manifest.json`，面向用户、跨前后端，接口优先、浏览器用例只覆盖核心链路，非功能条件也写在这里。它是合同的一部分，实现代理永远不能改。
+
+**系统冒烟（system smoke）**：`acceptance/smoke/` 下项目级的核心链路套件，跨变更累积，每轮尝试、`ci`、`base-update` 都跑。功能变更不能改它；合并后由 acceptance 角色 `smoke-propose` 提议并入或更新，人 `smoke-apply` 批准。
+
+**特征化测试（characterization）**：实现之前，characterize 角色为将被修改的既有文件写只断言"必须不变"行为的测试（扩展的列表用 contains），引擎要求它们在旧代码上跑绿、只改了 `test_roots` 内的文件，才允许开工；实现若改了未声明的既有文件，引擎还原、补锁、重试。
+
+**单元与集成**：`unit_commands` 与 `integration_commands` 分开配置、分开放（不同目录或包）、分开出结论；`check_commands` 是静态检查层。
 
 **验收级 RED**：实现之前在隔离候选副本里跑一次冒烟，只有"行为断言失败"算有效红灯；环境错误、跳过、超时都不算。没有 RED 就不会调用实现代理。这是引擎观察到的外部红灯，和实现代理内部的 TDD 是两回事。
 
@@ -46,7 +52,7 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 
 **候选副本（candidate）**：由 Git 可见且未忽略的文件构成的临时副本，环境只有 PATH 和临时目录变量。冒烟在副本里跑，写入副本即判失败，避免"先改实现再断言"的假绿。`candidate_allow` 放行名字看起来敏感但确实是配置的文件；`acceptance/ui/` 不进副本。
 
-**四个角色**：`product`、`smoke`、`implement`、`review`。都是无状态进程调用：stdin 一个请求、stdout 一个 JSON。适配器可以是 Codex CLI（默认）、Claude Code（`examples/claude-code/`）或人工桥接（manual）。
+**六个角色**：`product`、`acceptance`、`characterize`、`implement`、`review`、`survey`。都是无状态进程调用：stdin 一个请求、stdout 一个 JSON。适配器可以是 Codex CLI（默认）、Claude Code（`examples/claude-code/`）或人工桥接（manual）。
 
 **尝试（attempt）与预算**：一轮尝试 = 实现 → 回归 → 冒烟 → 边界审计 → 审查。`max_attempts` 是唯一的质量预算；`agent_timeout_seconds` 只是挂死保护；适配器的圈数上限只是检查点，到上限续同一会话。
 
@@ -60,17 +66,18 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 | `MANUAL_ACCEPTANCE_REQUIRED` | 自动验收全过，等人工条件 | `accept` 逐条，再 `run` |
 | `BASE_CHANGE_REQUIRED` | 功能触碰底座 | 独立提交后 `base-update`，再 `run` |
 | `WORKSPACE_TAINTED` | 工作区出现不该有的改动 | 清理后 `reset`，再 `run` |
-| `BUDGET_EXHAUSTED` | 尝试用尽 | 人判断：`smoke-repair`、修订合同或放弃 |
+| `BUDGET_EXHAUSTED` | 尝试用尽 | 人判断：`acceptance-repair`、修订合同或放弃 |
+| `CHARACTERIZATION_FAILED` | 特征化测试在旧代码上不绿 | 修测试，再 `run` |
 
-**smoke-repair**：冒烟用例本身有缺陷（定位器、时序、数据准备）时的唯一修复通道。冒烟角色修自己的套件，引擎从合同提交重建候选副本重新证明 RED，之前的尝试作废、预算归零，理由写进 decisions.md。
+**acceptance-repair**：验收用例本身有缺陷（定位器、时序、数据准备）时的唯一修复通道。acceptance 角色修自己的套件，引擎从合同提交重建候选副本重新证明 RED，之前的尝试作废、预算归零，理由写进 decisions.md。
 
 **证据与指纹**：冒烟结果写入 `.storyloop/evidence/`，带套件字节指纹和**实现指纹**（Git 可见文件减去引擎产物）。人工验收记录也绑定实现指纹。报告的每条验收条件都追溯到真实命令、退出码、证据摘要、实现提交、合并提交。
 
 **归档（OpenSpec 格式）**：批准时生成增量规格 `openspec/changes/<id>/specs/<capability>/spec.md`；完成时写 `design.md`（实现代理的方案）、`decisions.md`（引擎汇总的人为决策），并把增量并入活规格 `openspec/specs/<capability>/spec.md`。变更目录不会被移走，它是受保护的合同和追溯锚点。装了 `openspec` CLI 时结构校验是门。
 
-**UI 回归资产（可选）**：审查通过后，引擎只读调用项目配置的生成器（例如 Playwright Test Agents），把探索真实页面得到的测试计划和用例放到 `acceptance/ui/<capability>/`。它们第一次执行必然通过，因此不是验收证据，也不进冒烟；它们是页面行为的活文档和按需回归资产，冒烟角色盲写时会复用其中的页面事实。
+**页面事实资产（历史遗留）**：`acceptance/ui/<capability>/` 里是早期用 Playwright Test Agents 生成的页面计划与用例，不进冒烟、不是证据；acceptance 角色盲写浏览器用例时可复用其中的定位器与流程。完成阶段不再生成它们。
 
-**完成阶段**：实现提交 → 文档归档 → 活规格并入 → UI 资产 → 报告 → 文档提交 → no-ff 合并 → 回执 → 基线推进。整个阶段幂等，崩溃后再次 `run` 不会重复调用代理、不会重复提交。
+**完成阶段**：实现提交 → 文档归档 → 活规格并入 → 报告 → 文档提交 → no-ff 合并 → 回执 → 基线推进；合并后由人触发系统冒烟维护。整个阶段幂等，崩溃后再次 `run` 不会重复调用代理、不会重复提交。
 
 **遥测**：每次代理调用记录墙钟；适配器回报 `_telemetry` 时还记录轮数、token、费用。报告的"成本与耗时"一节按角色汇总。
 
@@ -81,7 +88,7 @@ sequenceDiagram
     participant U as 人
     participant E as 引擎
     participant P as product
-    participant S as smoke
+    participant S as acceptance
     participant I as implement
     participant R as review
     U->>E: change --idea
@@ -90,13 +97,14 @@ sequenceDiagram
     E->>U: 逐条澄清
     U->>E: approve
     E->>E: 质量门、锁定指纹、建分支、物化合同
-    E->>S: 盲写冒烟
+    E->>S: 盲写变更验收套件
     S-->>E: files + manifest
     E->>E: 提交合同与套件，候选副本里跑 RED
+    E->>I: 特征化：锁定将改动的现有行为（旧代码上跑绿）
     loop 每轮尝试（max_attempts）
-        E->>I: change + failures + answers
-        I-->>E: summary + design
-        E->>E: 回归、冒烟、边界审计
+        E->>I: change + failures + answers + touched
+        I-->>E: summary + design（Tests First）
+        E->>E: 单元、集成、验收、系统冒烟、静态检查、边界审计
         E->>R: 证据
         R-->>E: pass / fail / needs_input
     end
@@ -112,7 +120,7 @@ sequenceDiagram
 1. 引擎在仓库外面，代理在仓库里面：代理拿不到判定权。
 2. 验收用例在实现之前写、和合同一起提交：测试不能迁就实现。
 3. 验收级 RED 必须被真实观察到：没有红灯就没有实现。实现级的先红后绿是代理内部的纪律，引擎不替它作证。
-4. 冒烟只含核心链路：历史功能的 UI 用例不进门，门不会越来越重。
+4. 测试分层各司其职：系统冒烟只含核心链路且只经人更新，变更验收先红，特征化先绿，单元与集成分开。
 5. 代理的文字不是证据：只有命令结果、退出码和指纹。
 6. 人只在明确停点介入：每个停点一个命令，不做半自动。
 7. `max_attempts` 是唯一质量预算：时间和圈数只是保护和检查点。

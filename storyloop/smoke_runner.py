@@ -19,8 +19,10 @@ from .models import StoryLoopError, require
 from .path_security import safe_target
 from .project_profile import GENERATED_PATHS
 from .processutil import redact, run_process
-from .smoke import load_smoke_manifest, smoke_digests
+from .smoke import (RED_EVIDENCE, RESULT_EVIDENCE, load_smoke_manifest, protection_path, smoke_digests,
+                    suite_relative, suite_root)
 from .storage import load_json, write_json
+from .system_smoke import run_system_smoke_isolated
 
 
 def run_smoke(
@@ -65,7 +67,7 @@ def run_smoke(
         "results": results,
     }
     path = project / ".storyloop" / "evidence" / change_id / (
-        "smoke-red.json" if expect_red else "smoke-result.json"
+        RED_EVIDENCE if expect_red else RESULT_EVIDENCE
     )
     write_json(path, evidence, max_bytes=4_000_000)
     return {**evidence, "evidence_path": str(path), "evidence_sha256": _sha256(path)}
@@ -141,8 +143,8 @@ def _copy_candidate_from_commit(project: Path, candidate: Path, commit: str, cha
             safe_target(candidate, member.name, "candidate target")
         tar.extractall(candidate, members=members, filter="data")
     paths = {member.name for member in members}
-    suite = project / "acceptance" / "smoke" / change_id
-    for stale in sorted((candidate / "acceptance" / "smoke" / change_id).rglob("*"), reverse=True):
+    suite = suite_root(project, change_id)
+    for stale in sorted((candidate / suite_relative(project, change_id)).rglob("*"), reverse=True):
         if stale.is_file():
             stale.unlink()
     paths = {path for path in paths if not path.startswith(f"acceptance/smoke/{change_id}/")}
@@ -170,10 +172,10 @@ def _copy_smoke_control(project: Path, candidate: Path, change_id: str) -> None:
         (project / ".storyloop/config.json", candidate / ".storyloop/config.json"),
         (project / ".storyloop/state/changes" / f"{change_id}.json",
          candidate / ".storyloop/state/changes" / f"{change_id}.json"),
-        (project / ".storyloop/state/smoke" / f"{change_id}.json",
-         candidate / ".storyloop/state/smoke" / f"{change_id}.json"),
+        (protection_path(project, change_id),
+         candidate / protection_path(project, change_id).relative_to(project)),
     ]
-    red = project / ".storyloop/evidence" / change_id / "smoke-red.json"
+    red = project / ".storyloop/evidence" / change_id / RED_EVIDENCE
     if red.exists():
         pairs.append((red, candidate / ".storyloop/evidence" / change_id / red.name))
     for source, target in pairs:
@@ -309,7 +311,7 @@ def _expand(value: str) -> str:
 def _require_same_red_suite(
     project: Path, change_id: str, suite: dict, expect_red: bool,
 ) -> None:
-    red_path = project / ".storyloop" / "evidence" / change_id / "smoke-red.json"
+    red_path = project / ".storyloop" / "evidence" / change_id / RED_EVIDENCE
     if expect_red or not red_path.exists():
         return
     red = load_json(red_path)
@@ -325,3 +327,11 @@ def _timestamp() -> str:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def run_ci(project: Path, change_id: str) -> dict:
+    """The CI entry: the change's acceptance suite plus the system smoke suite, both isolated."""
+    acceptance = run_smoke_isolated(project, change_id)
+    smoke = run_system_smoke_isolated(project)
+    status = "PASSED" if acceptance["status"] == "PASSED" and smoke["status"] in {"PASSED", "SKIPPED"} else "FAILED"
+    return {"status": status, "change_id": change_id, "acceptance": acceptance, "smoke": smoke}

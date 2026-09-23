@@ -58,6 +58,8 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
     }
     write_json(project / CONFIG_PATH, config, max_bytes=512_000)
     write_json(project / BASELINE_PATH, baseline, max_bytes=8_000_000)
+    from .system_smoke import adopt_system_smoke  # a committed system suite of a clean tree is trusted at init
+    adopt_system_smoke(project)
     require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
             "StoryLoop control files must stay outside Git changes")
     return _bootstrap_result(project, baseline, profile)

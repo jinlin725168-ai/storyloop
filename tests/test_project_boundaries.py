@@ -37,7 +37,7 @@ class ProjectBoundaryTests(unittest.TestCase):
             repository(root)
             bootstrap_project(root)
             contract = root / "openspec/changes/FEAT-20260916-001/proposal.md"
-            smoke = root / "acceptance/smoke/FEAT-20260916-001/test.py"
+            smoke = root / "acceptance/changes/FEAT-20260916-001/test.py"
             contract.parent.mkdir(parents=True)
             smoke.parent.mkdir(parents=True)
             contract.write_text("approved\n", encoding="utf-8")

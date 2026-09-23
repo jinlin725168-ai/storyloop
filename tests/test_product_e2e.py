@@ -36,7 +36,7 @@ class ProductIterationEndToEndTests(unittest.TestCase):
                 "files": [{"path": "core_flow.py", "content": smoke_source}],
                 "manifest": {"version": 1, "tests": [{
                     "id": "SMOKE-ORDER", "criteria": ["AC-1"],
-                    "command": ["{python}", f"acceptance/smoke/{change_id}/core_flow.py"],
+                    "command": ["{python}", f"acceptance/changes/{change_id}/core_flow.py"],
                     "timeout_seconds": 10,
                 }]},
             }
@@ -67,7 +67,7 @@ class ProductIterationEndToEndTests(unittest.TestCase):
             self.assertEqual(report["traceability"][0]["tests"][0]["result"]["status"], "PASS")
             tracked = set(git(root, "ls-files").splitlines())
             self.assertIn(f"openspec/changes/{change_id}/approval.json", tracked)
-            self.assertIn(f"acceptance/smoke/{change_id}/manifest.json", tracked)
+            self.assertIn(f"acceptance/changes/{change_id}/manifest.json", tracked)
             self.assertIn(f"reports/storyloop/{change_id}/report.json", tracked)
 
 

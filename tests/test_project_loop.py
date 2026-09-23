@@ -25,7 +25,7 @@ def smoke_payload(change_id: str) -> dict:
         "files": [{"path": "flow.py", "content": source}],
         "manifest": {"version": 1, "tests": [{
             "id": "SMOKE-1", "criteria": ["AC-1"],
-            "command": ["{python}", f"acceptance/smoke/{change_id}/flow.py"],
+            "command": ["{python}", f"acceptance/changes/{change_id}/flow.py"],
             "timeout_seconds": 10,
         }]},
     }

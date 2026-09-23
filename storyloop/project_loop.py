@@ -19,7 +19,6 @@ from .project_boundaries import audit_project_changes
 from .answers import load_answers, _pending as _unanswered
 from .telemetry import summarize
 from .openspec_docs import capability_of, merge_into_main_spec, render_decisions, validate_with_cli
-from .ui_regression import generate_ui_assets, install_ui_assets
 from .manual_acceptance import load_manual_acceptance, pending_manual_criteria
 from .project_contracts import (validate_agent_summary,
                                 validate_review)
@@ -30,7 +29,10 @@ from .project_loop_support import (control_digest as _control_digest,
                                    set_change_status as _set_change_status)
 from .project_receipt import (ensure_merge_receipt, recover_completed_merge,
                               verify_verified_artifacts)
-from .smoke import install_smoke_suite, load_smoke_manifest
+from .project_profile import layer_commands, matches_test_root
+from .system_smoke import run_system_smoke_isolated
+from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, load_smoke_manifest, protection_path
+from .smoke import suite_relative, suite_root as acceptance_suite_root
 from .smoke_runner import implementation_digest, run_commands_isolated, run_smoke_isolated
 from .storage import load_json, locked, write_json
 
@@ -42,6 +44,7 @@ class LoopServices:
     generate_smoke: Callable[[Path, dict], dict]
     implement: Callable[[Path, dict], dict]
     review: Callable[[Path, dict], dict]
+    characterize: Callable[[Path, dict], dict] | None = None
 
 
 def run_change(project: Path, change_id: str, services: LoopServices | None = None) -> dict:
@@ -83,6 +86,9 @@ def _run_change_locked(
         return _finalize_change(project, change, state)
     if fresh or state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED"}:
         _prepare_acceptance(project, change, services, state)
+    paused = _ensure_characterization(project, change, state, services, config)
+    if paused is not None:
+        return paused
     for attempt in range(start_attempt, config["max_attempts"] + 1):
         state["attempt"] = attempt
         state["status"] = "IMPLEMENTING"
@@ -121,7 +127,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
             f"Smoke repair is only possible while implementing (current: {state.get('status')})")
     require(current_branch(project) == state["feature_branch"], "Check out the run's feature branch first")
     services = services or _default_services()
-    suite_root = project / "acceptance" / "smoke" / change_id
+    suite_root = acceptance_suite_root(project, change_id)
     existing = [{"path": p.relative_to(suite_root).as_posix(), "content": p.read_text(encoding="utf-8")}
                 for p in sorted(suite_root.rglob("*")) if p.is_file() and p.name != "manifest.json"]
     evidence = _last_smoke_evidence(project, change_id, state)
@@ -134,14 +140,14 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     files = [item for item in generated["files"]
              if not (isinstance(item, dict) and item.get("path") == "manifest.json")]  # manifest travels separately
     install_smoke_suite(project, change_id, files, generated["manifest"], replace=True)
-    for name in ("smoke-red.json", "smoke-result.json"):
+    for name in (RED_EVIDENCE, RESULT_EVIDENCE):
         (project / ".storyloop/evidence" / change_id / name).unlink(missing_ok=True)
     paths = _relative_files(project, [suite_root])
     commit = commit_paths(project, paths, f"test({change_id}): repair smoke suite")
     red = _read_only_call(
         project, change_id,
         lambda: run_smoke_isolated(project, change_id, expect_red=True, at_commit=state["contract_commit"]),
-        allowed_evidence="smoke-red.json",
+        allowed_evidence=RED_EVIDENCE,
     )
     moment = (now or (lambda: datetime.now(timezone.utc)))().astimezone(timezone.utc).isoformat(timespec="seconds")
     state.setdefault("repairs", []).append({"at": moment, "reason": reason, "commit": commit["commit"],
@@ -157,7 +163,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
 def _last_smoke_evidence(project: Path, change_id: str, state: dict) -> dict:
     """Tails of the latest smoke output, so the repairing agent sees what actually failed."""
     for failure in reversed(state.get("failures") or []):
-        smoke = failure.get("smoke")
+        smoke = failure.get("acceptance") or failure.get("smoke")
         if isinstance(smoke, dict) and smoke.get("results"):
             return {"status": smoke.get("status"), "results": [
                 {"id": r.get("id"), "status": r.get("status"), "stdout": str(r.get("stdout", ""))[-6000:],
@@ -214,8 +220,9 @@ def _run_attempt(
     state["answers"] = answers
     context = {"change": change, "attempt": state["attempt"],
                "max_attempts": config["max_attempts"],
-               "failures": list(state["failures"]), "answers": answers}
-    response, touched = _implement_safely(project, change_id, services, context)
+               "failures": list(state["failures"]), "answers": answers,
+               "characterization": state.get("characterization")}
+    response, touched = _write_safely(project, change_id, lambda: services.implement(project, context))
     validate_agent_summary(response)
     if response.get("design"):
         state["design"] = response["design"]
@@ -225,18 +232,25 @@ def _run_attempt(
     _require_git_visible(touched, boundary)
     if boundary["violations"]:
         return _pause_for_boundary(project, state, boundary)
-    regression, smoke, boundary = _run_checks_safely(
-        project, change_id, config, boundary
-    )
-    if boundary["violations"]:
-        return _pause_for_boundary(project, state, boundary)
-    if regression["status"] not in {"PASSED", "SKIPPED"} or smoke["status"] != "PASSED":
+    uncharacterized = _uncharacterized_paths(project, state, boundary, config)
+    if uncharacterized:
+        # Existing behaviour must be locked before it is changed: restore, lock, and try again.
+        _git(project, "checkout", state["contract_commit"], "--", *uncharacterized)
+        paused = _characterize_paths(project, change, state, services, config, extend=uncharacterized)
+        if paused is not None:
+            return paused
         state["failures"].append({"attempt": state["attempt"],
-                                  "regression": regression, "smoke": smoke})
+                                  "characterization": {"status": "FAILED", "uncharacterized": uncharacterized}})
         _save_run(project, state)
         return None
-    review = _perform_review(project, change, state, services,
-                             boundary, regression, smoke)
+    layers, boundary = _run_checks_safely(project, change_id, config, boundary)
+    if boundary["violations"]:
+        return _pause_for_boundary(project, state, boundary)
+    if not layers_green(layers):
+        state["failures"].append({"attempt": state["attempt"], **layers})
+        _save_run(project, state)
+        return None
+    review = _perform_review(project, change, state, services, boundary, layers)
     verdict = validate_review(review)
     if verdict == "needs_input":
         return _pause(project, state, "NEEDS_INPUT", questions=review["questions"])
@@ -244,7 +258,7 @@ def _run_attempt(
         state["failures"].append({"attempt": state["attempt"], "review": review})
         _save_run(project, state)
         return None
-    verified = {"boundary": boundary, "regression": regression, "smoke": smoke, "review": review}
+    verified = {"boundary": boundary, "layers": layers, "review": review}
     paused = _manual_acceptance_gate(project, change, state, verified)
     if paused is not None:
         return paused
@@ -269,7 +283,7 @@ def _resume_manual_acceptance(project: Path, change: dict, state: dict) -> dict:
     require(implementation_digest(project) == state.get("candidate_sha256"),
             "Workspace changed while waiting for manual acceptance; use `storyloop reset` to retry")
     verified = state.get("verified")
-    require(isinstance(verified, dict) and set(verified) == {"boundary", "regression", "smoke", "review"},
+    require(isinstance(verified, dict) and set(verified) == {"boundary", "layers", "review"},
             "Paused run lacks its verification evidence")
     paused = _manual_acceptance_gate(project, change, state, verified)
     if paused is not None:
@@ -283,7 +297,7 @@ def _prepare_acceptance(
     change_id = change["change_id"]
     contract_root = materialize_approved_change(project, change_id)
     state.setdefault("openspec", {})["delta"] = validate_with_cli(project, "change", change_id)
-    smoke_state = project / ".storyloop/state/smoke" / f"{change_id}.json"
+    smoke_state = protection_path(project, change_id)
     if smoke_state.exists():
         load_smoke_manifest(project, change_id)
     else:
@@ -293,7 +307,7 @@ def _prepare_acceptance(
         require(isinstance(generated, dict) and set(generated) == {"files", "manifest"},
                 "Smoke agent returned an invalid contract")
         install_smoke_suite(project, change_id, generated["files"], generated["manifest"])
-    smoke_root = project / "acceptance" / "smoke" / change_id
+    smoke_root = acceptance_suite_root(project, change_id)
     paths = _relative_files(project, [contract_root, smoke_root])
     if state["status"] == "PREPARING":
         state["status"] = "CONTRACT_READY"
@@ -327,7 +341,7 @@ def _ensure_contract_commit(project: Path, state: dict, paths: list[str]) -> str
 
 
 def _ensure_red_evidence(project: Path, change_id: str) -> dict:
-    path = project / ".storyloop/evidence" / change_id / "smoke-red.json"
+    path = project / ".storyloop/evidence" / change_id / RED_EVIDENCE
     if path.exists():
         value = load_json(path)
         require(value.get("change_id") == change_id and value.get("status") == "RED",
@@ -337,43 +351,56 @@ def _ensure_red_evidence(project: Path, change_id: str) -> dict:
     return _read_only_call(
         project, change_id,
         lambda: run_smoke_isolated(project, change_id, expect_red=True),
-        allowed_evidence="smoke-red.json",
+        allowed_evidence=RED_EVIDENCE,
     )
+
+
+LAYER_ORDER = ("unit", "integration", "acceptance", "smoke", "checks")
+
+
+def layers_green(layers: dict) -> bool:
+    """Acceptance must pass; every other layer passes or is skipped because it is not configured."""
+    return (layers["acceptance"]["status"] == "PASSED"
+            and all(layers[name]["status"] in {"PASSED", "SKIPPED"} for name in LAYER_ORDER if name != "acceptance"))
 
 
 def _run_checks_safely(
     project: Path, change_id: str, config: dict, prior_boundary: dict,
-) -> tuple[dict, dict, dict]:
+) -> tuple[dict, dict]:
+    """Every verification layer, in order, each with its own verdict: unit, integration, acceptance, smoke, checks."""
     before = capture_snapshot(project, include_control=True, include_ignored=True)
-    control = _control_digest(project, change_id, excluded_evidence="smoke-result.json")
+    control = _control_digest(project, change_id, excluded_evidence=RESULT_EVIDENCE)
+    profile, timeout = config["profile"], config["check_timeout_seconds"]
     try:
-        regression = run_commands_isolated(
-            project, config["profile"]["test_commands"],
-            config["check_timeout_seconds"],
-        )
-        smoke = run_smoke_isolated(project, change_id)
+        layers = {
+            "unit": run_commands_isolated(project, layer_commands(profile, "unit"), timeout),
+            "integration": run_commands_isolated(project, layer_commands(profile, "integration"), timeout),
+            "acceptance": run_smoke_isolated(project, change_id),
+            "smoke": run_system_smoke_isolated(project),
+            "checks": run_commands_isolated(project, layer_commands(profile, "checks"), timeout),
+        }
     finally:
         _verify_read_only_snapshot(
             before, capture_snapshot(project, include_control=True, include_ignored=True),
-            f".storyloop/evidence/{change_id}/smoke-result.json",
+            f".storyloop/evidence/{change_id}/{RESULT_EVIDENCE}",
         )
         _require_control_unchanged(
             _control_digest(project, change_id,
-                            excluded_evidence="smoke-result.json") == control,
+                            excluded_evidence=RESULT_EVIDENCE) == control,
             "Test command modified Git or the protected control plane",
         )
     boundary = audit_project_changes(project, change_id)
     require(prior_boundary["allowed"] == boundary["allowed"] or boundary["violations"],
             "Audited implementation changed during verification")
-    return regression, smoke, boundary
+    return layers, boundary
 
 
 def _perform_review(
     project: Path, change: dict, state: dict, services: LoopServices,
-    boundary: dict, regression: dict, smoke: dict,
+    boundary: dict, layers: dict,
 ) -> dict:
     context = {"change": change, "attempt": state["attempt"],
-               "regression": regression, "smoke": smoke, "boundary": boundary,
+               "layers": layers, "boundary": boundary,
                "answers": load_answers(project, change["change_id"]),
                "design": state.get("design") or ""}
     return _read_only_call(
@@ -381,16 +408,14 @@ def _perform_review(
     )
 
 
-def _implement_safely(
-    project: Path, change_id: str, services: LoopServices,
-    context: dict,
-) -> tuple[dict, list]:
+def _write_safely(project: Path, change_id: str, operation: Callable[[], dict]) -> tuple[dict, list]:
+    """Run an agent that may write the workspace; the control plane and the index must stay untouched."""
     before = capture_snapshot(project, include_control=True, include_ignored=True)
     control = _control_digest(project, change_id)
     staged = _staged_index(project)
     failure: BaseException | None = None
     try:
-        response = services.implement(project, context)
+        response = operation()
     except BaseException as exc:
         failure = exc
     finally:
@@ -516,6 +541,91 @@ def _require_git_visible(touched: list, boundary: dict) -> None:
                              code="WORKSPACE_TAINTED")
 
 
+def _ensure_characterization(project: Path, change: dict, state: dict, services: LoopServices,
+                             config: dict) -> dict | None:
+    """Layer 3 gate, once per change: lock the current behaviour of the paths about to change."""
+    current = state.get("characterization") or {}
+    if current.get("status") in {"GREEN", "SKIPPED"}:
+        return None
+    profile = config["profile"]
+    reason = None
+    if not profile.get("test_roots"):
+        reason = "test_roots not configured"
+    elif not layer_commands(profile, "unit"):
+        reason = "unit_commands not configured"
+    elif services.characterize is None:
+        reason = "no characterize service"
+    if reason:
+        state["characterization"] = {"status": "SKIPPED", "reason": reason, "touched": [], "tests": []}
+        _save_run(project, state)
+        return None
+    return _characterize_paths(project, change, state, services, config, extend=None)
+
+
+def _characterize_paths(project: Path, change: dict, state: dict, services: LoopServices, config: dict,
+                        extend: list[str] | None) -> dict | None:
+    change_id = change["change_id"]
+    profile = config["profile"]
+    previous = state.get("characterization") or {"touched": [], "tests": []}
+    context = {"change": change, "test_roots": profile["test_roots"], "extend": list(extend or []),
+               "characterization": previous if previous.get("status") == "GREEN" else None,
+               "foundation": None}
+    context.pop("foundation")
+    response, written = _write_safely(project, change_id, lambda: services.characterize(project, context))
+    require(isinstance(response, dict) and isinstance(response.get("summary"), str)
+            and isinstance(response.get("touched"), list) and isinstance(response.get("tests"), list)
+            and all(isinstance(p, str) for p in response["touched"] + response["tests"]),
+            "Characterization agent returned an invalid result")
+    require(not response.get("questions"), "Characterization asks no questions; it locks what exists")
+    boundary = audit_project_changes(project, change_id)
+    _require_git_visible(written, boundary)
+    # Judge only what this call wrote: in extend mode the implementation's own edits are already present.
+    changed = sorted({item.path for item in written if not item.path.endswith("/")})
+    violating = {item["path"] for item in boundary["violations"]}
+    outside = [path for path in changed if path in violating or not matches_test_root(path, profile["test_roots"])]
+    if outside:
+        violations = [{"path": p, "category": "NOT_A_TEST_PATH"} for p in outside]
+        return _pause(project, state, "BOUNDARY_VIOLATION", violations=violations, base_proposal=None,
+                      error="Characterization may only write test files")
+    touched = sorted(set(previous.get("touched", [])) | set(response["touched"]) | set(extend or []))
+    for path in touched:
+        require(_exists_at(project, state["contract_commit"], path) and not matches_test_root(path, profile["test_roots"]),
+                f"Characterized path must be an existing non-test file: {path}")
+    unit = run_commands_isolated(project, layer_commands(profile, "unit"), config["check_timeout_seconds"])
+    if unit["status"] != "PASSED":
+        return _pause(project, state, "CHARACTERIZATION_FAILED", unit=unit,
+                      error="Characterization tests must be green on the current code before implementation",
+                      next="Fix the characterization tests (they lock existing behaviour), then storyloop run")
+    commits = list(previous.get("commits", []))
+    if changed:
+        commits.append(commit_paths(project, changed, f"test({change_id}): characterize touched paths")["commit"])
+    state["characterization"] = {"status": "GREEN", "touched": touched,
+                                 "tests": sorted(set(previous.get("tests", [])) | set(response["tests"]) | set(changed)),
+                                 "commits": commits}
+    _save_run(project, state)
+    return None
+
+
+def _uncharacterized_paths(project: Path, state: dict, boundary: dict, config: dict) -> list[str]:
+    """Pre-existing non-test files the implementation modified without a characterization lock."""
+    characterization = state.get("characterization") or {}
+    if characterization.get("status") != "GREEN":
+        return []
+    roots = config["profile"].get("test_roots") or []
+    touched = set(characterization.get("touched", []))
+    return sorted(item["path"] for item in boundary["allowed"]
+                  if item["path"] not in touched and not matches_test_root(item["path"], roots)
+                  and _exists_at(project, state["contract_commit"], item["path"]))
+
+
+def _exists_at(project: Path, commit: str, path: str) -> bool:
+    try:
+        _git(project, "cat-file", "-e", f"{commit}:{path}")
+        return True
+    except Exception:  # noqa: BLE001  (git reports a missing object through a non-zero exit)
+        return False
+
+
 def _pause_for_boundary(project: Path, state: dict, boundary: dict) -> dict:
     return _pause(project, state, boundary["status"],
                   violations=boundary["violations"],
@@ -524,7 +634,7 @@ def _pause_for_boundary(project: Path, state: dict, boundary: dict) -> dict:
 
 def _complete(
     project: Path, change: dict, state: dict, boundary: dict,
-    regression: dict, smoke: dict, review: dict,
+    layers: dict, review: dict,
 ) -> dict:
     change_id = change["change_id"]
     subject = f"feat({change_id}): implement approved product change"
@@ -550,13 +660,12 @@ def _complete(
     telemetry = {**summarize(project, change_id), "attempts": state["attempt"],
                  "loop_ms": _loop_ms(state)}
     report_path = generate_change_report(
-        project, change_id, implementation["commit"], regression, smoke, review,
+        project, change_id, implementation["commit"], layers, review,
         manual_acceptance=manual, telemetry=telemetry,
     )
     state["manual_acceptance"] = manual
     state["telemetry"] = telemetry
     documents = _write_openspec_artifacts(project, change, state, manual)
-    documents += _ui_regression_assets(project, change, state)
     report_commit = commit_paths(
         project, list(dict.fromkeys([report_path.relative_to(project).as_posix(),
                                      report_path.with_suffix(".md").relative_to(project).as_posix(), *documents])),
@@ -565,7 +674,7 @@ def _complete(
     state.update({"status": "VERIFIED", "implementation_commit": implementation["commit"],
                   "report_commit": report_commit["commit"], "report": str(report_path),
                   "report_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
-                  "smoke_evidence_sha256": smoke["evidence_sha256"], "review": review})
+                  "acceptance_evidence_sha256": layers["acceptance"]["evidence_sha256"], "review": review})
     _save_run(project, state)
     return _finish_verified(project, change, state)
 
@@ -657,20 +766,6 @@ def _implementation_already_committed(project: Path, subject: str, boundary: dic
     if _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip():
         return None
     return _git(project, "rev-parse", "HEAD").strip()
-
-
-def _ui_regression_assets(project: Path, change: dict, state: dict) -> list[str]:
-    """Regression assets from the finished UI; the generator may not touch the workspace itself."""
-    capability = capability_of(change["product"], change["change_id"])
-    config = load_project_config(project)
-    outcome = _read_only_call(project, change["change_id"],
-                              lambda: generate_ui_assets(project, change, capability, config))
-    if outcome["status"] != "GENERATED":
-        state["ui_regression"] = outcome
-        return []
-    written = install_ui_assets(project, capability, outcome["payload"])
-    state["ui_regression"] = {"status": "GENERATED", "files": len(written), "paths": written}
-    return written
 
 
 def _write_openspec_artifacts(project: Path, change: dict, state: dict, manual: list[dict]) -> list[str]:
@@ -768,10 +863,11 @@ def _default_services() -> LoopServices:
     from .project_agents import invoke_project_agent
     return LoopServices(
         generate_smoke=lambda project, state: invoke_project_agent(
-            project, "smoke",
-            {"change": state, "suite_root": f"acceptance/smoke/{state['change_id']}"}),
+            project, "acceptance",
+            {"change": state, "suite_root": suite_relative(project, state["change_id"])}),
         implement=lambda project, context: invoke_project_agent(project, "implement", context),
         review=lambda project, context: invoke_project_agent(project, "review", context),
+        characterize=lambda project, context: invoke_project_agent(project, "characterize", context),
     )
 
 

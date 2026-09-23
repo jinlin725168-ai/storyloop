@@ -18,6 +18,11 @@ from tests.test_baseline_behavior import git, repository
 NOW = datetime(2026, 9, 16, tzinfo=timezone.utc)
 
 
+def _layers(acceptance: dict) -> dict:
+    skipped = {"status": "SKIPPED", "results": []}
+    return {"unit": skipped, "integration": skipped, "acceptance": acceptance, "smoke": skipped, "checks": skipped}
+
+
 class ChangeReportTests(unittest.TestCase):
     def _setup(self):
         temporary = tempfile.TemporaryDirectory()
@@ -30,7 +35,7 @@ class ChangeReportTests(unittest.TestCase):
         install_smoke_suite(root, change_id, [{"path": "flow.py", "content": "raise SystemExit(0)\n"}], {
             "version": 1, "tests": [{
                 "id": "SMOKE-1", "criteria": ["AC-1"],
-                "command": ["{python}", f"acceptance/smoke/{change_id}/flow.py"],
+                "command": ["{python}", f"acceptance/changes/{change_id}/flow.py"],
                 "timeout_seconds": 10,
             }],
         })
@@ -43,8 +48,8 @@ class ChangeReportTests(unittest.TestCase):
         try:
             head = git(root, "rev-parse", "HEAD")
             path = generate_change_report(
-                root, change_id, head, {"status": "SKIPPED", "results": []},
-                smoke, {"verdict": "pass", "summary": "ok", "findings": [], "questions": []},
+                root, change_id, head, _layers(smoke),
+                {"verdict": "pass", "summary": "ok", "findings": [], "questions": []},
             )
             report = json.loads(path.read_text(encoding="utf-8"))
             trace = report["traceability"][0]
@@ -65,8 +70,7 @@ class ChangeReportTests(unittest.TestCase):
             forged["status"] = "FAILED"
             with self.assertRaisesRegex(StoryLoopError, "pass|evidence|acceptance"):
                 generate_change_report(
-                    root, change_id, git(root, "rev-parse", "HEAD"),
-                    {"status": "SKIPPED", "results": []}, forged,
+                    root, change_id, git(root, "rev-parse", "HEAD"), _layers(forged),
                     {"verdict": "pass", "summary": "ok", "findings": [], "questions": []},
                 )
         finally:

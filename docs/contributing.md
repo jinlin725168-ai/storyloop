@@ -24,13 +24,14 @@
 
 1. 没有观察到有效 RED 就不调用实现代理；环境错误不是 RED。
 2. 合同、冒烟套件、证据文件的字节由指纹保护，篡改即失败。
-3. 实现代理不能改 `acceptance/smoke/`、`openspec/changes/<id>/` 的合同部分和报告。
+3. 实现代理不能改 `acceptance/changes/<id>/`、`acceptance/smoke/`、`openspec/changes/<id>/` 的合同部分和报告。
 4. 冒烟在隔离候选副本里跑，写入副本即失败。
 5. 边界审计覆盖全树，未声明的被忽略文件判 `WORKSPACE_TAINTED`。
 6. 引擎不 push、不删分支、不重写历史；CI 文件字节不变。
 7. 报告只接受真实命令结果和人工记录，代理文字不是证据。
 8. 完成阶段幂等：重复 `run` 不重复调用代理、不重复提交。
 9. 任何修订让旧批准失效；人工验收记录与实现指纹绑定。
+10. 特征化门：没有 `test_roots` 内的绿测试锁定，实现不能修改既有文件；系统冒烟只经人 `smoke-apply` 更新。
 
 ## 模块边界
 
@@ -38,7 +39,8 @@
 |---|---|
 | 状态机、停点、尝试循环 | `project_loop.py`（持久化在 `project_loop_support.py`） |
 | 角色调用与适配器 | `project_agents.py`，返回结构校验在 `project_contracts.py` |
-| 冒烟套件、候选副本、指纹 | `smoke.py`、`smoke_runner.py` |
+| 变更验收套件、候选副本、指纹 | `smoke.py`、`smoke_runner.py` |
+| 系统冒烟与维护 | `system_smoke.py` |
 | 边界分类 | `project_boundaries.py`（快照在 `boundaries.py`） |
 | 合同、澄清、质量门 | `changes.py`、`approvals.py`、`requirement_checklist.py` |
 | OpenSpec 产物 | `openspec_docs.py` |

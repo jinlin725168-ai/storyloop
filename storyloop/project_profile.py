@@ -13,7 +13,8 @@ from .path_security import repository_relative
 CI_FILES = (
     ".gitlab-ci.yml", "Jenkinsfile", "azure-pipelines.yml", ".circleci/config.yml",
 )
-GENERATED_PATHS = ("openspec/changes", "openspec/specs", "acceptance/smoke", "acceptance/ui", "reports/storyloop")
+GENERATED_PATHS = ("openspec/changes", "openspec/specs", "acceptance/changes", "acceptance/smoke", "acceptance/ui",
+                   "reports/storyloop")
 
 
 SKIP_DIRECTORIES = {"node_modules", "target", "build", "dist", "vendor", "venv", ".venv", "__pycache__"}
@@ -35,7 +36,10 @@ def detect_project(root: Path) -> dict:
     return {
         "version": 1,
         "kinds": kinds or ["generic"],
-        "test_commands": _deduplicate_commands(commands),
+        "unit_commands": _deduplicate_commands(commands),
+        "integration_commands": [],
+        "check_commands": [],
+        "test_roots": [],
         "module_roots": ["modules", "features"],
         "integration_paths": sorted(set(integration)),
         "protected_paths": _protected_files(root),
@@ -51,11 +55,18 @@ def validate_project_settings(root: Path, overrides: dict | None = None) -> dict
     require(overrides is None or isinstance(overrides, dict), "Project overrides must be an object")
     profile = detect_project(root)
     overrides = overrides or {}
-    allowed = {"test_commands", "module_roots", "integration_paths", "candidate_allow",
-               "scratch_paths"}
+    allowed = {"test_commands", "unit_commands", "integration_commands", "check_commands", "test_roots",
+               "module_roots", "integration_paths", "candidate_allow", "scratch_paths"}
     require(set(overrides) <= allowed, "Unknown project setting")
+    require(not ("test_commands" in overrides and "unit_commands" in overrides),
+            "test_commands is the old name of unit_commands; give one of them")
     if "test_commands" in overrides:
-        profile["test_commands"] = _commands(overrides["test_commands"])
+        profile["unit_commands"] = _commands(overrides["test_commands"])
+    for key in ("unit_commands", "integration_commands", "check_commands"):
+        if key in overrides:
+            profile[key] = _commands(overrides[key])
+    if "test_roots" in overrides:
+        profile["test_roots"] = _relative_paths(overrides["test_roots"], "test_roots")
     for key in ("module_roots", "integration_paths", "candidate_allow"):
         if key in overrides:
             profile[key] = _relative_paths(overrides[key], key)
@@ -65,6 +76,48 @@ def validate_project_settings(root: Path, overrides: dict | None = None) -> dict
     require(not protected.intersection(profile["module_roots"]),
             "Protected CI paths cannot be module roots")
     return profile
+
+
+LAYERS = ("unit", "integration", "checks")
+
+
+def matches_test_root(relative: str, test_roots: list[str]) -> bool:
+    """Whether a repository path is a test file per the project's `test_roots` (dirs or globs with ** and *)."""
+    path = relative.replace("\\", "/")
+    for root in test_roots:
+        pattern = root.replace("\\", "/").rstrip("/")
+        if "*" not in pattern:
+            if path == pattern or path.startswith(pattern + "/"):
+                return True
+            continue
+        if _glob_regex(pattern).fullmatch(path):
+            return True
+    return False
+
+
+def _glob_regex(pattern: str):
+    import re
+    out = []
+    i = 0
+    while i < len(pattern):
+        if pattern.startswith("**/", i):
+            out.append("(?:.*/)?"); i += 3
+        elif pattern.startswith("**", i):
+            out.append(".*"); i += 2
+        elif pattern[i] == "*":
+            out.append("[^/]*"); i += 1
+        else:
+            out.append(re.escape(pattern[i])); i += 1
+    return re.compile("".join(out))
+
+
+def layer_commands(profile: dict, layer: str) -> list[list[str]]:
+    """Commands of one verification layer; `test_commands` from older configs count as unit."""
+    require(layer in LAYERS, "Unknown verification layer")
+    if layer == "unit" and "unit_commands" not in profile:
+        return list(profile.get("test_commands") or [])
+    key = {"unit": "unit_commands", "integration": "integration_commands", "checks": "check_commands"}[layer]
+    return list(profile.get(key) or [])
 
 
 def is_ci_path(relative_path: str) -> bool:

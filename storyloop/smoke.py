@@ -1,4 +1,10 @@
-"""Independent core-flow smoke acceptance suites."""
+"""Per-change acceptance suites (layer 2): written blind from the contract, proven RED, protected.
+
+Layout: `acceptance/changes/<change-id>/` holds the suite and its manifest. Repositories that
+started before the rename keep their `acceptance/smoke/<change-id>/` suites; those are still
+recognized so their evidence and `storyloop ci` reruns keep working. The project-level system
+smoke suite (layer 1) lives at `acceptance/smoke/` itself, see system_smoke.py.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +16,31 @@ from .models import StoryLoopError, fields, identifier, require
 from .path_security import repository_relative, safe_target
 from .project_profile import is_ci_path
 from .storage import load_json, write_json, write_text_atomic
+
+SUITE_DIR = "acceptance/changes"
+LEGACY_SUITE_DIR = "acceptance/smoke"
+PROTECTION_DIR = ".storyloop/state/suites"  # state/acceptance holds human acceptance records
+LEGACY_PROTECTION_DIR = ".storyloop/state/smoke"
+RED_EVIDENCE = "acceptance-red.json"
+RESULT_EVIDENCE = "acceptance-result.json"
+
+
+def suite_relative(project: Path, change_id: str) -> str:
+    """Repository-relative suite directory; a pre-rename suite keeps its legacy location."""
+    change_id = identifier(change_id, "change id")
+    legacy = Path(project).resolve() / LEGACY_SUITE_DIR / change_id
+    return f"{LEGACY_SUITE_DIR}/{change_id}" if legacy.is_dir() else f"{SUITE_DIR}/{change_id}"
+
+
+def suite_root(project: Path, change_id: str) -> Path:
+    return Path(project).resolve() / suite_relative(project, change_id)
+
+
+def protection_path(project: Path, change_id: str) -> Path:
+    project = Path(project).resolve()
+    name = f"{identifier(change_id, 'change id')}.json"
+    legacy = project / LEGACY_PROTECTION_DIR / name
+    return legacy if legacy.is_file() else project / PROTECTION_DIR / name
 
 
 def install_smoke_suite(
@@ -26,8 +57,7 @@ def install_smoke_suite(
             "Change must be approved before smoke generation")
     normalized = _validate_manifest(manifest, change)
     sources = _validate_files(files)
-    root_relative = f"acceptance/smoke/{identifier(change_id, 'change id')}"
-    root = safe_target(project, root_relative, "smoke root", target_directory=True)
+    root = safe_target(project, suite_relative(project, change_id), "acceptance suite root", target_directory=True)
     root.mkdir(parents=True, exist_ok=True)
     if replace:
         for stale in sorted(root.rglob("*"), reverse=True):
@@ -138,11 +168,11 @@ def _safe_relative(value: object) -> str:
 
 
 def _suite_root(project: Path, change_id: str) -> Path:
-    return project / "acceptance" / "smoke" / identifier(change_id, "change id")
+    return suite_root(project, change_id)
 
 
 def _protection_path(project: Path, change_id: str) -> Path:
-    return project / ".storyloop" / "state" / "smoke" / f"{identifier(change_id, 'change id')}.json"
+    return protection_path(project, change_id)
 
 
 def _write_text(path: Path, content: str) -> None:

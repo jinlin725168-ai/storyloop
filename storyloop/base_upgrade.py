@@ -12,7 +12,9 @@ from .models import identifier, require, text
 from .path_security import repository_relative
 from .project_boundaries import _write_base_proposal
 from .project_profile import is_ci_path
+from .project_profile import layer_commands
 from .smoke_runner import run_commands_isolated
+from .system_smoke import adopt_system_smoke, run_system_smoke_isolated
 from .storage import load_json, locked, write_json
 
 
@@ -156,11 +158,9 @@ def _recover_upgrade(
             write_json(proposal_path, proposal, max_bytes=4_000_000)
         return _upgrade_result(receipt)
     _require_recovery_candidate(project, receipt)
-    regression = run_commands_isolated(
-        project, config["profile"]["test_commands"], config["check_timeout_seconds"]
-    )
+    regression = _regression_layers(project, config)
     require(regression["status"] == "PASSED",
-            "Base upgrade requires at least one passing regression command")
+            "Base upgrade requires unit and integration layers to pass (at least one must run)")
     candidate = _next_baseline(
         project, baseline, config["profile"], receipt["source_head"],
         receipt["new_baseline_version"],
@@ -168,6 +168,7 @@ def _recover_upgrade(
     require(_dict_digest(candidate) == receipt["candidate_baseline_digest"],
             "Recovered candidate baseline differs from the accepted transition")
     write_json(project / ".storyloop/baseline.json", candidate, max_bytes=8_000_000)
+    adopt_system_smoke(project)  # the accepted base may include a reviewed smoke change
     receipt.update({"status": "ACCEPTED", "regression": regression})
     write_json(receipt_path, receipt, max_bytes=4_000_000)
     proposal["status"] = "ACCEPTED"
@@ -277,3 +278,15 @@ def _upgrade_result(receipt: dict) -> dict:
     return {"status": "BASELINE_UPGRADED", "proposal_id": receipt["proposal_id"],
             "baseline_version": receipt["new_baseline_version"],
             "source_head": receipt["source_head"]}
+
+
+def _regression_layers(project: Path, config: dict) -> dict:
+    """Unit and integration layers, each with its own verdict; PASSED only if all ran green and one ran."""
+    profile, timeout = config["profile"], config["check_timeout_seconds"]
+    unit = run_commands_isolated(project, layer_commands(profile, "unit"), timeout)
+    integration = run_commands_isolated(project, layer_commands(profile, "integration"), timeout)
+    smoke = run_system_smoke_isolated(project)
+    statuses = {unit["status"], integration["status"], smoke["status"]}
+    status = "PASSED" if statuses <= {"PASSED", "SKIPPED"} and "PASSED" in statuses else "FAILED"
+    return {"status": status, "unit": unit, "integration": integration, "smoke": smoke,
+            "candidate_sha256": unit.get("candidate_sha256") or integration.get("candidate_sha256")}

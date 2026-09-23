@@ -20,19 +20,19 @@ flowchart TD
 
 ## 通用工程模式模块
 
-`storyloop init <已有 Git 仓库>` 进入的模式，命令面是 `change / approve / run / accept / answer / reset / smoke-repair / document / base-propose / base-update / ci / report`。
+`storyloop init <已有 Git 仓库>` 进入的模式，命令面是 `skills / survey / change / approve / run / accept / answer / reset / acceptance-repair / smoke-propose / smoke-apply / document / base-propose / base-update / ci / report`。
 
 | 模块 | 责任 |
 |---|---|
 | project_profile / baseline / base_upgrade | 工程探测（根目录与一级子目录）、底座锁定与版本、BASE 提案与回归门升级 |
 | changes / approvals / requirement_checklist | 草案与修订（澄清记录、答案入合同）、批准指纹、确定性需求质量门 |
 | openspec_docs | 增量规格、活规格并入与取代记录、design.md / decisions.md、`openspec validate` 门 |
-| smoke / smoke_runner | 受保护的冒烟套件与清单、隔离候选副本（Git 可见文件，剔除 UI 资产）、证据与指纹（`candidate_digest` / `implementation_digest`） |
+| smoke / smoke_runner | 变更验收套件与清单（`acceptance/changes/<id>/`）、隔离候选副本、证据与指纹、`run_ci` |
 | project_agents / project_contracts | 四个角色的无状态调用（codex / command / manual）、返回结构校验、`_telemetry` 剥离 |
-| project_loop / project_loop_support | 外部闭环状态机：RED、实现—回归—冒烟—审查循环、边界审计、人工验收停点、smoke-repair、幂等完成阶段 |
+| project_loop / project_loop_support | 外部闭环状态机：RED、特征化门、实现—分层验证—审查循环、边界审计、人工验收停点、acceptance-repair、幂等完成阶段 |
 | project_boundaries / boundaries | 可变区、集成点、底座、CI 与 scratch 路径的变更分类；写入者停止后的全树快照 |
 | manual_acceptance / answers / run_recovery | 人工验收记录（绑定实现指纹）、问答账本、`reset` |
-| ui_regression | 实现后的 UI 回归资产挂点（只读调用外部生成器，文件限定在 `acceptance/ui/<capability>/`） |
+| system_smoke | 项目级系统冒烟：受保护的清单与用例、隔离运行、`smoke-propose` / `smoke-apply` 维护、克隆后采纳 |
 | skills / foundation_survey | 引擎自带技能包（`storyloop/skills/<name>/`）的安装、版本状态与文本加载；survey 角色按技能摸底，产物校验后写入 `openspec/foundation/` 并开 BASE 提案 |
 | change_report / project_receipt / project_git | 追溯报告（证据门、成本节）、合并回执、本地分支与 no-ff 合并 |
 | telemetry | 每次代理调用的墙钟、轮数、费用账本 |

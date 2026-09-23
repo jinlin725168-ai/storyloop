@@ -35,7 +35,7 @@ class SmokeSuiteTests(unittest.TestCase):
             "tests": [{
                 "id": "SMOKE-1",
                 "criteria": ["AC-1"],
-                "command": ["{python}", f"acceptance/smoke/{self.change_id}/test_smoke.py"],
+                "command": ["{python}", f"acceptance/changes/{self.change_id}/test_smoke.py"],
                 "timeout_seconds": 10,
             }],
         }
@@ -87,7 +87,7 @@ class SmokeSuiteTests(unittest.TestCase):
         manifest = {"version": 1, "tests": [{
             "id": "SMOKE-1", "criteria": ["AC-1"],
             "command": ["{python}",
-                        f"acceptance/smoke/{self.change_id}/test_smoke.py"],
+                        f"acceptance/changes/{self.change_id}/test_smoke.py"],
             "timeout_seconds": 10,
         }]}
         install_smoke_suite(

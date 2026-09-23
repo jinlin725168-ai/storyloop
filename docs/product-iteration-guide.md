@@ -27,8 +27,10 @@ storyloop init C:\work\my-project
 Windows 上 `.cmd`、`.bat`、`.ps1` 包装器不会被自动执行；对应回归命令会显示 warning，并在报告中明确标记为 `SKIPPED`。如需指定安全的原生可执行程序或显式解释器 argv，可准备：
 
 ```json
-{"test_commands":[["{python}","-m","unittest","discover"]],"module_roots":["modules","features"],"integration_paths":["pyproject.toml"],"candidate_allow":["frontend/.env.production"]}
+{"unit_commands":[["{python}","-m","unittest","discover","-s","tests/unit"]],"integration_commands":[["{python}","-m","unittest","discover","-s","tests/integration"]],"check_commands":[["ruff","check","."]],"test_roots":["tests"],"module_roots":["modules","features"],"integration_paths":["pyproject.toml"],"candidate_allow":["frontend/.env.production"]}
 ```
+
+`unit_commands`、`integration_commands`、`check_commands` 分别是单元测试、集成测试和静态检查（lint、格式、安全扫描）的命令，每层各自出结论，报告分开记；单元与集成在代码里也要分开放（不同目录或包，见接入手册）。旧字段 `test_commands` 等同 `unit_commands`。`test_roots` 声明测试文件所在的目录或通配（`tests`、`backend/**/src/test/**`、`frontend/src/**/*.test.ts`）：它们是 implement 和 characterize 角色可以写的地方，也是特征化门判断"只改了测试"的依据。
 
 `scratch_paths` 列出代理可以在工作区里产生的被忽略位置（目录名或相对路径，如 `target`、`node_modules`、`dist`、`__pycache__`），用于就地构建和测试；未列出的被忽略文件一旦出现即判 `WORKSPACE_TAINTED`。只读的 `git status`/`git diff` 造成的 `.git/index` 刷新总是被容忍，任何暂存、提交或切换分支都会被检测。
 
@@ -123,18 +125,19 @@ storyloop approve C:\work\my-project --change FEAT-20260916-001
 1. 需求质量门：确定性 checklist 检查合同，阻断项让批准失败；锁定产品合同摘要。
 2. 建立 `feature/<change-id>` 本地分支。
 3. 将批准合同物化到 `openspec/changes/<change-id>/`（含增量规格），装了 `openspec` CLI 时校验结构。
-4. 生成 `acceptance/smoke/<change-id>/` 核心流程测试（接口优先，浏览器用例只覆盖核心链路），与合同一起提交。
-5. 先证明冒烟测试因功能缺失而失败（验收级 RED；这不是实现代理内部的 TDD）。
-6. 调用实现代理，运行项目回归和外部冒烟测试，失败则带着证据自动重试；代理提出真实产品歧义时停在 `NEEDS_INPUT`。
-7. 审计底座、模块、集成点、测试和 CI 边界；集成点变化转为底座提案。
-8. 进行独立审查。
-9. 有 `manual` 验收条件时停在 `MANUAL_ACCEPTANCE_REQUIRED`，等人 `accept` 后 `run` 继续。
-10. 提交实现；写 design.md、decisions.md，把增量并入活规格并校验；运行可选的 `ui_regression` 生成器产出 `acceptance/ui/<capability>/` 回归资产。
-11. 生成 `reports/storyloop/<change-id>/report.json` 和 `report.md`（含追溯与成本），与上述文档一起提交。
-12. 切回原分支执行本地 `--no-ff` 合并。
-13. 将合并提交写回验收报告，提交合并回执并推进基线血缘。
+4. acceptance 角色只看合同盲写 `acceptance/changes/<change-id>/` 变更验收套件（接口优先，浏览器用例只覆盖核心链路），与合同一起提交。
+5. 在隔离候选副本里证明验收套件因功能缺失而失败（验收级 RED）。
+6. 特征化门：characterize 角色列出实现将修改的既有文件，为它们写只断言"必须不变"行为的测试（扩展的列表用 contains），引擎要求这些测试在旧代码上跑绿、只改了 `test_roots` 内的文件，然后提交。项目没配 `test_roots` 或单元命令时跳过。
+7. 调用实现代理（TDD 先红后绿），然后依次跑：单元测试 → 集成测试 → 变更验收 → 系统冒烟 → 静态检查，每层各自出结论；任何一层红就带着证据进入下一轮尝试。实现改了未声明的既有文件时，引擎把它们还原到合同提交、补做特征化再重试。代理提出真实产品歧义时停在 `NEEDS_INPUT`。
+8. 审计底座、模块、集成点、测试、系统冒烟和 CI 边界；集成点变化转为底座提案。
+9. 进行独立审查（对照 design 的 Tests First、知识库的积木与扩展机制）。
+10. 有 `manual` 验收条件时停在 `MANUAL_ACCEPTANCE_REQUIRED`，等人 `accept` 后 `run` 继续。
+11. 提交实现；写 design.md、decisions.md，把增量并入活规格并校验。
+12. 生成 `reports/storyloop/<change-id>/report.json` 和 `report.md`（含追溯、分层验证、成本），与上述文档一起提交。
+13. 切回原分支执行本地 `--no-ff` 合并，将合并提交写回验收报告，提交合并回执并推进基线血缘。
+14. 合并之后（独立步骤，由人触发）：`smoke-propose` 让 acceptance 角色提议把本次核心链路并入或更新项目级系统冒烟，人审核草案后 `smoke-apply` 安装、隔离跑绿、提交。
 
-第 10 步之后的完成阶段是幂等的：任何一步崩溃后再次 `storyloop run`，引擎会采纳已存在的实现提交，丢弃上次留下的引擎产物（文档、活规格、UI 资产、报告）并重新生成，不会再次调用实现代理，也不会重复提交。
+第 11 步之后的完成阶段是幂等的：任何一步崩溃后再次 `storyloop run`，引擎会采纳已存在的实现提交，丢弃上次留下的引擎产物（文档、活规格、UI 资产、报告）并重新生成，不会再次调用实现代理，也不会重复提交。
 
 StoryLoop 控制器本身不执行 `git push`。
 
@@ -143,9 +146,10 @@ flowchart LR
     A[一句产品意图] --> B[AI 共创故事和验收条件]
     B --> C{用户批准}
     C --> D[锁定 OpenSpec]
-    D --> E[外部冒烟 RED]
-    E --> F[自动实现与修复]
-    F --> G[回归 + 冒烟 + 独立审查]
+    D --> E[变更验收 RED]
+    E --> E2[特征化测试跑绿]
+    E2 --> F[实现：TDD]
+    F --> G[单元 / 集成 / 验收 / 系统冒烟 / 静态检查 / 审查]
     G -->|失败| F
     G -->|通过| H[追溯报告]
     H --> I[本地 no-ff 合并]
@@ -154,13 +158,13 @@ flowchart LR
 
 ## 5. 在现有 CI 中调用
 
-StoryLoop 只提供一个独立冒烟入口：
+StoryLoop 只提供一个独立入口：
 
 ```powershell
 storyloop ci C:\work\my-project --change FEAT-20260916-001
 ```
 
-在任何 CI 平台中添加一个普通命令步骤即可。StoryLoop 不会修改以下内容：
+在任何 CI 平台中添加一个普通命令步骤即可，它跑该变更的验收套件和项目级系统冒烟。StoryLoop 不会修改以下内容：
 
 - `.github/workflows/*`
 - `.gitlab-ci.yml`
@@ -168,7 +172,7 @@ storyloop ci C:\work\my-project --change FEAT-20260916-001
 - `.circleci/config.yml`
 - `azure-pipelines.yml`
 
-命令退出码为 `0` 时冒烟通过；失败、环境错误、超时、测试篡改或缺少证据时返回 `2`。执行使用由 Git 可见且未被忽略的文件构成的隔离副本，测试对候选代码的任何写入都会被视为污染，不能通过“先改实现再断言”的方式制造假绿。
+命令退出码为 `0` 时两层都通过；失败、环境错误、超时、测试篡改或缺少证据时返回 `2`。执行使用由 Git 可见且未被忽略的文件构成的隔离副本，测试对候选代码的任何写入都会被视为污染，不能通过"先改实现再断言"的方式制造假绿。安全扫描、代码风格这类第五层检查由项目通过 `check_commands` 接进每轮尝试，CI 上原有的扫描流水线保持不变。
 
 ## 5b. 每个变更留下的文档（OpenSpec 格式）
 
@@ -186,17 +190,20 @@ storyloop ci C:\work\my-project --change FEAT-20260916-001
 
 事后发现规格与代码不一致只有两条出路，引擎不会自动改规格去迁就代码：代码错了，开一个功能变更修；规格过时了，开一个文档型底座变更（`storyloop document` 重新生成后走 `base-propose` / `base-update`）。
 
-### 5c. 实现后的 UI 回归资产（可选）
+### 5c. 五层测试各在哪里
 
-Playwright Test Agents 这类"对着运行中的应用探索并生成用例"的工具，产出的用例第一次执行必然通过，因此不能作为验收证据；它们的位置是回归资产和页面行为的活文档。引擎提供一个通用挂点：
+| 层 | 引擎里的名字 | 位置 | 谁写 | 什么时候跑 |
+|---|---|---|---|---|
+| 系统冒烟 | smoke | `acceptance/smoke/`，跨变更累积，受保护 | acceptance 角色提议、人 `smoke-apply` | 每轮尝试、`ci`、`base-update` |
+| 变更验收 | acceptance | `acceptance/changes/<id>/` | acceptance 角色盲写，先红 | 每轮尝试、`ci` |
+| 特征化测试 | characterize | `test_roots` | characterize 角色，在旧代码上跑绿 | RED 之后、实现之前一次 |
+| 单元测试 | unit | `unit_commands`、`test_roots` | implement 角色 TDD | 每轮尝试、特征化门、`base-update` |
+| 集成测试 | integration | `integration_commands`，独立目录或包 | implement 角色 | 每轮尝试、`base-update` |
+| 静态检查 | checks | `check_commands` | 项目配置 | 每轮尝试 |
 
-```json
-"ui_regression": {"command": ["{python}", "acceptance/tools/ui_regression.py"], "timeout_seconds": 3600}
-```
+系统冒烟的更新永远经人：`smoke-propose --change ID` 之后草案在 `.storyloop/drafts/smoke/<id>/`（用例、manifest.json、rationale.md），可以直接改；`smoke-apply --change ID` 安装到 `acceptance/smoke/`、隔离跑绿后提交 `test(smoke): …`，红的草案不留下任何改动。首次建立系统冒烟也走这条路：在第一个 PASSED 的变更上 `smoke-propose`。克隆仓库或 `base-update` 时引擎采纳已提交的系统冒烟作为受保护基线。功能变更改动 `acceptance/smoke/` 是 `SMOKE_PROTECTED` 越界。
 
-审查通过、实现提交之后，引擎以只读调用运行该命令（stdin 为 `storyloop.ui-regression.v1` 请求：变更、能力、suite_root、故事），命令返回 `{files:[{path,content}]}`，引擎把文件写到 `acceptance/ui/<capability>/` 并与报告一起提交。命令内部怎么起应用、怎么驱动 planner/generator/healer 由项目自定；命令本身不得改动工作区。未配置时跳过。
-
-约束：healer 只能修 `acceptance/ui/` 下的回归用例，绝不能碰 `acceptance/smoke/` 里的合同用例；冒烟角色会把 `acceptance/ui/` 里已验证的页面事实（定位器、文案、流程）当作盲写时的素材。回归资产不进入冒烟候选副本，也不作为任何变更的门：冒烟只包含本次变更的核心链路验收和不该坏的基础功能；验收条件以接口可观察的行为为主，浏览器用例只覆盖核心链路。
+Playwright Test Agents 这类"对着运行中的应用探索并生成用例"的工具不再挂在完成阶段（它们生成的用例第一次执行必然通过，不是证据，而且曾把合并拖慢一小时）；需要浏览器用例进入系统冒烟时，在 `smoke-propose` 的草案阶段用项目自己的工具生成，再由人审核应用。
 
 ## 6. 查看状态与报告
 
@@ -208,12 +215,14 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 报告的每条记录包含：
 
 ```text
-需求 → 用户故事 → 验收条件 → 冒烟测试 → 实际命令 → 退出码 → 证据 SHA-256 → 实现提交 → 合并提交
+需求 → 用户故事 → 验收条件 → 验收测试 → 实际命令 → 退出码 → 证据 SHA-256 → 实现提交 → 合并提交
+
+报告还有"分层验证"一节：单元、集成、变更验收、系统冒烟、静态检查各一行，状态与通过数分开记。
 ```
 
 任何验收条件没有真实通过证据，报告都不能标记为 `PASSED`。
 
-指纹的口径：冒烟证据和人工验收记录绑定的都是**实现指纹**，即 Git 可见文件减去引擎自己的产物（`openspec/changes/<id>/` 下的 design.md 和 decisions.md、`openspec/specs/`、`acceptance/ui/`、`reports/storyloop/<id>/`）。因此完成阶段生成文档不会让证据失效；改动任何业务或测试文件都会。
+指纹的口径：验收证据和人工验收记录绑定的都是**实现指纹**，即 Git 可见文件减去引擎自己的产物（`openspec/changes/<id>/` 下的 design.md 和 decisions.md、`openspec/specs/`、`acceptance/ui/`、`reports/storyloop/<id>/`）。因此完成阶段生成文档不会让证据失效；改动任何业务或测试文件都会。
 
 ## 7. 底座变更如何处理
 
@@ -259,7 +268,8 @@ storyloop base-update C:\work\my-project --proposal BASE-20260916-001
 - `BASE_CHANGE_REQUIRED`：功能依赖底座修改。
 - `NEEDS_INPUT`：已批准合同仍出现真实产品歧义。在终端里执行 `run` 或 `approve` 时会直接逐条提问并继续（回车表示让代理按现有约定自行决定）；非交互环境用 `storyloop answer PATH --change ID --answer "…"`。回答按尝试号记录在 `.storyloop/state/answers/`，随后的实现和审查都能看到问答配对；问题未回答前 `run` 拒绝续跑，`--no-interactive` 可关闭终端提问。
 - `WORKSPACE_TAINTED`：代理或其他进程在工作区里产生了不该有的改动（未声明的被忽略文件、暂存、控制面文件）。这是终态：人先判断原因（常见：残留的 dev server、未声明的构建目录），处理后执行 `storyloop reset PATH --change ID --reason "…"` 再 `storyloop run`。复位不动任何文件，被中断的那一轮不计入尝试预算，理由写入运行状态。
-- 冒烟用例本身有缺陷（定位器、时序、数据准备）而实现无法通过时：由人判断并执行 `storyloop smoke-repair PATH --change ID --reason "…"`。只在 `IMPLEMENTING`、`BUDGET_EXHAUSTED`、`NEEDS_INPUT` 状态可用。冒烟角色拿到现有套件文件和最近的失败证据修复自己的套件（不得放宽行为断言；`manifest.json` 由引擎重建，代理不用返回），新套件以 `test(<id>): repair smoke suite` 提交到功能分支后，引擎从合同提交重建候选副本（`git archive` + 当前套件）重新证明 RED，之前的尝试作废、预算归零，修复记录写入运行状态和 decisions.md。实现代理永远不能改验收用例。
+- `CHARACTERIZATION_FAILED`：特征化测试在旧代码上不绿，说明锁定现有行为的测试写错了；修正测试后 `storyloop run`。
+- 变更验收用例本身有缺陷（定位器、时序、数据准备）而实现无法通过时：由人判断并执行 `storyloop acceptance-repair PATH --change ID --reason "…"`（旧名 `smoke-repair`）。只在 `IMPLEMENTING`、`BUDGET_EXHAUSTED`、`NEEDS_INPUT` 状态可用。acceptance 角色拿到现有套件文件和最近的失败证据修复自己的套件（不得放宽行为断言；`manifest.json` 由引擎重建，代理不用返回），新套件以 `test(<id>): repair smoke suite` 提交到功能分支后，引擎从合同提交重建候选副本（`git archive` + 当前套件）重新证明 RED，之前的尝试作废、预算归零，修复记录写入运行状态和 decisions.md。实现代理永远不能改验收用例。
 - `MANUAL_ACCEPTANCE_REQUIRED`：自动验收、回归和独立审查都已通过，但合同里有 `manual` 验收条件。此时功能分支上的代码就是待验收版本；逐条执行 `storyloop accept PATH --change ID --criterion A2 --note "看到了什么"`，再 `storyloop run PATH --change ID` 生成报告并合并。验收记录与当时的代码指纹绑定，代码一变就失效。
 - `BOUNDARY_VIOLATION`：代理写到了未授权路径。
 - `BUDGET_EXHAUSTED`：达到自动尝试上限。
@@ -273,13 +283,14 @@ storyloop base-update C:\work\my-project --proposal BASE-20260916-001
 
 | 状态 | 含义 | 下一步 |
 |---|---|---|
-| `PREPARING` / `CONTRACT_READY` / `CONTRACT_COMMITTED` | 建分支、物化合同、生成并提交冒烟套件 | 自动 |
-| `IMPLEMENTING` | RED 已证明，实现—回归—冒烟—审查循环中 | 自动；可 `smoke-repair` |
+| `PREPARING` / `CONTRACT_READY` / `CONTRACT_COMMITTED` | 建分支、物化合同、生成并提交验收套件 | 自动 |
+| `IMPLEMENTING` | RED 与特征化门已过，实现—分层验证—审查循环中 | 自动；可 `acceptance-repair` |
+| `CHARACTERIZATION_FAILED` | 特征化测试在旧代码上不绿 | 修测试，再 `run` |
 | `SMOKE_REPAIRED` | 套件已修复并重新证明 RED | `run` |
 | `NEEDS_INPUT` | 代理提出真实产品歧义 | 终端提问或 `answer`，再 `run` |
 | `MANUAL_ACCEPTANCE_REQUIRED` | 自动验收全部通过，等人工条件 | `accept` 逐条，再 `run` |
 | `VERIFIED` / `FINALIZING` / `RECEIPTING` / `MERGED` | 完成阶段各步（幂等） | 自动；崩溃后 `run` |
 | `PASSED` | 已合并，报告含合并回执 | 无 |
 | `BASE_CHANGE_REQUIRED` | 功能触碰底座 | 独立提交后 `base-update`，再 `run` |
-| `BOUNDARY_VIOLATION` / `BUDGET_EXHAUSTED` | 越界写入 / 尝试用尽 | 人工判断；可 `smoke-repair` 或修订合同 |
+| `BOUNDARY_VIOLATION` / `BUDGET_EXHAUSTED` | 越界写入 / 尝试用尽 | 人工判断；可 `acceptance-repair` 或修订合同 |
 | `WORKSPACE_TAINTED` | 工作区出现不该有的改动 | 清理后 `reset`，再 `run` |

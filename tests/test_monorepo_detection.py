@@ -30,7 +30,7 @@ class MonorepoDetectionTests(unittest.TestCase):
             self.assertEqual(profile["kinds"], ["maven", "node"])
             self.assertEqual(profile["integration_paths"],
                              ["backend/pom.xml", "frontend/package.json"])
-            commands = profile["test_commands"]
+            commands = profile["unit_commands"]
             self.assertTrue(["mvn", "-f", "backend/pom.xml", "test"] in commands
                             or any("mvn" in item for item in profile["warnings"]))
             self.assertTrue(["pnpm", "--dir", "frontend", "test"] in commands

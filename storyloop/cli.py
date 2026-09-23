@@ -13,6 +13,7 @@ from .baseline import BASELINE_PATH, bootstrap_project
 from .base_upgrade import propose_base_change, upgrade_baseline
 from .foundation_survey import survey_foundation
 from .skills import install_skills
+from .system_smoke import apply_smoke_update, propose_smoke_update
 from .changes import create_change, load_change, revise_change
 from .manual_acceptance import record_manual_acceptance
 from .openspec_docs import document_change
@@ -22,7 +23,7 @@ from .project_agents import invoke_project_agent
 from .project_loop import load_run_state, repair_smoke, run_change
 from .report import render
 from .run_recovery import reset_run
-from .smoke_runner import run_smoke_isolated
+from .smoke_runner import run_ci
 from .storage import initialize, load_json
 from .telemetry import adopt_pending, summarize
 
@@ -37,7 +38,7 @@ def parser() -> argparse.ArgumentParser:
         "approve": "批准产品合同，并自动完成实现、验收、报告和本地合并",
         "run": "执行或继续已批准的产品变更（旧实例也可按故事运行）",
         "status": "查看产品变更或旧实例状态",
-        "ci": "独立运行某次变更的核心流程冒烟测试",
+        "ci": "CI 入口：隔离运行该变更的验收套件和项目级系统冒烟",
         "report": "定位某次变更的验收报告或生成旧实例报告",
         "base-propose": "为计划中的底座改动开一个 BASE 提案（无需先触发功能变更）",
         "base-update": "按 BASE 提案校验独立底座提交并升级底座版本",
@@ -46,8 +47,11 @@ def parser() -> argparse.ArgumentParser:
         "answer": "回答代理在 NEEDS_INPUT 停点提出的问题（--answer 可重复，按问题顺序）",
         "accept": "记录人工验收：产品变更用 --change 与 --criterion，旧实例用 --story",
         "reset": "人工复位卡住的运行（WORKSPACE_TAINTED 或工作区已变的人工验收等待），需说明理由",
-        "smoke-repair": "冒烟用例本身有缺陷时，让冒烟角色修复自己的套件并从合同提交重新证明 RED，需说明理由",
+        "acceptance-repair": "变更验收用例本身有缺陷时，让 acceptance 角色修复自己的套件并从合同提交重新证明 RED，需说明理由",
+        "smoke-repair": "acceptance-repair 的旧名",
         "document": "为已完成的变更（重新）生成 OpenSpec 文档：增量规格、decisions.md、活规格；--design 附加方案文件",
+        "smoke-propose": "变更合并后，让 acceptance 角色提议把哪些核心链路并入 / 更新项目级系统冒烟，草案写到 .storyloop/drafts/smoke/<id>/，由人审核",
+        "smoke-apply": "把审核过的系统冒烟草案安装到 acceptance/smoke/，隔离跑绿后提交；红的草案不会留下任何改动",
         "skills": "把引擎自带的技能（foundation-survey 等）安装或刷新到项目的 .claude/skills 与 .codex/skills；已初始化的项目会自动开 BASE 提案",
         "survey": "底座摸底：代理只读探索仓库，写出 openspec/foundation/ 知识库并开 BASE 提案；提交后 base-update 即受保护",
         "demo": "运行自带脚本示例（不调用 AI）",
@@ -80,11 +84,13 @@ def parser() -> argparse.ArgumentParser:
             child.add_argument("--change", dest="change_id", required=True)
             child.add_argument("--design", type=Path)
             child.add_argument("--capability", help="合同未命名能力时指定活规格名称")
+        elif command in {"smoke-propose", "smoke-apply"}:
+            child.add_argument("--change", dest="change_id", required=True)
         elif command == "survey":
             child.add_argument("--reason", default="foundation survey")
             child.add_argument("--from", dest="from_file", type=Path,
                                help="不再调用代理，从保存的摸底结果安装（校验失败后人工修正再装）")
-        elif command in {"reset", "smoke-repair"}:
+        elif command in {"reset", "smoke-repair", "acceptance-repair"}:
             child.add_argument("--change", dest="change_id", required=True)
             child.add_argument("--reason", required=True)
         elif command == "base-propose":
@@ -128,11 +134,17 @@ def dispatch(args) -> dict:
         return upgrade_baseline(project, args.proposal)
     if args.command == "skills":
         return install_skills(project)
+    if args.command == "smoke-propose":
+        require(_is_product_project(project), "Run storyloop init on this Git project first")
+        return propose_smoke_update(project, args.change_id)
+    if args.command == "smoke-apply":
+        require(_is_product_project(project), "Run storyloop init on this Git project first")
+        return apply_smoke_update(project, args.change_id)
     if args.command == "survey":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return survey_foundation(project, args.reason, from_file=args.from_file)
     if args.command == "ci":
-        return run_smoke_isolated(project, args.change_id)
+        return run_ci(project, args.change_id)
     if _is_product_project(project):
         return _product_dispatch(project, args)
     return _legacy_dispatch(project, args)
@@ -236,7 +248,7 @@ def _product_dispatch(project: Path, args) -> dict:
                 "telemetry": summarize(project, change_id)}
     if args.command == "reset":
         return reset_run(project, change_id, args.reason)
-    if args.command == "smoke-repair":
+    if args.command in {"smoke-repair", "acceptance-repair"}:
         return repair_smoke(project, change_id, args.reason)
     if args.command == "document":
         return document_change(project, change_id, args.design.resolve() if args.design else None,

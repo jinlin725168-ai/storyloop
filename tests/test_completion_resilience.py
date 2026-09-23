@@ -48,14 +48,6 @@ def _approved(root: Path, with_ui_asset: bool) -> str:
 
 
 class CompletionResilienceTests(unittest.TestCase):
-    def test_ui_assets_do_not_break_the_smoke_evidence_binding(self):
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            change_id = _approved(root, with_ui_asset=True)
-            self.assertNotEqual(candidate_digest(root), git_visible_digest(root))
-            done = run_change(root, change_id, _services(change_id))
-            self.assertEqual(done["status"], "PASSED", done)
-
     def test_completion_resumes_after_a_crash_following_the_implementation_commit(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

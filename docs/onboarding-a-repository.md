@@ -8,7 +8,7 @@ flowchart LR
     I --> C[.storyloop/config.json 适配器]
     T[acceptance/tools/<stack>_smoke.py] --> M[冒烟角色写的 manifest 命令]
     G[acceptance/AGENT_GUIDE.md] --> A[适配器 --guide]
-    U[acceptance/tools/ui_regression.py 可选] --> C
+    S2[acceptance/smoke 系统冒烟基线] --> M
 ```
 
 ## 1. 仓库准备
@@ -24,7 +24,10 @@ flowchart LR
 
 ```json
 {
-  "test_commands": [["mvn", "-q", "-o", "-f", "backend/pom.xml", "-Dmaven.test.skip=false", "-DskipTests=false", "-pl", "ruoyi-admin", "-am", "test"]],
+  "unit_commands": [["mvn", "-q", "-o", "-f", "backend/pom.xml", "-Dmaven.test.skip=false", "-DskipTests=false", "-pl", "ruoyi-admin", "-am", "test"]],
+  "integration_commands": [["mvn", "-q", "-o", "-f", "backend/pom.xml", "-Dmaven.test.skip=false", "-DskipTests=false", "-DskipITs=false", "-pl", "ruoyi-modules/ruoyi-biz", "failsafe:integration-test", "failsafe:verify"]],
+  "check_commands": [["pnpm", "--dir", "frontend", "exec", "vue-tsc", "--noEmit"]],
+  "test_roots": ["backend/**/src/test/**", "frontend/src/**/*.test.ts"],
   "module_roots": ["backend/ruoyi-modules", "frontend/src", "frontend/public", "sql/biz"],
   "integration_paths": ["backend/pom.xml", "backend/ruoyi-modules/pom.xml", "frontend/package.json", "frontend/pnpm-lock.yaml"],
   "candidate_allow": ["frontend/.env.development", "frontend/.env.production"],
@@ -35,7 +38,10 @@ flowchart LR
 
 | 字段 | 含义 | 常见错误 |
 |---|---|---|
-| `test_commands` | 回归命令 argv，`{python}` 会替换成解释器；Windows 的 `.cmd/.bat/.ps1` 包装器不会执行 | 用 shell 字符串；依赖网络 |
+| `unit_commands` | 单元测试命令 argv（旧名 `test_commands`），`{python}` 会替换成解释器；Windows 的 `.cmd/.bat/.ps1` 包装器不会执行 | 用 shell 字符串；依赖网络 |
+| `integration_commands` | 集成测试命令，与单元分开出结论；代码里也要分开放（Maven：单元 `*Test` 走 surefire，集成 `*IT` 放 `…/integration/` 包走 failsafe） | 混在一条命令里 |
+| `check_commands` | 静态检查：类型检查、lint、格式、安全扫描 | 放进单元命令 |
+| `test_roots` | 测试文件所在目录或通配；implement / characterize 可写，特征化门据此判断"只改了测试" | 没配，导致特征化门被跳过、代理加测试撞底座 |
 | `module_roots` | 可变区。可以是已有代码目录 | 漏掉测试目录，代理加测试就撞底座 |
 | `integration_paths` | 构建清单，改动一律转 BASE 提案 | monorepo 里嵌套的 pom/package.json 没列 |
 | `candidate_allow` | 名字敏感（`.env*`、`*.key`、`credentials.json`）但确实是已跟踪配置的文件，放进候选副本 | 把真正的密钥文件放进仓库 |
@@ -63,9 +69,9 @@ flowchart LR
 - `max_attempts` 是质量预算。全栈故事通常 2 到 4 轮；`agent_timeout_seconds` 只防挂死，别用它限制代理。
 - 用 `--dry-run` 看适配器实际拼出的 `claude` argv。
 
-## 4. 冒烟执行器
+## 4. 验收执行器
 
-冒烟角色写的 manifest 命令形如：
+acceptance 角色写的变更验收 manifest 命令形如：
 
 ```json
 ["{python}", "acceptance/tools/ruoyi_smoke.py", "acceptance/smoke/<id>/test_x.py", "acceptance/smoke/<id>/x.spec.ts"]
@@ -77,7 +83,7 @@ flowchart LR
 2. **构建**：离线，例如 `mvn -o package`。
 3. **准备数据**：临时数据库（RuoYi 用 `docker exec` 建一个带时间戳的库，先导上游 SQL 再按文件名顺序导 `sql/biz/*.sql`），这要求业务 SQL 可重复执行。
 4. **启动**：空闲端口、专用 profile（RuoYi 用 `dev,smoke`，smoke profile 关掉验证码和接口加密），HTTP 就绪轮询。
-5. **跑用例**：Python 用例用 unittest 按路径加载，环境里给 `SMOKE_BASE_URL`；浏览器用例起前端 dev server 指向临时后端，再跑 Playwright。只跑 manifest 里列出的文件，**不要**把别处的用例（例如 `acceptance/ui/`）附加进来。
+5. **跑用例**：Python 用例用 unittest 按路径加载，环境里给 `SMOKE_BASE_URL`；浏览器用例起前端 dev server 指向临时后端，再跑 Playwright。只跑 manifest 里列出的文件，**不要**把别处的用例（例如 `acceptance/ui/`）附加进来。项目级系统冒烟（`acceptance/smoke/manifest.json`）用同一个执行器，条目多一个 `description`。
 6. **清理并映射退出码**：0 通过、1 行为失败、2 环境错误。RED 阶段只有 1 是有效红灯，环境错误会阻断而不是被当成红灯。
 
 给冒烟角色一个客户端积木（RuoYi 是 `ruoyi_client.py`：登录、带 token 请求、解析 `{code,msg,data}`），用例就不会各写各的登录。
@@ -92,20 +98,16 @@ flowchart LR
 - 后端约定：一个业务表对应哪些文件、放哪个包、权限串格式、跨模块调用方式，指向仓库里的参考实现。
 - 数据库与菜单：表名前缀、审计字段、菜单 SQL 模板、ID 区段、SQL 必须可重复执行。
 - 前端约定：api/types/views 的位置和写法，路由由谁下发。
-- 验收（smoke 角色）：客户端积木怎么用、返回结构、manifest 命令统一形态、超时下限、`acceptance/ui/` 里的页面事实可以复用但不会跟着跑。
+- 验收（acceptance 角色）：客户端积木怎么用、返回结构、manifest 命令统一形态、超时下限、`acceptance/ui/` 里的页面事实可以复用但不会跟着跑。
+- 单元与集成怎么分：目录或包、命名（`*Test` / `*IT`）、各自的运行命令、默认被跳过的开关、标签要求。
+- 特征化（characterize 角色）：测试放哪、怎么只锁"必须不变"的行为、扩展的列表用 contains。
 - 实现（implement 角色）：可以在仓库里跑哪些编译和检查命令、哪些产物已声明为 scratch、git 只读命令要原样单条执行（`git diff` 可以，`git -C x diff`、管道都会被拒）、questions 只用于产品歧义、完成后自检清单。
 
 规范越具体，代理提问越少。RuoYi 的版本约 70 行。
 
-## 6. UI 回归资产（可选）
+## 6. 系统冒烟基线
 
-有浏览器界面时配置 `ui_regression`：
-
-```json
-"ui_regression": {"command": ["{python}", "acceptance/tools/ui_regression.py", "--max-scenarios", "3"], "timeout_seconds": 7200}
-```
-
-生成器复用冒烟执行器的 Stack 把应用跑起来，驱动 Playwright Test Agents：planner 探索页面写 `plan.md`（已有计划时跳过），generator 按计划逐条写用例（`--max-scenarios` 限制每次变更的数量），healer 只修这些新用例，最后只返回能通过的。引擎把文件放进 `acceptance/ui/<capability>/` 与报告一起提交。它不进冒烟、不是证据。一次 planner 约 30 到 60 分钟、1 到 2 美元；generator 每个场景约 0.7 到 0.9 美元。
+第一个变更 PASSED 之后：`storyloop smoke-propose --change <id>` 让 acceptance 角色从变更验收套件里挑出核心链路提议为项目级系统冒烟，草案在 `.storyloop/drafts/smoke/<id>/`；人审核后 `storyloop smoke-apply --change <id>`，引擎安装到 `acceptance/smoke/`、隔离跑绿、提交。之后每个变更合并后都可以这样并入或更新。需要浏览器用例时，在草案阶段用项目自己的工具（例如 Playwright Test Agents）生成，再审核。
 
 ## 6b. 底座摸底
 

@@ -10,7 +10,7 @@
 | 可变区与集成点 | `.storyloop/config.json` 的 `profile`、`acceptance/storyloop-settings.json` | modules |
 | 已实现能力 | `openspec/specs/*/spec.md`、`openspec/changes/*/proposal.md` | capabilities |
 | CI 与脚本 | `.github/workflows`、`Jenkinsfile`、`scripts/`、`Makefile` | testing |
-| 验收工具 | `acceptance/tools/`、`acceptance/smoke/`、`acceptance/ui/` | testing、building-blocks |
+| 验收工具 | `acceptance/tools/`、`acceptance/changes/`（变更验收）、`acceptance/smoke/`（系统冒烟）、`acceptance/ui/` | testing、building-blocks |
 | 被忽略但会生成的东西 | `.gitignore`、settings 的 `scratch_paths` | testing |
 
 ## Maven / Spring Boot

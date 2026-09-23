@@ -48,12 +48,12 @@ class CandidateTests(unittest.TestCase):
             repository(root)
             (root / "acceptance/ui/cap").mkdir(parents=True)
             (root / "acceptance/ui/cap/menu.spec.ts").write_text("// asset\n", encoding="utf-8")
-            (root / "acceptance/smoke").mkdir(parents=True)
-            (root / "acceptance/smoke/keep.py").write_text("pass\n", encoding="utf-8")
+            (root / "acceptance/changes").mkdir(parents=True)
+            (root / "acceptance/changes/keep.py").write_text("pass\n", encoding="utf-8")
             git(root, "add", "."); git(root, "commit", "-q", "-m", "assets")
             bootstrap_project(root)
             paths = _copy_candidate(root, Path(target))
-            self.assertIn("acceptance/smoke/keep.py", paths)
+            self.assertIn("acceptance/changes/keep.py", paths)
             self.assertFalse(any(path.startswith("acceptance/ui/") for path in paths))
             self.assertFalse((Path(target) / "acceptance/ui").exists())
 
@@ -99,7 +99,7 @@ class SmokeRepairTests(unittest.TestCase):
             self.assertIn("repair smoke suite", log)
             # implementation files from the failed attempt are still in the tree, uncommitted
             self.assertTrue((root / "modules/orders/service.py").is_file())
-            red = json.loads((root / ".storyloop/evidence" / change_id / "smoke-red.json").read_text(encoding="utf-8"))
+            red = json.loads((root / ".storyloop/evidence" / change_id / "acceptance-red.json").read_text(encoding="utf-8"))
             self.assertEqual(red["status"], "RED")
             self.assertEqual(red["head_commit"], new_state["contract_commit"])
 

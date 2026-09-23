@@ -29,7 +29,7 @@ def smoke_payload(change_id: str) -> dict:
     return {"files": [{"path": "flow.py", "content": source}],
             "manifest": {"version": 1, "tests": [{
                 "id": "SMOKE-1", "criteria": ["AC-1", "AC-2"],
-                "command": ["{python}", f"acceptance/smoke/{change_id}/flow.py"], "timeout_seconds": 10}]}}
+                "command": ["{python}", f"acceptance/changes/{change_id}/flow.py"], "timeout_seconds": 10}]}}
 from tests.test_product_spec import rich_product
 
 NOW = datetime(2026, 9, 21, tzinfo=timezone.utc)
