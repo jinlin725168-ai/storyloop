@@ -76,6 +76,31 @@ class ClaudeAdapterTests(unittest.TestCase):
         self.assertEqual(len(calls), 3)
         self.assertIn("segments", err.getvalue())
 
+    def test_a_prose_ending_is_repaired_by_asking_the_session_for_its_json(self):
+        replies = [envelope("success", "Done. The suite is written under acceptance/changes/…", "sid-3", 0.4, 30),
+                   envelope("success", json.dumps({"files": [], "manifest": {"version": 1, "tests": []}}), "sid-3", 0.1, 1)]
+        calls = []
+        inputs = []
+
+        def fake_run(command, **kwargs):
+            calls.append(command)
+            inputs.append(kwargs.get("input"))
+            return Completed(replies[len(calls) - 1], returncode=0)
+
+        request = {"role": "acceptance", "project": "/tmp/p", "payload": {}, "instructions": "write"}
+        with patch.object(adapter.subprocess, "run", fake_run), \
+                patch.object(adapter.shutil, "which", return_value="/usr/bin/claude"), \
+                patch("sys.stdin", io.StringIO(json.dumps(request))), \
+                patch("sys.stdout", new_callable=io.StringIO) as out, \
+                patch("sys.stderr", new_callable=io.StringIO) as err:
+            code = adapter.main_with_args([])
+        self.assertEqual(code, 0)
+        self.assertEqual(len(calls), 2)
+        self.assertIn("--resume", calls[1])
+        self.assertEqual(inputs[1], adapter.REPAIR_PROMPT)
+        self.assertIn("repair 1/2", err.getvalue())
+        self.assertEqual(json.loads(out.getvalue())["manifest"]["version"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

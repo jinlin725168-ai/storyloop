@@ -84,6 +84,11 @@ RESUME_PROMPT = (
     "继续完成上一条请求中尚未完成的工作。已经写入磁盘的文件都还在，不要重做已完成的部分。"
     "完成后仍然只输出一个 JSON 对象。"
 )
+REPAIR_PROMPT = (
+    "上一条回复不是一个 JSON 对象。工作已经完成的话不要重做，现在只输出那个 JSON 对象："
+    "不要 markdown 围栏，不要任何解释文字。"
+)
+REPAIR_LIMIT = 2  # a finished session that ended in prose is asked for its JSON, like the Codex adapter
 
 
 def main() -> int:
@@ -125,10 +130,13 @@ def main_with_args(argv: list[str] | None) -> int:
     telemetry = {"cost_usd": 0.0, "turns": 0, "duration_ms": 0, "input_tokens": 0,
                  "output_tokens": 0, "segments": 0, "models": set()}
     session = None
+    next_prompt = prompt
+    repairs = 0
     for segment in range(1, args.max_segments + 1):
         command = base + (["--resume", session] if session else [])
-        completed = subprocess.run(command, input=RESUME_PROMPT if session else prompt,
+        completed = subprocess.run(command, input=next_prompt,
                                    capture_output=True, text=True, cwd=request.get("project"))
+        next_prompt = RESUME_PROMPT
         # claude exits 1 on error_max_turns but still prints the JSON envelope on stdout, so the
         # envelope is authoritative and the exit code only matters when there is no envelope.
         try:
@@ -149,6 +157,12 @@ def main_with_args(argv: list[str] | None) -> int:
             return 1
         result = _extract_object(envelope.get("result", ""))
         if result is None:
+            if session and repairs < REPAIR_LIMIT:
+                repairs += 1
+                next_prompt = REPAIR_PROMPT
+                print(f"claude {role}: result was not JSON, asking session {session} for it "
+                      f"(repair {repairs}/{REPAIR_LIMIT})", file=sys.stderr)
+                continue
             print("claude result was not a JSON object", file=sys.stderr)
             return 1
         result["_telemetry"] = _finish(telemetry)  # StoryLoop strips and records this
