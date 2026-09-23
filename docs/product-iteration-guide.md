@@ -199,7 +199,7 @@ storyloop ci C:\work\my-project --change FEAT-20260916-001
 | 特征化测试 | characterize | `test_roots` | characterize 角色，在旧代码上跑绿 | RED 之后、实现之前一次 |
 | 单元测试 | unit | `unit_commands`、`test_roots` | implement 角色 TDD | 每轮尝试、特征化门、`base-update` |
 | 集成测试 | integration | `integration_commands`，独立目录或包 | implement 角色 | 每轮尝试、`base-update` |
-| 静态检查 | checks | `check_commands` | 项目配置 | 每轮尝试 |
+| 静态检查 | checks | `check_commands`（离线、确定性、快：Spotless / Checkstyle / oxlint / vue-tsc / gitleaks；漏洞扫描与 SAST 放 CI） | 项目配置 | 每轮尝试 |
 
 系统冒烟的更新永远经人：`smoke-propose --change ID` 之后草案在 `.storyloop/drafts/smoke/<id>/`（用例、manifest.json、rationale.md），可以直接改；`smoke-apply --change ID` 安装到 `acceptance/smoke/`、隔离跑绿后提交 `test(smoke): …`，红的草案不留下任何改动。首次建立系统冒烟也走这条路：在第一个 PASSED 的变更上 `smoke-propose`。克隆仓库或 `base-update` 时引擎采纳已提交的系统冒烟作为受保护基线。功能变更改动 `acceptance/smoke/` 是 `SMOKE_PROTECTED` 越界。
 

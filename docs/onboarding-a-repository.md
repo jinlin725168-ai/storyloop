@@ -26,7 +26,10 @@ flowchart LR
 {
   "unit_commands": [["mvn", "-q", "-o", "-f", "backend/pom.xml", "-Dmaven.test.skip=false", "-DskipTests=false", "-pl", "ruoyi-admin", "-am", "test"]],
   "integration_commands": [["mvn", "-q", "-o", "-f", "backend/pom.xml", "-Dmaven.test.skip=false", "-DskipTests=false", "-DskipITs=false", "-pl", "ruoyi-modules/ruoyi-biz", "failsafe:integration-test", "failsafe:verify"]],
-  "check_commands": [["pnpm", "--dir", "frontend", "exec", "vue-tsc", "--noEmit"]],
+  "check_commands": [["mvn", "-q", "-o", "-f", "backend/pom.xml", "-pl", "ruoyi-modules/ruoyi-biz", "spotless:check"],
+                     ["mvn", "-q", "-o", "-f", "backend/pom.xml", "-pl", "ruoyi-modules/ruoyi-biz", "checkstyle:check"],
+                     ["{python}", "acceptance/tools/frontend_check.py"],
+                     ["gitleaks", "detect", "--no-git", "--source", ".", "--config", ".gitleaks.toml", "--redact", "--exit-code", "1"]],
   "test_roots": ["backend/**/src/test/**", "frontend/src/**/*.test.ts"],
   "module_roots": ["backend/ruoyi-modules", "frontend/src", "frontend/public", "sql/biz"],
   "integration_paths": ["backend/pom.xml", "backend/ruoyi-modules/pom.xml", "frontend/package.json", "frontend/pnpm-lock.yaml"],
@@ -40,7 +43,7 @@ flowchart LR
 |---|---|---|
 | `unit_commands` | 单元测试命令 argv（旧名 `test_commands`），`{python}` 会替换成解释器；Windows 的 `.cmd/.bat/.ps1` 包装器不会执行 | 用 shell 字符串；依赖网络 |
 | `integration_commands` | 集成测试命令，与单元分开出结论；代码里也要分开放（Maven：单元 `*Test` 走 surefire，集成 `*IT` 放 `…/integration/` 包走 failsafe） | 混在一条命令里 |
-| `check_commands` | 静态检查：类型检查、lint、格式、安全扫描 | 放进单元命令 |
+| `check_commands` | 静态检查，每轮尝试在隔离候选副本里跑，因此只能放离线、确定性、几十秒内完成的工具：格式（Spotless）、编码约束（Checkstyle 或 PMD p3c）、前端 lint 与类型（oxlint / Biome、vue-tsc）、密钥扫描（gitleaks）。依赖漏洞（Trivy、OWASP Dependency-Check）和 SAST（Semgrep、CodeQL）依赖外部数据，放项目自己的 CI | 候选副本没有 `node_modules`，直接 `pnpm exec` 会失败：前端工具要先同步到 scratch 再跑（参考 `frontend_check.py`） |
 | `test_roots` | 测试文件所在目录或通配；implement / characterize 可写，特征化门据此判断"只改了测试" | 没配，导致特征化门被跳过、代理加测试撞底座 |
 | `module_roots` | 可变区。可以是已有代码目录 | 漏掉测试目录，代理加测试就撞底座 |
 | `integration_paths` | 构建清单，改动一律转 BASE 提案 | monorepo 里嵌套的 pom/package.json 没列 |
