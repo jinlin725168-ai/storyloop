@@ -71,6 +71,28 @@ class BaseProposeTests(unittest.TestCase):
             proposal = load_json(Path(proposed["proposal"]))
             self.assertEqual(proposal["changes"], [{"path": "modules/pom.xml", "category": "INTEGRATION_CHANGE"}])
 
+    def test_ci_files_enter_the_base_only_through_an_explicitly_allowed_proposal(self):
+        """Agents never touch CI; a human may add or change workflows through a BASE iteration."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._project(root)
+            with self.assertRaises(StoryLoopError):
+                propose_base_change(root, [".github/workflows/ci.yml"], "add ci")
+            proposed = propose_base_change(root, [".github/workflows/ci.yml", "core.py"], "add ci", allow_ci=True)
+            proposal = load_json(Path(proposed["proposal"]))
+            categories = {item["path"]: item["category"] for item in proposal["changes"]}
+            self.assertEqual(categories[".github/workflows/ci.yml"], "CI_CHANGE")
+            (root / ".github/workflows/ci.yml").write_text("name: ci\n", encoding="utf-8")  # fixture has one
+            (root / "core.py").write_text("STABLE = 2\n", encoding="utf-8")
+            git(root, "add", ".github", "core.py")
+            git(root, "commit", "-q", "-m", "ci")
+            result = upgrade_baseline(root, proposed["change_id"])
+            self.assertEqual(result["status"], "BASELINE_UPGRADED")
+            self.assertIn(".github/workflows/ci.yml", load_baseline(root)["protected_paths"])
+            # A later feature run still sees the workflow as protected foundation.
+            with self.assertRaises(StoryLoopError):
+                propose_base_change(root, [".github/workflows/ci.yml"], "edit ci again")
+
     def test_rejects_ci_paths_mutable_paths_and_empty_input(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

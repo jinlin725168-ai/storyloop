@@ -53,7 +53,7 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 - 人工验收：合同里的 `manual` 条件停在 `MANUAL_ACCEPTANCE_REQUIRED`，人用 `accept` 逐条留痕，记录与实现指纹绑定。
 - 单仓库底座：初始化提交和文件摘要构成逻辑底座；普通业务新增只进入 `modules/` 或 `features/`。
 - 底座独立演进：普通功能触碰底座会暂停并产生 `BASE-*` 提案。
-- CI 中立：只提供 `storyloop ci ...`；不创建或覆盖 GitHub Actions、GitLab CI、Jenkins 文件。
+- CI 中立：只提供 `storyloop ci ...`；不创建或覆盖 GitHub Actions、GitLab CI、Jenkins 文件。项目自己的流水线由人通过 `base-propose --allow-ci` 纳入底座，参考模板见 [接入手册的 CI 一节](docs/onboarding-a-repository.md#9-ci)。
 - 自动本地 Git：控制器只创建本地功能分支、提交并 `--no-ff` 合并；控制器代码不调用 push、删除分支或重写历史。
 - 证据追溯：报告映射需求、故事、验收条件、测试、真实命令结果、证据摘要、实现提交和最终合并提交。
 
@@ -123,7 +123,7 @@ my-project/
 | `status PATH --change ID --json` | 查看合同和外部 Loop 状态 |
 | `ci PATH --change ID` | CI 入口：隔离运行该变更的验收套件和项目级系统冒烟 |
 | `report PATH --change ID` | 定位最终验收报告 |
-| `base-propose PATH --path P [--path P2] --reason TEXT` | 为计划中的底座改动开 BASE 提案（无需先触发功能变更） |
+| `base-propose PATH --path P [--path P2] --reason TEXT [--allow-mutable] [--allow-ci]` | 为计划中的底座改动开 BASE 提案（无需先触发功能变更）；`--allow-ci` 是 CI 配置进入或修改底座的唯一通道，由人决定，代理永远不能 |
 | `base-update PATH --proposal BASE-ID` | 校验独立底座提交、完整回归并提升底座版本 |
 | `accept PATH --change ID --criterion A1 --note TEXT` | 记录人工验收条件已由人确认（仅在 `MANUAL_ACCEPTANCE_REQUIRED` 停点可用） |
 | `answer PATH --change ID --answer TEXT [--answer TEXT]` | 回答 `NEEDS_INPUT` 停点的问题（按顺序；只给一个答案则适用于全部）。在终端里 `run`/`approve` 会直接提问，无需此命令 |

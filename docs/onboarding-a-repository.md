@@ -136,3 +136,17 @@ acceptance 角色写的变更验收 manifest 命令形如：
 - 冒烟执行器的行为修正。
 - `openspec/specs/` 的补生成（`storyloop document`）。
 - 上游同步（`git subtree pull --squash`，提案加 `--allow-mutable`）。
+
+## 9. CI
+
+引擎不写流水线；项目自己的 CI 由人通过 `storyloop base-propose --allow-ci` 纳入底座（代理永远碰不到）。RuoYi 底座的 `.github/workflows/ci.yml` 可以当模板，它和闭环里的分层一一对应，只是把离线命令换成在线命令：
+
+| 作业 | 内容 | 对应层 |
+|---|---|---|
+| backend | `mvn install`（父 pom 默认跳过测试，显式打开）→ surefire 单元 → failsafe 集成 → `spotless:check` → `checkstyle:check` | 单元、集成、静态检查 |
+| frontend | pnpm 安装 → `frontend_check.py --in-place`（oxlint + 只对业务文件判失败的 vue-tsc；用一次短暂的 vite 启动生成 unplugin 声明） | 静态检查 |
+| security | gitleaks（docker，`.gitleaks.toml`）→ Trivy 依赖漏洞（HIGH/CRITICAL 且有修复）→ Semgrep（只扫业务目录） | 只适合 CI 的第五层 |
+| smoke | `docker compose up` 起中间件 → 预热 Maven 仓库 → Playwright chromium → `run_manifest.py acceptance/smoke/manifest.json` | 系统冒烟 |
+| CodeQL（单独 workflow） | 每周 + 手动，Java 与 TypeScript | 深度 SAST |
+
+`storyloop ci` 依赖本地控制面（`.storyloop/state/suites/` 的保护摘要），在 CI 机器上没有；所以 CI 直接用 `acceptance/tools/run_manifest.py` 执行受保护的清单文件，效果相同但不做字节指纹校验（指纹校验由闭环在合并前完成）。变更验收套件（`acceptance/changes/<id>/manifest.json`）也可以用同一个脚本按需在 CI 里跑。

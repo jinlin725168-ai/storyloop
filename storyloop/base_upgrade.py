@@ -19,11 +19,13 @@ from .storage import load_json, locked, write_json
 
 
 def propose_base_change(project: Path, paths: list[str], reason: str,
-                        allow_mutable: bool = False) -> dict:
+                        allow_mutable: bool = False, allow_ci: bool = False) -> dict:
     """Open a BASE proposal for a planned foundation change (no feature run needed).
 
     `allow_mutable` is for upstream synchronisation, where the imported tree legitimately
     touches files inside module roots as well; such paths are recorded as UPSTREAM_MUTABLE.
+    `allow_ci` is the only way CI configuration enters or changes the base: a human says so
+    at proposal time; agents can never propose it and feature runs never touch it.
     """
     project = Path(project).resolve()
     baseline = load_baseline(project)
@@ -32,7 +34,9 @@ def propose_base_change(project: Path, paths: list[str], reason: str,
     changes = []
     for item in paths:
         relative = repository_relative(item, "base path")
-        require(not is_ci_path(relative), "CI configuration paths cannot be changed through StoryLoop")
+        ci = is_ci_path(relative)
+        require(allow_ci or not ci, "CI configuration paths change only through a human BASE proposal "
+                                    "(storyloop base-propose --allow-ci)")
         # Same precedence as the boundary audit: an integration point (a nested pom or
         # package.json in a monorepo) is base even when it sits inside a module root.
         integration = relative in baseline["integration_paths"]
@@ -40,7 +44,9 @@ def propose_base_change(project: Path, paths: list[str], reason: str,
         require(allow_mutable or not mutable,
                 f"{relative} is inside a mutable module root; change it through a feature, "
                 "or pass --allow-mutable for an upstream sync")
-        if mutable:
+        if ci:
+            category = "CI_CHANGE"
+        elif mutable:
             category = "UPSTREAM_MUTABLE"
         elif integration:
             category = "INTEGRATION_CHANGE"
@@ -111,8 +117,9 @@ def _require_candidate(project: Path, baseline: dict, proposal: dict) -> None:
     actual = _changed_since(project, baseline["source_head"])
     expected = {item["path"] for item in proposal["changes"]}
     require(actual == expected, "Committed base paths must exactly match the approved proposal")
-    require(not any(is_ci_path(path) for path in actual),
-            "StoryLoop base upgrades never modify existing CI configuration")
+    approved_ci = {item["path"] for item in proposal["changes"] if item["category"] == "CI_CHANGE"}
+    require(all(path in approved_ci for path in actual if is_ci_path(path)),
+            "StoryLoop base upgrades never modify CI configuration unless the proposal allowed it")
 
 
 def _changed_since(project: Path, source_head: str) -> set[str]:
@@ -191,8 +198,9 @@ def _require_recovery_candidate(project: Path, receipt: dict) -> None:
     expected = set(receipt["approved_paths"])
     actual = _changed_since(project, source)
     require(actual == expected, "Base recovery paths differ from the approved proposal")
-    require(not any(is_ci_path(path) for path in actual),
-            "StoryLoop base upgrades never modify existing CI configuration")
+    approved_ci = set(receipt.get("approved_ci_paths") or [])
+    require(all(path in approved_ci for path in actual if is_ci_path(path)),
+            "StoryLoop base upgrades never modify CI configuration unless the proposal allowed it")
 
 
 def _next_version(version: str) -> str:
@@ -217,6 +225,7 @@ def _new_receipt(project: Path, proposal: dict, baseline: dict, head: str) -> di
         "new_baseline_version": version,
         "source_branch": baseline["source_branch"], "source_head": head,
         "approved_paths": sorted(item["path"] for item in proposal["changes"]),
+        "approved_ci_paths": sorted(item["path"] for item in proposal["changes"] if item["category"] == "CI_CHANGE"),
     }
 
 

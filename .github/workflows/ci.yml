@@ -1,0 +1,61 @@
+name: CI
+
+# StoryLoop 引擎自己的 CI：全量测试（Linux 两个 Python 版本，Windows 一个，作为信息）、字节码编译、密钥扫描。
+# 引擎只用标准库，没有依赖安装步骤；测试会创建临时 Git 仓库，所以需要 git 身份。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: 测试（${{ matrix.os }}，Python ${{ matrix.python }}）
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.11"
+          - os: ubuntu-latest
+            python: "3.12"
+          - os: windows-latest
+            python: "3.12"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Git 身份（测试会提交到临时仓库）
+        run: |
+          git config --global user.email "ci@storyloop.invalid"
+          git config --global user.name "StoryLoop CI"
+          git config --global init.defaultBranch main
+      - name: 编译检查
+        run: python -m compileall -q storyloop examples/claude-code
+      - name: 安装（确认打包配置与技能包数据完整）
+        run: python -m pip install --quiet .
+      - name: 全量测试
+        run: python -m unittest discover -s tests -t .
+
+  security:
+    name: 密钥扫描
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+            detect --no-git --source /repo --redact --exit-code 1

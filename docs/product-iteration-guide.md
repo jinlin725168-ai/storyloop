@@ -238,6 +238,8 @@ storyloop base-propose C:\work\my-project --path pom.xml --path docs/guide.md --
 
 上游同步（如 `git subtree pull --squash`）会同时改动可变区里的上游文件，提案加 `--allow-mutable`，这些路径记为 `UPSTREAM_MUTABLE`；路径列表用同步前后的 `git diff --name-only` 得到。
 
+CI 配置（`.github/workflows/*`、`Jenkinsfile` 等）对代理永远是禁区，人要新增或修改时提案加 `--allow-ci`，这些路径记为 `CI_CHANGE`，`base-update` 只接受提案里列出的 CI 路径。
+
 在原分支独立实现并提交提案中的底座路径，确认工作树干净后执行：
 
 ```powershell
