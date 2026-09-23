@@ -116,6 +116,7 @@ INSTRUCTIONS = {
 
 
 SKILL_ROLES = {"survey": "foundation-survey"}
+FOUNDATION_LEDGER = "foundation"  # survey calls are base work, billed apart from any change
 
 
 def instructions_for(project: Path, role: str) -> str:
@@ -159,7 +160,7 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
     finally:
         telemetry = result.pop("_telemetry", None) if isinstance(result, dict) else None
         # A manual adapter waiting for input is not a failed call; everything else that raised is.
-        record_call(project, role, _change_id(payload), telemetry,
+        record_call(project, role, FOUNDATION_LEDGER if role == "survey" else _change_id(payload), telemetry,
                     int((time.monotonic() - started) * 1000), failed=failed and adapter != "manual")
 
 

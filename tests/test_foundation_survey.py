@@ -14,6 +14,7 @@ from storyloop.foundation_survey import (FOUNDATION_ROOT, REQUIRED_DOCUMENTS, fo
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import invoke_project_agent
 from storyloop.storage import load_json, write_json
+from storyloop.telemetry import summarize
 from tests.test_baseline_behavior import git, repository
 
 SURVEYOR = '''
@@ -61,6 +62,9 @@ class SurveyTests(unittest.TestCase):
             self.assertEqual({item["path"] for item in proposal["changes"]}, set(result["paths"]))
             self.assertTrue(all(item["category"] == "FOUNDATION_CHANGE" for item in proposal["changes"]))
             self.assertIn("base-update", result["next"])
+            # A survey belongs to the foundation ledger, never to the next change's bill.
+            self.assertEqual(summarize(root, "foundation")["calls"], 1)
+            self.assertFalse((root / ".storyloop/state/telemetry/pending.json").exists())
 
     def test_every_role_receives_the_foundation_documents_once_they_exist(self):
         with tempfile.TemporaryDirectory() as folder:
