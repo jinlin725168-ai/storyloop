@@ -55,6 +55,22 @@ class BaseProposeTests(unittest.TestCase):
             self.assertEqual(categories["modules/orders/service.py"], "UPSTREAM_MUTABLE")
             self.assertEqual(categories["core.py"], "FOUNDATION_CHANGE")
 
+    def test_integration_path_inside_a_module_root_is_still_a_base_path(self):
+        """A nested build manifest (monorepo pom/package.json) is an integration point, not feature code."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            (root / "modules").mkdir()
+            (root / "modules/pom.xml").write_text("<project/>\n", encoding="utf-8")
+            git(root, "add", "modules/pom.xml")
+            git(root, "commit", "-q", "-m", "modules pom")
+            bootstrap_project(root, {"test_commands": [[sys.executable, "-c", "pass"]],
+                                     "module_roots": ["modules"], "integration_paths": ["modules/pom.xml"]})
+            proposed = propose_base_change(root, ["modules/pom.xml"], "add test dependency")
+            self.assertEqual(proposed["status"], "PROPOSED")
+            proposal = load_json(Path(proposed["proposal"]))
+            self.assertEqual(proposal["changes"], [{"path": "modules/pom.xml", "category": "INTEGRATION_CHANGE"}])
+
     def test_rejects_ci_paths_mutable_paths_and_empty_input(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

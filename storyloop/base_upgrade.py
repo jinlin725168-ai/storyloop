@@ -31,13 +31,16 @@ def propose_base_change(project: Path, paths: list[str], reason: str,
     for item in paths:
         relative = repository_relative(item, "base path")
         require(not is_ci_path(relative), "CI configuration paths cannot be changed through StoryLoop")
-        mutable = any(_inside(relative, root) for root in baseline["module_roots"])
+        # Same precedence as the boundary audit: an integration point (a nested pom or
+        # package.json in a monorepo) is base even when it sits inside a module root.
+        integration = relative in baseline["integration_paths"]
+        mutable = not integration and any(_inside(relative, root) for root in baseline["module_roots"])
         require(allow_mutable or not mutable,
                 f"{relative} is inside a mutable module root; change it through a feature, "
                 "or pass --allow-mutable for an upstream sync")
         if mutable:
             category = "UPSTREAM_MUTABLE"
-        elif relative in baseline["integration_paths"]:
+        elif integration:
             category = "INTEGRATION_CHANGE"
         else:
             category = "FOUNDATION_CHANGE"
