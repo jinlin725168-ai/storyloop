@@ -87,7 +87,7 @@ storyloop approve C:\work\my-project --change FEAT-20260916-001
 2. 建立 `feature/<change-id>` 本地分支。
 3. 将批准合同物化到 `openspec/changes/<change-id>/`（含增量规格），装了 `openspec` CLI 时校验结构。
 4. 生成 `acceptance/smoke/<change-id>/` 核心流程测试（接口优先，浏览器用例只覆盖核心链路），与合同一起提交。
-5. 先证明测试因功能缺失而失败（RED）。
+5. 先证明冒烟测试因功能缺失而失败（验收级 RED；这不是实现代理内部的 TDD）。
 6. 调用实现代理，运行项目回归和外部冒烟测试，失败则带着证据自动重试；代理提出真实产品歧义时停在 `NEEDS_INPUT`。
 7. 审计底座、模块、集成点、测试和 CI 边界；集成点变化转为底座提案。
 8. 进行独立审查。
