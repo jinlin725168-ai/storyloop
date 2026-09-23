@@ -26,6 +26,8 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 
 **BASE 迭代**：功能变更碰到底座会停在 `BASE_CHANGE_REQUIRED` 并生成 `BASE-*` 提案；计划中的底座改动直接 `base-propose`。人在原分支独立提交提案里的路径，`base-update` 校验路径一致、回归通过后把底座版本加一。上游同步（subtree pull）也是一次 BASE 迭代。
 
+**底座知识库（foundation survey）**：`survey` 角色只读摸底后写出的八份文档（`openspec/foundation/`）：模块组成、架构与运行机制、扩展机制、接口清单、能力清单、积木索引、测试基础设施，外加索引。它通过 BASE 迭代进入受保护的底座，跟着底座版本走；之后每个角色都先读它。它把"底座已经能做什么、新功能该怎么加"从代理各自翻代码变成一份共同的事实。
+
 **产品变更（FEAT-*）**：从一句话意图开始的一次迭代。草案在 `.storyloop/drafts/<id>/`，批准后物化到 `openspec/changes/<id>/`。
 
 **产品合同**：目标、非目标、用户故事（优先级、独立验证方式）、EARS 规则（WHEN … THE SYSTEM SHALL …）、Given/When/Then 验收条件、澄清记录、待决问题。结构沿用 spec-kit，纪律沿用 Gherkin。批准前有确定性的需求质量门（checklist.md）。

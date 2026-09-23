@@ -107,6 +107,10 @@ flowchart LR
 
 生成器复用冒烟执行器的 Stack 把应用跑起来，驱动 Playwright Test Agents：planner 探索页面写 `plan.md`（已有计划时跳过），generator 按计划逐条写用例（`--max-scenarios` 限制每次变更的数量），healer 只修这些新用例，最后只返回能通过的。引擎把文件放进 `acceptance/ui/<capability>/` 与报告一起提交。它不进冒烟、不是证据。一次 planner 约 30 到 60 分钟、1 到 2 美元；generator 每个场景约 0.7 到 0.9 美元。
 
+## 6b. 底座摸底
+
+接入完成、第一个变更之前跑 `storyloop survey`，让代理写出 `openspec/foundation/` 知识库并走一次 BASE 迭代把它保护起来。人工检查产物：模块和扩展机制是否与你的理解一致、有没有把配置值抄进去（引擎会拒绝凭证样式的内容，但仍要看）。之后 `AGENT_GUIDE.md` 只保留"怎么写"的约定，"有什么、怎么扩展"交给知识库。
+
 ## 7. 接入自检清单
 
 - [ ] `storyloop init` 后 `git status` 干净，`.storyloop/` 只在 `.git/info/exclude` 里。
@@ -114,6 +118,7 @@ flowchart LR
 - [ ] 执行器 self-test 通过；故意改坏一个断言能得到退出码 1；停掉数据库能得到退出码 2。
 - [ ] 适配器 `--dry-run` 的 argv 正确，`--guide` 文件存在。
 - [ ] 所有 dev server 已停（残留的 vite 会重写 `auto-imports.d.ts` 触发 `WORKSPACE_TAINTED`）。
+- [ ] `storyloop survey` 已跑、产物已审、已 `base-update`。
 - [ ] 第一个变更选一个单表、无界面依赖的小功能，跑通后再做全栈故事。
 - [ ] 第一个变更合并后，把运行中发现的规范缺口用一次 BASE 迭代补进 AGENT_GUIDE。
 

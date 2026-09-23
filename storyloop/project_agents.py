@@ -13,14 +13,23 @@ import time
 from .agents import _codex_executable
 from .baseline import load_project_config
 from .models import StoryLoopError, require
+from .foundation_survey import foundation_payload
 from .processutil import redact, run_process
 from .storage import load_json, write_json
 from .telemetry import record_call
 
-ROLES = {"product", "smoke", "implement", "review"}
+ROLES = {"product", "smoke", "implement", "review", "survey"}
+FOUNDATION_NOTE = (
+    "payload.foundation (when present) lists the protected knowledge base under openspec/foundation/ "
+    "(modules, architecture, extension mechanism, API surface, capabilities, building blocks, testing). "
+    "Read the documents relevant to your role before anything else and treat them as the authority on "
+    "what the base already provides and how it is extended. "
+)
 INSTRUCTIONS = {
     "product": (
         "Co-create only product-level intent and return the complete StoryLoop product v1 JSON. "
+        + FOUNDATION_NOTE + "Never re-specify a capability the base already provides: reference it, "
+        "and when a story changes an existing requirement reuse that requirement's title. "
         "Structure (spec-kit style): goal; non_goals; stories ordered by priority P1/P2/P3, each "
         "independently testable (`independent_test` says how to verify it alone), with `rules` "
         "written as EARS statements (\"WHEN <trigger> THE SYSTEM SHALL <behavior>\" or "
@@ -54,6 +63,8 @@ INSTRUCTIONS = {
     ),
     "smoke": (
         "Act as independent external acceptance QA. Return exactly {files:[{path,content}],manifest}. "
+        + FOUNDATION_NOTE + "Use testing.md and building-blocks.md for the acceptance client, how the "
+        "app is started, and the API conventions. "
         "Generate a small core-flow smoke suite under payload.suite_root: verify every criterion that can be "
         "observed through the API with API tests, and use a browser only for criteria that are inherently visual. "
         "If acceptance/ui/ exists it holds "
@@ -69,6 +80,8 @@ INSTRUCTIONS = {
     "implement": (
         "Implement the approved change in this repository. Modify only new files under configured module "
         "roots. If an integration or foundation file must change, explain that need without editing it. "
+        + FOUNDATION_NOTE + "Follow extension.md for where a new feature's files go and reuse what "
+        "building-blocks.md lists instead of re-implementing it. "
         "Never edit the foundation, OpenSpec contract, acceptance "
         "tests, reports, CI, or .storyloop. Do not commit or push. "
         "Work test-first: for each behaviour, write a unit test in the project's own test layout, run it "
@@ -83,11 +96,33 @@ INSTRUCTIONS = {
     ),
     "review": (
         "Independently review the real implementation against the approved stories and acceptance evidence. "
+        + FOUNDATION_NOTE + "Treat re-implementation of a listed building block, or a feature placed "
+        "against extension.md, as a finding. "
         "payload.design is the implementer's design record; check that the unit tests it lists under "
         "## Tests First exist in the repository and cover the behaviours claimed, and treat a missing or "
         "hollow Tests First section as a finding. "
         "Do not edit files. Return exactly {verdict:'pass'|'fail'|'needs_input',summary:string,"
         "findings:[object],questions:[string]}. Pass only with no findings or questions."
+    ),
+    "survey": (
+        "Survey this repository's foundation so that later agents can build on it correctly. Read-only: "
+        "do not create or modify any file. Work systematically: 1) README and docs; 2) build files "
+        "(pom/package.json/pyproject and their module lists); 3) entry points, configuration and profiles, "
+        "startup sequence, request pipeline (auth, permissions, validation, error handling), data access, "
+        "caching, scheduling; 4) every module's responsibility and dependency direction; 5) the API surface: "
+        "controllers/routes with their permission strings, grouped by module; 6) how a new feature is added "
+        "end to end (files per layer, templates or generators, menus/permissions, SQL, frontend routes) and "
+        "the reference implementation to copy; 7) reusable building blocks: services, utilities, base "
+        "classes, frontend composables/components, acceptance clients and smoke tooling; 8) existing tests "
+        "and acceptance infrastructure: layouts, how to run them, tags/profiles, what is skipped by default. "
+        "payload.module_roots is the mutable area and payload.integration_paths the build integration points; "
+        "everything else is protected foundation. Write in the language of the repository's own docs. Be "
+        "concrete: cite paths, class and function names, routes. Describe configuration by key and location, "
+        "never copy values, credentials or connection strings. Return exactly {documents:[{path,content}]} "
+        "with `path` relative to payload.foundation_root and at least every name in payload.required_documents: "
+        "README.md (index, baseline version, how to use these documents), modules.md, architecture.md, "
+        "extension.md, api.md, capabilities.md (what the base already does, including the living specs under "
+        "openspec/specs/), building-blocks.md, testing.md. Additional Markdown documents are allowed."
     ),
 }
 
@@ -98,6 +133,9 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
     require(role in ROLES, "Unknown project agent role")
     require(isinstance(payload, dict), "Agent payload must be an object")
     config = load_project_config(project)
+    foundation = foundation_payload(project) if role != "survey" else None
+    if foundation and "foundation" not in payload:
+        payload = {**payload, "foundation": foundation}
     request = {
         "protocol": "storyloop.project-agent.v1",
         "role": role,

@@ -24,6 +24,9 @@
 | `smoke` | `{change, suite_root}`；修复模式 `change.repair` 为 `{reason, existing_files:[{path,content}], manifest, failure_evidence}` | `{files:[{path,content}], manifest}` |
 | `implement` | `{change, attempt, failures:[{attempt, regression?, smoke?, review?}], answers:[{attempt,question,answer}]}` | `{summary, questions:[string], design}`；通过直接改工作区实现 |
 | `review` | `{change, attempt, regression, smoke, boundary, answers, design}` | `{verdict:'pass'|'fail'|'needs_input', summary, findings:[object], questions:[string]}` |
+| `survey` | `{baseline_version, foundation_root, required_documents, module_roots, integration_paths, reason}` | `{documents:[{path,content}]}`，路径相对 `openspec/foundation/`，只读探索 |
+
+`openspec/foundation/README.md` 存在时，除 `survey` 外每个角色的 payload 都多一项 `foundation: {version, documents:[path]}`，角色说明要求先读再动手。
 
 产品对象：
 

@@ -10,7 +10,8 @@
 - 需求与规格：spec-kit 结构的合同、选择题澄清、checklist 质量门、OpenSpec 增量与活规格、design.md/decisions.md、`openspec validate` 门、取代记录、`document` 补生成。
 - 代理：Claude Code 与 Codex 适配器的会话恢复、预算语义、遥测账本与报告成本节。
 - UI：`ui_regression` 挂点与 Playwright Test Agents 执行器；冒烟只含核心链路。
-- 验证：RuoYi 底座三个功能变更、六次 BASE 迭代、上游同步。
+- 底座知识库：`survey` 角色摸底产出 `openspec/foundation/`，BASE 保护，每个角色先读（决策 0013）。
+- 验证：RuoYi 底座三个功能变更、七次 BASE 迭代、上游同步。
 
 ## 下一步（按价值排序）
 

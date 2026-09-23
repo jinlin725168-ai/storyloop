@@ -31,6 +31,7 @@ ROLE_TOOLS = {
     "smoke": READ_ONLY,
     "review": READ_ONLY + ["Bash"],
     "implement": READ_ONLY + ["Edit", "Write", "MultiEdit", "Bash"],
+    "survey": READ_ONLY + ["Bash"],
 }
 # Bash prefixes pre-approved for roles that may run commands; extend per project with
 # `--bash "mvn:*"`. Claude Code checks every segment of a chained command against these
@@ -59,6 +60,8 @@ SCHEMA_HINTS = {
                   "## Context, ## Goals, ## Tests First (each test: observed failure, then green), "
                   "## Decisions (Choice/Rationale/Alternatives), ## Risks And Trade-Offs, ## Files."),
     "review": "Exact shape: {verdict:'pass'|'fail'|'needs_input', summary:string, findings:[object], questions:[string]}.",
+    "survey": ("Exact shape: {documents:[{path,content}]}; path relative to payload.foundation_root, Markdown only, "
+               "every name in payload.required_documents present. No extra fields."),
 }
 RULES = (
     "Final answer must be ONLY one JSON object, no markdown fences, no prose.\n"

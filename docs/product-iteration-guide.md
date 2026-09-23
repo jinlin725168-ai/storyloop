@@ -40,6 +40,31 @@ Windows 上 `.cmd`、`.bat`、`.ps1` 包装器不会被自动执行；对应回�
 storyloop init C:\work\my-project --settings C:\work\storyloop-settings.json
 ```
 
+## 2b. 底座摸底：建立受保护的知识库
+
+接入后、第一个变更之前，让代理把底座摸清楚：
+
+```powershell
+storyloop survey C:\work\my-project --reason "首次摸底"
+```
+
+`survey` 角色只读探索 README、构建文件、入口与配置、请求链路、数据访问、每个模块的职责、接口与权限串、"加一个功能要碰哪些文件"、可复用的服务和工具、已有测试怎么跑，写出固定的八份文档到 `openspec/foundation/`：
+
+| 文件 | 回答的问题 |
+|---|---|
+| `README.md` | 索引、对应的底座版本、怎么用这些文档 |
+| `modules.md` | 模块组成与依赖方向 |
+| `architecture.md` | 架构与运行机制（启动、认证、权限、校验、异常、数据访问、缓存、调度） |
+| `extension.md` | 新功能怎么加：每层的文件、模板或生成器、菜单与权限、SQL、前端路由，以及可照抄的参考实现 |
+| `api.md` | 现有接口清单（路由、权限串，按模块分组） |
+| `capabilities.md` | 底座已经能做什么，含上游自带能力与 `openspec/specs/` 活规格 |
+| `building-blocks.md` | 可复用积木：服务、工具类、基类、前端 composables、验收客户端与冒烟工具 |
+| `testing.md` | 已有测试与验收基础设施：布局、运行方式、标签或 profile、默认被跳过的东西 |
+
+引擎校验产物（全部为 Markdown、路径限定在 `openspec/foundation/`、八份必须齐全、不得含凭证样式的内容），写入后自动开一个 BASE 提案；在原分支提交这些文件，`base-update` 后它们就是受保护的底座。之后每个角色的请求都带 `payload.foundation`（底座版本和文档路径），product 据此不重复建设、修改既有需求时沿用旧标题，implement 按 `extension.md` 放文件、复用 `building-blocks.md` 里的东西，review 把重写已有积木记为 finding。
+
+知识库跟着底座版本走：上游同步或任何改变模块、机制、扩展点的 BASE 迭代之后重新 `survey`，用同样的 BASE 流程更新。人可以直接修订这些文件，也走 BASE 迭代。
+
 ## 3. 用一句话创建产品变更
 
 ```powershell
