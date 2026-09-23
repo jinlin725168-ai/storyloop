@@ -21,7 +21,7 @@
 3. **成本治理**：按变更和角色的预算上限、超限提前停点、`status` 里的实时费用。
 4. **上游同步自动化**：一条命令完成 subtree pull、提案、冲突提示、`base-update`。
 5. **多变更并行**：依赖声明、分支隔离、合并顺序；目前一次只跑一个变更。
-6. **Windows 回归验证**：产品迭代模式在 Windows 上完整跑一遍（进程 Job Object 路径已存在，但近期功能都只在 Linux 验证）。
+6. **Windows 回归验证**：产品迭代模式在 Windows 上完整跑一遍。GitHub Actions 的 windows-latest 作业（信息性，不挡合并）2026-09-23 首跑暴露了三类问题：`core.autocrlf` 改写行尾导致"Protected smoke suite was modified"（套件字节指纹应按 LF 规范化或在候选副本里禁用转换）；直接执行 `.py` 作为 argv[0] 报 WinError 193（清单命令必须显式 `{python}`，测试夹具要改）；错误消息里的路径大小写与临时目录短名（`RUNNER~1`）不一致。
 7. **品牌与页面替换的样板变更**：验证"改已有目录"而非"新增模块"的变更路径。
 
 ## 明确不做
