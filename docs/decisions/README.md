@@ -15,3 +15,4 @@
 | [0009](0009-smoke-repair-channel.md) | 冒烟缺陷走 smoke-repair，从合同提交重证 RED | 2026-09-21 |
 | [0010](0010-implementation-digest.md) | 证据与人工验收绑定实现指纹，引擎产物不算 | 2026-09-22 |
 | [0011](0011-no-push-no-history-rewrite.md) | 引擎不 push、不删分支、不重写历史 | 2026-09-12 |
+| [0012](0012-implementation-tdd-by-prompt.md) | 实现级先红后绿由提示词要求并记录，引擎不证明 | 2026-09-23 |

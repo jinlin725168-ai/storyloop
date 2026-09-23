@@ -374,7 +374,8 @@ def _perform_review(
 ) -> dict:
     context = {"change": change, "attempt": state["attempt"],
                "regression": regression, "smoke": smoke, "boundary": boundary,
-               "answers": load_answers(project, change["change_id"])}
+               "answers": load_answers(project, change["change_id"]),
+               "design": state.get("design") or ""}
     return _read_only_call(
         project, change["change_id"], lambda: services.review(project, context)
     )

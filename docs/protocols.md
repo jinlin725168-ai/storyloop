@@ -23,7 +23,7 @@
 | `product` | 新建：`{idea}`；修订：`{change_id, message, answers:[{question_id,question,answer}], current_product}` | 完整产品对象（spec-kit 结构，见下） |
 | `smoke` | `{change, suite_root}`；修复模式 `change.repair` 为 `{reason, existing_files:[{path,content}], manifest, failure_evidence}` | `{files:[{path,content}], manifest}` |
 | `implement` | `{change, attempt, failures:[{attempt, regression?, smoke?, review?}], answers:[{attempt,question,answer}]}` | `{summary, questions:[string], design}`；通过直接改工作区实现 |
-| `review` | `{change, attempt, regression, smoke, boundary, answers}` | `{verdict:'pass'|'fail'|'needs_input', summary, findings:[object], questions:[string]}` |
+| `review` | `{change, attempt, regression, smoke, boundary, answers, design}` | `{verdict:'pass'|'fail'|'needs_input', summary, findings:[object], questions:[string]}` |
 
 产品对象：
 
@@ -53,7 +53,7 @@
 
 每个 `automated` 验收条件必须出现在某个测试的 `criteria` 里。命令在仓库的隔离候选副本根目录执行，环境只有 PATH 和临时目录变量；副本由 Git 可见且未忽略的文件构成（`candidate_allow` 例外），不含 `acceptance/ui/`，写入副本即判失败。退出码 0 通过、1 行为失败、其他为环境错误；RED 阶段只有行为失败算有效红灯。
 
-`implement` 的 `design` 是 Markdown（Context、Goals、Decisions 含备选方案、Risks And Trade-Offs、Files），完成时写入 `openspec/changes/<id>/design.md`。`questions` 非空会让运行停在 `NEEDS_INPUT`，人的回答以 `answers` 形式出现在后续调用里。
+`implement` 角色被要求测试先行：每个行为先写单元测试、看到它因预期原因失败、再写最小实现、绿灯后重构。`design` 是 Markdown（Context、Goals、Tests First 记录每个测试先失败后通过的运行、Decisions 含备选方案、Risks And Trade-Offs、Files），完成时写入 `openspec/changes/<id>/design.md`。引擎不验证 Tests First 的真实性，只验收回归、冒烟和审查结果。`questions` 非空会让运行停在 `NEEDS_INPUT`，人的回答以 `answers` 形式出现在后续调用里。
 
 `review` 的 `pass` 不能同时带 findings 或 questions；`fail` 的 findings 会作为下一次实现尝试的输入。审查角色只读，可运行受限的构建/测试命令。
 
