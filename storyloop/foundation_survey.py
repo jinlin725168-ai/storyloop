@@ -13,12 +13,13 @@ upstream sync or any base change that alters modules, mechanisms or extension po
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 from .base_upgrade import propose_base_change
-from .baseline import load_baseline
-from .models import require, text
+from .baseline import _git, load_baseline
+from .models import StoryLoopError, require, text
 from .path_security import safe_target
-from .processutil import redact
+from .storage import load_json, write_json
 
 FOUNDATION_ROOT = "openspec/foundation"
 REQUIRED_DOCUMENTS = (
@@ -33,20 +34,43 @@ REQUIRED_DOCUMENTS = (
 )
 MAX_DOCUMENTS = 40
 MAX_DOCUMENT_BYTES = 512_000
+LAST_RESPONSE = ".storyloop/state/foundation/last-survey.json"
+# Configuration files whose sensitive values must never be copied into the knowledge base.
+CONFIG_FILE = re.compile(r"(^|/)(application|bootstrap|config|settings|secrets?)[^/]*\.(ya?ml|properties|toml|ini|json)$"
+                         r"|(^|/)\.env[^/]*$", re.I)
+SENSITIVE_KEY = ("password", "passwd", "secret", "token", "apikey", "api-key", "api_key", "access-key",
+                 "access_key", "accesskey", "secret-key", "secret_key", "secretkey", "private-key",
+                 "private_key", "privatekey", "credential", "credentials")
+CONFIG_LINE = re.compile(r"^\s*[-\s]*([A-Za-z0-9_.\-\[\]]+)\s*[:=]\s*(.+?)\s*$")
+URL_WITH_CREDENTIALS = re.compile(r"[a-z][a-z0-9+.-]*://[^\s/@]+:[^\s/@]+@", re.I)
 
 
-def survey_foundation(project: Path, reason: str) -> dict:
-    """Run the survey role, install its documents and open the BASE proposal that protects them."""
+def survey_foundation(project: Path, reason: str, from_file: Path | None = None) -> dict:
+    """Run the survey role (or reuse a saved response), install its documents, open the BASE proposal.
+
+    The raw response is kept at LAST_RESPONSE before validation: a survey costs real agent time,
+    so a rejected document is fixed by hand and installed again with `--from`, not re-surveyed.
+    """
     from .project_agents import invoke_project_agent  # local import: project_agents imports this module
 
     project = Path(project).resolve()
     reason = text(reason, "survey reason")
     baseline = load_baseline(project)
-    payload = {"baseline_version": baseline["baseline_version"], "foundation_root": FOUNDATION_ROOT,
-               "required_documents": list(REQUIRED_DOCUMENTS), "module_roots": baseline["module_roots"],
-               "integration_paths": baseline["integration_paths"], "reason": reason}
-    response = invoke_project_agent(project, "survey", payload)
-    written = install_foundation_documents(project, response)
+    saved = project / LAST_RESPONSE
+    if from_file is not None:
+        response = load_json(Path(from_file).resolve())
+    else:
+        payload = {"baseline_version": baseline["baseline_version"], "foundation_root": FOUNDATION_ROOT,
+                   "required_documents": list(REQUIRED_DOCUMENTS), "module_roots": baseline["module_roots"],
+                   "integration_paths": baseline["integration_paths"], "reason": reason}
+        response = invoke_project_agent(project, "survey", payload)
+        write_json(saved, response, max_bytes=MAX_DOCUMENTS * MAX_DOCUMENT_BYTES + 100_000)
+    try:
+        written = install_foundation_documents(project, response)
+    except StoryLoopError as error:
+        source = Path(from_file).resolve() if from_file is not None else saved
+        raise StoryLoopError(f"{error}. The survey response is kept at {source}; fix it and rerun "
+                             f"`storyloop survey <project> --from {source}`", code=error.code) from None
     proposal = propose_base_change(project, written, f"foundation survey: {reason}")
     return {"status": "SURVEYED", "paths": written, "proposal": proposal["proposal"],
             "change_id": proposal["change_id"], "next": proposal["next"]}
@@ -58,17 +82,18 @@ def install_foundation_documents(project: Path, response: object) -> list[str]:
     documents = response.get("documents") if isinstance(response, dict) else None
     require(isinstance(documents, list) and 0 < len(documents) <= MAX_DOCUMENTS,
             "Survey must return a bounded list of documents")
+    secrets = _configured_secret_values(project)
     planned: list[tuple[Path, str, str]] = []
     for item in documents:
         require(isinstance(item, dict) and isinstance(item.get("path"), str)
                 and isinstance(item.get("content"), str), "Each survey document needs a string path and content")
-        content = item["content"]
-        require(item["path"].endswith(".md"), "Survey documents must be Markdown")
+        path, content = item["path"], item["content"]
+        require(path.endswith(".md"), "Survey documents must be Markdown")
         require(len(content.encode("utf-8")) <= MAX_DOCUMENT_BYTES, "Survey document is too large")
-        require(redact(content) == content,
-                f"Survey document {item['path']} contains credential-like content; describe, never copy, configuration")
-        relative = f"{FOUNDATION_ROOT}/{item['path']}"
-        target = safe_target(project, relative, "foundation document path")
+        leaked = URL_WITH_CREDENTIALS.search(content) or any(value in content for value in secrets)
+        require(not leaked, f"Survey document {path} copies a configured secret; describe configuration "
+                            "by key and location, never by value")
+        target = safe_target(project, f"{FOUNDATION_ROOT}/{path}", "foundation document path")
         require(target.is_relative_to(project / FOUNDATION_ROOT), "Foundation document escapes its root")
         planned.append((target, target.relative_to(project).as_posix(), content))
     names = {Path(rel).relative_to(FOUNDATION_ROOT).as_posix() for _, rel, _ in planned}
@@ -79,6 +104,31 @@ def install_foundation_documents(project: Path, response: object) -> list[str]:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
     return sorted(rel for _, rel, _ in planned)
+
+
+def _configured_secret_values(project: Path) -> set[str]:
+    """Values of password/secret/token-like keys in tracked configuration files (never logged)."""
+    values: set[str] = set()
+    tracked = [p for p in _git(project, "ls-files", "-z").split("\0") if p and CONFIG_FILE.search(p)][:200]
+    for relative in tracked:
+        path = project / relative
+        try:
+            if path.stat().st_size > 256_000:
+                continue
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            match = CONFIG_LINE.match(line)
+            if not match:
+                continue
+            key = match.group(1).lower().rsplit(".", 1)[-1].strip("[]")
+            if not any(key == name or key.endswith(name) for name in SENSITIVE_KEY):
+                continue
+            value = match.group(2).strip().strip("'\"").split(" #")[0].strip()
+            if len(value) >= 4 and not any(mark in value for mark in ("${", "{{", "<", ">", "*", "[REDACTED]")):
+                values.add(value)
+    return values
 
 
 def foundation_payload(project: Path) -> dict | None:

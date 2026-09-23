@@ -80,6 +80,8 @@ def parser() -> argparse.ArgumentParser:
             child.add_argument("--capability", help="合同未命名能力时指定活规格名称")
         elif command == "survey":
             child.add_argument("--reason", default="foundation survey")
+            child.add_argument("--from", dest="from_file", type=Path,
+                               help="不再调用代理，从保存的摸底结果安装（校验失败后人工修正再装）")
         elif command in {"reset", "smoke-repair"}:
             child.add_argument("--change", dest="change_id", required=True)
             child.add_argument("--reason", required=True)
@@ -124,7 +126,7 @@ def dispatch(args) -> dict:
         return upgrade_baseline(project, args.proposal)
     if args.command == "survey":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
-        return survey_foundation(project, args.reason)
+        return survey_foundation(project, args.reason, from_file=args.from_file)
     if args.command == "ci":
         return run_smoke_isolated(project, args.change_id)
     if _is_product_project(project):

@@ -36,6 +36,9 @@
 **冒烟里的浏览器用例第一次总是失败**
 写盲测时定位器猜错很常见。让冒烟角色优先写接口用例，浏览器用例只覆盖核心链路，并在指南里指向 `acceptance/ui/<capability>/` 的页面事实。失败后用 `smoke-repair`。
 
+**`survey` 报 "copies a configured secret"**
+摸底文档里出现了配置文件中 password/secret/token 类键的实际值，或带口令的连接串。原始返回保存在 `.storyloop/state/foundation/last-survey.json`，把对应值改成"见 `<文件>` 的 `<键>`"这样的描述后 `storyloop survey PATH --from <该文件>` 安装，不用重新摸底。
+
 ## 适配器
 
 **Claude 适配器报 `error_max_turns` 后失败**

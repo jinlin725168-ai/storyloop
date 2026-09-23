@@ -61,7 +61,9 @@ storyloop survey C:\work\my-project --reason "首次摸底"
 | `building-blocks.md` | 可复用积木：服务、工具类、基类、前端 composables、验收客户端与冒烟工具 |
 | `testing.md` | 已有测试与验收基础设施：布局、运行方式、标签或 profile、默认被跳过的东西 |
 
-引擎校验产物（全部为 Markdown、路径限定在 `openspec/foundation/`、八份必须齐全、不得含凭证样式的内容），写入后自动开一个 BASE 提案；在原分支提交这些文件，`base-update` 后它们就是受保护的底座。之后每个角色的请求都带 `payload.foundation`（底座版本和文档路径），product 据此不重复建设、修改既有需求时沿用旧标题，implement 按 `extension.md` 放文件、复用 `building-blocks.md` 里的东西，review 把重写已有积木记为 finding。
+引擎校验产物（全部为 Markdown、路径限定在 `openspec/foundation/`、八份必须齐全、不得包含仓库配置文件里 password/secret/token 类键的实际值或带口令的连接串；描述键名和位置是允许的），写入后自动开一个 BASE 提案；在原分支提交这些文件，`base-update` 后它们就是受保护的底座。之后每个角色的请求都带 `payload.foundation`（底座版本和文档路径），product 据此不重复建设、修改既有需求时沿用旧标题，implement 按 `extension.md` 放文件、复用 `building-blocks.md` 里的东西，review 把重写已有积木记为 finding。
+
+一次摸底要花代理十来分钟，所以原始返回先保存在 `.storyloop/state/foundation/last-survey.json` 再校验；校验失败时按提示手工修正该文件，用 `storyloop survey PATH --from <该文件>` 直接安装，不必重新摸底。
 
 知识库跟着底座版本走：上游同步或任何改变模块、机制、扩展点的 BASE 迭代之后重新 `survey`，用同样的 BASE 流程更新。人可以直接修订这些文件，也走 BASE 迭代。
 
