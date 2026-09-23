@@ -1,0 +1,128 @@
+# 新底座接入手册
+
+把一个已有仓库接进 StoryLoop 需要准备三样项目侧的东西：**settings**（告诉引擎什么能改、怎么回归）、**冒烟执行器**（把候选副本跑起来并执行用例）、**代理规范**（告诉四个角色这个仓库的约定）。引擎本身不知道你的技术栈。参考实现是 RuoYi 底座仓库 `ruoyi-platform/acceptance/`，下文以它为例。
+
+```mermaid
+flowchart LR
+    S[storyloop-settings.json] --> I[storyloop init]
+    I --> C[.storyloop/config.json 适配器]
+    T[acceptance/tools/<stack>_smoke.py] --> M[冒烟角色写的 manifest 命令]
+    G[acceptance/AGENT_GUIDE.md] --> A[适配器 --guide]
+    U[acceptance/tools/ui_regression.py 可选] --> C
+```
+
+## 1. 仓库准备
+
+- 单一 Git 根目录，工作树干净，处在有名字的本地分支。多个上游用 `git subtree add --squash` 引进来（`backend/`、`frontend/`），上游同步就是一次 BASE 迭代。
+- 能离线构建和跑测试。冒烟在候选副本里执行，环境只有 PATH 和临时目录变量，依赖必须已经在本机（Maven `-o`、`node_modules` 已装）。
+- 决定可变区。业务新增放哪里、哪些已有目录允许功能变更改（例如 `backend/ruoyi-modules`、`frontend/src`、`frontend/public`、`sql/biz`），其余都是底座。
+- 把仓库自己会生成的被忽略文件列出来（`target`、`node_modules`、`dist`、`logs`、`__pycache__`、unplugin 生成的 `auto-imports.d.ts`），它们要进 `scratch_paths`。
+
+## 2. settings
+
+放在仓库里（例如 `acceptance/storyloop-settings.json`），`init --settings` 时读取：
+
+```json
+{
+  "test_commands": [["mvn", "-q", "-o", "-f", "backend/pom.xml", "-Dmaven.test.skip=false", "-DskipTests=false", "-pl", "ruoyi-admin", "-am", "test"]],
+  "module_roots": ["backend/ruoyi-modules", "frontend/src", "frontend/public", "sql/biz"],
+  "integration_paths": ["backend/pom.xml", "backend/ruoyi-modules/pom.xml", "frontend/package.json", "frontend/pnpm-lock.yaml"],
+  "candidate_allow": ["frontend/.env.development", "frontend/.env.production"],
+  "scratch_paths": ["target", "node_modules", "dist", "logs", "__pycache__", ".flattened-pom.xml",
+                    "frontend/src/types/auto-imports.d.ts", "frontend/src/types/components.d.ts"]
+}
+```
+
+| 字段 | 含义 | 常见错误 |
+|---|---|---|
+| `test_commands` | 回归命令 argv，`{python}` 会替换成解释器；Windows 的 `.cmd/.bat/.ps1` 包装器不会执行 | 用 shell 字符串；依赖网络 |
+| `module_roots` | 可变区。可以是已有代码目录 | 漏掉测试目录，代理加测试就撞底座 |
+| `integration_paths` | 构建清单，改动一律转 BASE 提案 | monorepo 里嵌套的 pom/package.json 没列 |
+| `candidate_allow` | 名字敏感（`.env*`、`*.key`、`credentials.json`）但确实是已跟踪配置的文件，放进候选副本 | 把真正的密钥文件放进仓库 |
+| `scratch_paths` | 代理可以就地产生的被忽略位置（目录名或相对路径） | 漏掉一个，第一次运行就 `WORKSPACE_TAINTED` |
+
+`storyloop init PATH --settings FILE` 锁定底座。**init 之后再改底座文件**（在任何变更之前）需要 `rm -rf .storyloop` 重新 init；有了变更之后改底座走 BASE 迭代。
+
+## 3. 适配器
+
+`init` 生成的 `.storyloop/config.json` 默认 `codex`。用 Claude Code 时改成：
+
+```json
+{
+  "adapter": "command",
+  "agent_command": ["{python}", "/abs/path/storyloop/examples/claude-code/claude_agent.py",
+                    "--bash", "mvn:*", "--bash", "pnpm:*", "--bash", "npx:*",
+                    "--guide", "/abs/path/my-project/acceptance/AGENT_GUIDE.md"],
+  "max_attempts": 4,
+  "agent_timeout_seconds": 14400,
+  "check_timeout_seconds": 1200
+}
+```
+
+- `--bash` 只放行构建和测试工具的前缀；不要放行 `git -C:*` 这类能绕到写操作的前缀。
+- `max_attempts` 是质量预算。全栈故事通常 2 到 4 轮；`agent_timeout_seconds` 只防挂死，别用它限制代理。
+- 用 `--dry-run` 看适配器实际拼出的 `claude` argv。
+
+## 4. 冒烟执行器
+
+冒烟角色写的 manifest 命令形如：
+
+```json
+["{python}", "acceptance/tools/ruoyi_smoke.py", "acceptance/smoke/<id>/test_x.py", "acceptance/smoke/<id>/x.spec.ts"]
+```
+
+执行器要做的事，按顺序：
+
+1. **从候选副本同步到 scratch**：候选副本不能写，把 Git 可见文件同步到 `/tmp/storyloop-<stack>-smoke` 之类的目录（`examples/tools/smoke_harness.py` 有 `sync` 积木，它会删除源里消失的文件）。
+2. **构建**：离线，例如 `mvn -o package`。
+3. **准备数据**：临时数据库（RuoYi 用 `docker exec` 建一个带时间戳的库，先导上游 SQL 再按文件名顺序导 `sql/biz/*.sql`），这要求业务 SQL 可重复执行。
+4. **启动**：空闲端口、专用 profile（RuoYi 用 `dev,smoke`，smoke profile 关掉验证码和接口加密），HTTP 就绪轮询。
+5. **跑用例**：Python 用例用 unittest 按路径加载，环境里给 `SMOKE_BASE_URL`；浏览器用例起前端 dev server 指向临时后端，再跑 Playwright。只跑 manifest 里列出的文件，**不要**把别处的用例（例如 `acceptance/ui/`）附加进来。
+6. **清理并映射退出码**：0 通过、1 行为失败、2 环境错误。RED 阶段只有 1 是有效红灯，环境错误会阻断而不是被当成红灯。
+
+给冒烟角色一个客户端积木（RuoYi 是 `ruoyi_client.py`：登录、带 token 请求、解析 `{code,msg,data}`），用例就不会各写各的登录。
+
+**自测**：执行器自己带一组 self-test（`selftest_backend.py`、`selftest_ui.spec.ts`），接入完成后先跑通它们，再接引擎。
+
+## 5. 代理规范 AGENT_GUIDE.md
+
+四个角色每次调用都会附带这份文件，写这些内容：
+
+- 可变区与底座：哪些目录能改，改底座时不要动手而是在 summary/questions 里说明。
+- 后端约定：一个业务表对应哪些文件、放哪个包、权限串格式、跨模块调用方式，指向仓库里的参考实现。
+- 数据库与菜单：表名前缀、审计字段、菜单 SQL 模板、ID 区段、SQL 必须可重复执行。
+- 前端约定：api/types/views 的位置和写法，路由由谁下发。
+- 验收（smoke 角色）：客户端积木怎么用、返回结构、manifest 命令统一形态、超时下限、`acceptance/ui/` 里的页面事实可以复用但不会跟着跑。
+- 实现（implement 角色）：可以在仓库里跑哪些编译和检查命令、哪些产物已声明为 scratch、git 只读命令要原样单条执行（`git diff` 可以，`git -C x diff`、管道都会被拒）、questions 只用于产品歧义、完成后自检清单。
+
+规范越具体，代理提问越少。RuoYi 的版本约 70 行。
+
+## 6. UI 回归资产（可选）
+
+有浏览器界面时配置 `ui_regression`：
+
+```json
+"ui_regression": {"command": ["{python}", "acceptance/tools/ui_regression.py", "--max-scenarios", "3"], "timeout_seconds": 7200}
+```
+
+生成器复用冒烟执行器的 Stack 把应用跑起来，驱动 Playwright Test Agents：planner 探索页面写 `plan.md`（已有计划时跳过），generator 按计划逐条写用例（`--max-scenarios` 限制每次变更的数量），healer 只修这些新用例，最后只返回能通过的。引擎把文件放进 `acceptance/ui/<capability>/` 与报告一起提交。它不进冒烟、不是证据。一次 planner 约 30 到 60 分钟、1 到 2 美元；generator 每个场景约 0.7 到 0.9 美元。
+
+## 7. 接入自检清单
+
+- [ ] `storyloop init` 后 `git status` 干净，`.storyloop/` 只在 `.git/info/exclude` 里。
+- [ ] `storyloop init` 输出的 warnings 为空或已理解。
+- [ ] 执行器 self-test 通过；故意改坏一个断言能得到退出码 1；停掉数据库能得到退出码 2。
+- [ ] 适配器 `--dry-run` 的 argv 正确，`--guide` 文件存在。
+- [ ] 所有 dev server 已停（残留的 vite 会重写 `auto-imports.d.ts` 触发 `WORKSPACE_TAINTED`）。
+- [ ] 第一个变更选一个单表、无界面依赖的小功能，跑通后再做全栈故事。
+- [ ] 第一个变更合并后，把运行中发现的规范缺口用一次 BASE 迭代补进 AGENT_GUIDE。
+
+## 8. 接入过程中常见的 BASE 迭代
+
+按 RuoYi 的经验，前几个变更之后通常会有这些底座改动，都走 `base-propose` → 提交 → `base-update`：
+
+- 根 `.gitignore` 补上运行产生的目录（`logs/`）。
+- 开发端口、profile、代理规范的修订。
+- 冒烟执行器的行为修正。
+- `openspec/specs/` 的补生成（`storyloop document`）。
+- 上游同步（`git subtree pull --squash`，提案加 `--allow-mutable`）。

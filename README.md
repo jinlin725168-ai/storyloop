@@ -40,7 +40,7 @@ storyloop status C:\work\my-project --change FEAT-20260916-001 --json
 storyloop report C:\work\my-project --change FEAT-20260916-001
 ```
 
-完整说明见 [通用工程迭代使用指南](docs/product-iteration-guide.md)。
+新人从 [定位与概念手册](docs/concepts.md) 和 [入门教程](docs/tutorial.md) 开始；完整说明见 [使用指南](docs/product-iteration-guide.md)，接入自己的仓库见 [接入手册](docs/onboarding-a-repository.md)，全部文档见 [docs/README.md](docs/README.md)。
 
 ## 核心保证
 

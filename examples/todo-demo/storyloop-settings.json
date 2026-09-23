@@ -1,0 +1,19 @@
+{
+  "test_commands": [
+    [
+      "{python}",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "tests"
+    ]
+  ],
+  "module_roots": [
+    "app",
+    "tests"
+  ],
+  "scratch_paths": [
+    "__pycache__"
+  ]
+}
