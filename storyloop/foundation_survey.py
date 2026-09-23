@@ -90,7 +90,7 @@ def install_foundation_documents(project: Path, response: object) -> list[str]:
         path, content = item["path"], item["content"]
         require(path.endswith(".md"), "Survey documents must be Markdown")
         require(len(content.encode("utf-8")) <= MAX_DOCUMENT_BYTES, "Survey document is too large")
-        leaked = URL_WITH_CREDENTIALS.search(content) or any(value in content for value in secrets)
+        leaked = URL_WITH_CREDENTIALS.search(content) or any(_contains_value(content, v) for v in secrets)
         require(not leaked, f"Survey document {path} copies a configured secret; describe configuration "
                             "by key and location, never by value")
         target = safe_target(project, f"{FOUNDATION_ROOT}/{path}", "foundation document path")
@@ -126,9 +126,21 @@ def _configured_secret_values(project: Path) -> set[str]:
             if not any(key == name or key.endswith(name) for name in SENSITIVE_KEY):
                 continue
             value = match.group(2).strip().strip("'\"").split(" #")[0].strip()
-            if len(value) >= 4 and not any(mark in value for mark in ("${", "{{", "<", ">", "*", "[REDACTED]")):
+            if _looks_like_a_secret(value):
                 values.add(value)
     return values
+
+
+def _looks_like_a_secret(value: str) -> bool:
+    """A literal worth protecting: long enough to be one, and not a build-time placeholder."""
+    placeholder = (any(mark in value for mark in ("${", "{{", "<", ">", "*", "[REDACTED]"))
+                   or (value.startswith("@") and value.endswith("@")))
+    return len(value) >= 6 and not placeholder
+
+
+def _contains_value(content: str, value: str) -> bool:
+    """Whole-token match, so a short value inside an identifier (module_roots) is not a leak."""
+    return re.search(r"(?<![A-Za-z0-9_])" + re.escape(value) + r"(?![A-Za-z0-9_])", content) is not None
 
 
 def foundation_payload(project: Path) -> dict | None:

@@ -17,3 +17,4 @@
 | [0011](0011-no-push-no-history-rewrite.md) | 引擎不 push、不删分支、不重写历史 | 2026-09-12 |
 | [0012](0012-implementation-tdd-by-prompt.md) | 实现级先红后绿由提示词要求并记录，引擎不证明 | 2026-09-23 |
 | [0013](0013-foundation-knowledge-base.md) | 底座知识库由 survey 角色摸底产出，挂底座受保护，每个角色先读 | 2026-09-23 |
+| [0014](0014-skills-as-packaged-modules.md) | 摸底做成引擎自带的技能包，装进项目供 Claude Code 与 Codex 通用，引擎角色读同一份 | 2026-09-23 |

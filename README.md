@@ -46,7 +46,7 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 
 - 产品层输入：用户无需编写技术方案和详细任务文档。
 - 用户批准：未决问题会阻止批准；任何故事或验收条件修订都会使旧批准失效。
-- 底座知识库：`survey` 角色摸清底座的模块组成、架构与运行机制、扩展机制、接口与能力、可复用积木和测试基础设施，挂在底座受保护；product 据此不重复建设，implement 据此复用而不是重写，review 据此核对。
+- 底座知识库：`foundation-survey` 技能包（随引擎维护，`storyloop skills` 装进任何项目，Claude Code 与 Codex 通用）摸清底座的模块组成、架构与运行机制、扩展机制、接口与能力、可复用积木和测试基础设施，产物挂在底座受保护；product 据此不重复建设，implement 据此复用而不是重写，review 据此核对。
 - 需求质量门：合同采用 spec-kit 结构（优先级、独立验证方式、EARS 规则、Gherkin 验收条件），澄清问题以选择题形式逐条回答并入合同；批准前有确定性 checklist 把关。
 - OpenSpec 管理：批准合同、增量规格、实现方案（design.md）和人为决策（decisions.md）进入 `openspec/changes/<change-id>/`，完成时并入 `openspec/specs/<capability>/spec.md` 活规格；装了 `openspec` CLI 时结构校验是门。
 - 外部验收：实现代理不能修改或自行通过 OpenSpec、冒烟测试和报告；冒烟只包含本次变更的核心链路与不该坏的基础功能，用例缺陷走 `smoke-repair` 通道并从合同提交重新证明 RED。
@@ -127,6 +127,7 @@ my-project/
 | `answer PATH --change ID --answer TEXT [--answer TEXT]` | 回答 `NEEDS_INPUT` 停点的问题（按顺序；只给一个答案则适用于全部）。在终端里 `run`/`approve` 会直接提问，无需此命令 |
 | `reset PATH --change ID --reason TEXT` | 人工复位卡住的运行（`WORKSPACE_TAINTED`，或人工验收等待期间工作区已变）；不动文件，被中断的一轮不计预算，理由留痕 |
 | `smoke-repair PATH --change ID --reason TEXT` | 冒烟用例本身有缺陷时，让冒烟角色修自己的套件并从合同提交重新证明 RED；之前的尝试作废，理由写入 decisions.md |
+| `skills PATH` | 把引擎自带的技能包（`foundation-survey`）安装或刷新到项目的 `.claude/skills/` 与 `.codex/skills/`，Claude Code 与 Codex 都能直接用；已初始化的项目自动开 BASE 提案 |
 | `survey PATH [--reason TEXT] [--from FILE]` | 底座摸底：survey 角色只读探索仓库，写出 `openspec/foundation/` 知识库（模块、架构、扩展机制、接口、能力、积木、测试）并开 BASE 提案；提交后 `base-update` 即受保护，之后每个角色起手先读它 |
 | `document PATH --change ID [--design FILE] [--capability NAME]` | 为已 PASSED 的变更补生成 design.md、decisions.md 和活规格（配合 `base-propose`/`base-update` 提交） |
 

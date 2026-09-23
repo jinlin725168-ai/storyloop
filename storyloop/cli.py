@@ -12,6 +12,7 @@ from .approvals import approve_change
 from .baseline import BASELINE_PATH, bootstrap_project
 from .base_upgrade import propose_base_change, upgrade_baseline
 from .foundation_survey import survey_foundation
+from .skills import install_skills
 from .changes import create_change, load_change, revise_change
 from .manual_acceptance import record_manual_acceptance
 from .openspec_docs import document_change
@@ -47,6 +48,7 @@ def parser() -> argparse.ArgumentParser:
         "reset": "人工复位卡住的运行（WORKSPACE_TAINTED 或工作区已变的人工验收等待），需说明理由",
         "smoke-repair": "冒烟用例本身有缺陷时，让冒烟角色修复自己的套件并从合同提交重新证明 RED，需说明理由",
         "document": "为已完成的变更（重新）生成 OpenSpec 文档：增量规格、decisions.md、活规格；--design 附加方案文件",
+        "skills": "把引擎自带的技能（foundation-survey 等）安装或刷新到项目的 .claude/skills 与 .codex/skills；已初始化的项目会自动开 BASE 提案",
         "survey": "底座摸底：代理只读探索仓库，写出 openspec/foundation/ 知识库并开 BASE 提案；提交后 base-update 即受保护",
         "demo": "运行自带脚本示例（不调用 AI）",
     }
@@ -124,6 +126,8 @@ def dispatch(args) -> dict:
     if args.command == "base-update":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return upgrade_baseline(project, args.proposal)
+    if args.command == "skills":
+        return install_skills(project)
     if args.command == "survey":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return survey_foundation(project, args.reason, from_file=args.from_file)

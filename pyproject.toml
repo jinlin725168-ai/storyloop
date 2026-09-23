@@ -15,3 +15,6 @@ storyloop = "storyloop.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["storyloop*"]
+
+[tool.setuptools.package-data]
+storyloop = ["skills/**/*.md"]

@@ -42,11 +42,21 @@ storyloop init C:\work\my-project --settings C:\work\storyloop-settings.json
 
 ## 2b. 底座摸底：建立受保护的知识库
 
-接入后、第一个变更之前，让代理把底座摸清楚：
+摸底是一个独立维护的技能包 `foundation-survey`（源在引擎的 `storyloop/skills/`，含 SKILL.md、八份文档的章节模板与质量标准、按技术栈的探查清单）。先把它装进项目：
+
+```powershell
+storyloop skills C:\work\my-project
+```
+
+它会写到 `.claude/skills/foundation-survey/`（Claude Code 自动发现）和 `.codex/skills/foundation-survey/`（Codex 自动发现）。未初始化的项目先提交这些文件再 `init`；已初始化的项目会自动开 BASE 提案，提交后 `base-update`。引擎升级后再跑一次即可刷新，`storyloop skills` 的输出会列出每个技能的打包版本与已装版本。
+
+然后让代理把底座摸清楚，两种方式等价：
 
 ```powershell
 storyloop survey C:\work\my-project --reason "首次摸底"
 ```
+
+或者在 Claude Code / Codex 会话里直接说"摸底底座"，技能会把文档写到 `openspec/foundation/` 并提示你走 BASE 流程。引擎调用时 `survey` 角色的说明就是这份技能（优先项目里已安装的副本，便于本地修订），所以两种方式产物一致。
 
 `survey` 角色只读探索 README、构建文件、入口与配置、请求链路、数据访问、每个模块的职责、接口与权限串、"加一个功能要碰哪些文件"、可复用的服务和工具、已有测试怎么跑，写出固定的八份文档到 `openspec/foundation/`：
 

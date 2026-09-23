@@ -92,7 +92,9 @@ class SurveyTests(unittest.TestCase):
             (root / "config").mkdir()
             (root / "config/application-dev.yml").write_text(
                 "spring:\n  datasource:\n    password: hunter2-real\n    url: jdbc:mysql://db/app\n"
-                "sa-token:\n  token-name: Authorization\n", encoding="utf-8")
+                "sa-token:\n  token-name: Authorization\n"
+                "monitor:\n  password: @monitor.password@\n  username: root\nredis:\n  password: root\n",
+                encoding="utf-8")
             git(root, "add", "config")
             git(root, "commit", "-q", "-m", "config")
             complete = _complete()
@@ -108,13 +110,19 @@ class SurveyTests(unittest.TestCase):
                 install_foundation_documents(root, {"documents": leaking})
             embedded = _complete()
             embedded[0]["content"] = "连接串 jdbc:mysql://root:hunter2-real@db/app\n"
+            # A value embedded in a longer token is still a copy of it.
+            padded = _complete()
+            padded[0]["content"] = "口令是 hunter2-real。\n"
+            with self.assertRaises(StoryLoopError):
+                install_foundation_documents(root, {"documents": padded})
             with self.assertRaises(StoryLoopError):
                 install_foundation_documents(root, {"documents": embedded})
             self.assertFalse((root / FOUNDATION_ROOT).exists())
             # Describing configuration keys is the whole point; key names and locations are not secrets.
             describing = _complete()
             describing[0]["content"] = ("认证头由 `sa-token.token-name: Authorization` 配置；"
-                                        "数据库口令键 `spring.datasource.password` 在 config/application-dev.yml\n")
+                                        "数据库口令键 `spring.datasource.password` 在 config/application-dev.yml；"
+                                        "构建时资源过滤写入 `@monitor.password@`；可变区 module_roots 见 root pom\n")
             install_foundation_documents(root, {"documents": describing})
             self.assertTrue((root / FOUNDATION_ROOT / "README.md").is_file())
 

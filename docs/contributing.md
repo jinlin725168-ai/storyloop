@@ -48,6 +48,10 @@
 
 `stage_*`、`coordinator_*`、`final_judges.py`、`v2_cli.py` 是 v2 Stage/DAG 引擎，产品迭代模式不依赖它们；修改前先确认影响面。
 
+## 技能包
+
+`storyloop/skills/<name>/` 是随引擎发布的技能，`SKILL.md` 的 frontmatter 必须有 `name`、`version`、`description`；改动内容时升版本号，`storyloop skills` 靠它判断项目里的副本是否过期。技能文本会原样进入代理请求，所以写给代理看，而不是写给人看。
+
 ## 文档
 
 行为变化必须同步文档：命令面改动改 README 的命令表和使用指南；协议改动改 `docs/protocols.md`；设计取舍新增一条 `docs/decisions/`。

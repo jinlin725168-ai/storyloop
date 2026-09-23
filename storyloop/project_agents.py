@@ -14,6 +14,7 @@ from .agents import _codex_executable
 from .baseline import load_project_config
 from .models import StoryLoopError, require
 from .foundation_survey import foundation_payload
+from .skills import skill_text
 from .processutil import redact, run_process
 from .storage import load_json, write_json
 from .telemetry import record_call
@@ -105,26 +106,24 @@ INSTRUCTIONS = {
         "findings:[object],questions:[string]}. Pass only with no findings or questions."
     ),
     "survey": (
-        "Survey this repository's foundation so that later agents can build on it correctly. Read-only: "
-        "do not create or modify any file. Work systematically: 1) README and docs; 2) build files "
-        "(pom/package.json/pyproject and their module lists); 3) entry points, configuration and profiles, "
-        "startup sequence, request pipeline (auth, permissions, validation, error handling), data access, "
-        "caching, scheduling; 4) every module's responsibility and dependency direction; 5) the API surface: "
-        "controllers/routes with their permission strings, grouped by module; 6) how a new feature is added "
-        "end to end (files per layer, templates or generators, menus/permissions, SQL, frontend routes) and "
-        "the reference implementation to copy; 7) reusable building blocks: services, utilities, base "
-        "classes, frontend composables/components, acceptance clients and smoke tooling; 8) existing tests "
-        "and acceptance infrastructure: layouts, how to run them, tags/profiles, what is skipped by default. "
-        "payload.module_roots is the mutable area and payload.integration_paths the build integration points; "
-        "everything else is protected foundation. Write in the language of the repository's own docs. Be "
-        "concrete: cite paths, class and function names, routes. Describe configuration by key and location, "
-        "never copy values, credentials or connection strings. Return exactly {documents:[{path,content}]} "
-        "with `path` relative to payload.foundation_root and at least every name in payload.required_documents: "
-        "README.md (index, baseline version, how to use these documents), modules.md, architecture.md, "
-        "extension.md, api.md, capabilities.md (what the base already does, including the living specs under "
-        "openspec/specs/), building-blocks.md, testing.md. Additional Markdown documents are allowed."
+        "Survey this repository's foundation by following the foundation-survey skill below exactly, in "
+        "its StoryLoop-engine mode: read-only, no questions, and the final answer is only one JSON object "
+        "{documents:[{path,content}]} with `path` relative to payload.foundation_root covering every name in "
+        "payload.required_documents. payload.module_roots is the mutable area and payload.integration_paths "
+        "the build integration points; everything else is protected foundation."
     ),
 }
+
+
+SKILL_ROLES = {"survey": "foundation-survey"}
+
+
+def instructions_for(project: Path, role: str) -> str:
+    """Role instructions; roles defined by a packaged skill embed the skill (project copy first)."""
+    text_ = INSTRUCTIONS[role]
+    if role in SKILL_ROLES:
+        text_ += "\n\nSkill:\n" + skill_text(project, SKILL_ROLES[role])
+    return text_
 
 
 def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
@@ -174,7 +173,7 @@ def _change_id(payload: dict) -> str | None:
 
 def _manual(project: Path, request: dict) -> dict:
     request_id = _request_id(request)
-    envelope = {**request, "request_id": request_id, "instructions": INSTRUCTIONS[request["role"]]}
+    envelope = {**request, "request_id": request_id, "instructions": instructions_for(project, request["role"])}
     request_path = project / ".storyloop" / "requests" / f"project-{request['role']}.json"
     response_path = project / ".storyloop" / "responses" / f"project-{request['role']}.json"
     write_json(request_path, envelope, max_bytes=2_000_000)
@@ -203,7 +202,8 @@ def _command(project: Path, request: dict, config: dict) -> dict:
     argv[0] = str(executable)
     result = run_process(
         argv, project, config["agent_timeout_seconds"],
-        input_text=json.dumps({**request, "instructions": INSTRUCTIONS[request["role"]]}, ensure_ascii=False),
+        input_text=json.dumps({**request, "instructions": instructions_for(project, request["role"])},
+                              ensure_ascii=False),
     )
     _check_process(result)
     return _parse(result.get("stdout", ""))
@@ -226,7 +226,7 @@ def _codex(project: Path, request: dict, config: dict) -> dict:
     """
     sandbox = "workspace-write" if request["role"] == "implement" else "read-only"
     common = ["--ignore-user-config", "--color", "never", "--json"]
-    prompt = INSTRUCTIONS[request["role"]] + "\nRequest:\n" + json.dumps(request, ensure_ascii=False)
+    prompt = instructions_for(project, request["role"]) + "\nRequest:\n" + json.dumps(request, ensure_ascii=False)
     telemetry = {"turns": 0, "input_tokens": 0, "output_tokens": 0, "segments": 0}
     thread: str | None = None
     for repair in range(CODEX_REPAIR_LIMIT + 1):

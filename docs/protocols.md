@@ -26,6 +26,8 @@
 | `review` | `{change, attempt, regression, smoke, boundary, answers, design}` | `{verdict:'pass'|'fail'|'needs_input', summary, findings:[object], questions:[string]}` |
 | `survey` | `{baseline_version, foundation_root, required_documents, module_roots, integration_paths, reason}` | `{documents:[{path,content}]}`，路径相对 `openspec/foundation/`，只读探索 |
 
+`survey` 的 `instructions` 由 `foundation-survey` 技能包生成：引擎把 SKILL.md 与 references 原文附在角色说明后（优先项目里 `.claude/skills/` 或 `.codex/skills/` 的副本，否则用引擎打包的副本），三种适配器拿到的说明相同。
+
 `openspec/foundation/README.md` 存在时，除 `survey` 外每个角色的 payload 都多一项 `foundation: {version, documents:[path]}`，角色说明要求先读再动手。
 
 产品对象：
