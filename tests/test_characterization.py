@@ -34,6 +34,10 @@ def _repo(settings: dict):
     (root / "modules/orders/other.py").write_text("OTHER = 0\n", encoding="utf-8")
     (root / "tests").mkdir()
     (root / "tests/__init__.py").write_text("", encoding="utf-8")
+    # Python 3.12's unittest exits 5 when it discovers no tests; a real project always has one.
+    (root / "tests/test_existing.py").write_text(
+        "import unittest\n\n\nclass Existing(unittest.TestCase):\n    def test_truth(self):\n"
+        "        self.assertTrue(True)\n", encoding="utf-8")
     git(root, "add", "."); git(root, "commit", "-q", "-m", "existing behaviour")
     bootstrap_project(root, settings)
     state = create_change(root, "orders", product(), now=lambda: NOW)
