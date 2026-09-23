@@ -57,10 +57,11 @@ class RunResetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             change_id = _approved(root, {})
+            source_branch = git(root, "branch", "--show-current")  # main or master, whatever git defaults to
             with self.assertRaises(StoryLoopError):
                 run_change(root, change_id, _services(change_id, build_in_place=True))
             git(root, "stash", "-u", "-q")
-            git(root, "checkout", "-q", "master")
+            git(root, "checkout", "-q", source_branch)
             with self.assertRaises(StoryLoopError):
                 reset_run(root, change_id, "wrong branch")
             with self.assertRaises(StoryLoopError):
