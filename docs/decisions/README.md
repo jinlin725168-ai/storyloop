@@ -19,3 +19,4 @@
 | [0013](0013-foundation-knowledge-base.md) | 底座知识库由 survey 角色摸底产出，挂底座受保护，每个角色先读 | 2026-09-23 |
 | [0014](0014-skills-as-packaged-modules.md) | 摸底做成引擎自带的技能包，装进项目供 Claude Code 与 Codex 通用，引擎角色读同一份 | 2026-09-23 |
 | [0015](0015-test-layers.md) | 五层测试各在其环节：系统冒烟、变更验收、特征化门、单元/集成分开、静态检查；撤掉 ui_regression | 2026-09-23 |
+| [0016](0016-roles-by-authority.md) | 角色按权限边界而非岗位表划分；新增 design（架构师）角色，细分工用角色内子代理 | 2026-09-24 |

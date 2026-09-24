@@ -52,7 +52,7 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 
 **候选副本（candidate）**：由 Git 可见且未忽略的文件构成的临时副本，环境只有 PATH 和临时目录变量。冒烟在副本里跑，写入副本即判失败，避免"先改实现再断言"的假绿。`candidate_allow` 放行名字看起来敏感但确实是配置的文件；`acceptance/ui/` 不进副本。
 
-**六个角色**：`product`、`acceptance`、`characterize`、`implement`、`review`、`survey`。都是无状态进程调用：stdin 一个请求、stdout 一个 JSON。适配器可以是 Codex CLI（默认）、Claude Code（`examples/claude-code/`）或人工桥接（manual）。
+**七个角色**：`survey`、`product`、`acceptance`、`design`、`characterize`、`implement`、`review`，按权限边界划分，见 [角色目录](roles.md)。都是无状态进程调用：stdin 一个请求、stdout 一个 JSON。适配器可以是 Codex CLI（默认）、Claude Code（`examples/claude-code/`）或人工桥接（manual）。
 
 **尝试（attempt）与预算**：一轮尝试 = 实现 → 回归 → 冒烟 → 边界审计 → 审查。`max_attempts` 是唯一的质量预算；`agent_timeout_seconds` 只是挂死保护；适配器的圈数上限只是检查点，到上限续同一会话。
 

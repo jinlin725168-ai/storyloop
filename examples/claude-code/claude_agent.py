@@ -33,6 +33,7 @@ ROLE_TOOLS = {
     "review": READ_ONLY + ["Bash"],
     "implement": READ_ONLY + ["Edit", "Write", "MultiEdit", "Bash"],
     "characterize": READ_ONLY + ["Edit", "Write", "MultiEdit", "Bash"],
+    "design": READ_ONLY + ["Bash"],
     "survey": READ_ONLY + ["Bash"],
 }
 # Bash prefixes pre-approved for roles that may run commands; extend per project with
@@ -62,6 +63,8 @@ SCHEMA_HINTS = {
                   "## Context, ## Goals, ## Tests First (each test: observed failure, then green), "
                   "## Decisions (Choice/Rationale/Alternatives), ## Risks And Trade-Offs, ## Files."),
     "characterize": "Exact shape: {summary:string, touched:[string], tests:[string], questions:[]}; no extra fields.",
+    "design": ("Exact shape: {summary:string, touched:[string], design:string, questions:[string]}; design is Markdown with "
+               "## Context, ## Goals, ## Decisions, ## Files, ## Data And Interfaces, ## Risks And Trade-Offs. No extra fields."),
     "review": "Exact shape: {verdict:'pass'|'fail'|'needs_input', summary:string, findings:[object], questions:[string]}.",
     "survey": ("Exact shape: {documents:[{path,content}]}; path relative to payload.foundation_root, Markdown only, "
                "every name in payload.required_documents present. No extra fields."),

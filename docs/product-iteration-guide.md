@@ -127,17 +127,18 @@ storyloop approve C:\work\my-project --change FEAT-20260916-001
 3. 将批准合同物化到 `openspec/changes/<change-id>/`（含增量规格），装了 `openspec` CLI 时校验结构。
 4. acceptance 角色只看合同盲写 `acceptance/changes/<change-id>/` 变更验收套件（接口优先，浏览器用例只覆盖核心链路），与合同一起提交。
 5. 在隔离候选副本里证明验收套件因功能缺失而失败（验收级 RED）。
-6. 特征化门：characterize 角色列出实现将修改的既有文件，为它们写只断言"必须不变"行为的测试（扩展的列表用 contains），引擎要求这些测试在旧代码上跑绿、只改了 `test_roots` 内的文件，然后提交。项目没配 `test_roots` 或单元命令时跳过。
-7. 调用实现代理（TDD 先红后绿），然后依次跑：单元测试 → 集成测试 → 变更验收 → 系统冒烟 → 静态检查，每层各自出结论；任何一层红就带着证据进入下一轮尝试。实现改了未声明的既有文件时，引擎把它们还原到合同提交、补做特征化再重试。代理提出真实产品歧义时停在 `NEEDS_INPUT`。
-8. 审计底座、模块、集成点、测试、系统冒烟和 CI 边界；集成点变化转为底座提案。
-9. 进行独立审查（对照 design 的 Tests First、知识库的积木与扩展机制）。
-10. 有 `manual` 验收条件时停在 `MANUAL_ACCEPTANCE_REQUIRED`，等人 `accept` 后 `run` 继续。
-11. 提交实现；写 design.md、decisions.md，把增量并入活规格并校验。
-12. 生成 `reports/storyloop/<change-id>/report.json` 和 `report.md`（含追溯、分层验证、成本），与上述文档一起提交。
-13. 切回原分支执行本地 `--no-ff` 合并，将合并提交写回验收报告，提交合并回执并推进基线血缘。
-14. 合并之后（独立步骤，由人触发）：`smoke-propose` 让 acceptance 角色提议把本次核心链路并入或更新项目级系统冒烟，人审核草案后 `smoke-apply` 安装、隔离跑绿、提交。
+6. 方案：design 角色（架构师）只读地对照知识库的扩展机制和积木写出方案（Files、Data And Interfaces、Decisions、Risks），并列出将修改的既有文件 `touched`；方案里留有真实决策时停在 `NEEDS_INPUT`。方案喂给后面每个角色，完成时归档为 design.md 的前半部分。
+7. 特征化门：characterize 角色以方案的 `touched` 为必锁清单，为这些既有文件写只断言"必须不变"行为的测试（扩展的列表用 contains），引擎要求这些测试在旧代码上跑绿、只改了 `test_roots` 内的文件，然后提交。项目没配 `test_roots` 或单元命令时跳过。
+8. 调用实现代理（TDD 先红后绿），然后依次跑：单元测试 → 集成测试 → 变更验收 → 系统冒烟 → 静态检查，每层各自出结论；任何一层红就带着证据进入下一轮尝试。实现改了未声明的既有文件时，引擎把它们还原到合同提交、补做特征化再重试。代理提出真实产品歧义时停在 `NEEDS_INPUT`。
+9. 审计底座、模块、集成点、测试、系统冒烟和 CI 边界；集成点变化转为底座提案。
+10. 进行独立审查（对照 design 的 Tests First、知识库的积木与扩展机制）。
+11. 有 `manual` 验收条件时停在 `MANUAL_ACCEPTANCE_REQUIRED`，等人 `accept` 后 `run` 继续。
+12. 提交实现；写 design.md、decisions.md，把增量并入活规格并校验。
+13. 生成 `reports/storyloop/<change-id>/report.json` 和 `report.md`（含追溯、分层验证、成本），与上述文档一起提交。
+14. 切回原分支执行本地 `--no-ff` 合并，将合并提交写回验收报告，提交合并回执并推进基线血缘。
+15. 合并之后（独立步骤，由人触发）：`smoke-propose` 让 acceptance 角色提议把本次核心链路并入或更新项目级系统冒烟，人审核草案后 `smoke-apply` 安装、隔离跑绿、提交。
 
-第 11 步之后的完成阶段是幂等的：任何一步崩溃后再次 `storyloop run`，引擎会采纳已存在的实现提交，丢弃上次留下的引擎产物（文档、活规格、UI 资产、报告）并重新生成，不会再次调用实现代理，也不会重复提交。
+第 12 步之后的完成阶段是幂等的：任何一步崩溃后再次 `storyloop run`，引擎会采纳已存在的实现提交，丢弃上次留下的引擎产物（文档、活规格、UI 资产、报告）并重新生成，不会再次调用实现代理，也不会重复提交。
 
 StoryLoop 控制器本身不执行 `git push`。
 
@@ -147,7 +148,8 @@ flowchart LR
     B --> C{用户批准}
     C --> D[锁定 OpenSpec]
     D --> E[变更验收 RED]
-    E --> E2[特征化测试跑绿]
+    E --> D2[design 方案]
+    D2 --> E2[特征化测试跑绿]
     E2 --> F[实现：TDD]
     F --> G[单元 / 集成 / 验收 / 系统冒烟 / 静态检查 / 审查]
     G -->|失败| F
@@ -196,7 +198,8 @@ storyloop ci C:\work\my-project --change FEAT-20260916-001
 |---|---|---|---|---|
 | 系统冒烟 | smoke | `acceptance/smoke/`，跨变更累积，受保护 | acceptance 角色提议、人 `smoke-apply` | 每轮尝试、`ci`、`base-update` |
 | 变更验收 | acceptance | `acceptance/changes/<id>/` | acceptance 角色盲写，先红 | 每轮尝试、`ci` |
-| 特征化测试 | characterize | `test_roots` | characterize 角色，在旧代码上跑绿 | RED 之后、实现之前一次 |
+| 方案 | design | 运行状态与 design.md | design 角色（架构师），只读 | RED 之后、特征化之前一次 |
+| 特征化测试 | characterize | `test_roots` | characterize 角色，在旧代码上跑绿，方案的 `touched` 必锁 | 方案之后、实现之前一次 |
 | 单元测试 | unit | `unit_commands`、`test_roots` | implement 角色 TDD | 每轮尝试、特征化门、`base-update` |
 | 集成测试 | integration | `integration_commands`，独立目录或包 | implement 角色 | 每轮尝试、`base-update` |
 | 静态检查 | checks | `check_commands`（离线、确定性、快：Spotless / Checkstyle / oxlint / vue-tsc / gitleaks；漏洞扫描与 SAST 放 CI） | 项目配置 | 每轮尝试 |

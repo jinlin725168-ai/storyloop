@@ -19,7 +19,7 @@ from .processutil import redact, run_process
 from .storage import load_json, write_json
 from .telemetry import record_call
 
-ROLES = {"product", "acceptance", "implement", "review", "survey", "characterize"}
+ROLES = {"product", "acceptance", "implement", "review", "survey", "characterize", "design"}
 FOUNDATION_NOTE = (
     "payload.foundation (when present) lists the protected knowledge base under openspec/foundation/ "
     "(modules, architecture, extension mechanism, API surface, capabilities, building blocks, testing). "
@@ -88,6 +88,9 @@ INSTRUCTIONS = {
     "implement": (
         "Implement the approved change in this repository. Modify only new files under configured module "
         "roots. If an integration or foundation file must change, explain that need without editing it. "
+        "payload.design_plan (when present) is the architect's plan: follow its Files, Data And Interfaces and "
+        "Decisions; modify no existing file outside its `touched` list; if you must deviate, say exactly why in "
+        "the summary. "
         + FOUNDATION_NOTE + "Follow extension.md for where a new feature's files go and reuse what "
         "building-blocks.md lists instead of re-implementing it. "
         "Never edit the foundation, OpenSpec contract, acceptance "
@@ -106,18 +109,36 @@ INSTRUCTIONS = {
         "Independently review the real implementation against the approved stories and acceptance evidence. "
         + FOUNDATION_NOTE + "Treat re-implementation of a listed building block, or a feature placed "
         "against extension.md, as a finding. "
+        "payload.design_plan (when present) is the architect's plan: an implementation that departs from its "
+        "Files, interfaces or decisions without a stated reason is a finding. "
         "payload.design is the implementer's design record; check that the unit tests it lists under "
         "## Tests First exist in the repository and cover the behaviours claimed, and treat a missing or "
         "hollow Tests First section as a finding. "
         "Do not edit files. Return exactly {verdict:'pass'|'fail'|'needs_input',summary:string,"
         "findings:[object],questions:[string]}. Pass only with no findings or questions."
     ),
+    "design": (
+        "You are the architect. The contract is approved and its acceptance suite already proved RED; "
+        "before anyone writes code, produce the solution design. "
+        + FOUNDATION_NOTE + "Follow extension.md for where each layer's files go, reuse what "
+        "building-blocks.md lists, and respect modules.md's dependency direction. Read the existing code "
+        "you intend to change. Return exactly {summary:string, touched:[string], design:string, questions:[string]}: "
+        "`touched` is every EXISTING non-test file the implementation will modify (repository-relative; files "
+        "that will merely be created are described in the design, not listed here); `design` is Markdown with "
+        "## Context, ## Goals, ## Decisions (each: Choice, Rationale, Alternatives considered), ## Files "
+        "(every file to create or modify with its responsibility), ## Data And Interfaces (tables, columns, "
+        "endpoints, payloads, permission strings), ## Risks And Trade-Offs. Do not write any file. "
+        "questions only for genuine decisions the contract and the base leave open (payload.answers holds "
+        "earlier answers; never re-ask)."
+    ),
     "characterize": (
         "Before any implementation, lock the existing behaviour of the code this change is about to modify. "
         + FOUNDATION_NOTE + "Read payload.change (the approved contract) and, using extension.md and "
         "building-blocks.md, decide which EXISTING non-test files the implementation will have to modify; list "
         "them in `touched` as repository-relative paths (files that will merely be added are not listed). For "
-        "each touched path write characterization tests in the project's own unit-test layout (only paths under "
+        "each touched path write characterization tests in the project's own unit-test layout (payload.design, "
+        "when present, is the architect's plan: its `touched` list is mandatory and its Markdown says what will "
+        "change, so lock what must stay) (only paths under "
         "payload.test_roots may be created or changed): assert only behaviour that MUST NOT change, use "
         "contains-style assertions for lists or fields that the change will extend, never assert the new "
         "behaviour. Run the tests: they must pass on the current code. payload.extend lists paths the engine "

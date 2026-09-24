@@ -45,6 +45,7 @@ class LoopServices:
     implement: Callable[[Path, dict], dict]
     review: Callable[[Path, dict], dict]
     characterize: Callable[[Path, dict], dict] | None = None
+    design: Callable[[Path, dict], dict] | None = None
 
 
 def run_change(project: Path, change_id: str, services: LoopServices | None = None) -> dict:
@@ -86,7 +87,8 @@ def _run_change_locked(
         return _finalize_change(project, change, state)
     if fresh or state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED"}:
         _prepare_acceptance(project, change, services, state)
-    paused = _ensure_characterization(project, change, state, services, config)
+    paused = _ensure_design(project, change, state, services) or \
+        _ensure_characterization(project, change, state, services, config)
     if paused is not None:
         return paused
     for attempt in range(start_attempt, config["max_attempts"] + 1):
@@ -221,7 +223,8 @@ def _run_attempt(
     context = {"change": change, "attempt": state["attempt"],
                "max_attempts": config["max_attempts"],
                "failures": list(state["failures"]), "answers": answers,
-               "characterization": state.get("characterization")}
+               "characterization": state.get("characterization"),
+               "design_plan": _design_plan(state)}
     response, touched = _write_safely(project, change_id, lambda: services.implement(project, context))
     validate_agent_summary(response)
     if response.get("design"):
@@ -400,7 +403,7 @@ def _perform_review(
     boundary: dict, layers: dict,
 ) -> dict:
     context = {"change": change, "attempt": state["attempt"],
-               "layers": layers, "boundary": boundary,
+               "layers": layers, "boundary": boundary, "design_plan": _design_plan(state),
                "answers": load_answers(project, change["change_id"]),
                "design": state.get("design") or ""}
     return _read_only_call(
@@ -541,6 +544,48 @@ def _require_git_visible(touched: list, boundary: dict) -> None:
                              code="WORKSPACE_TAINTED")
 
 
+def _design_plan(state: dict) -> dict | None:
+    plan = state.get("design_plan") or {}
+    if plan.get("status") != "DONE":
+        return None
+    return {"summary": plan["summary"], "touched": list(plan["touched"]), "design": plan["design"]}
+
+
+def _ensure_design(project: Path, change: dict, state: dict, services: LoopServices) -> dict | None:
+    """The architect step, once per change after RED: a read-only plan naming the files to modify.
+
+    Its `touched` list seeds the characterization gate and its Markdown is what implement follows
+    and review checks against. Design questions pause the run like any other agent question.
+    """
+    current = state.get("design_plan") or {}
+    if current.get("status") in {"DONE", "SKIPPED"}:
+        return None
+    if services.design is None:
+        state["design_plan"] = {"status": "SKIPPED", "reason": "no design service", "touched": [], "design": ""}
+        _save_run(project, state)
+        return None
+    change_id = change["change_id"]
+    context = {"change": change, "answers": load_answers(project, change_id)}
+    response = _read_only_call(project, change_id, lambda: services.design(project, context))
+    require(isinstance(response, dict) and isinstance(response.get("summary"), str)
+            and isinstance(response.get("touched"), list) and all(isinstance(p, str) for p in response["touched"])
+            and isinstance(response.get("design"), str) and isinstance(response.get("questions"), list)
+            and all(isinstance(q, str) and q.strip() for q in response["questions"]),
+            "Design agent returned an invalid result")
+    if response["questions"]:
+        return _pause(project, state, "NEEDS_INPUT", questions=response["questions"])
+    require(response["design"].strip(), "Design must contain the plan as Markdown")
+    touched = sorted(set(response["touched"]))
+    for path in touched:
+        require(_exists_at(project, state["contract_commit"], path),
+                f"Design names a file that does not exist at the contract commit: {path}")
+    state["design_plan"] = {"status": "DONE", "summary": response["summary"], "touched": touched,
+                            "design": response["design"].rstrip("\n") + "\n"}
+    state.pop("questions", None)
+    _save_run(project, state)
+    return None
+
+
 def _ensure_characterization(project: Path, change: dict, state: dict, services: LoopServices,
                              config: dict) -> dict | None:
     """Layer 3 gate, once per change: lock the current behaviour of the paths about to change."""
@@ -567,10 +612,10 @@ def _characterize_paths(project: Path, change: dict, state: dict, services: Loop
     change_id = change["change_id"]
     profile = config["profile"]
     previous = state.get("characterization") or {"touched": [], "tests": []}
+    plan = _design_plan(state)
     context = {"change": change, "test_roots": profile["test_roots"], "extend": list(extend or []),
                "characterization": previous if previous.get("status") == "GREEN" else None,
-               "foundation": None}
-    context.pop("foundation")
+               "design": plan}
     response, written = _write_safely(project, change_id, lambda: services.characterize(project, context))
     require(isinstance(response, dict) and isinstance(response.get("summary"), str)
             and isinstance(response.get("touched"), list) and isinstance(response.get("tests"), list)
@@ -587,7 +632,8 @@ def _characterize_paths(project: Path, change: dict, state: dict, services: Loop
         violations = [{"path": p, "category": "NOT_A_TEST_PATH"} for p in outside]
         return _pause(project, state, "BOUNDARY_VIOLATION", violations=violations, base_proposal=None,
                       error="Characterization may only write test files")
-    touched = sorted(set(previous.get("touched", [])) | set(response["touched"]) | set(extend or []))
+    touched = sorted(set(previous.get("touched", [])) | set(response["touched"]) | set(extend or [])
+                     | set(plan["touched"] if plan else []))
     for path in touched:
         require(_exists_at(project, state["contract_commit"], path) and not matches_test_root(path, profile["test_roots"]),
                 f"Characterized path must be an existing non-test file: {path}")
@@ -773,8 +819,12 @@ def _write_openspec_artifacts(project: Path, change: dict, state: dict, manual: 
     change_id = change["change_id"]
     base = project / "openspec" / "changes" / change_id
     written: list[str] = []
+    plan = _design_plan(state)
+    parts = [plan["design"].rstrip("\n")] if plan else []
     if state.get("design"):
-        (base / "design.md").write_text(state["design"].rstrip("\n") + "\n", encoding="utf-8")
+        parts.append(("## Implementation record\n\n" if plan else "") + state["design"].rstrip("\n"))
+    if parts:
+        (base / "design.md").write_text("\n\n".join(parts) + "\n", encoding="utf-8")
         written.append(f"openspec/changes/{change_id}/design.md")
     decisions = render_decisions(change, load_answers(project, change_id), manual, state.get("resets") or [],
                                  state.get("repairs") or [])
@@ -868,6 +918,7 @@ def _default_services() -> LoopServices:
         implement=lambda project, context: invoke_project_agent(project, "implement", context),
         review=lambda project, context: invoke_project_agent(project, "review", context),
         characterize=lambda project, context: invoke_project_agent(project, "characterize", context),
+        design=lambda project, context: invoke_project_agent(project, "design", context),
     )
 
 

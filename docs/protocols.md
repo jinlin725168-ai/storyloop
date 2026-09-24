@@ -22,9 +22,10 @@
 |---|---|---|
 | `product` | 新建：`{idea}`；修订：`{change_id, message, answers:[{question_id,question,answer}], current_product}` | 完整产品对象（spec-kit 结构，见下） |
 | `acceptance` | `{change, suite_root}`；修复模式 `change.repair` 为 `{reason, existing_files:[{path,content}], manifest, failure_evidence}`；冒烟维护模式 `{mode:'smoke-maintenance', change, acceptance_suite, system_smoke, smoke_root}` | 前两种：`{files:[{path,content}], manifest}`；维护模式：`{files, manifest:{tests:[{id,description,command,timeout_seconds}]}, rationale}` |
-| `characterize` | `{change, test_roots, extend:[path], characterization}` | `{summary, touched:[path], tests:[path], questions:[]}`；只能写 `test_roots` 内的文件 |
-| `implement` | `{change, attempt, failures:[{attempt, unit?, integration?, acceptance?, smoke?, checks?, review?, characterization?}], answers, characterization:{touched, tests}}` | `{summary, questions:[string], design}`；通过直接改工作区实现，只能改 `touched` 里的既有文件和新文件 |
-| `review` | `{change, attempt, layers:{unit,integration,acceptance,smoke,checks}, boundary, answers, design}` | `{verdict:'pass'|'fail'|'needs_input', summary, findings:[object], questions:[string]}` |
+| `design` | `{change, answers}`（+ foundation） | `{summary, touched:[path], design:markdown, questions:[string]}`；只读；`touched` 必须是合同提交时存在的非测试文件 |
+| `characterize` | `{change, test_roots, extend:[path], characterization, design:{summary,touched,design}}` | `{summary, touched:[path], tests:[path], questions:[]}`；只能写 `test_roots` 内的文件 |
+| `implement` | `{change, attempt, failures:[…], answers, characterization:{touched, tests}, design_plan:{summary,touched,design}}` | `{summary, questions:[string], design}`；通过直接改工作区实现，只能改 `touched` 里的既有文件和新文件 |
+| `review` | `{change, attempt, layers:{…}, boundary, answers, design, design_plan}` | `{verdict:'pass'|'fail'|'needs_input', summary, findings:[object], questions:[string]}` |
 | `survey` | `{baseline_version, foundation_root, required_documents, module_roots, integration_paths, reason}` | `{documents:[{path,content}]}`，路径相对 `openspec/foundation/`，只读探索 |
 
 `survey` 的 `instructions` 由 `foundation-survey` 技能包生成：引擎把 SKILL.md 与 references 原文附在角色说明后（优先项目里 `.claude/skills/` 或 `.codex/skills/` 的副本，否则用引擎打包的副本），三种适配器拿到的说明相同。

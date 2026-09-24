@@ -47,6 +47,7 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 - 产品层输入：用户无需编写技术方案和详细任务文档。
 - 用户批准：未决问题会阻止批准；任何故事或验收条件修订都会使旧批准失效。
 - 底座知识库：`foundation-survey` 技能包（随引擎维护，`storyloop skills` 装进任何项目，Claude Code 与 Codex 通用）摸清底座的模块组成、架构与运行机制、扩展机制、接口与能力、可复用积木和测试基础设施，产物挂在底座受保护；product 据此不重复建设，implement 据此复用而不是重写，review 据此核对。
+- 角色按权限边界划分（[角色目录](docs/roles.md)）：survey 摸底、product 立合同、acceptance 盲写验收、design 出方案并圈定要改的既有文件、characterize 锁定现有行为、implement 实现、review 独立审查；细分工放在角色内的子代理。
 - 需求质量门：合同采用 spec-kit 结构（优先级、独立验证方式、EARS 规则、Gherkin 验收条件），澄清问题以选择题形式逐条回答并入合同；批准前有确定性 checklist 把关。
 - OpenSpec 管理：批准合同、增量规格、实现方案（design.md）和人为决策（decisions.md）进入 `openspec/changes/<change-id>/`，完成时并入 `openspec/specs/<capability>/spec.md` 活规格；装了 `openspec` CLI 时结构校验是门。
 - 测试分层：变更验收套件（`acceptance/changes/<id>/`，acceptance 角色盲写、先红、受保护）、项目级系统冒烟（`acceptance/smoke/`，跨变更累积、只能经人批准更新）、实现前的特征化测试门（锁定将被修改路径的现有行为，在旧代码上跑绿才开工，机器验证）、单元与集成分开的回归命令、静态检查。每层各自出结论，任何一层红都不能过。用例缺陷走 `acceptance-repair` 通道并从合同提交重新证明 RED。
