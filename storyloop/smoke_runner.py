@@ -168,6 +168,7 @@ def _candidate_allow(project: Path) -> set[str]:
 
 def _copy_smoke_control(project: Path, candidate: Path, change_id: str) -> None:
     """Copy the control files a candidate needs, including config for snapshot allow lists."""
+    project = Path(project).resolve()  # protection_path() resolves too; Windows 8.3 names must not differ
     pairs = [
         (project / ".storyloop/config.json", candidate / ".storyloop/config.json"),
         (project / ".storyloop/state/changes" / f"{change_id}.json",

@@ -193,17 +193,17 @@ def clarify_interactively(project: Path, change_id: str, reviser, interactive: b
     state = load_change(project, change_id)
     while state["product"]["questions"] and interactive and _terminal():
         questions = state["product"]["questions"][:per_round]
-        print(f"草案有 {len(state['product']['questions'])} 个待决问题，本轮澄清 {len(questions)} 个"
+        _say(f"草案有 {len(state['product']['questions'])} 个待决问题，本轮澄清 {len(questions)} 个"
               "（回车选推荐项，输入序号或自由文本，q 结束本轮）：")
         answers = []
         stopped = False
         for index, question in enumerate(questions, 1):
-            print(f"\n[{question['id']}] {question['text']}")
+            _say(f"\n[{question['id']}] {question['text']}")
             for number, option in enumerate(question["options"], 1):
                 marker = "（推荐）" if option == question.get("recommended") else ""
-                print(f"  {number}. {option}{marker}")
+                _say(f"  {number}. {option}{marker}")
             if question.get("why"):
-                print(f"  为什么重要：{question['why']}")
+                _say(f"  为什么重要：{question['why']}")
             reply = input("> ").strip()
             if reply.lower() == "q":
                 stopped = True
@@ -220,6 +220,15 @@ def clarify_interactively(project: Path, change_id: str, reviser, interactive: b
         if stopped:
             break
     return state
+
+
+def _say(text: str) -> None:
+    """Print prompts without dying on consoles that cannot encode them (Windows cp1252)."""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+        print(text.encode(encoding, "replace").decode(encoding, "replace"))
 
 
 def _pick_answer(reply: str, question: dict) -> str | None:
@@ -303,7 +312,7 @@ def run_with_answers(project: Path, change_id: str, interactive: bool,
         questions = pending_questions(project, change_id)
         if not questions:
             break
-        print(f"代理有 {len(questions)} 个问题需要你决定（直接回车表示让代理自行决定）：")
+        _say(f"代理有 {len(questions)} 个问题需要你决定（直接回车表示让代理自行决定）：")
         answers = []
         for index, question in enumerate(questions, 1):
             reply = input(f"[{index}/{len(questions)}] {question}\n> ").strip()

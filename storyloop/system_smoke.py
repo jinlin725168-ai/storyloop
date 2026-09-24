@@ -68,7 +68,9 @@ def load_system_smoke(project: Path) -> dict | None:
     protection = load_json(protection_path)
     require(protection.get("version") == 1 and isinstance(protection.get("digests"), dict),
             "Invalid system smoke protection state")
-    require(_digests(project) == protection["digests"], "Protected system smoke suite was modified")
+    current = _digests(project)
+    require(current == protection["digests"],
+            "Protected system smoke suite was modified: " + _describe_drift(protection["digests"], current))
     return validate_manifest(load_json(manifest_path))
 
 
@@ -138,6 +140,13 @@ def _validate_files(files: object) -> list[tuple[str, str]]:
         result.append((relative, item["content"]))
     require(len({r for r, _ in result}) == len(result), "System smoke files must have distinct paths")
     return result
+
+
+def _describe_drift(expected: dict, current: dict) -> str:
+    missing = sorted(set(expected) - set(current))
+    extra = sorted(set(current) - set(expected))
+    changed = sorted(k for k in set(expected) & set(current) if expected[k] != current[k])
+    return f"missing={missing} extra={extra} changed={changed}"
 
 
 def _suite_files(project: Path) -> list[Path]:

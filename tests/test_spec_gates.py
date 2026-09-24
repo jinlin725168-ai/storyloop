@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import subprocess
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -84,6 +85,7 @@ class ChecklistTests(unittest.TestCase):
 
 
 class OpenSpecGateTests(unittest.TestCase):
+    @unittest.skipIf(sys.platform == "win32", "the fake openspec is a POSIX script; Windows cannot exec it")
     def test_missing_cli_is_skipped_and_invalid_output_blocks(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

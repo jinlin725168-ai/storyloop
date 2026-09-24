@@ -100,7 +100,9 @@ def load_smoke_manifest(project: Path, change_id: str) -> dict:
         path.relative_to(root).as_posix(): _sha256(path)
         for path in sorted(root.rglob("*")) if path.is_file() and not path.is_symlink()
     }
-    require(current == digests, "Protected smoke suite was modified")
+    require(current == digests, "Protected smoke suite was modified: "
+            f"missing={sorted(set(digests) - set(current))} extra={sorted(set(current) - set(digests))} "
+            f"changed={sorted(k for k in set(digests) & set(current) if digests[k] != current[k])}")
     manifest = load_json(root / "manifest.json")
     return _validate_manifest(manifest, load_change(project, change_id))
 

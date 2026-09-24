@@ -140,7 +140,7 @@ class SurveyTests(unittest.TestCase):
             saved = root / ".storyloop/state/foundation/last-survey.json"
             with self.assertRaises(StoryLoopError) as caught:
                 survey_foundation(root, "incomplete")
-            self.assertIn(str(saved), str(caught.exception))
+            self.assertIn(str(saved.resolve()), str(caught.exception))
             response = load_json(saved)
             self.assertEqual(len(response["documents"]), len(REQUIRED_DOCUMENTS) - 1)
             missing = sorted(set(REQUIRED_DOCUMENTS) - {d["path"] for d in response["documents"]})[0]
