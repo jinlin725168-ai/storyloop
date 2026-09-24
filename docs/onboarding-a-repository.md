@@ -145,8 +145,11 @@ acceptance 角色写的变更验收 manifest 命令形如：
 |---|---|---|
 | backend | `mvn install`（父 pom 默认跳过测试，显式打开）→ surefire 单元 → failsafe 集成 → `spotless:check` → `checkstyle:check` | 单元、集成、静态检查 |
 | frontend | pnpm 安装 → `frontend_check.py --in-place`（oxlint + 只对业务文件判失败的 vue-tsc；用一次短暂的 vite 启动生成 unplugin 声明） | 静态检查 |
-| security | gitleaks（docker，`.gitleaks.toml`）→ Trivy 依赖漏洞（HIGH/CRITICAL 且有修复）→ Semgrep（只扫业务目录） | 只适合 CI 的第五层 |
+| security | gitleaks（docker，`.gitleaks.toml`）→ Semgrep（只扫业务目录） | 只适合 CI 的第五层 |
+| backend（续） | Trivy 依赖漏洞：用刚构建好的本地 Maven 仓库离线解析依赖树；HIGH/CRITICAL 且已有修复版本的**阻断合入**，没有修复版本的只记录，结果同时上传 Security 标签页 | 依赖漏洞门 |
 | smoke | `docker compose up` 起中间件 → 预热 Maven 仓库 → Playwright chromium → `run_manifest.py acceptance/smoke/manifest.json` | 系统冒烟 |
 | CodeQL（单独 workflow） | 每周 + 手动，Java 与 TypeScript | 深度 SAST |
+
+依赖漏洞的处理方式：升级走 BASE 迭代，在根 pom 的 `dependencyManagement` 开头钉修复版本（BOM 先声明者优先、显式条目优先于 BOM），上游升级后再逐条删除；确有理由不升的例外写进 `.trivyignore` 并注明原因。RuoYi 底座首次接入时 Spring Boot 4.1.0 传递引入的 netty、tomcat、httpcore5、postgresql、commons-beanutils 共 16 个组件有修复版本，一次 BASE 迭代全部钉平。
 
 `storyloop ci` 依赖本地控制面（`.storyloop/state/suites/` 的保护摘要），在 CI 机器上没有；所以 CI 直接用 `acceptance/tools/run_manifest.py` 执行受保护的清单文件，效果相同但不做字节指纹校验（指纹校验由闭环在合并前完成）。变更验收套件（`acceptance/changes/<id>/manifest.json`）也可以用同一个脚本按需在 CI 里跑。
