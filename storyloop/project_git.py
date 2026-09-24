@@ -40,8 +40,8 @@ def commit_paths(project: Path, paths: list[str], message: str) -> dict:
     status = _git(project, "status", "--porcelain=v1", "--untracked-files=all")
     require(bool(status.strip()), "Commit has no changes")
     try:
-        _git(project, "-c", "user.name=StoryLoop", "-c",
-             "user.email=storyloop@localhost", "commit", "--no-verify", "-m", message)
+        # Commits carry the repository's own configured identity: the loop acts for its user.
+        _git(project, "commit", "--no-verify", "-m", message)
     except StoryLoopError as exc:
         raise StoryLoopError("Local Git commit failed", code="GIT_BLOCKED") from exc
     return {"status": "COMMITTED", "commit": _git(project, "rev-parse", "HEAD").strip(),
@@ -60,8 +60,7 @@ def finish_feature(project: Path, feature_branch: str, target_branch: str) -> di
     _git(project, "show-ref", "--verify", f"refs/heads/{target_branch}")
     _git(project, "switch", target_branch)
     try:
-        _git(project, "-c", "user.name=StoryLoop", "-c",
-             "user.email=storyloop@localhost", "merge", "--no-ff", "--no-edit",
+        _git(project, "merge", "--no-ff", "--no-edit",
              "--no-verify", feature_branch)
     except StoryLoopError as exc:
         raise StoryLoopError("Git merge conflict or failure; feature branch was preserved",
