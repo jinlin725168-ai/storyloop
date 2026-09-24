@@ -1,6 +1,6 @@
 name: CI
 
-# StoryLoop 引擎自己的 CI：全量测试（Linux 两个 Python 版本，Windows 一个，作为信息）、字节码编译、密钥扫描。
+# StoryLoop 引擎自己的 CI：全量测试（Linux 两个 Python 版本，Windows 一个，全部必须通过）、字节码编译、密钥扫描。
 # 引擎只用标准库，没有依赖安装步骤；测试会创建临时 Git 仓库，所以需要 git 身份。
 
 on:
@@ -21,7 +21,6 @@ jobs:
     name: 测试（${{ matrix.os }}，Python ${{ matrix.python }}）
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:

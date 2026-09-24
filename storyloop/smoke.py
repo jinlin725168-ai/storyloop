@@ -182,8 +182,6 @@ def _write_text(path: Path, content: str) -> None:
 
 
 def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    """Content digest with line endings normalized to LF: Git on Windows (core.autocrlf) rewrites
+    CRLF on checkout and merge, which is not a modification of the suite."""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()

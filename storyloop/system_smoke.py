@@ -159,7 +159,9 @@ def _suite_files(project: Path) -> list[Path]:
 
 def _digests(project: Path) -> dict[str, str]:
     root = project / SYSTEM_SMOKE_DIR
-    return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in _suite_files(project)}
+    # LF-normalized like the per-change suites: autocrlf checkouts are not modifications.
+    return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+            for p in _suite_files(project)}
 
 
 # ---- maintenance: propose (agent) and apply (human) -------------------------------------
