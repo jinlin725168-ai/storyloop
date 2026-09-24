@@ -19,6 +19,7 @@ StoryLoop's attempt budget, not by how many turns it took.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import shutil
@@ -93,6 +94,48 @@ REPAIR_PROMPT = (
 )
 REPAIR_LIMIT = 2  # a finished session that ended in prose is asked for its JSON, like the Codex adapter
 
+# Review fans out to focused perspectives (parallel sessions, same evidence) and a lead merges them.
+# The engine protocol is untouched: it still receives one {verdict, summary, findings, questions}.
+REVIEW_PERSPECTIVES = {
+    "correctness": (
+        "Focus only on correctness: walk every automated and manual acceptance criterion of the contract "
+        "against the code and the layer evidence; check edge cases, error handling, data consistency between "
+        "list/detail/export paths, and that nothing outside the stories was changed."
+    ),
+    "security": (
+        "Focus only on security: injection (SQL built from strings, unbound parameters), authorization "
+        "(permission strings on every endpoint, ownership checks), sensitive data in logs or responses, "
+        "input validation, secrets or credentials in code or config. Cite file and line for every finding."
+    ),
+    "architecture": (
+        "Focus only on conformance to the base and the plan: payload.design_plan (if present), the foundation "
+        "documents extension.md, building-blocks.md and modules.md. Re-implemented building blocks, files in "
+        "the wrong layer, forbidden dependency directions, or deviations from the plan without a stated reason "
+        "are findings."
+    ),
+    "tests": (
+        "Focus only on test quality: the implementer's design record ## Tests First must match real test "
+        "files that exercise the claimed behaviours; characterization tests must cover every touched path; "
+        "assertions must be meaningful (no tautologies, no tests that pass without the change)."
+    ),
+}
+PERSPECTIVE_MARK = "[review perspective: {name}]"
+LEAD_MARK = "[lead reviewer]"
+PERSPECTIVE_SCHEMA = (
+    "Return ONLY {summary:string, findings:[{message:string, evidence:string}], questions:[string]}. A finding "
+    "must name a concrete defect you can point to (file, line or evidence id); doubts without evidence go "
+    "into summary, not findings. questions only for genuine product ambiguities."
+)
+LEAD_RULES = (
+    "You are the lead reviewer. Below are the reports of focused reviewers who all saw the same request. "
+    "Merge them into the final review: verdict is 'fail' if any retained finding remains, 'needs_input' if "
+    "there are no findings but open questions, otherwise 'pass'. You may drop a reviewer's finding only "
+    "by verifying it yourself and stating the reason in the summary; never drop it silently. Deduplicate, "
+    "keep each retained finding's `perspective` and `message`, and give a one-line conclusion per "
+    "perspective in the summary. Return ONLY {verdict:'pass'|'fail'|'needs_input', summary:string, "
+    "findings:[{perspective:string, message:string}], questions:[string]}."
+)
+
 
 def main() -> int:
     return main_with_args(None)
@@ -111,6 +154,9 @@ def main_with_args(argv: list[str] | None) -> int:
     parser.add_argument("--guide", action="append", default=[],
                         help="project guidance file appended to every prompt (repeatable)")
     parser.add_argument("--dry-run", action="store_true", help="print the claude argv and exit")
+    parser.add_argument("--review-perspectives", default=",".join(REVIEW_PERSPECTIVES),
+                        help="comma-separated review perspectives run as parallel sub-agents, or 'none'")
+    parser.add_argument("--review-parallel", type=int, default=4, help="max concurrent perspective sessions")
     args = parser.parse_args(argv)
     segment_turns = args.max_turns or args.segment_turns
 
@@ -130,34 +176,56 @@ def main_with_args(argv: list[str] | None) -> int:
         print(json.dumps({"command": base, "prompt_chars": len(prompt)}))
         return 0
 
-    telemetry = {"cost_usd": 0.0, "turns": 0, "duration_ms": 0, "input_tokens": 0,
-                 "output_tokens": 0, "segments": 0, "models": set()}
+    perspectives = [p for p in args.review_perspectives.split(",") if p and p != "none"]
+    if role == "review" and perspectives:
+        return _review_with_perspectives(request, base, args, perspectives)
+
+    result, telemetry = _run_session(base, prompt, role, args, request.get("project"))
+    if result is None:
+        return 1
+    return _emit(result, telemetry, role)
+
+
+def _emit(result: dict, telemetry: dict, role: str) -> int:
+    result["_telemetry"] = _finish(telemetry)  # StoryLoop strips and records this
+    print(f"claude {role}: cost=${telemetry['cost_usd']:.4f} turns={telemetry['turns']} "
+          f"segments={telemetry['segments']}", file=sys.stderr)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+def _new_telemetry() -> dict:
+    return {"cost_usd": 0.0, "turns": 0, "duration_ms": 0, "input_tokens": 0,
+            "output_tokens": 0, "segments": 0, "models": set()}
+
+
+def _run_session(base: list[str], prompt: str, role: str, args, cwd) -> tuple[dict | None, dict]:
+    """One claude session: resume on turn caps, ask for JSON on prose endings; (result, telemetry)."""
+    telemetry = _new_telemetry()
     session = None
     next_prompt = prompt
     repairs = 0
     for segment in range(1, args.max_segments + 1):
         command = base + (["--resume", session] if session else [])
-        completed = subprocess.run(command, input=next_prompt,
-                                   capture_output=True, text=True, cwd=request.get("project"))
+        completed = subprocess.run(command, input=next_prompt, capture_output=True, text=True, cwd=cwd)
         next_prompt = RESUME_PROMPT
         # claude exits 1 on error_max_turns but still prints the JSON envelope on stdout, so the
         # envelope is authoritative and the exit code only matters when there is no envelope.
         try:
             envelope = json.loads(completed.stdout)
         except json.JSONDecodeError:
-            print(f"claude exited {completed.returncode} without a JSON envelope: "
+            print(f"claude {role} exited {completed.returncode} without a JSON envelope: "
                   f"{completed.stderr[-4000:]}", file=sys.stderr)
-            return completed.returncode or 1
+            return None, telemetry
         _accumulate(telemetry, envelope)
         session = envelope.get("session_id") or session
         subtype = envelope.get("subtype", "success")
         if subtype == "error_max_turns" and session:
-            print(f"claude {role}: segment {segment} hit {segment_turns} turns, resuming {session}",
-                  file=sys.stderr)
+            print(f"claude {role}: segment {segment} hit the turn cap, resuming {session}", file=sys.stderr)
             continue
         if envelope.get("is_error") or subtype != "success":
-            print(f"claude ended with {subtype}: {envelope.get('result')}", file=sys.stderr)
-            return 1
+            print(f"claude {role} ended with {subtype}: {envelope.get('result')}", file=sys.stderr)
+            return None, telemetry
         result = _extract_object(envelope.get("result", ""))
         if result is None:
             if session and repairs < REPAIR_LIMIT:
@@ -166,16 +234,56 @@ def main_with_args(argv: list[str] | None) -> int:
                 print(f"claude {role}: result was not JSON, asking session {session} for it "
                       f"(repair {repairs}/{REPAIR_LIMIT})", file=sys.stderr)
                 continue
-            print("claude result was not a JSON object", file=sys.stderr)
-            return 1
-        result["_telemetry"] = _finish(telemetry)  # StoryLoop strips and records this
-        print(f"claude {role}: cost=${telemetry['cost_usd']:.4f} turns={telemetry['turns']} "
-              f"segments={telemetry['segments']}", file=sys.stderr)
-        print(json.dumps(result, ensure_ascii=False))
-        return 0
+            print(f"claude {role}: result was not a JSON object", file=sys.stderr)
+            return None, telemetry
+        return result, telemetry
     print(f"claude {role}: gave up after {args.max_segments} segments "
           f"({telemetry['turns']} turns); the agent is looping, not just slow", file=sys.stderr)
-    return 1
+    return None, telemetry
+
+
+def _review_with_perspectives(request: dict, base: list[str], args, perspectives: list[str]) -> int:
+    """Parallel focused reviewers, then a lead session that merges their reports into one verdict."""
+    unknown = [p for p in perspectives if p not in REVIEW_PERSPECTIVES]
+    if unknown:
+        print(f"unknown review perspectives: {unknown}", file=sys.stderr)
+        return 2
+    cwd = request.get("project")
+
+    def run_perspective(name: str) -> tuple[str, dict | None, dict]:
+        extra = f"{PERSPECTIVE_MARK.format(name=name)}\n{REVIEW_PERSPECTIVES[name]}\n{PERSPECTIVE_SCHEMA}"
+        prompt = _prompt(request, "review", args.guide, extra=extra, schema=False)
+        result, telemetry = _run_session(base, prompt, f"review/{name}", args, cwd)
+        return name, result, telemetry
+
+    with ThreadPoolExecutor(max_workers=max(1, args.review_parallel)) as pool:
+        reports = list(pool.map(run_perspective, perspectives))
+    total = _new_telemetry()
+    for _, _, telemetry in reports:
+        _merge_telemetry(total, telemetry)
+    failed = [name for name, result, _ in reports if result is None]
+    if failed:
+        print(f"claude review: perspective(s) failed: {', '.join(failed)}", file=sys.stderr)
+        return 1
+    digest = json.dumps({name: result for name, result, _ in reports}, ensure_ascii=False, indent=1)
+    lead_prompt = _prompt(request, "review", args.guide,
+                          extra=f"{LEAD_MARK}\n{LEAD_RULES}\n\nPerspective reports:\n{digest}", schema=False)
+    result, telemetry = _run_session(base, lead_prompt, "review/lead", args, cwd)
+    _merge_telemetry(total, telemetry)
+    if result is None:
+        return 1
+    if not ({"verdict", "summary", "findings", "questions"} <= set(result)):
+        print("claude review: lead result lacks verdict/summary/findings/questions", file=sys.stderr)
+        return 1
+    result = {key: result[key] for key in ("verdict", "summary", "findings", "questions")}
+    total["perspectives"] = len(perspectives)
+    return _emit(result, total, "review")
+
+
+def _merge_telemetry(total: dict, part: dict) -> None:
+    for key in ("cost_usd", "turns", "duration_ms", "input_tokens", "output_tokens", "segments"):
+        total[key] += part.get(key, 0)
+    total["models"].update(part.get("models", set()))
 
 
 def _base_command(claude: str, role: str, segment_turns: int, extra_bash: list[str],
@@ -214,13 +322,19 @@ def _finish(telemetry: dict) -> dict:
     value = dict(telemetry)
     models = sorted(value.pop("models"))
     value["cost_usd"] = round(value["cost_usd"], 6)
+    value["duration_ms"] = int(value["duration_ms"])
     if models:
         value["model"] = ",".join(models)
     return value
 
 
-def _prompt(request: dict, role: str, guides: list[str]) -> str:
-    parts = [request.get("instructions", ""), SCHEMA_HINTS.get(role) or SCHEMA_HINTS["acceptance"], RULES]
+def _prompt(request: dict, role: str, guides: list[str], extra: str = "", schema: bool = True) -> str:
+    parts = [request.get("instructions", "")]
+    if extra:
+        parts.append(extra)
+    if schema:
+        parts.append(SCHEMA_HINTS.get(role) or SCHEMA_HINTS["acceptance"])
+    parts.append(RULES)
     for guide in guides:
         path = Path(guide)
         if path.is_file():

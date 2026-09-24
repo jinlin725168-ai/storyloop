@@ -64,6 +64,8 @@
 
 `review` 的 `pass` 不能同时带 findings 或 questions；`fail` 的 findings 会作为下一次实现尝试的输入。审查角色只读，可运行受限的构建/测试命令。
 
+`review` 的返回可以由适配器内部的多个子会话合成（Claude 适配器默认四个视角 + 主评审），引擎只看到合成后的一个对象；`findings` 里每项建议带 `perspective` 与 `message`。
+
 `_telemetry`（可选）：任何角色的返回对象里可以附带 `{"cost_usd", "turns", "duration_ms", "input_tokens", "output_tokens", "segments", "model"}`，引擎剥离后记入 `.storyloop/state/telemetry/<change-id>.json`；没有它时只记录墙钟时间。
 
 `manual` 适配器：请求写到 `.storyloop/requests/project-<role>.json`，把 `{request_id, result}` 写到 `.storyloop/responses/project-<role>.json` 后重跑原命令。

@@ -71,7 +71,8 @@ class ClaudeAdapterTests(unittest.TestCase):
                 patch("sys.stdin", io.StringIO(json.dumps(request))), \
                 patch("sys.stdout", new_callable=io.StringIO), \
                 patch("sys.stderr", new_callable=io.StringIO) as err:
-            code = adapter.main_with_args(["--segment-turns", "60", "--max-segments", "3"])
+            code = adapter.main_with_args(["--segment-turns", "60", "--max-segments", "3",
+                                           "--review-perspectives", "none"])
         self.assertEqual(code, 1)
         self.assertEqual(len(calls), 3)
         self.assertIn("segments", err.getvalue())
@@ -100,6 +101,87 @@ class ClaudeAdapterTests(unittest.TestCase):
         self.assertEqual(inputs[1], adapter.REPAIR_PROMPT)
         self.assertIn("repair 1/2", err.getvalue())
         self.assertEqual(json.loads(out.getvalue())["manifest"]["version"], 1)
+
+
+class ReviewPerspectiveTests(unittest.TestCase):
+    """review fans out to perspective sub-agents (parallel claude sessions) and a lead merges the verdict."""
+
+    def _request(self):
+        return {"role": "review", "project": "/tmp/p", "instructions": "review it",
+                "payload": {"change": {"change_id": "FEAT-1"}, "layers": {}, "design_plan": None}}
+
+    def test_perspectives_run_and_the_lead_merges_them_into_one_verdict(self):
+        calls = []
+
+        def fake_run(command, **kwargs):
+            prompt = kwargs.get("input", "")
+            calls.append(prompt)
+            if adapter.LEAD_MARK in prompt:
+                self.assertIn("security", prompt)  # the lead sees every perspective's output
+                self.assertIn("SQL built by string concatenation", prompt)
+                result = {"verdict": "fail", "summary": "security found a real defect",
+                          "findings": [{"perspective": "security", "message": "SQL built by string concatenation"}],
+                          "questions": []}
+                return Completed(envelope("success", json.dumps(result), "lead", 0.2, 3))
+            for name in adapter.REVIEW_PERSPECTIVES:
+                if adapter.PERSPECTIVE_MARK.format(name=name) in prompt:
+                    findings = ([{"message": "SQL built by string concatenation", "evidence": "Mapper.xml:12"}]
+                                if name == "security" else [])
+                    result = {"summary": f"{name} looked", "findings": findings, "questions": []}
+                    return Completed(envelope("success", json.dumps(result), f"sid-{name}", 0.1, 2))
+            raise AssertionError("unexpected prompt")
+
+        with patch.object(adapter.subprocess, "run", fake_run), \
+                patch.object(adapter.shutil, "which", return_value="/usr/bin/claude"), \
+                patch("sys.stdin", io.StringIO(json.dumps(self._request()))), \
+                patch("sys.stdout", new_callable=io.StringIO) as out, \
+                patch("sys.stderr", new_callable=io.StringIO):
+            code = adapter.main_with_args([])
+        self.assertEqual(code, 0)
+        self.assertEqual(len(calls), len(adapter.REVIEW_PERSPECTIVES) + 1)
+        result = json.loads(out.getvalue())
+        self.assertEqual(result["verdict"], "fail")
+        self.assertEqual(result["findings"][0]["perspective"], "security")
+        telemetry = result["_telemetry"]
+        self.assertEqual(telemetry["perspectives"], len(adapter.REVIEW_PERSPECTIVES))
+        self.assertAlmostEqual(telemetry["cost_usd"], 0.1 * len(adapter.REVIEW_PERSPECTIVES) + 0.2)
+        self.assertEqual(telemetry["turns"], 2 * len(adapter.REVIEW_PERSPECTIVES) + 3)
+
+    def test_perspectives_can_be_disabled_for_a_single_review_session(self):
+        calls = []
+
+        def fake_run(command, **kwargs):
+            calls.append(kwargs.get("input", ""))
+            result = {"verdict": "pass", "summary": "ok", "findings": [], "questions": []}
+            return Completed(envelope("success", json.dumps(result), "one", 0.3, 5))
+
+        with patch.object(adapter.subprocess, "run", fake_run), \
+                patch.object(adapter.shutil, "which", return_value="/usr/bin/claude"), \
+                patch("sys.stdin", io.StringIO(json.dumps(self._request()))), \
+                patch("sys.stdout", new_callable=io.StringIO) as out, \
+                patch("sys.stderr", new_callable=io.StringIO):
+            code = adapter.main_with_args(["--review-perspectives", "none"])
+        self.assertEqual(code, 0)
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn(adapter.LEAD_MARK, calls[0])
+        self.assertEqual(json.loads(out.getvalue())["verdict"], "pass")
+
+    def test_a_failing_perspective_fails_the_whole_review_call(self):
+        def fake_run(command, **kwargs):
+            prompt = kwargs.get("input", "")
+            if adapter.PERSPECTIVE_MARK.format(name="tests") in prompt:
+                return Completed(envelope("error_during_execution", "boom", "sid-tests", 0.1, 1), returncode=1)
+            result = {"summary": "fine", "findings": [], "questions": []}
+            return Completed(envelope("success", json.dumps(result), "sid", 0.1, 2))
+
+        with patch.object(adapter.subprocess, "run", fake_run), \
+                patch.object(adapter.shutil, "which", return_value="/usr/bin/claude"), \
+                patch("sys.stdin", io.StringIO(json.dumps(self._request()))), \
+                patch("sys.stdout", new_callable=io.StringIO), \
+                patch("sys.stderr", new_callable=io.StringIO) as err:
+            code = adapter.main_with_args([])
+        self.assertEqual(code, 1)
+        self.assertIn("tests", err.getvalue())
 
 
 if __name__ == "__main__":

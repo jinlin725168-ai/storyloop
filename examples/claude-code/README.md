@@ -15,6 +15,8 @@
 
 Bash 默认只放行 `python3`、`python`、常见只读命令和只读 git（status/diff/log/show）；其他构建工具按项目追加，例如 `--bash "mvn:*"`（可重复）。Claude Code 对链式命令逐段匹配规则，所以提示词要求代理只跑原样单条命令：`git diff` 可以，`git -C x diff`、`git --no-pager diff`、带 `&&` 或管道的都会被拒。`--guide FILE`（可重复）把项目规范附进每次提示，`--model` 选模型，`--dry-run` 只打印将要执行的 argv。
 
+review 角色默认展开为多视角子代理：正确性、安全、架构合规（对照 design_plan 与知识库）、测试质量四个并行会话看同一份证据，各自只报能指到文件或证据的 finding；再由一个主评审会话合并成最终 verdict，丢弃子视角的 finding 必须在 summary 里说明理由。`--review-perspectives correctness,security`（子集）或 `none`（单会话）可调，`--review-parallel` 控制并发。引擎协议不变，只多了 `_telemetry.perspectives`。
+
 返回对象里附带 `_telemetry`（费用、轮数、时长、token、段数、模型），引擎剥离后记入成本账本并汇总到验收报告。
 就地构建产生的 `target/`、`node_modules/` 等目录需要在 `storyloop init --settings` 的 `scratch_paths` 里声明，否则会判 WORKSPACE_TAINTED；不想声明时用 `examples/tools/scratch_build.py` 在临时目录构建。
 

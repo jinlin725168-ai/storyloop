@@ -33,7 +33,7 @@ flowchart LR
 
 ## 角色内部的子代理（适配器侧，可选）
 
-- `review`：正确性、安全、架构合规（对照 extension.md 与 building-blocks.md）、测试质量（Tests First 是否真实）四个视角并行，主评审汇总 verdict。
+- `review`：正确性、安全、架构合规（对照 design_plan、extension.md 与 building-blocks.md）、测试质量（Tests First 是否真实）四个视角并行，主评审汇总 verdict。Claude 适配器已实现（默认开启，`--review-perspectives` 可调）。
 - `implement`：全栈变更按方案拆后端、前端、SQL 子代理并行，主实现者集成并跑分层检查。
 - `acceptance`：接口用例与浏览器用例分开写。
 
