@@ -61,7 +61,8 @@ flowchart LR
   "adapter": "command",
   "agent_command": ["{python}", "/abs/path/storyloop/examples/claude-code/claude_agent.py",
                     "--bash", "mvn:*", "--bash", "pnpm:*", "--bash", "npx:*",
-                    "--guide", "/abs/path/my-project/acceptance/AGENT_GUIDE.md"],
+                    "--guide", "/abs/path/my-project/acceptance/AGENT_GUIDE.md",
+                    "--implement-lanes", "backend=backend/ruoyi-modules/,frontend=frontend/src/,sql=sql/biz/"],
   "max_attempts": 4,
   "agent_timeout_seconds": 14400,
   "check_timeout_seconds": 1200

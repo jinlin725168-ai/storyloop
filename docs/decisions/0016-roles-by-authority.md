@@ -10,7 +10,7 @@
 
 - 引擎角色只在权限不同（能写什么、能看什么、结论是否为门）时单独设立；关注点不同的分工放在角色内部用子代理（适配器侧），引擎协议不变。
 - 新增 `design` 角色（架构师）：RED 之后、特征化之前，只读地产出方案（Files、Data And Interfaces、Decisions、Risks）和将修改的既有文件 `touched`；`touched` 成为特征化门的必锁清单，方案是 implement 的输入和 review 的对照物；方案问题走 `NEEDS_INPUT`。完成时 design.md = 方案 + 实现记录。
-- review 多视角子代理已在 Claude 适配器实现（2026-09-24）：四个并行视角 + 主评审合并，引擎协议不变。implement 按层拆子代理待做。
+- review 多视角子代理已在 Claude 适配器实现（2026-09-24）：四个并行视角 + 主评审合并，引擎协议不变。implement 按层拆通道也已实现（同日）：主实现者规划通道 → 通道并行 → 主实现者 `--resume` 集成，需要 design_plan，`--implement-lanes` 配置路径前缀。
 - 明确不设：DevOps、技术文档、UX 角色。
 
 ## 理由

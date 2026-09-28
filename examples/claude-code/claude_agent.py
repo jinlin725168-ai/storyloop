@@ -119,6 +119,32 @@ REVIEW_PERSPECTIVES = {
         "assertions must be meaningful (no tautologies, no tests that pass without the change)."
     ),
 }
+# Implement can split a full-stack change into per-layer lanes: a lead session plans the lanes from the
+# architect's design_plan, lane sessions work in parallel on disjoint path prefixes, and the same lead
+# session (resumed, so it keeps the plan in context) integrates, runs the checks and writes the record.
+LANE_PLAN_MARK = "[implement lead: plan lanes]"
+LANE_MARK = "[implement lane: {name}]"
+LANE_INTEGRATE_MARK = "[implement lead: integrate]"
+LANE_PLAN_RULES = (
+    "You are the lead implementer. Do NOT write any file in this step. Read payload.design_plan and decide "
+    "which of the configured lanes have work in this change; each lane is one layer owned by one "
+    "parallel implementer. Return ONLY {lanes:[{name:string, task:string}]} using only configured lane "
+    "names; `task` is a precise brief for that lane (files to create or modify, interfaces to expose or "
+    "consume, tests to write first). Lanes that have nothing to do are omitted."
+)
+LANE_RULES = (
+    "You are one lane of a parallel implementation. Only create or modify files under the lane's path "
+    "prefixes listed below; other lanes are editing other paths right now, so never touch them and never "
+    "run project-wide formatters, git commands that stage or the full regression. Work test-first within "
+    "your layer. Return ONLY {summary:string, files:[string], questions:[]}: `files` lists every path you "
+    "created or modified."
+)
+LANE_INTEGRATE_RULES = (
+    "Every lane has finished; their reports follow. Integrate: reconcile interfaces between layers, run the "
+    "project's build and unit/integration commands, fix whatever breaks (in any lane's files), and then "
+    "return the final implement result exactly as {summary:string, questions:[string], design:string}; "
+    "the design's ## Tests First must cover the tests of every lane."
+)
 PERSPECTIVE_MARK = "[review perspective: {name}]"
 LEAD_MARK = "[lead reviewer]"
 PERSPECTIVE_SCHEMA = (
@@ -157,6 +183,9 @@ def main_with_args(argv: list[str] | None) -> int:
     parser.add_argument("--review-perspectives", default=",".join(REVIEW_PERSPECTIVES),
                         help="comma-separated review perspectives run as parallel sub-agents, or 'none'")
     parser.add_argument("--review-parallel", type=int, default=4, help="max concurrent perspective sessions")
+    parser.add_argument("--implement-lanes", default="",
+                        help="per-layer implement lanes as name=path-prefix,name=path-prefix (needs a design_plan)")
+    parser.add_argument("--implement-parallel", type=int, default=3, help="max concurrent lane sessions")
     args = parser.parse_args(argv)
     segment_turns = args.max_turns or args.segment_turns
 
@@ -179,8 +208,11 @@ def main_with_args(argv: list[str] | None) -> int:
     perspectives = [p for p in args.review_perspectives.split(",") if p and p != "none"]
     if role == "review" and perspectives:
         return _review_with_perspectives(request, base, args, perspectives)
+    lanes = _parse_lanes(args.implement_lanes)
+    if role == "implement" and lanes and (request.get("payload") or {}).get("design_plan"):
+        return _implement_with_lanes(request, base, prompt, args, lanes)
 
-    result, telemetry = _run_session(base, prompt, role, args, request.get("project"))
+    result, telemetry, _ = _run_session(base, prompt, role, args, request.get("project"))
     if result is None:
         return 1
     return _emit(result, telemetry, role)
@@ -199,10 +231,11 @@ def _new_telemetry() -> dict:
             "output_tokens": 0, "segments": 0, "models": set()}
 
 
-def _run_session(base: list[str], prompt: str, role: str, args, cwd) -> tuple[dict | None, dict]:
-    """One claude session: resume on turn caps, ask for JSON on prose endings; (result, telemetry)."""
+def _run_session(base: list[str], prompt: str, role: str, args, cwd,
+                 session: str | None = None) -> tuple[dict | None, dict, str | None]:
+    """One claude session (optionally resuming `session`): resume on turn caps, ask for JSON on prose
+    endings; returns (result, telemetry, session_id)."""
     telemetry = _new_telemetry()
-    session = None
     next_prompt = prompt
     repairs = 0
     for segment in range(1, args.max_segments + 1):
@@ -216,7 +249,7 @@ def _run_session(base: list[str], prompt: str, role: str, args, cwd) -> tuple[di
         except json.JSONDecodeError:
             print(f"claude {role} exited {completed.returncode} without a JSON envelope: "
                   f"{completed.stderr[-4000:]}", file=sys.stderr)
-            return None, telemetry
+            return None, telemetry, session
         _accumulate(telemetry, envelope)
         session = envelope.get("session_id") or session
         subtype = envelope.get("subtype", "success")
@@ -225,7 +258,7 @@ def _run_session(base: list[str], prompt: str, role: str, args, cwd) -> tuple[di
             continue
         if envelope.get("is_error") or subtype != "success":
             print(f"claude {role} ended with {subtype}: {envelope.get('result')}", file=sys.stderr)
-            return None, telemetry
+            return None, telemetry, session
         result = _extract_object(envelope.get("result", ""))
         if result is None:
             if session and repairs < REPAIR_LIMIT:
@@ -235,11 +268,11 @@ def _run_session(base: list[str], prompt: str, role: str, args, cwd) -> tuple[di
                       f"(repair {repairs}/{REPAIR_LIMIT})", file=sys.stderr)
                 continue
             print(f"claude {role}: result was not a JSON object", file=sys.stderr)
-            return None, telemetry
-        return result, telemetry
+            return None, telemetry, session
+        return result, telemetry, session
     print(f"claude {role}: gave up after {args.max_segments} segments "
           f"({telemetry['turns']} turns); the agent is looping, not just slow", file=sys.stderr)
-    return None, telemetry
+    return None, telemetry, session
 
 
 def _review_with_perspectives(request: dict, base: list[str], args, perspectives: list[str]) -> int:
@@ -253,7 +286,7 @@ def _review_with_perspectives(request: dict, base: list[str], args, perspectives
     def run_perspective(name: str) -> tuple[str, dict | None, dict]:
         extra = f"{PERSPECTIVE_MARK.format(name=name)}\n{REVIEW_PERSPECTIVES[name]}\n{PERSPECTIVE_SCHEMA}"
         prompt = _prompt(request, "review", args.guide, extra=extra, schema=False)
-        result, telemetry = _run_session(base, prompt, f"review/{name}", args, cwd)
+        result, telemetry, _ = _run_session(base, prompt, f"review/{name}", args, cwd)
         return name, result, telemetry
 
     with ThreadPoolExecutor(max_workers=max(1, args.review_parallel)) as pool:
@@ -268,7 +301,7 @@ def _review_with_perspectives(request: dict, base: list[str], args, perspectives
     digest = json.dumps({name: result for name, result, _ in reports}, ensure_ascii=False, indent=1)
     lead_prompt = _prompt(request, "review", args.guide,
                           extra=f"{LEAD_MARK}\n{LEAD_RULES}\n\nPerspective reports:\n{digest}", schema=False)
-    result, telemetry = _run_session(base, lead_prompt, "review/lead", args, cwd)
+    result, telemetry, _ = _run_session(base, lead_prompt, "review/lead", args, cwd)
     _merge_telemetry(total, telemetry)
     if result is None:
         return 1
@@ -278,6 +311,68 @@ def _review_with_perspectives(request: dict, base: list[str], args, perspectives
     result = {key: result[key] for key in ("verdict", "summary", "findings", "questions")}
     total["perspectives"] = len(perspectives)
     return _emit(result, total, "review")
+
+
+def _parse_lanes(value: str) -> dict[str, str]:
+    lanes: dict[str, str] = {}
+    for item in [v for v in value.split(",") if v.strip()]:
+        name, separator, prefix = item.partition("=")
+        if not separator or not name.strip() or not prefix.strip():
+            raise SystemExit(f"invalid --implement-lanes entry: {item!r} (expected name=path-prefix)")
+        lanes[name.strip()] = prefix.strip()
+    return lanes
+
+
+def _implement_with_lanes(request: dict, base: list[str], single_prompt: str, args,
+                          lanes: dict[str, str]) -> int:
+    """Lead plans the lanes, lanes implement their layers in parallel, the lead integrates."""
+    cwd = request.get("project")
+    total = _new_telemetry()
+    configured = "\n".join(f"- {name}: {prefix}" for name, prefix in lanes.items())
+    plan_prompt = _prompt(request, "implement", args.guide,
+                          extra=f"{LANE_PLAN_MARK}\n{LANE_PLAN_RULES}\nConfigured lanes:\n{configured}",
+                          schema=False)
+    plan, telemetry, lead = _run_session(base, plan_prompt, "implement/lead", args, cwd)
+    _merge_telemetry(total, telemetry)
+    if plan is None:
+        return 1
+    chosen = [item for item in (plan.get("lanes") or []) if isinstance(item, dict)
+              and item.get("name") in lanes and isinstance(item.get("task"), str)]
+    if len(chosen) < 2:
+        print(f"claude implement: {len(chosen)} lane(s) planned, running as one session", file=sys.stderr)
+        result, telemetry, _ = _run_session(base, single_prompt, "implement", args, cwd)
+        _merge_telemetry(total, telemetry)
+        return 1 if result is None else _emit(result, total, "implement")
+
+    def run_lane(item: dict) -> tuple[str, dict | None, dict]:
+        name = item["name"]
+        extra = (f"{LANE_MARK.format(name=name)}\n{LANE_RULES}\nOnly create or modify files under: "
+                 f"{lanes[name]}\nYour task:\n{item['task']}")
+        prompt = _prompt(request, "implement", args.guide, extra=extra, schema=False)
+        result, telemetry, _ = _run_session(base, prompt, f"implement/{name}", args, cwd)
+        return name, result, telemetry
+
+    with ThreadPoolExecutor(max_workers=max(1, args.implement_parallel)) as pool:
+        reports = list(pool.map(run_lane, chosen))
+    for _, _, telemetry in reports:
+        _merge_telemetry(total, telemetry)
+    failed = [name for name, result, _ in reports if result is None]
+    if failed:
+        print(f"claude implement: lane(s) failed: {', '.join(failed)}", file=sys.stderr)
+        return 1
+    digest = json.dumps({name: result for name, result, _ in reports}, ensure_ascii=False, indent=1)
+    integrate_prompt = (f"{LANE_INTEGRATE_MARK}\n{LANE_INTEGRATE_RULES}\n\nLane reports:\n{digest}\n"
+                        f"{SCHEMA_HINTS['implement']}")
+    result, telemetry, _ = _run_session(base, integrate_prompt, "implement/lead", args, cwd, session=lead)
+    _merge_telemetry(total, telemetry)
+    if result is None:
+        return 1
+    if not ({"summary", "questions", "design"} <= set(result)):
+        print("claude implement: lead result lacks summary/questions/design", file=sys.stderr)
+        return 1
+    result = {key: result[key] for key in ("summary", "questions", "design")}
+    total["lanes"] = len(chosen)
+    return _emit(result, total, "implement")
 
 
 def _merge_telemetry(total: dict, part: dict) -> None:

@@ -184,5 +184,119 @@ class ReviewPerspectiveTests(unittest.TestCase):
         self.assertIn("tests", err.getvalue())
 
 
+class ImplementLaneTests(unittest.TestCase):
+    """implement splits a full-stack change into per-layer lanes (parallel sessions) and integrates."""
+
+    LANES = ["--implement-lanes", "backend=backend/,frontend=frontend/src/,sql=sql/"]
+
+    def _request(self, plan=True):
+        return {"role": "implement", "project": "/tmp/p", "instructions": "implement it",
+                "payload": {"change": {"change_id": "FEAT-1"}, "attempt": 1, "failures": [], "answers": [],
+                            "characterization": None,
+                            "design_plan": ({"summary": "s", "touched": ["backend/A.java"],
+                                             "design": "## Files\n- backend/A.java\n- frontend/src/x.vue\n"}
+                                            if plan else None)}}
+
+    def test_lead_plans_lanes_run_in_parallel_and_the_lead_integrates(self):
+        calls = []
+
+        def fake_run(command, **kwargs):
+            prompt = kwargs.get("input", "")
+            calls.append((command, prompt))
+            if adapter.LANE_PLAN_MARK in prompt:
+                self.assertNotIn("--resume", command)
+                plan = {"lanes": [{"name": "backend", "task": "add the condition"},
+                                  {"name": "frontend", "task": "add the input"}]}
+                return Completed(envelope("success", json.dumps(plan), "lead-sid", 0.2, 4))
+            if adapter.LANE_INTEGRATE_MARK in prompt:
+                self.assertIn("--resume", command)  # the lead keeps its own context
+                self.assertEqual(command[command.index("--resume") + 1], "lead-sid")
+                self.assertIn("backend/A.java", prompt)  # lane reports reach the lead
+                result = {"summary": "integrated", "questions": [], "design": "## Tests First\nok\n"}
+                return Completed(envelope("success", json.dumps(result), "lead-sid", 0.3, 6))
+            for name in ("backend", "frontend", "sql"):
+                if adapter.LANE_MARK.format(name=name) in prompt:
+                    self.assertIn("Only create or modify files under", prompt)
+                    files = ["backend/A.java"] if name == "backend" else ["frontend/src/x.vue"]
+                    result = {"summary": f"{name} done", "files": files, "questions": []}
+                    return Completed(envelope("success", json.dumps(result), f"sid-{name}", 0.5, 10))
+            raise AssertionError("unexpected prompt")
+
+        with patch.object(adapter.subprocess, "run", fake_run), \
+                patch.object(adapter.shutil, "which", return_value="/usr/bin/claude"), \
+                patch("sys.stdin", io.StringIO(json.dumps(self._request()))), \
+                patch("sys.stdout", new_callable=io.StringIO) as out, \
+                patch("sys.stderr", new_callable=io.StringIO):
+            code = adapter.main_with_args(self.LANES)
+        self.assertEqual(code, 0)
+        self.assertEqual(len(calls), 4)  # plan + 2 lanes + integrate; the sql lane had no work
+        result = json.loads(out.getvalue())
+        self.assertEqual(set(result) - {"_telemetry"}, {"summary", "questions", "design"})
+        self.assertEqual(result["_telemetry"]["lanes"], 2)
+        self.assertAlmostEqual(result["_telemetry"]["cost_usd"], 0.2 + 0.5 + 0.5 + 0.3)
+
+    def test_a_single_lane_falls_back_to_one_ordinary_session(self):
+        calls = []
+
+        def fake_run(command, **kwargs):
+            prompt = kwargs.get("input", "")
+            calls.append(prompt)
+            if adapter.LANE_PLAN_MARK in prompt:
+                return Completed(envelope("success", json.dumps({"lanes": [{"name": "backend", "task": "all"}]}),
+                                          "lead-sid", 0.1, 2))
+            result = {"summary": "done", "questions": [], "design": "## Tests First\nok\n"}
+            return Completed(envelope("success", json.dumps(result), "one", 0.9, 20))
+
+        with patch.object(adapter.subprocess, "run", fake_run), \
+                patch.object(adapter.shutil, "which", return_value="/usr/bin/claude"), \
+                patch("sys.stdin", io.StringIO(json.dumps(self._request()))), \
+                patch("sys.stdout", new_callable=io.StringIO) as out, \
+                patch("sys.stderr", new_callable=io.StringIO):
+            code = adapter.main_with_args(self.LANES)
+        self.assertEqual(code, 0)
+        self.assertEqual(len(calls), 2)
+        self.assertNotIn(adapter.LANE_MARK.format(name="backend"), calls[1])
+        self.assertEqual(json.loads(out.getvalue())["summary"], "done")
+
+    def test_lanes_are_off_without_a_plan_or_without_the_flag(self):
+        for argv, request in ([], self._request()), (self.LANES, self._request(plan=False)):
+            calls = []
+
+            def fake_run(command, **kwargs):
+                calls.append(kwargs.get("input", ""))
+                result = {"summary": "done", "questions": [], "design": "## Tests First\nok\n"}
+                return Completed(envelope("success", json.dumps(result), "one", 0.9, 20))
+
+            with patch.object(adapter.subprocess, "run", fake_run), \
+                    patch.object(adapter.shutil, "which", return_value="/usr/bin/claude"), \
+                    patch("sys.stdin", io.StringIO(json.dumps(request))), \
+                    patch("sys.stdout", new_callable=io.StringIO), \
+                    patch("sys.stderr", new_callable=io.StringIO):
+                code = adapter.main_with_args(argv)
+            self.assertEqual(code, 0)
+            self.assertEqual(len(calls), 1)
+            self.assertNotIn(adapter.LANE_PLAN_MARK, calls[0])
+
+    def test_a_failing_lane_fails_the_implement_call(self):
+        def fake_run(command, **kwargs):
+            prompt = kwargs.get("input", "")
+            if adapter.LANE_PLAN_MARK in prompt:
+                plan = {"lanes": [{"name": "backend", "task": "a"}, {"name": "frontend", "task": "b"}]}
+                return Completed(envelope("success", json.dumps(plan), "lead-sid", 0.1, 2))
+            if adapter.LANE_MARK.format(name="frontend") in prompt:
+                return Completed(envelope("error_during_execution", "boom", "sid-f", 0.1, 1), returncode=1)
+            return Completed(envelope("success", json.dumps({"summary": "ok", "files": [], "questions": []}),
+                                      "sid-b", 0.1, 2))
+
+        with patch.object(adapter.subprocess, "run", fake_run), \
+                patch.object(adapter.shutil, "which", return_value="/usr/bin/claude"), \
+                patch("sys.stdin", io.StringIO(json.dumps(self._request()))), \
+                patch("sys.stdout", new_callable=io.StringIO), \
+                patch("sys.stderr", new_callable=io.StringIO) as err:
+            code = adapter.main_with_args(self.LANES)
+        self.assertEqual(code, 1)
+        self.assertIn("frontend", err.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
