@@ -4,6 +4,7 @@ implement and review; questions pause the run; it never writes the workspace."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -14,6 +15,7 @@ from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
 from storyloop.changes import create_change
 from storyloop.models import StoryLoopError
+from storyloop.storage import load_json, write_json
 from storyloop.project_loop import LoopServices, load_run_state, run_change
 from tests.support import product
 from tests.test_baseline_behavior import git, repository
@@ -26,7 +28,8 @@ PLAN = ("## Context\nOrders live in modules/orders.\n\n## Goals\nExpose VALUE.\n
         "## Risks And Trade-Offs\nNone.\n")
 
 
-def _repo(settings: dict):
+def _repo(settings: dict, design_min_stories: int = 1, stories: int = 1):
+    """A repo with an approved single-story change; design_min_stories=1 makes the architect run for it."""
     temporary = tempfile.TemporaryDirectory()
     root = Path(temporary.name)
     repository(root)
@@ -41,9 +44,24 @@ def _repo(settings: dict):
         "        self.assertTrue(True)\n", encoding="utf-8")
     git(root, "add", "."); git(root, "commit", "-q", "-m", "existing")
     bootstrap_project(root, settings)
-    state = create_change(root, "orders", product(), now=lambda: NOW)
+    config = load_json(root / ".storyloop/config.json")
+    config["design_min_stories"] = design_min_stories
+    write_json(root / ".storyloop/config.json", config)
+    state = create_change(root, "orders", _product_with(stories), now=lambda: NOW)
     approve_change(root, state["change_id"], now=lambda: NOW)
     return temporary, root, state["change_id"]
+
+
+def _product_with(stories: int) -> dict:
+    value = product()
+    first = value["stories"][0]
+    for n in range(2, stories + 1):
+        story = json.loads(json.dumps(first))
+        story["id"] = f"ST-{n}"; story["title"] = f"{first['title']} {n}"
+        for criterion in story["acceptance"]:
+            criterion["id"] = f"{criterion['id']}-{n}"
+        value["stories"].append(story)
+    return value
 
 
 def _implement(project, context):
@@ -51,8 +69,13 @@ def _implement(project, context):
     return {"summary": "done", "questions": [], "design": "## Tests First\nnone needed\n"}
 
 
-def _services(change_id, design, implement=_implement, characterize=None, seen=None):
+def _services(change_id, design, implement=_implement, characterize=None, seen=None, criteria=("AC-1",)):
     seen = seen if seen is not None else {}
+
+    def smoke(project, state):
+        payload = smoke_payload(change_id)
+        payload["manifest"]["tests"][0]["criteria"] = list(criteria)
+        return payload
 
     def remember(name, fn):
         def wrapped(project, context):
@@ -61,7 +84,7 @@ def _services(change_id, design, implement=_implement, characterize=None, seen=N
         return wrapped
 
     return LoopServices(
-        generate_smoke=lambda project, state: smoke_payload(change_id),
+        generate_smoke=smoke,
         implement=remember("implement", implement),
         review=remember("review", lambda project, context: {"verdict": "pass", "summary": "ok", "findings": [],
                                                              "questions": []}),
@@ -154,6 +177,54 @@ class DesignRoleTests(unittest.TestCase):
             self.assertEqual(result["status"], "PASSED")
             self.assertEqual(load_run_state(root, change_id)["design_plan"]["status"], "SKIPPED")
             self.assertIsNone(seen["implement"][0]["design_plan"])
+        finally:
+            temporary.cleanup()
+
+
+class DesignSkipPolicyTests(unittest.TestCase):
+    """Small changes skip the architect: by default a single-story change is small."""
+
+    def _design(self):
+        return lambda project, context: {"summary": "plan", "touched": ["modules/orders/service.py"],
+                                         "design": PLAN, "questions": []}
+
+    def test_a_single_story_change_skips_design_by_default(self):
+        temporary, root, change_id = _repo({"unit_commands": [UNIT]}, design_min_stories=2)
+        seen: dict = {}
+        try:
+            result = run_change(root, change_id, _services(change_id, self._design(), seen=seen))
+            self.assertEqual(result["status"], "PASSED")
+            self.assertNotIn("design", seen)
+            plan = load_run_state(root, change_id)["design_plan"]
+            self.assertEqual(plan["status"], "SKIPPED")
+            self.assertIn("1 story", plan["reason"])
+            self.assertIsNone(seen["implement"][0]["design_plan"])
+        finally:
+            temporary.cleanup()
+
+    def test_two_stories_run_design_by_default(self):
+        temporary, root, change_id = _repo({"unit_commands": [UNIT]}, design_min_stories=2, stories=2)
+        seen: dict = {}
+        try:
+            result = run_change(root, change_id, _services(change_id, self._design(), seen=seen,
+                                                           criteria=("AC-1", "AC-1-2")))
+            self.assertEqual(result["status"], "PASSED")
+            self.assertEqual(len(seen["design"]), 1)
+            self.assertEqual(load_run_state(root, change_id)["design_plan"]["status"], "DONE")
+        finally:
+            temporary.cleanup()
+
+    def test_the_threshold_is_configurable_and_a_fresh_project_defaults_to_two(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"unit_commands": []})
+            self.assertEqual(load_json(root / ".storyloop/config.json")["design_min_stories"], 2)
+        temporary, root, change_id = _repo({"unit_commands": [UNIT]}, design_min_stories=1)
+        seen: dict = {}
+        try:
+            run_change(root, change_id, _services(change_id, self._design(), seen=seen))
+            self.assertEqual(len(seen["design"]), 1)
         finally:
             temporary.cleanup()
 

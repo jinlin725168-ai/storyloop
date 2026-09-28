@@ -87,7 +87,7 @@ def _run_change_locked(
         return _finalize_change(project, change, state)
     if fresh or state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED"}:
         _prepare_acceptance(project, change, services, state)
-    paused = _ensure_design(project, change, state, services) or \
+    paused = _ensure_design(project, change, state, services, config) or \
         _ensure_characterization(project, change, state, services, config)
     if paused is not None:
         return paused
@@ -551,17 +551,30 @@ def _design_plan(state: dict) -> dict | None:
     return {"summary": plan["summary"], "touched": list(plan["touched"]), "design": plan["design"]}
 
 
-def _ensure_design(project: Path, change: dict, state: dict, services: LoopServices) -> dict | None:
+def _ensure_design(project: Path, change: dict, state: dict, services: LoopServices,
+                   config: dict) -> dict | None:
     """The architect step, once per change after RED: a read-only plan naming the files to modify.
 
     Its `touched` list seeds the characterization gate and its Markdown is what implement follows
     and review checks against. Design questions pause the run like any other agent question.
+    Small changes skip it: fewer stories than `design_min_stories` (default 2) means the
+    characterize and implement roles work from the contract alone.
     """
     current = state.get("design_plan") or {}
     if current.get("status") in {"DONE", "SKIPPED"}:
         return None
+    reason = None
     if services.design is None:
-        state["design_plan"] = {"status": "SKIPPED", "reason": "no design service", "touched": [], "design": ""}
+        reason = "no design service"
+    else:
+        minimum = config.get("design_min_stories", 2)
+        require(type(minimum) is int and minimum >= 1, "design_min_stories must be a positive integer")
+        stories = len(change["product"]["stories"])
+        if stories < minimum:
+            reason = (f"small change: {stories} {'story' if stories == 1 else 'stories'} "
+                      f"< design_min_stories {minimum}")
+    if reason:
+        state["design_plan"] = {"status": "SKIPPED", "reason": reason, "touched": [], "design": ""}
         _save_run(project, state)
         return None
     change_id = change["change_id"]

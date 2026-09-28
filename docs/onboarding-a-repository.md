@@ -66,11 +66,13 @@ flowchart LR
                     "--implement-lanes", "backend=backend/ruoyi-modules/,frontend=frontend/src/,sql=sql/biz/"],
   "max_attempts": 4,
   "agent_timeout_seconds": 14400,
-  "check_timeout_seconds": 1200
+  "check_timeout_seconds": 1200,
+  "design_min_stories": 2
 }
 ```
 
 - `--bash` 只放行构建和测试工具的前缀；不要放行 `git -C:*` 这类能绕到写操作的前缀。
+- `design_min_stories`：故事数达到它才运行 design 角色（默认 2，单故事变更跳过）；全栈或跨模块变更通常故事更多，自然会触发。
 - `max_attempts` 是质量预算。全栈故事通常 2 到 4 轮；`agent_timeout_seconds` 只防挂死，别用它限制代理。
 - 用 `--dry-run` 看适配器实际拼出的 `claude` argv。
 

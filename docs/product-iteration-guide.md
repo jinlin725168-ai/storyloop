@@ -127,7 +127,7 @@ storyloop approve C:\work\my-project --change FEAT-20260916-001
 3. 将批准合同物化到 `openspec/changes/<change-id>/`（含增量规格），装了 `openspec` CLI 时校验结构。
 4. acceptance 角色只看合同盲写 `acceptance/changes/<change-id>/` 变更验收套件（接口优先，浏览器用例只覆盖核心链路），与合同一起提交。
 5. 在隔离候选副本里证明验收套件因功能缺失而失败（验收级 RED）。
-6. 方案：design 角色（架构师）只读地对照知识库的扩展机制和积木写出方案（Files、Data And Interfaces、Decisions、Risks），并列出将修改的既有文件 `touched`；方案里留有真实决策时停在 `NEEDS_INPUT`。方案喂给后面每个角色，完成时归档为 design.md 的前半部分。
+6. 方案：design 角色（架构师）只读地对照知识库的扩展机制和积木写出方案（Files、Data And Interfaces、Decisions、Risks），并列出将修改的既有文件 `touched`；方案里留有真实决策时停在 `NEEDS_INPUT`。方案喂给后面每个角色，完成时归档为 design.md 的前半部分。小改动自动跳过：故事数少于 `.storyloop/config.json` 的 `design_min_stories`（默认 2，即单故事变更不出方案）时记为 SKIPPED，characterize 与 implement 直接从合同工作；把它设成 1 则每个变更都出方案。
 7. 特征化门：characterize 角色以方案的 `touched` 为必锁清单，为这些既有文件写只断言"必须不变"行为的测试（扩展的列表用 contains），引擎要求这些测试在旧代码上跑绿、只改了 `test_roots` 内的文件，然后提交。项目没配 `test_roots` 或单元命令时跳过。
 8. 调用实现代理（TDD 先红后绿），然后依次跑：单元测试 → 集成测试 → 变更验收 → 系统冒烟 → 静态检查，每层各自出结论；任何一层红就带着证据进入下一轮尝试。实现改了未声明的既有文件时，引擎把它们还原到合同提交、补做特征化再重试。代理提出真实产品歧义时停在 `NEEDS_INPUT`。
 9. 审计底座、模块、集成点、测试、系统冒烟和 CI 边界；集成点变化转为底座提案。

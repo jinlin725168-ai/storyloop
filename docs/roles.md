@@ -7,7 +7,7 @@
 | 架构师 / 技术负责人（摸底） | `survey` | 无（只读） | 整个仓库 | `openspec/foundation/` 底座知识库（经 BASE 迭代受保护） | 否，是所有角色的输入 |
 | 产品经理 / BA | `product` | 无 | 意图、知识库的能力清单与活规格、澄清回答 | 合同：故事、EARS 规则、Given/When/Then 条件、澄清记录 | 人批准才生效 |
 | 测试 / QA | `acceptance` | `acceptance/changes/<id>/`（仅生成与修复时） | 合同、知识库的 testing 与 building-blocks | 变更验收套件（先红）；合并后的系统冒烟提议 | 套件是门；提议需人 `smoke-apply` |
-| 架构师（方案） | `design` | 无 | 合同、知识库的 extension / building-blocks / modules、既有代码 | 方案：Files、Data And Interfaces、Decisions、Risks，以及将修改的既有文件 `touched` | 否，但 `touched` 喂特征化门，方案是审查的对照物 |
+| 架构师（方案） | `design` | 无 | 合同、知识库的 extension / building-blocks / modules、既有代码 | 方案：Files、Data And Interfaces、Decisions、Risks，以及将修改的既有文件 `touched` | 否，但 `touched` 喂特征化门，方案是审查的对照物；故事数少于 `design_min_stories`（默认 2）时跳过 |
 | 开发（开工前） | `characterize` | `test_roots` | 合同、方案的 `touched` | 锁定现有行为的特征化测试，在旧代码上跑绿 | 是（机器验证） |
 | 开发 | `implement` | 可变区 + `test_roots`，既有文件只限 `touched` | 合同、方案、失败证据、答案、已锁定路径 | 代码；`design` 记录（Tests First、Decisions） | 由各层验证判定 |
 | 代码评审 | `review` | 无（只读 + 受限命令） | 合同、各层证据、方案、实现记录、知识库 | verdict + findings | 是 |

@@ -43,6 +43,7 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
         "max_attempts": 3,
         "agent_timeout_seconds": 14400,  # liveness guard only; the budget is max_attempts
         "check_timeout_seconds": 300,
+        "design_min_stories": 2,  # the architect step runs for changes with at least this many stories
         "profile": profile,
     }
     baseline = {
