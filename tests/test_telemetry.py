@@ -12,7 +12,7 @@ from storyloop.baseline import bootstrap_project, load_project_config
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import invoke_project_agent
 from storyloop.project_loop import load_run_state, run_change
-from storyloop.storage import write_json
+from storyloop.storage import load_json, write_json
 from storyloop.project_loop import LoopServices
 from storyloop.telemetry import adopt_pending, record_call, summarize
 from tests.test_project_loop import smoke_payload
@@ -26,7 +26,7 @@ if request["role"] == "product":
     result = {"version": 1, "goal": "g", "non_goals": [], "questions": [], "stories": []}
 else:
     result = {"summary": "ok", "questions": []}
-result["_telemetry"] = {"cost_usd": 0.12, "turns": 3, "duration_ms": 1500, "model": "claude-x"}
+result["_telemetry"] = {"cost_usd": 0.12, "turns": 3, "duration_ms": 1500, "model": "claude-x", "lanes": 2}
 print(json.dumps(result))
 '''
 
@@ -93,6 +93,8 @@ class TelemetryTests(unittest.TestCase):
             self.assertAlmostEqual(summary["cost_usd"], 0.12)
             self.assertEqual(summary["by_role"]["implement"]["turns"], 3)
             self.assertGreater(summary["agent_ms"], 0)
+            entry = load_json(root / ".storyloop/state/telemetry/FEAT-1.json")["entries"][0]
+            self.assertEqual(entry.get("lanes"), 2)  # adapter-side sub-agent counts are kept in the ledger
 
     def test_product_calls_before_a_change_exists_are_adopted_later(self):
         with tempfile.TemporaryDirectory() as folder:

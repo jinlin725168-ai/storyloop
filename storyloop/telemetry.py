@@ -11,7 +11,7 @@ from .storage import load_json, write_json
 
 Clock = Callable[[], datetime]
 PENDING = "pending"  # product calls made before the change id exists
-NUMERIC = ("cost_usd", "turns", "duration_ms", "input_tokens", "output_tokens", "segments")
+NUMERIC = ("cost_usd", "turns", "duration_ms", "input_tokens", "output_tokens", "segments", "lanes", "perspectives")
 
 
 def record_call(project: Path, role: str, change_id: str | None, telemetry: object,
