@@ -24,7 +24,8 @@ flowchart LR
 
 ```json
 {
-  "unit_commands": [["mvn", "-q", "-o", "-f", "backend/pom.xml", "-Dmaven.test.skip=false", "-DskipTests=false", "-pl", "ruoyi-admin", "-am", "test"]],
+  "unit_commands": [["mvn", "-q", "-o", "-f", "backend/pom.xml", "-Dmaven.test.skip=false", "-DskipTests=false", "-pl", "ruoyi-admin", "-am", "test"],
+                    ["{python}", "acceptance/tools/frontend_unit.py"]],
   "integration_commands": [["mvn", "-q", "-o", "-f", "backend/pom.xml", "-Dmaven.test.skip=false", "-DskipTests=false", "-DskipITs=false", "-pl", "ruoyi-modules/ruoyi-biz", "failsafe:integration-test", "failsafe:verify"]],
   "check_commands": [["mvn", "-q", "-o", "-f", "backend/pom.xml", "-pl", "ruoyi-modules/ruoyi-biz", "spotless:check"],
                      ["mvn", "-q", "-o", "-f", "backend/pom.xml", "-pl", "ruoyi-modules/ruoyi-biz", "checkstyle:check"],
@@ -41,7 +42,7 @@ flowchart LR
 
 | 字段 | 含义 | 常见错误 |
 |---|---|---|
-| `unit_commands` | 单元测试命令 argv（旧名 `test_commands`），`{python}` 会替换成解释器；Windows 的 `.cmd/.bat/.ps1` 包装器不会执行 | 用 shell 字符串；依赖网络 |
+| `unit_commands` | 单元测试命令 argv（旧名 `test_commands`），`{python}` 会替换成解释器；每种语言一条，前端的 vitest 和后端一样是这一层（候选副本没有 `node_modules`，前端命令要走 scratch，参考 `frontend_unit.py`）；Windows 的 `.cmd/.bat/.ps1` 包装器不会执行 | 用 shell 字符串；依赖网络；漏掉前端 |
 | `integration_commands` | 集成测试命令，与单元分开出结论；代码里也要分开放（Maven：单元 `*Test` 走 surefire，集成 `*IT` 放 `…/integration/` 包走 failsafe） | 混在一条命令里 |
 | `check_commands` | 静态检查，每轮尝试在隔离候选副本里跑，因此只能放离线、确定性、几十秒内完成的工具：格式（Spotless）、编码约束（Checkstyle 或 PMD p3c）、前端 lint 与类型（oxlint / Biome、vue-tsc）、密钥扫描（gitleaks）。依赖漏洞（Trivy、OWASP Dependency-Check）和 SAST（Semgrep、CodeQL）依赖外部数据，放项目自己的 CI | 候选副本没有 `node_modules`，直接 `pnpm exec` 会失败：前端工具要先同步到 scratch 再跑（参考 `frontend_check.py`） |
 | `test_roots` | 测试文件所在目录或通配；implement / characterize 可写，特征化门据此判断"只改了测试" | 没配，导致特征化门被跳过、代理加测试撞底座 |
