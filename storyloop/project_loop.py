@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Callable
 
 from .approvals import materialize_approved_change
-from .baseline import (_git, advance_repository_head, load_project_config,
+from .baseline import (_git, advance_repository_head, load_baseline, load_project_config,
                        verify_baseline)
 from .boundaries import capture_snapshot, snapshot_changes
 from .change_report import generate_change_report
@@ -204,12 +204,27 @@ def _open_run(project: Path, change: dict) -> tuple[dict, int, bool]:
             verify_baseline(
                 project, resume=state["status"] not in {"MERGED", "FINALIZING"}
             )
+            _follow_base_upgrade(project, state)
         return state, int(state.get("attempt", 0)) + 1, False
     verify_baseline(project)
     state = _new_run_state(change_id, start_feature(project, change_id),
                            change["approval"]["contract_digest"])
     _save_run(project, state)
     return state, 1, True
+
+
+def _follow_base_upgrade(project: Path, state: dict) -> None:
+    """A base-update made while this feature was paused moves the source branch on purpose; the
+    run adopts the upgraded head (verify_baseline already proved it is an ancestor). Any other
+    movement of the source branch is still refused at completion."""
+    baseline = load_baseline(project)
+    if baseline["source_head"] == state["source_head"] or state["status"] in {"MERGED", "FINALIZING"}:
+        return
+    state.setdefault("base_upgrades", []).append({
+        "baseline_version": baseline["baseline_version"], "from": state["source_head"],
+        "to": baseline["source_head"]})
+    state["source_head"] = baseline["source_head"]
+    _save_run(project, state)
 
 
 def _run_attempt(

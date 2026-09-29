@@ -251,6 +251,16 @@ storyloop base-update C:\work\my-project --proposal BASE-20260916-001
 
 该命令要求实际提交路径与提案完全一致、原底座提交仍是祖先、至少一个回归命令真实通过，并把底座补丁版本加一。StoryLoop 不会自动丢弃或搬移功能分支上的未提交内容；这一步由用户按团队 Git 流程处理。
 
+如果提案是由一个正在运行的功能变更撞出来的（`BASE_CHANGE_REQUIRED`），锁定底座后回到功能分支，把源分支合并进来再续跑：
+
+```powershell
+git checkout feature/FEAT-20260916-001
+git merge --no-edit main
+storyloop run C:\work\my-project --change FEAT-20260916-001
+```
+
+续跑时引擎发现底座头已前移且功能分支包含它，就把运行的源头改到新底座，记入 `run.base_upgrades`；源分支因其他原因移动仍会在完成阶段被拒绝合并。功能分支上未提交的实现改动由用户处理（丢弃即可，下一轮会重做）。
+
 ## 8. 适配器
 
 默认使用本机已安装并登录的 Codex CLI，不保存 API 密钥。Codex 会话持久化在本机（不再 `--ephemeral`），代理以非 JSON 文本结束时引擎用 `codex exec resume` 在同一会话里让它补出 JSON，最多两次；token 用量从事件流记入成本账本（Codex 不报告金额）。`.storyloop/config.json` 也支持：
@@ -296,6 +306,6 @@ storyloop base-update C:\work\my-project --proposal BASE-20260916-001
 | `MANUAL_ACCEPTANCE_REQUIRED` | 自动验收全部通过，等人工条件 | `accept` 逐条，再 `run` |
 | `VERIFIED` / `FINALIZING` / `RECEIPTING` / `MERGED` | 完成阶段各步（幂等） | 自动；崩溃后 `run` |
 | `PASSED` | 已合并，报告含合并回执 | 无 |
-| `BASE_CHANGE_REQUIRED` | 功能触碰底座 | 独立提交后 `base-update`，再 `run` |
+| `BASE_CHANGE_REQUIRED` | 功能触碰底座 | 在源分支独立提交后 `base-update`，把源分支合进功能分支，再 `run` |
 | `BOUNDARY_VIOLATION` / `BUDGET_EXHAUSTED` | 越界写入 / 尝试用尽 | 人工判断；可 `acceptance-repair` 或修订合同 |
 | `WORKSPACE_TAINTED` | 工作区出现不该有的改动 | 清理后 `reset`，再 `run` |

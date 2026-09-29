@@ -64,7 +64,7 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 |---|---|---|
 | `NEEDS_INPUT` | 代理提出真实产品歧义 | 终端直接回答，或 `answer` |
 | `MANUAL_ACCEPTANCE_REQUIRED` | 自动验收全过，等人工条件 | `accept` 逐条，再 `run` |
-| `BASE_CHANGE_REQUIRED` | 功能触碰底座 | 独立提交后 `base-update`，再 `run` |
+| `BASE_CHANGE_REQUIRED` | 功能触碰底座 | 在源分支独立提交后 `base-update`，把源分支合进功能分支，再 `run` |
 | `WORKSPACE_TAINTED` | 工作区出现不该有的改动 | 清理后 `reset`，再 `run` |
 | `BUDGET_EXHAUSTED` | 尝试用尽 | 人判断：`acceptance-repair`、修订合同或放弃 |
 | `CHARACTERIZATION_FAILED` | 特征化测试在旧代码上不绿 | 修测试，再 `run` |
