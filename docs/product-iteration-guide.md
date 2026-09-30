@@ -274,6 +274,8 @@ storyloop run C:\work\my-project --change FEAT-20260916-001
 
 每次代理调用的墙钟时间都会记录；适配器若在结果里附带 `_telemetry`（费用、轮数、时长、token、模型，`examples/claude-code` 已实现），引擎会剥离并一起记录到 `.storyloop/state/telemetry/<change-id>.json`。验收报告的『成本与耗时』一节汇总每个角色的调用次数、轮数、耗时和费用，以及闭环墙钟和实现尝试轮数；`status --json` 的 `telemetry` 字段给出同样的数据。
 
+每次调用另有一份诊断记录 `.storyloop/state/telemetry/calls/<调用 ID>/`：`request.json`（逐字段脱敏）、`response.json`（或解析失败时的原文 `response.txt`）、`stderr.log`（适配器完整 stderr，脱敏）、`meta.json`（结果、错误码、结构问题、修复次数、代理会话 ID）。账本条目的 `call` 字段指向它，`session` 字段可直接用于 `codex resume <id>` 或 `claude --resume <id>` 回看代理当时做了什么。`storyloop log PATH --change ID` 把调用时间线、每轮失败原因和下一步命令汇总在一屏里。这些是排障材料，不是证据。
+
 预算的含义：`max_attempts` 是唯一的质量预算，连续几轮完整尝试都过不了验收就停下来交给人；`agent_timeout_seconds` 只是进程挂死保护（默认 4 小时），不是用来判断代理能不能做完的；适配器内部的圈数上限是检查点，到上限续同一会话而不是失败。
 
 ## 9. 明确停止点

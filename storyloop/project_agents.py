@@ -15,6 +15,7 @@ from .baseline import load_project_config
 from .models import StoryLoopError, require
 from .foundation_survey import foundation_payload
 from .skills import skill_text
+from .call_log import close_call, open_call
 from .processutil import redact, run_process
 from .role_schemas import normalize, schema_errors, schema_for, wire_schema
 from .storage import load_json, write_json
@@ -174,7 +175,9 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
     """Invoke one stateless agent using the repository-local adapter configuration.
 
     The role's JSON Schema travels with the request (`response_schema`) so adapters can have
-    their CLI enforce it natively; the engine checks the answer against it either way.
+    their CLI enforce it natively; the engine checks the answer against it either way. Every
+    call leaves a diagnostic record (request, answer, stderr, session ids) under the telemetry
+    ledger, named by the `call` id in the ledger entry.
     """
     project = Path(project).resolve()
     require(role in ROLES, "Unknown project agent role")
@@ -194,6 +197,7 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
     _bounded_json(request)
     adapter = config.get("adapter")
     ledger = FOUNDATION_LEDGER if role == "survey" else _change_id(payload)
+    call = open_call(project, role, ledger, adapter, request)
     trace: dict = {"stderr": "", "sessions": [], "raw": None, "repairs": 0, "schema_errors": []}
     started = time.monotonic()
     result = None
@@ -213,9 +217,24 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
     finally:
         wall_ms = int((time.monotonic() - started) * 1000)
         telemetry = result.pop("_telemetry", None) if isinstance(result, dict) else None
+        sessions = trace["sessions"] + _telemetry_sessions(telemetry)
         waiting = error is not None and adapter == "manual" and error.code == "NEEDS_INPUT"
         # A manual adapter waiting for input is not a failed call; everything else that raised is.
-        record_call(project, role, ledger, telemetry, wall_ms, failed=result is None and not waiting)
+        failed = result is None and not waiting
+        record_call(project, role, ledger, telemetry, wall_ms, failed=failed,
+                    call=call, session=",".join(dict.fromkeys(sessions)))
+        close_call(project, call, status="WAITING" if waiting else "FAILED" if failed else "OK",
+                   wall_ms=wall_ms, response=result, raw=trace["raw"], stderr=trace["stderr"],
+                   error=str(error) if error else None, code=error.code if error else None,
+                   sessions=list(dict.fromkeys(sessions)), schema_errors=trace["schema_errors"],
+                   repairs=trace["repairs"])
+
+
+def _telemetry_sessions(telemetry: object) -> list[str]:
+    if not isinstance(telemetry, dict):
+        return []
+    value = telemetry.get("sessions")
+    return [item for item in value if isinstance(item, str) and item] if isinstance(value, list) else []
 
 
 def _change_id(payload: dict) -> str | None:

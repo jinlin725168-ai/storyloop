@@ -18,6 +18,7 @@ from .models import StoryLoopError, identifier, require, text
 from .project_boundaries import audit_project_changes
 from .answers import load_answers, _pending as _unanswered
 from .telemetry import summarize
+from .next_steps import next_step
 from .openspec_docs import capability_of, merge_into_main_spec, render_decisions, validate_with_cli
 from .manual_acceptance import load_manual_acceptance, pending_manual_criteria
 from .project_contracts import (validate_agent_summary,
@@ -971,4 +972,5 @@ def _pause(project: Path, state: dict, status: str, **details) -> dict:
     state["status"] = status
     state.update(details)
     _save_run(project, state)
-    return {"status": status, "change_id": state["change_id"], **details}
+    hint = details.get("next") or next_step(status, state["change_id"], project, details)
+    return {"status": status, "change_id": state["change_id"], **details, "next": hint}

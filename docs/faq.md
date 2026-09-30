@@ -4,6 +4,9 @@
 
 ## 状态与停点
 
+**先看哪里**
+`storyloop log PATH --change ID`：每次代理调用的结果、耗时、费用、会话 ID 与记录目录，每轮失败卡在哪一层，最后一行是下一步命令。每个停点的返回和 `status --json` 也都带 `next`。
+
 **`WORKSPACE_TAINTED`，但我什么都没改**
 常见原因：残留的 dev server（vite 会重写 `frontend/src/types/auto-imports.d.ts`、`components.d.ts`）；代理就地构建产生了未声明的被忽略目录（`target`、`logs`、`.flattened-pom.xml`）；代理执行了 `git add`。处理：停掉所有 dev server，把合法的产物加进 `scratch_paths`（改 settings 需要一次 BASE 迭代，或在没有变更时重新 init），然后 `storyloop reset --reason "…"` 再 `run`。
 
@@ -42,16 +45,16 @@
 ## 适配器
 
 **Claude 适配器报 `error_max_turns` 后失败**
-默认每段 80 圈、最多 10 段自动续会话。10 段都用完说明代理在打转，看 stderr 里最后一段在做什么，通常是权限被拒后反复重试同一条命令。
+默认每段 80 圈、最多 10 段自动续会话。10 段都用完说明代理在打转：`storyloop log` 找到这次调用的记录目录，看 `stderr.log` 最后一段在做什么，或用 `meta.json` 里的会话 ID `claude --resume <id>` 回看；通常是权限被拒后反复重试同一条命令。
 
 **代理说"git diff 被拒绝"**
 Bash 规则按前缀逐段匹配：`git -C x diff`、`git --no-pager diff`、带管道或 `&&` 的都不在白名单。指南里写明"原样单条命令"。
 
 **Codex 适配器返回非 JSON**
-角色结构已由 `--output-schema` 原生约束，很少发生。仍发生时引擎用 `codex exec resume` 在同一会话里让它补出 JSON（结构不符时附上具体问题），最多两次。仍失败时看 `.storyloop/state/telemetry/` 里的失败记录和 stderr。
+角色结构已由 `--output-schema` 原生约束，很少发生。仍发生时引擎用 `codex exec resume` 在同一会话里让它补出 JSON（结构不符时附上具体问题），最多两次。仍失败时 `storyloop log` 看该次调用的 `response.txt`、`schema_errors` 与 `stderr.log`。
 
 **`AGENT_CONTRACT_INVALID`**
-代理的最终回答在修复后仍不符合角色的 JSON Schema，错误信息列出具体的字段问题。implement 角色的这种失败计为一轮失败尝试并回喂给下一轮；其他角色会中断运行，处理后直接 `run` 续跑。自定义 `command` 适配器应读取请求里的 `response_schema` 并交给自己的 CLI 约束。
+代理的最终回答在修复后仍不符合角色的 JSON Schema。implement 角色的这种失败计为一轮失败尝试并回喂给下一轮；其他角色会中断运行，`storyloop log` 查看后直接 `run` 续跑。自定义 `command` 适配器应读取请求里的 `response_schema` 并交给自己的 CLI 约束。
 
 **`python -m storyloop.cli run` 什么都不做**
 入口是 `storyloop` 或 `python -m storyloop`。

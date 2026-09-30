@@ -68,6 +68,8 @@
 
 `response_schema`：请求里附带该角色返回值的 JSON Schema（来源 `storyloop/role_schemas.py`，严格子集：每个对象 `additionalProperties:false`、全部属性列入 `required`，引擎视为可选的字段声明为可为 `null`）。适配器应交给 CLI 原生约束（Codex `--output-schema`，Claude `--json-schema`）。引擎先丢弃可为 null 字段的 `null` 值再校验，所以省略可选字段同样合法；review 的 `findings` 项允许额外键。不符时 Codex 适配器在同一会话带着具体问题修复（最多两次），最终仍不符则报 `AGENT_CONTRACT_INVALID`：implement 计为一轮失败尝试并回喂，其他角色中断运行。
 
+诊断记录：每次调用写 `.storyloop/state/telemetry/calls/<调用 ID>/`（`request.json`、`response.json` 或 `response.txt`、`stderr.log`、`meta.json`），账本条目带 `call` 与 `session`。适配器可在 `_telemetry.sessions` 里回报会话 ID 列表。
+
 `_telemetry`（可选）：任何角色的返回对象里可以附带 `{"cost_usd", "turns", "duration_ms", "input_tokens", "output_tokens", "segments", "model"}`，引擎剥离后记入 `.storyloop/state/telemetry/<change-id>.json`；没有它时只记录墙钟时间。
 
 `manual` 适配器：请求写到 `.storyloop/requests/project-<role>.json`，把 `{request_id, result}` 写到 `.storyloop/responses/project-<role>.json` 后重跑原命令。

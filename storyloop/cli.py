@@ -14,8 +14,10 @@ from .base_upgrade import propose_base_change, upgrade_baseline
 from .foundation_survey import survey_foundation
 from .skills import install_skills
 from .system_smoke import apply_smoke_update, propose_smoke_update
+from .change_log import change_log, render_log
 from .changes import create_change, load_change, revise_change
 from .manual_acceptance import record_manual_acceptance
+from .next_steps import next_step
 from .openspec_docs import document_change
 from .models import StoryLoopError, require
 from .processutil import redact
@@ -46,6 +48,7 @@ def parser() -> argparse.ArgumentParser:
         "prepare": "旧实例：生成验收测试与初始骨架（不执行）",
         "answer": "回答代理在 NEEDS_INPUT 停点提出的问题（--answer 可重复，按问题顺序）",
         "accept": "记录人工验收：产品变更用 --change 与 --criterion，旧实例用 --story",
+        "log": "查看一个变更的全过程：每次代理调用（结果、耗时、费用、会话、调用记录目录）、每轮失败原因和下一步",
         "reset": "人工复位卡住的运行（WORKSPACE_TAINTED 或工作区已变的人工验收等待），需说明理由",
         "acceptance-repair": "变更验收用例本身有缺陷时，让 acceptance 角色修复自己的套件并从合同提交重新证明 RED，需说明理由",
         "smoke-repair": "acceptance-repair 的旧名",
@@ -70,6 +73,8 @@ def parser() -> argparse.ArgumentParser:
             child.add_argument("--message")
             child.add_argument("--no-interactive", action="store_true",
                                help="有待决问题时不在终端逐条澄清")
+        elif command == "log":
+            child.add_argument("--change", dest="change_id", required=True)
         elif command in {"approve", "status", "report", "ci"}:
             child.add_argument("--change", dest="change_id", required=command == "ci")
             if command == "approve":
@@ -254,10 +259,13 @@ def _product_dispatch(project: Path, args) -> dict:
         require(change_id, "Product status needs --change")
         change = load_change(project, change_id)
         run_path = project / ".storyloop/state/runs" / f"{change_id}.json"
+        run = load_run_state(project, change_id) if run_path.exists() else None
         return {"status": change["status"], "change_id": change_id,
-                "revision": change["revision"],
-                "run": load_run_state(project, change_id) if run_path.exists() else None,
-                "telemetry": summarize(project, change_id)}
+                "revision": change["revision"], "run": run,
+                "telemetry": summarize(project, change_id),
+                "next": next_step((run or {}).get("status") or change["status"], change_id, project, run)}
+    if args.command == "log":
+        return change_log(project, change_id)
     if args.command == "reset":
         return reset_run(project, change_id, args.reason)
     if args.command in {"smoke-repair", "acceptance-repair"}:
@@ -337,6 +345,9 @@ def display(result: dict, complete_json: bool) -> None:
     if complete_json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
+    if result.get("status") == "LOG":
+        print(render_log(result))
+        return
     if "goal" in result:
         print(result["goal"])
         for story in result.get("stories", []):
@@ -368,7 +379,12 @@ def main(argv: list[str] | None = None) -> int:
         }
         return 2 if result.get("status") in failures else 0
     except StoryLoopError as exc:
-        print(json.dumps({"status": exc.code, "message": redact(str(exc))}, ensure_ascii=False), file=sys.stderr)
+        error = {"status": exc.code, "message": redact(str(exc))}
+        change_id = getattr(args, "change_id", None)
+        hint = next_step(exc.code, change_id, args.project.resolve()) if change_id else None
+        if hint:
+            error["next"] = hint
+        print(json.dumps(error, ensure_ascii=False), file=sys.stderr)
         return 2
     except (OSError, ValueError, TypeError) as exc:
         print(json.dumps({"status": "BLOCKED", "message": "Operation could not complete: " + type(exc).__name__}), file=sys.stderr)

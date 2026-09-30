@@ -15,13 +15,22 @@ NUMERIC = ("cost_usd", "turns", "duration_ms", "input_tokens", "output_tokens", 
 
 
 def record_call(project: Path, role: str, change_id: str | None, telemetry: object,
-                wall_ms: int, now: Clock | None = None, failed: bool = False) -> dict:
-    """Append one agent call; adapter telemetry is optional and only known keys are kept."""
+                wall_ms: int, now: Clock | None = None, failed: bool = False,
+                call: str | None = None, session: str | None = None) -> dict:
+    """Append one agent call; adapter telemetry is optional and only known keys are kept.
+
+    `call` names the diagnostic record under calls/ and `session` the agent CLI session ids
+    (comma-separated), so a ledger line leads straight to what the agent saw and said.
+    """
     project = Path(project).resolve()
     entry = {"role": role, "wall_ms": int(wall_ms),
              "at": (now or _utc_now)().astimezone(timezone.utc).isoformat(timespec="seconds")}
     if failed:
         entry["failed"] = True
+    if call:
+        entry["call"] = call
+    if session:
+        entry["session"] = session[:400]
     if isinstance(telemetry, dict):
         for key in NUMERIC:
             value = telemetry.get(key)
@@ -66,6 +75,11 @@ def summarize(project: Path, change_id: str) -> dict:
     return {"calls": len(entries), "failed": sum(1 for e in entries if e.get("failed")),
             "agent_ms": sum(int(e.get("wall_ms", 0)) for e in entries),
             "cost_usd": round(sum(costs), 4) if costs else None, "by_role": by_role}
+
+
+def ledger_entries(project: Path, change_id: str) -> list[dict]:
+    """The raw ledger of one change, oldest call first."""
+    return list(_entries(Path(project).resolve(), change_id))
 
 
 def _entries(project: Path, key: str) -> list[dict]:
