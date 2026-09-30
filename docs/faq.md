@@ -48,7 +48,10 @@
 Bash 规则按前缀逐段匹配：`git -C x diff`、`git --no-pager diff`、带管道或 `&&` 的都不在白名单。指南里写明"原样单条命令"。
 
 **Codex 适配器返回非 JSON**
-引擎会用 `codex exec resume` 在同一会话里让它补出 JSON，最多两次。仍失败时看 `.storyloop/state/telemetry/` 里的失败记录和 stderr。
+角色结构已由 `--output-schema` 原生约束，很少发生。仍发生时引擎用 `codex exec resume` 在同一会话里让它补出 JSON（结构不符时附上具体问题），最多两次。仍失败时看 `.storyloop/state/telemetry/` 里的失败记录和 stderr。
+
+**`AGENT_CONTRACT_INVALID`**
+代理的最终回答在修复后仍不符合角色的 JSON Schema，错误信息列出具体的字段问题。implement 角色的这种失败计为一轮失败尝试并回喂给下一轮；其他角色会中断运行，处理后直接 `run` 续跑。自定义 `command` 适配器应读取请求里的 `response_schema` 并交给自己的 CLI 约束。
 
 **`python -m storyloop.cli run` 什么都不做**
 入口是 `storyloop` 或 `python -m storyloop`。

@@ -10,6 +10,12 @@ stdout : exactly one JSON object (the role result, plus `_telemetry` which Story
 Claude Code runs in --restricted print mode; tools are narrowed per role and any
 permission that would prompt is denied instead of hanging.
 
+Structured output: when the request carries `response_schema` (engines that publish role
+schemas), the final session runs with `--json-schema` and its `structured_output` is the answer,
+so the shape is enforced by the CLI instead of by prompt discipline; intermediate sessions (review
+perspectives, implement lanes) use this adapter's own schemas. Session ids are reported in
+`_telemetry.sessions` so a call can be reopened with `claude --resume <id>`.
+
 Turn caps are checkpoints, not failures: each segment runs up to --segment-turns agentic
 turns; when Claude stops with error_max_turns the same session is resumed (`--resume`) with
 its full context, up to --max-segments. Whether the work is good enough is judged by
@@ -145,6 +151,19 @@ LANE_INTEGRATE_RULES = (
     "return the final implement result exactly as {summary:string, questions:[string], design:string}; "
     "the design's ## Tests First must cover the tests of every lane."
 )
+
+
+def _strict(properties: dict) -> dict:
+    return {"type": "object", "properties": properties, "required": list(properties),
+            "additionalProperties": False}
+
+
+_TEXT = {"type": "string"}
+_TEXTS = {"type": "array", "items": _TEXT}
+PERSPECTIVE_OUTPUT = _strict({"summary": _TEXT, "findings": {"type": "array", "items": _strict(
+    {"message": _TEXT, "evidence": _TEXT})}, "questions": _TEXTS})
+LANE_PLAN_OUTPUT = _strict({"lanes": {"type": "array", "items": _strict({"name": _TEXT, "task": _TEXT})}})
+LANE_OUTPUT = _strict({"summary": _TEXT, "files": _TEXTS, "questions": _TEXTS})
 PERSPECTIVE_MARK = "[review perspective: {name}]"
 LEAD_MARK = "[lead reviewer]"
 PERSPECTIVE_SCHEMA = (
@@ -212,7 +231,8 @@ def main_with_args(argv: list[str] | None) -> int:
     if role == "implement" and lanes and (request.get("payload") or {}).get("design_plan"):
         return _implement_with_lanes(request, base, prompt, args, lanes)
 
-    result, telemetry, _ = _run_session(base, prompt, role, args, request.get("project"))
+    result, telemetry, _ = _run_session(base, prompt, role, args, request.get("project"),
+                                        schema=request.get("response_schema"))
     if result is None:
         return 1
     return _emit(result, telemetry, role)
@@ -228,18 +248,19 @@ def _emit(result: dict, telemetry: dict, role: str) -> int:
 
 def _new_telemetry() -> dict:
     return {"cost_usd": 0.0, "turns": 0, "duration_ms": 0, "input_tokens": 0,
-            "output_tokens": 0, "segments": 0, "models": set()}
+            "output_tokens": 0, "segments": 0, "models": set(), "sessions": []}
 
 
 def _run_session(base: list[str], prompt: str, role: str, args, cwd,
-                 session: str | None = None) -> tuple[dict | None, dict, str | None]:
+                 session: str | None = None, schema: dict | None = None) -> tuple[dict | None, dict, str | None]:
     """One claude session (optionally resuming `session`): resume on turn caps, ask for JSON on prose
-    endings; returns (result, telemetry, session_id)."""
+    endings; `schema` makes the CLI enforce the answer's shape. Returns (result, telemetry, session_id)."""
     telemetry = _new_telemetry()
     next_prompt = prompt
     repairs = 0
+    structured = ["--json-schema", json.dumps(schema, ensure_ascii=False)] if schema else []
     for segment in range(1, args.max_segments + 1):
-        command = base + (["--resume", session] if session else [])
+        command = base + structured + (["--resume", session] if session else [])
         completed = subprocess.run(command, input=next_prompt, capture_output=True, text=True, cwd=cwd)
         next_prompt = RESUME_PROMPT
         # claude exits 1 on error_max_turns but still prints the JSON envelope on stdout, so the
@@ -252,6 +273,8 @@ def _run_session(base: list[str], prompt: str, role: str, args, cwd,
             return None, telemetry, session
         _accumulate(telemetry, envelope)
         session = envelope.get("session_id") or session
+        if session and session not in telemetry["sessions"]:
+            telemetry["sessions"].append(session)
         subtype = envelope.get("subtype", "success")
         if subtype == "error_max_turns" and session:
             print(f"claude {role}: segment {segment} hit the turn cap, resuming {session}", file=sys.stderr)
@@ -259,7 +282,9 @@ def _run_session(base: list[str], prompt: str, role: str, args, cwd,
         if envelope.get("is_error") or subtype != "success":
             print(f"claude {role} ended with {subtype}: {envelope.get('result')}", file=sys.stderr)
             return None, telemetry, session
-        result = _extract_object(envelope.get("result", ""))
+        structured_output = envelope.get("structured_output")
+        result = structured_output if isinstance(structured_output, dict) else \
+            _extract_object(envelope.get("result", ""))
         if result is None:
             if session and repairs < REPAIR_LIMIT:
                 repairs += 1
@@ -286,7 +311,8 @@ def _review_with_perspectives(request: dict, base: list[str], args, perspectives
     def run_perspective(name: str) -> tuple[str, dict | None, dict]:
         extra = f"{PERSPECTIVE_MARK.format(name=name)}\n{REVIEW_PERSPECTIVES[name]}\n{PERSPECTIVE_SCHEMA}"
         prompt = _prompt(request, "review", args.guide, extra=extra, schema=False)
-        result, telemetry, _ = _run_session(base, prompt, f"review/{name}", args, cwd)
+        result, telemetry, _ = _run_session(base, prompt, f"review/{name}", args, cwd,
+                                            schema=PERSPECTIVE_OUTPUT)
         return name, result, telemetry
 
     with ThreadPoolExecutor(max_workers=max(1, args.review_parallel)) as pool:
@@ -301,7 +327,8 @@ def _review_with_perspectives(request: dict, base: list[str], args, perspectives
     digest = json.dumps({name: result for name, result, _ in reports}, ensure_ascii=False, indent=1)
     lead_prompt = _prompt(request, "review", args.guide,
                           extra=f"{LEAD_MARK}\n{LEAD_RULES}\n\nPerspective reports:\n{digest}", schema=False)
-    result, telemetry, _ = _run_session(base, lead_prompt, "review/lead", args, cwd)
+    result, telemetry, _ = _run_session(base, lead_prompt, "review/lead", args, cwd,
+                                        schema=request.get("response_schema"))
     _merge_telemetry(total, telemetry)
     if result is None:
         return 1
@@ -332,7 +359,8 @@ def _implement_with_lanes(request: dict, base: list[str], single_prompt: str, ar
     plan_prompt = _prompt(request, "implement", args.guide,
                           extra=f"{LANE_PLAN_MARK}\n{LANE_PLAN_RULES}\nConfigured lanes:\n{configured}",
                           schema=False)
-    plan, telemetry, lead = _run_session(base, plan_prompt, "implement/lead", args, cwd)
+    plan, telemetry, lead = _run_session(base, plan_prompt, "implement/lead", args, cwd,
+                                         schema=LANE_PLAN_OUTPUT)
     _merge_telemetry(total, telemetry)
     if plan is None:
         return 1
@@ -340,7 +368,8 @@ def _implement_with_lanes(request: dict, base: list[str], single_prompt: str, ar
               and item.get("name") in lanes and isinstance(item.get("task"), str)]
     if len(chosen) < 2:
         print(f"claude implement: {len(chosen)} lane(s) planned, running as one session", file=sys.stderr)
-        result, telemetry, _ = _run_session(base, single_prompt, "implement", args, cwd)
+        result, telemetry, _ = _run_session(base, single_prompt, "implement", args, cwd,
+                                            schema=request.get("response_schema"))
         _merge_telemetry(total, telemetry)
         return 1 if result is None else _emit(result, total, "implement")
 
@@ -349,7 +378,8 @@ def _implement_with_lanes(request: dict, base: list[str], single_prompt: str, ar
         extra = (f"{LANE_MARK.format(name=name)}\n{LANE_RULES}\nOnly create or modify files under: "
                  f"{lanes[name]}\nYour task:\n{item['task']}")
         prompt = _prompt(request, "implement", args.guide, extra=extra, schema=False)
-        result, telemetry, _ = _run_session(base, prompt, f"implement/{name}", args, cwd)
+        result, telemetry, _ = _run_session(base, prompt, f"implement/{name}", args, cwd,
+                                            schema=LANE_OUTPUT)
         return name, result, telemetry
 
     with ThreadPoolExecutor(max_workers=max(1, args.implement_parallel)) as pool:
@@ -363,7 +393,8 @@ def _implement_with_lanes(request: dict, base: list[str], single_prompt: str, ar
     digest = json.dumps({name: result for name, result, _ in reports}, ensure_ascii=False, indent=1)
     integrate_prompt = (f"{LANE_INTEGRATE_MARK}\n{LANE_INTEGRATE_RULES}\n\nLane reports:\n{digest}\n"
                         f"{SCHEMA_HINTS['implement']}")
-    result, telemetry, _ = _run_session(base, integrate_prompt, "implement/lead", args, cwd, session=lead)
+    result, telemetry, _ = _run_session(base, integrate_prompt, "implement/lead", args, cwd, session=lead,
+                                        schema=request.get("response_schema"))
     _merge_telemetry(total, telemetry)
     if result is None:
         return 1
@@ -379,6 +410,7 @@ def _merge_telemetry(total: dict, part: dict) -> None:
     for key in ("cost_usd", "turns", "duration_ms", "input_tokens", "output_tokens", "segments"):
         total[key] += part.get(key, 0)
     total["models"].update(part.get("models", set()))
+    total["sessions"].extend(item for item in part.get("sessions", []) if item not in total["sessions"])
 
 
 def _base_command(claude: str, role: str, segment_turns: int, extra_bash: list[str],

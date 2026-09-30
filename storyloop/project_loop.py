@@ -240,7 +240,13 @@ def _run_attempt(
                "failures": list(state["failures"]), "answers": answers,
                "characterization": state.get("characterization"),
                "design_plan": _design_plan(state)}
-    response, touched = _write_safely(project, change_id, lambda: services.implement(project, context))
+    response, touched = _write_safely(project, change_id, lambda: _implement_answer(services, project, context))
+    if "_contract_error" in response:
+        # The work on disk stays; the malformed answer costs this attempt and is fed back as a failure.
+        state["failures"].append({"attempt": state["attempt"],
+                                  "contract": {"status": "INVALID", "message": response["_contract_error"]}})
+        _save_run(project, state)
+        return None
     validate_agent_summary(response)
     if response.get("design"):
         state["design"] = response["design"]
@@ -281,6 +287,17 @@ def _run_attempt(
     if paused is not None:
         return paused
     return _complete(project, change, state, **verified)
+
+
+def _implement_answer(services: LoopServices, project: Path, context: dict) -> dict:
+    """The implement call; an answer that breaks the role schema even after the adapter's own
+    repairs becomes a marker instead of an exception, so it is judged like any failed attempt."""
+    try:
+        return services.implement(project, context)
+    except StoryLoopError as exc:
+        if exc.code != "AGENT_CONTRACT_INVALID":
+            raise
+        return {"_contract_error": str(exc)}
 
 
 def _manual_acceptance_gate(project: Path, change: dict, state: dict, verified: dict) -> dict | None:

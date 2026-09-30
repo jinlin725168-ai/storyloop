@@ -16,6 +16,7 @@ from .models import StoryLoopError, require
 from .foundation_survey import foundation_payload
 from .skills import skill_text
 from .processutil import redact, run_process
+from .role_schemas import normalize, schema_errors, schema_for, wire_schema
 from .storage import load_json, write_json
 from .telemetry import record_call
 
@@ -170,7 +171,11 @@ def instructions_for(project: Path, role: str) -> str:
 
 
 def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
-    """Invoke one stateless agent using the repository-local adapter configuration."""
+    """Invoke one stateless agent using the repository-local adapter configuration.
+
+    The role's JSON Schema travels with the request (`response_schema`) so adapters can have
+    their CLI enforce it natively; the engine checks the answer against it either way.
+    """
     project = Path(project).resolve()
     require(role in ROLES, "Unknown project agent role")
     require(isinstance(payload, dict), "Agent payload must be an object")
@@ -178,32 +183,39 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
     foundation = foundation_payload(project) if role != "survey" else None
     if foundation and "foundation" not in payload:
         payload = {**payload, "foundation": foundation}
+    schema = schema_for(role, payload)
     request = {
         "protocol": "storyloop.project-agent.v1",
         "role": role,
         "project": str(project),
         "payload": payload,
+        "response_schema": wire_schema(schema),
     }
     _bounded_json(request)
     adapter = config.get("adapter")
+    ledger = FOUNDATION_LEDGER if role == "survey" else _change_id(payload)
+    trace: dict = {"stderr": "", "sessions": [], "raw": None, "repairs": 0, "schema_errors": []}
     started = time.monotonic()
-    failed = True
     result = None
+    error: StoryLoopError | None = None
     try:
         if adapter == "manual":
-            result = _manual(project, request)
+            result = _manual(project, request, schema, trace)
         elif adapter == "command":
-            result = _command(project, request, config)
+            result = _command(project, request, config, schema, trace)
         else:
             require(adapter == "codex", "Unknown project agent adapter")
-            result = _codex(project, request, config)
-        failed = False
+            result = _codex(project, request, config, schema, trace)
         return result
+    except StoryLoopError as exc:
+        error = exc
+        raise
     finally:
+        wall_ms = int((time.monotonic() - started) * 1000)
         telemetry = result.pop("_telemetry", None) if isinstance(result, dict) else None
+        waiting = error is not None and adapter == "manual" and error.code == "NEEDS_INPUT"
         # A manual adapter waiting for input is not a failed call; everything else that raised is.
-        record_call(project, role, FOUNDATION_LEDGER if role == "survey" else _change_id(payload), telemetry,
-                    int((time.monotonic() - started) * 1000), failed=failed and adapter != "manual")
+        record_call(project, role, ledger, telemetry, wall_ms, failed=result is None and not waiting)
 
 
 def _change_id(payload: dict) -> str | None:
@@ -214,7 +226,26 @@ def _change_id(payload: dict) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
-def _manual(project: Path, request: dict) -> dict:
+def conform(value: dict, schema: dict) -> tuple[dict, list[str]]:
+    """Normalize a role answer (nulls of optional fields dropped) and list its schema mismatches."""
+    telemetry = value.get("_telemetry")
+    body = normalize({key: item for key, item in value.items() if key != "_telemetry"}, schema)
+    errors = schema_errors(body, schema)
+    if telemetry is not None:
+        body["_telemetry"] = telemetry
+    return body, errors
+
+
+def _require_conforming(value: dict, schema: dict, trace: dict) -> dict:
+    body, errors = conform(value, schema)
+    if errors:
+        trace["schema_errors"] = errors
+        raise StoryLoopError("Agent answer does not match the role's response schema: " + "; ".join(errors),
+                             code="AGENT_CONTRACT_INVALID", details={"schema_errors": errors})
+    return body
+
+
+def _manual(project: Path, request: dict, schema: dict, trace: dict) -> dict:
     request_id = _request_id(request)
     envelope = {**request, "request_id": request_id, "instructions": instructions_for(project, request["role"])}
     request_path = project / ".storyloop" / "requests" / f"project-{request['role']}.json"
@@ -229,11 +260,12 @@ def _manual(project: Path, request: dict) -> dict:
     require(response.get("request_id") == request_id, "Manual response does not match this request")
     result = response.get("result")
     require(isinstance(result, dict), "Manual response result must be an object")
+    result = _require_conforming(result, schema, trace)
     response_path.unlink()
     return result
 
 
-def _command(project: Path, request: dict, config: dict) -> dict:
+def _command(project: Path, request: dict, config: dict, schema: dict, trace: dict) -> dict:
     command = config.get("agent_command")
     require(isinstance(command, list) and bool(command), "Command adapter needs explicit argv")
     argv = [_expand(item, project) for item in command]
@@ -248,58 +280,89 @@ def _command(project: Path, request: dict, config: dict) -> dict:
         input_text=json.dumps({**request, "instructions": instructions_for(project, request["role"])},
                               ensure_ascii=False),
     )
+    trace["stderr"] = str(result.get("stderr") or "")
     _check_process(result)
-    return _parse(result.get("stdout", ""))
+    trace["raw"] = result.get("stdout", "")
+    parsed = _parse(trace["raw"])
+    trace["raw"] = None
+    return _require_conforming(parsed, schema, trace)
 
 
-CODEX_REPAIR_LIMIT = 2                 # resumes allowed to turn a prose ending into JSON
+CODEX_REPAIR_LIMIT = 2                 # resumes allowed to turn a bad final message into a valid answer
 CODEX_MAX_OUTPUT = 16 * 1024 * 1024    # --json streams every event; far above the default cap
 CODEX_REPAIR_PROMPT = (
     "上一条回复不是合法的 JSON 对象。不要再修改任何文件，也不要重复说明；"
     "只按原始要求输出一个 JSON 对象。"
 )
+CODEX_SCHEMA_REPAIR_PROMPT = (
+    "上一条回复的 JSON 不符合要求的结构，问题如下：\n{errors}\n"
+    "不要再修改任何文件，也不要重复说明；只输出修正后的完整 JSON 对象。"
+)
 
 
-def _codex(project: Path, request: dict, config: dict) -> dict:
-    """Run Codex in a persistent session; resume it to repair a non-JSON final message.
+def _codex(project: Path, request: dict, config: dict, schema: dict, trace: dict) -> dict:
+    """Run Codex in a persistent session; resume it to repair a malformed final message.
 
-    Codex has no turn cap, so a long task simply runs; the recoverable failure is the agent
-    ending in prose. Sessions are kept on disk (no --ephemeral) so `codex exec resume` can
-    finish the same thread with its context intact. Usage comes from the --json event stream.
+    The role schema is enforced natively (`--output-schema`), which removes most format
+    failures; what still goes wrong (prose, a mismatch the CLI let through) is repaired by
+    resuming the same thread with the concrete problems. Sessions are kept on disk (no
+    --ephemeral) so `codex exec resume` keeps the context. Usage comes from the --json events.
     """
     sandbox = "workspace-write" if request["role"] in {"implement", "characterize"} else "read-only"
     common = ["--ignore-user-config", "--color", "never", "--json"]
     prompt = instructions_for(project, request["role"]) + "\nRequest:\n" + json.dumps(request, ensure_ascii=False)
     telemetry = {"turns": 0, "input_tokens": 0, "output_tokens": 0, "segments": 0}
     thread: str | None = None
-    for repair in range(CODEX_REPAIR_LIMIT + 1):
-        if repair == 0:
-            argv = _codex_executable() + ["exec", "--sandbox", sandbox, "-C", str(project), *common]
-        else:
-            argv = _codex_executable() + ["exec", "resume", thread, *common]
-        content = _codex_once(project, argv, CODEX_REPAIR_PROMPT if repair else prompt,
-                              config["agent_timeout_seconds"], telemetry)
-        thread = telemetry.pop("thread", None) or thread
-        try:
-            result = _parse(content)
-        except StoryLoopError:
-            if not thread or repair == CODEX_REPAIR_LIMIT:
-                raise
-            continue
-        result["_telemetry"] = dict(telemetry)
-        return result
+    next_prompt = prompt
+    with tempfile.TemporaryDirectory(dir=project / ".storyloop", prefix="schema-") as folder:
+        schema_file = Path(folder) / "response-schema.json"
+        schema_file.write_text(json.dumps(request["response_schema"], ensure_ascii=False), encoding="utf-8")
+        output_schema = ["--output-schema", str(schema_file)]
+        for repair in range(CODEX_REPAIR_LIMIT + 1):
+            if repair == 0:
+                argv = _codex_executable() + ["exec", "--sandbox", sandbox, "-C", str(project),
+                                              *common, *output_schema]
+            else:
+                argv = _codex_executable() + ["exec", "resume", thread, *common, *output_schema]
+            trace["repairs"] = repair
+            content = _codex_once(project, argv, next_prompt, config["agent_timeout_seconds"], telemetry, trace)
+            thread = telemetry.pop("thread", None) or thread
+            if thread and thread not in trace["sessions"]:
+                trace["sessions"].append(thread)
+            trace["raw"] = content
+            try:
+                result = _parse(content)
+            except StoryLoopError:
+                if not thread or repair == CODEX_REPAIR_LIMIT:
+                    raise
+                next_prompt = CODEX_REPAIR_PROMPT
+                continue
+            body, errors = conform(result, schema)
+            if errors:
+                trace["schema_errors"] = errors
+                if thread and repair < CODEX_REPAIR_LIMIT:
+                    next_prompt = CODEX_SCHEMA_REPAIR_PROMPT.format(errors="\n".join(errors))
+                    continue
+                return _require_conforming(result, schema, trace)
+            trace["raw"], trace["schema_errors"] = None, []
+            body["_telemetry"] = dict(telemetry)
+            return body
     raise StoryLoopError("Project agent did not return a JSON object")  # unreachable
 
 
-def _codex_once(project: Path, argv: list[str], prompt: str, timeout: int, telemetry: dict) -> str:
+def _codex_once(project: Path, argv: list[str], prompt: str, timeout: int, telemetry: dict,
+                trace: dict) -> str:
     with tempfile.NamedTemporaryFile(dir=project / ".storyloop", suffix=".response",
                                      delete=False) as handle:
         output = Path(handle.name)
     try:
         result = run_process(argv + ["--output-last-message", str(output), "-"], project, timeout,
                              input_text=prompt, max_output=CODEX_MAX_OUTPUT)
-        _check_process(result)
+        trace["stderr"] += str(result.get("stderr") or "")
         _codex_events(result.get("stdout", ""), telemetry)
+        if telemetry.get("thread") and telemetry["thread"] not in trace["sessions"]:
+            trace["sessions"].append(telemetry["thread"])
+        _check_process(result)
         require(output.stat().st_size <= 2_000_000, "Agent response exceeded the size limit")
         return output.read_text(encoding="utf-8")
     finally:

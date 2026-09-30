@@ -19,7 +19,9 @@ review 角色默认展开为多视角子代理：正确性、安全、架构合�
 
 implement 角色可以按层拆子代理：`--implement-lanes backend=backend/ruoyi-modules/,frontend=frontend/src/,sql=sql/biz/` 声明每条通道拥有的路径前缀。有 design_plan 时，主实现者会话先只读地把方案拆成通道任务（少于两条就退回单会话），通道会话并行实现各自的层（提示词限定只改本通道前缀下的文件、不跑全量回归），然后同一个主实现者会话 `--resume` 回来做集成：对齐层间接口、跑构建与单元/集成命令、修集成问题、写含全部通道 Tests First 的 design 记录。引擎协议不变，遥测多了 `lanes`。
 
-返回对象里附带 `_telemetry`（费用、轮数、时长、token、段数、模型），引擎剥离后记入成本账本并汇总到验收报告。
+请求带 `response_schema` 时，最终会话以 `--json-schema` 运行并以信封里的 `structured_output` 为答案，结构由 CLI 保证；多视角审查与按层实现的中间会话使用适配器自带的 schema。
+
+返回对象里附带 `_telemetry`（费用、轮数、时长、token、段数、模型、会话 ID 列表 `sessions`），引擎剥离后记入成本账本并汇总到验收报告；会话 ID 可用 `claude --resume <id>` 回看。
 就地构建产生的 `target/`、`node_modules/` 等目录需要在 `storyloop init --settings` 的 `scratch_paths` 里声明，否则会判 WORKSPACE_TAINTED；不想声明时用 `examples/tools/scratch_build.py` 在临时目录构建。
 
 启用方式（`storyloop init` 之后编辑 `.storyloop/config.json`）：
