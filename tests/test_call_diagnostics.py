@@ -115,5 +115,16 @@ class LogAndNextStepTests(unittest.TestCase):
             temporary.cleanup()
 
 
+class ExitCodeTests(unittest.TestCase):
+    def test_stops_that_need_a_human_fix_exit_2_and_manual_acceptance_exits_0(self):
+        expected = {"CHARACTERIZATION_FAILED": 2, "BUDGET_EXHAUSTED": 2, "NEEDS_INPUT": 2,
+                    "MANUAL_ACCEPTANCE_REQUIRED": 0, "PASSED": 0}
+        for status, code in expected.items():
+            with self.subTest(status=status), \
+                    patch("storyloop.cli.dispatch", return_value={"status": status, "change_id": "FEAT-1"}), \
+                    patch("sys.stdout", new_callable=io.StringIO):
+                self.assertEqual(cli.main(["run", ".", "--change", "FEAT-1"]), code)
+
+
 if __name__ == "__main__":
     unittest.main()

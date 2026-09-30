@@ -375,7 +375,7 @@ def main(argv: list[str] | None = None) -> int:
             "FAILED", "BLOCKED", "NEEDS_INPUT", "STALE", "INTERRUPTED",
             "ARCHITECTURE_DECISION_REQUIRED", "UNSAFE_CONTAINMENT", "WORKSPACE_TAINTED",
             "BUDGET_EXHAUSTED", "REPEATED_FAILURE", "BASE_CHANGE_REQUIRED",
-            "BOUNDARY_VIOLATION", "ERROR",
+            "BOUNDARY_VIOLATION", "ERROR", "CHARACTERIZATION_FAILED",
         }
         return 2 if result.get("status") in failures else 0
     except StoryLoopError as exc:
