@@ -7,32 +7,35 @@ import tempfile
 import unittest
 
 
-class CliTests(unittest.TestCase):
-    def test_help_lists_product_and_qa_commands(self):
-        self.assertIsNotNone(importlib.util.find_spec("storyloop.cli"), "CLI must exist")
-        result = subprocess.run([sys.executable, "-m", "storyloop", "--help"],
-                                capture_output=True, text=True, encoding="utf-8", check=False)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        for command in ["discuss", "prepare", "approve", "run", "accept", "report", "demo"]:
-            self.assertIn(command, result.stdout)
+def storyloop(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, "-m", "storyloop", *args],
+                          capture_output=True, text=True, encoding="utf-8", check=False)
 
-    def test_init_status_and_escaped_report(self):
+
+class CliTests(unittest.TestCase):
+    def test_help_lists_the_product_commands_only(self):
         self.assertIsNotNone(importlib.util.find_spec("storyloop.cli"), "CLI must exist")
+        result = storyloop("--help")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for command in ["init", "change", "approve", "run", "status", "log", "accept", "report", "ci"]:
+            self.assertIn(command, result.stdout)
+        for removed in ["discuss", "prepare", "demo", "stage"]:
+            self.assertNotIn(removed, result.stdout.split("positional arguments")[0])
+
+    def test_init_needs_a_git_repository_and_says_so(self):
         with tempfile.TemporaryDirectory() as folder:
             project = Path(folder) / "project"
-            init = subprocess.run([sys.executable, "-m", "storyloop", "init", str(project),
-                                   "--goal", "Room <script>alert(1)</script>"],
-                                  capture_output=True, text=True, encoding="utf-8", check=False)
-            self.assertEqual(init.returncode, 0, init.stderr)
-            report = subprocess.run([sys.executable, "-m", "storyloop", "report", str(project)],
-                                    capture_output=True, text=True, encoding="utf-8", check=False)
-            self.assertEqual(report.returncode, 0, report.stderr)
-            html = (project / ".storyloop/report.html").read_text(encoding="utf-8")
-            self.assertNotIn("<script>alert(1)</script>", html)
-            self.assertIn("&lt;script&gt;", html)
-            result = subprocess.run([sys.executable, "-m", "storyloop", "status", str(project), "--json"],
-                                    capture_output=True, text=True, encoding="utf-8", check=False)
-            self.assertIsInstance(json.loads(result.stdout), dict)
+            project.mkdir()
+            result = storyloop("init", str(project))
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("Git repository", json.loads(result.stderr)["message"])
+            self.assertFalse((project / ".storyloop").exists())
+
+    def test_commands_on_an_uninitialized_project_point_to_init(self):
+        with tempfile.TemporaryDirectory() as folder:
+            result = storyloop("status", folder, "--change", "FEAT-1")
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("storyloop init", json.loads(result.stderr)["message"])
 
 
 if __name__ == "__main__":

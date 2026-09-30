@@ -128,94 +128,12 @@ def _scan_once(root: Path, max_files: int, ignored: set[str],
     return tuple(entries)
 
 
-def snapshot_digest(snapshot: WorkspaceSnapshot) -> str:
-    """Return a content-free stable digest for a captured workspace snapshot."""
-    require(isinstance(snapshot, WorkspaceSnapshot), "Invalid workspace snapshot")
-    digest = hashlib.sha256()
-    for path, fingerprint in snapshot.entries:
-        values = (
-            path, fingerprint.kind, str(fingerprint.size), fingerprint.sha256,
-            str(fingerprint.mode), str(fingerprint.attributes),
-            str(fingerprint.uid), str(fingerprint.gid),
-        )
-        digest.update("\0".join(values).encode("utf-8") + b"\0")
-    return digest.hexdigest()
-
-
-def _require_untainted(condition: bool, message: str) -> None:
-    if not condition:
-        raise StoryLoopError(message, code="WORKSPACE_TAINTED")
-
-def verify_stage_changes(before: WorkspaceSnapshot, after: WorkspaceSnapshot,
-                         stage: dict) -> list[FileChange]:
-    """Return allowed changes or block protected and out-of-bound modifications."""
-    require(before.root == after.root, "Snapshots must belong to the same project root")
-    writes = _boundaries(stage, "write_paths")
-    protected = _boundaries(stage, "protected_paths")
-    changes = _changes(before, after)
-    protected_changes = [change for change in changes if _matches_any(change.path, protected)]
-    _require_untainted(not protected_changes,
-                       "Protected paths changed: " + _display_paths(protected_changes))
-    escaped = [change for change in changes if not _matches_any(change.path, writes)]
-    _require_untainted(not escaped,
-                       "Changes escaped write_paths: " + _display_paths(escaped))
-    return changes
-
-
-def verify_unchanged(before: WorkspaceSnapshot, after: WorkspaceSnapshot) -> None:
-    """Reject every non-ignored project change made by a read-only operation."""
-    require(before.root == after.root, "Snapshots must belong to the same project root")
-    changes = _changes(before, after)
-    _require_untainted(
-        not changes, "Read-only operation modified the project: " + _display_paths(changes),
-    )
-
-
 def snapshot_changes(before: WorkspaceSnapshot, after: WorkspaceSnapshot) -> list[FileChange]:
     """Return stable file-system changes for a writer that is audited separately."""
     require(before.root == after.root, "Snapshots must belong to the same project root")
     previous, current = dict(before.entries), dict(after.entries)
     return [item for item in _changes(before, after)
             if not _directory_mtime_only(item.path, previous, current)]
-
-
-def verify_stage_attempt_changes(
-    before: WorkspaceSnapshot,
-    after: WorkspaceSnapshot,
-    stage: dict,
-) -> list[FileChange]:
-    """Validate implementation changes while ignoring parent-directory mtime churn."""
-    require(before.root == after.root, "Snapshots must belong to the same project root")
-    writes = _boundaries(stage, "write_paths")
-    protected = _boundaries(stage, "protected_paths")
-    previous, current = dict(before.entries), dict(after.entries)
-    changes = [
-        item
-        for item in _changes(before, after)
-        if not _directory_mtime_only(item.path, previous, current)
-    ]
-    protected_changes = [
-        item
-        for item in changes
-        if _matches_any(_path_for_match(item.path), protected)
-    ]
-    _require_untainted(
-        not protected_changes,
-        "Protected paths changed: " + _display_paths(protected_changes),
-    )
-    matching = [
-        _path_for_match(item.path)
-        for item in changes
-        if _matches_any(_path_for_match(item.path), writes)
-    ]
-    escaped = [
-        item
-        for item in changes
-        if not _allowed_stage_change(item, current, writes, matching)
-    ]
-    _require_untainted(not escaped,
-                       "Changes escaped write_paths: " + _display_paths(escaped))
-    return changes
 
 
 def _directory_mtime_only(path: str, before: dict, after: dict) -> bool:
@@ -226,42 +144,6 @@ def _directory_mtime_only(path: str, before: dict, after: dict) -> bool:
         return False
     fields = ("kind", "size", "sha256", "mode", "attributes", "uid", "gid")
     return all(getattr(left, name) == getattr(right, name) for name in fields)
-
-
-def _allowed_stage_change(
-    change: FileChange,
-    after: dict,
-    writes: list[str],
-    matching: list[str],
-) -> bool:
-    path = _path_for_match(change.path)
-    if _matches_any(path, writes):
-        return True
-    value = after.get(change.path)
-    return (
-        change.kind == "added"
-        and value is not None
-        and value.kind == "directory"
-        and _is_boundary_ancestor(path, writes)
-        and any(_is_path_ancestor(path, candidate) for candidate in matching)
-    )
-
-
-def _path_for_match(path: str) -> str:
-    return path[:-1] if path.endswith("/") else path
-
-
-def _is_path_ancestor(path: str, candidate: str) -> bool:
-    parts = tuple(item.casefold() for item in path.split("/") if item)
-    target = tuple(item.casefold() for item in candidate.split("/") if item)
-    return len(parts) < len(target) and parts == target[: len(parts)]
-
-def _is_boundary_ancestor(path: str, patterns: list[str]) -> bool:
-    parts = tuple(item.casefold() for item in path.split("/") if item not in {"", "."})
-    return bool(parts) and any(
-        _states_after(parts, tuple(item.casefold() for item in pattern.split("/")))
-        for pattern in patterns
-    )
 
 
 def _changes(before: WorkspaceSnapshot, after: WorkspaceSnapshot) -> list[FileChange]:
@@ -275,56 +157,6 @@ def _changes(before: WorkspaceSnapshot, after: WorkspaceSnapshot) -> list[FileCh
         elif previous[path] != current[path]:
             changes.append(FileChange(path, "modified"))
     return changes
-
-
-def _boundaries(stage: dict, field: str) -> list[str]:
-    require(isinstance(stage, dict) and isinstance(stage.get(field), list),
-            f"Stage {field} must be a list")
-    values = stage[field]
-    require(bool(values) and all(isinstance(value, str) and value for value in values),
-            f"Stage {field} must contain paths")
-    for value in values:
-        parts = value.replace("\\", "/").split("/")
-        require(not any(part.casefold() in _CONTROL_IGNORED for part in parts),
-                "Stage boundaries cannot target ignored directories")
-    return values
-
-
-def _matches_any(path: str, patterns: list[str]) -> bool:
-    components = tuple(part.casefold() for part in path.split("/"))
-    return any(_match_parts(components, tuple(part.casefold() for part in pattern.split("/")))
-               for pattern in patterns)
-
-
-def _match_parts(path: tuple[str, ...], pattern: tuple[str, ...]) -> bool:
-    return len(pattern) in _states_after(path, pattern)
-
-
-def _states_after(path: tuple[str, ...], pattern: tuple[str, ...]) -> set[int]:
-    states = _epsilon_closure({0}, pattern)
-    for component in path:
-        following: set[int] = set()
-        for index in states:
-            if index == len(pattern):
-                continue
-            token = pattern[index]
-            if token == "**":
-                following.add(index)
-            elif token in {"*", component}:
-                following.add(index + 1)
-        states = _epsilon_closure(following, pattern)
-    return states
-
-
-def _epsilon_closure(states: set[int], pattern: tuple[str, ...]) -> set[int]:
-    expanded = set(states)
-    pending = list(states)
-    while pending:
-        index = pending.pop()
-        if index < len(pattern) and pattern[index] == "**" and index + 1 not in expanded:
-            expanded.add(index + 1)
-            pending.append(index + 1)
-    return expanded
 
 
 def _reject_links(directory: Path, names: list[str]) -> None:
@@ -458,9 +290,3 @@ def _stable(before: os.stat_result, after: os.stat_result) -> bool:
     fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_nlink", "st_mode",
               "st_file_attributes", "st_uid", "st_gid")
     return all(getattr(before, field, None) == getattr(after, field, None) for field in fields)
-
-
-def _display_paths(changes: list[FileChange]) -> str:
-    paths = [change.path for change in changes[:20]]
-    suffix = " ..." if len(changes) > len(paths) else ""
-    return ", ".join(paths) + suffix

@@ -169,12 +169,6 @@ Windows 上自动探测到的 `.cmd`、`.bat`、`.ps1` 包装器不会被直接�
 storyloop init C:\work\my-project --settings C:\work\settings.json
 ```
 
-## 兼容的旧流程与 v2 Stage DAG
-
-早期独立实例的 `init --goal`、`discuss`、`prepare`、`approve`、`run --story`、`accept` 和 HTML 报告仍保留。当 `init` 的目标是已有 Git 根目录时自动进入新的通用工程模式；目标是空目录时保持旧实例模式。
-
-底层 v2 `stage-run`、`stage-status`、`stage-resume` 仍可用于技术 Stage/DAG 编排，但普通产品迭代不需要直接操作这些命令。其协议见 [集成协议](docs/protocols.md) 与 [架构说明](docs/architecture.md)。
-
 ## 开发与验证
 
 项目仅使用 Python 标准库：

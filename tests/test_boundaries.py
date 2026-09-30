@@ -1,4 +1,4 @@
-"""Filesystem boundary contracts for stage implementation attempts."""
+"""Workspace snapshots: the tamper-evident view the loop audits every agent against."""
 
 from __future__ import annotations
 
@@ -17,20 +17,9 @@ from storyloop.boundaries import (
     _is_link,
     _open_descriptor,
     capture_snapshot,
-    verify_stage_changes,
+    snapshot_changes,
 )
 from storyloop.models import StoryLoopError
-
-
-def stage() -> dict:
-    return {
-        "id": "feature",
-        "depends_on": [],
-        "specs": ["openspec/changes/feature/proposal.md"],
-        "write_paths": ["service/business/**"],
-        "protected_paths": ["acceptance/**", "openspec/**"],
-        "judges": [],
-    }
 
 
 class BoundaryTests(unittest.TestCase):
@@ -61,7 +50,7 @@ class BoundaryTests(unittest.TestCase):
         self.write("service/business/existing.py", "after")
         (self.root / "service/business/remove.py").unlink()
 
-        changes = verify_stage_changes(before, capture_snapshot(self.root), stage())
+        changes = snapshot_changes(before, capture_snapshot(self.root))
 
         self.assertEqual([(item.path, item.kind) for item in changes], [
             ("service/business/existing.py", "modified"),
@@ -70,53 +59,19 @@ class BoundaryTests(unittest.TestCase):
         ])
         self.assertTrue(all("\\" not in item.path for item in changes))
 
-    def test_blocks_outside_write_without_deleting_user_file(self):
-        before = capture_snapshot(self.root)
-        escaped = self.write("service/application.py", "outside")
-
-        with self.assertRaisesRegex(StoryLoopError, "escaped write_paths"):
-            verify_stage_changes(before, capture_snapshot(self.root), stage())
-        self.assertTrue(escaped.exists())
-
-    def test_blocks_protected_file_modification(self):
-        before = capture_snapshot(self.root)
-        self.write("acceptance/check.py", "tampered")
-
-        with self.assertRaisesRegex(StoryLoopError, "Protected paths changed"):
-            verify_stage_changes(before, capture_snapshot(self.root), stage())
-
-    def test_protected_boundaries_are_case_insensitive_for_portability(self):
-        root = self.root.resolve()
-        fingerprint = FileFingerprint(1, "0" * 64)
-        before = WorkspaceSnapshot(root, ())
-        after = WorkspaceSnapshot(root, (("service/secrets/secret.py", fingerprint),))
-        portable = stage()
-        portable["write_paths"] = ["service/**"]
-        portable["protected_paths"] = ["Service/Secrets/**"]
-
-        with self.assertRaisesRegex(StoryLoopError, "Protected paths changed"):
-            verify_stage_changes(before, after, portable)
-
-    def test_blocks_protected_file_deletion(self):
-        before = capture_snapshot(self.root)
-        (self.root / "openspec/changes/feature/proposal.md").unlink()
-
-        with self.assertRaisesRegex(StoryLoopError, "Protected paths changed"):
-            verify_stage_changes(before, capture_snapshot(self.root), stage())
-
     def test_ignores_fixed_build_cache_directories(self):
         before = capture_snapshot(self.root)
         self.write("service/__pycache__/generated.pyc", b"cache")
         self.write("target/classes/generated.class", b"cache")
 
-        self.assertEqual(verify_stage_changes(before, capture_snapshot(self.root), stage()), [])
+        self.assertEqual(snapshot_changes(before, capture_snapshot(self.root)), [])
 
     def test_tracks_hidden_source_files_instead_of_silently_ignoring_them(self):
         before = capture_snapshot(self.root)
         self.write(".config", "changed")
 
-        with self.assertRaisesRegex(StoryLoopError, "escaped write_paths"):
-            verify_stage_changes(before, capture_snapshot(self.root), stage())
+        self.assertEqual([(item.path, item.kind) for item in snapshot_changes(before, capture_snapshot(self.root))],
+                         [(".config", "added")])
 
     def test_rejects_sensitive_files_without_exposing_their_contents(self):
         marker = "never-expose-this-value"
@@ -164,7 +119,7 @@ class BoundaryTests(unittest.TestCase):
         finally:
             os.close(descriptor)
 
-    def test_rejects_hard_links_that_can_escape_write_boundaries(self):
+    def test_rejects_hard_links_that_can_escape_the_workspace(self):
         outside = Path(self.temp.name) / "outside-source.py"
         outside.write_text("shared inode", encoding="utf-8")
         link = self.root / "service/business/hard-link.py"
@@ -182,7 +137,7 @@ class BoundaryTests(unittest.TestCase):
         before = capture_snapshot(self.root)
         self.write("service/business/故事.bin", large + b"y")
 
-        changes = verify_stage_changes(before, capture_snapshot(self.root), stage())
+        changes = snapshot_changes(before, capture_snapshot(self.root))
         self.assertEqual([(item.path, item.kind) for item in changes],
                          [("service/business/故事.bin", "modified")])
 
@@ -251,16 +206,7 @@ class BoundaryTests(unittest.TestCase):
         other.mkdir()
 
         with self.assertRaisesRegex(StoryLoopError, "same project root"):
-            verify_stage_changes(before, capture_snapshot(other), stage())
-
-    def test_rejects_write_boundaries_hidden_by_ignored_directories(self):
-        before = capture_snapshot(self.root)
-        for boundary in ("node_modules/**", "service/node_modules/**"):
-            invalid = stage()
-            invalid["write_paths"] = [boundary]
-
-            with self.assertRaisesRegex(StoryLoopError, "ignored directories"):
-                verify_stage_changes(before, before, invalid)
+            snapshot_changes(before, capture_snapshot(other))
 
     def test_deep_paths_do_not_exhaust_python_recursion(self):
         root = self.root.resolve()
@@ -270,7 +216,7 @@ class BoundaryTests(unittest.TestCase):
         after = WorkspaceSnapshot(root, ((deep_path, fingerprint),))
 
         try:
-            changes = verify_stage_changes(before, after, stage())
+            changes = snapshot_changes(before, after)
         except RecursionError:
             self.fail("deep paths must not exhaust Python recursion")
         self.assertEqual([(item.path, item.kind) for item in changes], [(deep_path, "added")])

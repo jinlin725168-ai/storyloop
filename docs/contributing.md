@@ -48,7 +48,7 @@
 | 底座 | `baseline.py`、`base_upgrade.py`、`project_profile.py` |
 | 命令面 | `cli.py` |
 
-`stage_*`、`coordinator_*`、`final_judges.py`、`v2_cli.py` 是 v2 Stage/DAG 引擎，产品迭代模式不依赖它们；修改前先确认影响面。
+早期独立实例模式与 v2 Stage/DAG 引擎已删除（本地 tag `archive/legacy-modes` 保存了删除前的状态），不要再引入按实例目录或 Stage 配置工作的代码路径。
 
 ## 技能包
 

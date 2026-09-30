@@ -10,7 +10,6 @@ import sys
 import tempfile
 import time
 
-from .agents import _codex_executable
 from .baseline import load_project_config
 from .models import StoryLoopError, require
 from .foundation_survey import foundation_payload
@@ -367,6 +366,21 @@ def _codex(project: Path, request: dict, config: dict, schema: dict, trace: dict
             body["_telemetry"] = dict(telemetry)
             return body
     raise StoryLoopError("Project agent did not return a JSON object")  # unreachable
+
+
+def _codex_executable() -> list[str]:
+    """The Codex CLI argv; on Windows an npm .cmd/.ps1 shim is resolved to node + codex.js."""
+    executable = shutil.which("codex.exe") or shutil.which("codex")
+    if executable and Path(executable).suffix.lower() not in {".cmd", ".bat", ".ps1"}:
+        return [executable]
+    shim = executable or shutil.which("codex.cmd") or shutil.which("codex.ps1")
+    if shim:
+        root = Path(shim).parent
+        entry = root / "node_modules" / "@openai" / "codex" / "bin" / "codex.js"
+        node = str(root / "node.exe") if (root / "node.exe").is_file() else shutil.which("node")
+        if entry.is_file() and node:
+            return [node, str(entry)]
+    raise StoryLoopError("Codex CLI is not available. Configure a manual or command adapter.")
 
 
 def _codex_once(project: Path, argv: list[str], prompt: str, timeout: int, telemetry: dict,

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import sys
 
-from . import __version__, discovery, engine, v2_cli
+from . import __version__
 from .answers import pending_questions, record_answers
 from .approvals import approve_change
 from .baseline import BASELINE_PATH, bootstrap_project
@@ -23,10 +23,9 @@ from .models import StoryLoopError, require
 from .processutil import redact
 from .project_agents import invoke_project_agent
 from .project_loop import load_run_state, repair_smoke, run_change
-from .report import render
 from .run_recovery import reset_run
 from .smoke_runner import run_ci
-from .storage import initialize, load_json
+from .storage import load_json
 from .telemetry import adopt_pending, summarize
 
 
@@ -35,19 +34,17 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument("--version", action="version", version=__version__)
     sub = root.add_subparsers(dest="command", required=True)
     descriptions = {
-        "init": "一键锁定现有 Git 工程底座，或创建旧版独立实例",
+        "init": "一键锁定现有 Git 工程底座",
         "change": "用一句产品意图与 AI 共创 OpenSpec 用户故事和验收条件",
         "approve": "批准产品合同，并自动完成实现、验收、报告和本地合并",
-        "run": "执行或继续已批准的产品变更（旧实例也可按故事运行）",
-        "status": "查看产品变更或旧实例状态",
+        "run": "执行或继续已批准的产品变更",
+        "status": "查看产品变更状态与下一步命令",
         "ci": "CI 入口：隔离运行该变更的验收套件和项目级系统冒烟",
-        "report": "定位某次变更的验收报告或生成旧实例报告",
+        "report": "定位某次变更的验收报告",
         "base-propose": "为计划中的底座改动开一个 BASE 提案（无需先触发功能变更）",
         "base-update": "按 BASE 提案校验独立底座提交并升级底座版本",
-        "discuss": "旧实例：与 AI 共创故事和验收边界",
-        "prepare": "旧实例：生成验收测试与初始骨架（不执行）",
         "answer": "回答代理在 NEEDS_INPUT 停点提出的问题（--answer 可重复，按问题顺序）",
-        "accept": "记录人工验收：产品变更用 --change 与 --criterion，旧实例用 --story",
+        "accept": "记录人工验收：--change 与 --criterion（仅在 MANUAL_ACCEPTANCE_REQUIRED 停点可用）",
         "log": "查看一个变更的全过程：每次代理调用（结果、耗时、费用、会话、调用记录目录）、每轮失败原因和下一步",
         "reset": "人工复位卡住的运行（WORKSPACE_TAINTED 或工作区已变的人工验收等待），需说明理由",
         "acceptance-repair": "变更验收用例本身有缺陷时，让 acceptance 角色修复自己的套件并从合同提交重新证明 RED，需说明理由",
@@ -57,14 +54,12 @@ def parser() -> argparse.ArgumentParser:
         "smoke-apply": "把审核过的系统冒烟草案安装到 acceptance/smoke/，隔离跑绿后提交；红的草案不会留下任何改动",
         "skills": "把引擎自带的技能（foundation-survey 等）安装或刷新到项目的 .claude/skills 与 .codex/skills；已初始化的项目会自动开 BASE 提案",
         "survey": "底座摸底：代理只读探索仓库，写出 openspec/foundation/ 知识库并开 BASE 提案；提交后 base-update 即受保护",
-        "demo": "运行自带脚本示例（不调用 AI）",
     }
     for command, help_text in descriptions.items():
         child = sub.add_parser(command, help=help_text)
         child.add_argument("project", type=Path)
         child.add_argument("--json", action="store_true", help="输出完整 JSON")
         if command == "init":
-            child.add_argument("--goal", default="")
             child.add_argument("--settings", type=Path,
                                help="可选 JSON：显式 test_commands/module_roots/integration_paths")
         elif command == "change":
@@ -105,32 +100,23 @@ def parser() -> argparse.ArgumentParser:
                                help="上游同步：允许提案包含可变区路径")
             child.add_argument("--allow-ci", action="store_true",
                                help="由人新增或修改 CI 配置（.github/workflows 等）；代理永远不能")
-        elif command == "discuss":
-            child.add_argument("--message", required=True)
         elif command == "run":
-            child.add_argument("--change", dest="change_id")
-            child.add_argument("--story")
+            child.add_argument("--change", dest="change_id", required=True)
             child.add_argument("--no-interactive", action="store_true",
                                help="停在 NEEDS_INPUT 时不在终端提问")
         elif command == "accept":
-            child.add_argument("--story")
-            child.add_argument("--change", dest="change_id")
-            child.add_argument("--criterion", dest="criteria", action="append", default=[])
+            child.add_argument("--change", dest="change_id", required=True)
+            child.add_argument("--criterion", dest="criteria", action="append", default=[], required=True)
             child.add_argument("--note", required=True)
-    v2_cli.add_parsers(sub)
     return root
 
 
 def dispatch(args) -> dict:
     project = args.project.resolve()
-    if args.command in v2_cli.STAGE_COMMANDS:
-        return v2_cli.dispatch(args)
     if args.command == "init":
-        if (project / ".git").exists():
-            settings = load_json(args.settings.resolve()) if args.settings else None
-            return bootstrap_project(project, settings)
-        initialize(project, args.goal)
-        return {"status": "DRAFT", "project": str(project), "next": "discuss --message 你的想法"}
+        require((project / ".git").exists(), "storyloop init needs an existing Git repository (git init first)")
+        settings = load_json(args.settings.resolve()) if args.settings else None
+        return bootstrap_project(project, settings)
     if args.command == "change":
         return _change(project, args)
     if args.command == "base-propose":
@@ -153,9 +139,8 @@ def dispatch(args) -> dict:
         return survey_foundation(project, args.reason, from_file=args.from_file)
     if args.command == "ci":
         return run_ci(project, args.change_id)
-    if _is_product_project(project):
-        return _product_dispatch(project, args)
-    return _legacy_dispatch(project, args)
+    require(_is_product_project(project), "Run storyloop init on this Git project first")
+    return _product_dispatch(project, args)
 
 
 def _change(project: Path, args) -> dict:
@@ -281,30 +266,7 @@ def _product_dispatch(project: Path, args) -> dict:
         path = project / "reports" / "storyloop" / change_id / "report.md"
         require(path.is_file(), "Acceptance report is not available")
         return {"status": "REPORT", "change_id": change_id, "report": str(path)}
-    raise StoryLoopError(f"{args.command} is only available for a legacy StoryLoop instance")
-
-
-def _legacy_dispatch(project: Path, args) -> dict:
-    if args.command == "discuss":
-        return discovery.discuss(project, args.message)
-    if args.command == "prepare":
-        return discovery.prepare(project)
-    if args.command == "approve":
-        return {"status": "APPROVED", **engine.approve(project)}
-    if args.command == "accept":
-        require(args.story, "Legacy acceptance needs --story")
-        return engine.accept(project, args.story, args.note)
-    if args.command == "report":
-        return {"report": str(render(project))}
-    if args.command == "demo":
-        from .demo import create_demo
-        create_demo(project)
-        engine.approve(project)
-        result = engine.run(project)
-        result["report"] = str(render(project))
-        result["demo"] = "Scripted fixture; external checks and code changes are real. No AI model was called."
-        return result
-    return engine.run(project, args.story) if args.command == "run" else engine.status(project)
+    raise StoryLoopError(f"Unknown command {args.command}")
 
 
 def run_with_answers(project: Path, change_id: str, interactive: bool,
@@ -348,15 +310,8 @@ def display(result: dict, complete_json: bool) -> None:
     if result.get("status") == "LOG":
         print(render_log(result))
         return
-    if "goal" in result:
-        print(result["goal"])
-        for story in result.get("stories", []):
-            print(f"  {story['id']}  {story['title']} ({len(story['acceptance'])} 项验收)")
-        for question in result.get("questions", []):
-            print(f"  ? {question['id']}: {question['text']}")
-        return
     print(result.get("status", "REPORT"))
-    for key in ("change_id", "project", "next", "report", "demo", "pending", "accepted", "paths", "written"):
+    for key in ("change_id", "project", "next", "report", "pending", "accepted", "paths", "written"):
         if key in result and result[key] is not None:
             print(f"{key}: {result[key]}")
     for warning in result.get("warnings", []):
@@ -372,9 +327,9 @@ def main(argv: list[str] | None = None) -> int:
         result = dispatch(args)
         display(result, args.json)
         failures = {
-            "FAILED", "BLOCKED", "NEEDS_INPUT", "STALE", "INTERRUPTED",
-            "ARCHITECTURE_DECISION_REQUIRED", "UNSAFE_CONTAINMENT", "WORKSPACE_TAINTED",
-            "BUDGET_EXHAUSTED", "REPEATED_FAILURE", "BASE_CHANGE_REQUIRED",
+            "FAILED", "BLOCKED", "NEEDS_INPUT", "INTERRUPTED",
+            "UNSAFE_CONTAINMENT", "WORKSPACE_TAINTED",
+            "BUDGET_EXHAUSTED", "BASE_CHANGE_REQUIRED",
             "BOUNDARY_VIOLATION", "ERROR", "CHARACTERIZATION_FAILED",
         }
         return 2 if result.get("status") in failures else 0
