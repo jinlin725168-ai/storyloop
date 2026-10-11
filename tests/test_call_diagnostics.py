@@ -100,6 +100,9 @@ class LogAndNextStepTests(unittest.TestCase):
             result = run_change(root, change_id, services)
             self.assertEqual(result["status"], "BUDGET_EXHAUSTED")
             self.assertIn(f"storyloop acceptance-repair {root} --change {change_id}", result["next"])
+            # A started run's contract cannot be revised, so the hint must not suggest it.
+            self.assertNotIn("修订合同", result["next"])
+            self.assertIn("max_attempts", result["next"])
             with patch("sys.stdout", new_callable=io.StringIO) as out:
                 code = cli.main(["status", str(root), "--change", change_id, "--json"])
             self.assertEqual(code, 0)
@@ -118,7 +121,8 @@ class LogAndNextStepTests(unittest.TestCase):
 class ExitCodeTests(unittest.TestCase):
     def test_stops_that_need_a_human_fix_exit_2_and_manual_acceptance_exits_0(self):
         expected = {"CHARACTERIZATION_FAILED": 2, "BUDGET_EXHAUSTED": 2, "NEEDS_INPUT": 2,
-                    "MANUAL_ACCEPTANCE_REQUIRED": 0, "PASSED": 0}
+                    "SMOKE_UPDATE_FAILED": 2, "MANUAL_ACCEPTANCE_REQUIRED": 0, "PASSED": 0,
+                    "SMOKE_APPLIED": 0}
         for status, code in expected.items():
             with self.subTest(status=status), \
                     patch("storyloop.cli.dispatch", return_value={"status": status, "change_id": "FEAT-1"}), \

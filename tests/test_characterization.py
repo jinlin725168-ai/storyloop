@@ -151,6 +151,40 @@ class CharacterizationGateTests(unittest.TestCase):
         finally:
             temporary.cleanup()
 
+    def test_a_red_characterization_resumes_after_the_human_fixes_the_tests(self):
+        temporary, root, change_id = _repo({"unit_commands": [UNIT], "test_roots": ["tests"]})
+        calls: list = []
+
+        def red(project, context):
+            (project / "tests/test_characterize_service.py").write_text(
+                GREEN_TEST.replace("assertIn", "assertNotIn"), encoding="utf-8")
+            return {"summary": "wrong lock", "touched": ["modules/orders/service.py"],
+                    "tests": ["tests/test_characterize_service.py"], "questions": []}
+
+        def implement(project, context):
+            (project / "modules/orders/service.py").write_text("VALUE = 1\n", encoding="utf-8")
+            return {"summary": "done", "questions": []}
+
+        services = self._services(change_id, implement, red, calls)
+        try:
+            self.assertEqual(run_change(root, change_id, services)["status"], "CHARACTERIZATION_FAILED")
+            # Still red: the run pauses again at the same gate instead of refusing to resume.
+            self.assertEqual(run_change(root, change_id, services)["status"], "CHARACTERIZATION_FAILED")
+            (root / "tests/test_characterize_service.py").write_text(GREEN_TEST, encoding="utf-8")
+            result = run_change(root, change_id, services)
+            self.assertEqual(result["status"], "PASSED")
+            self.assertEqual(len(calls), 1)  # the human's fix is re-verified, the agent is not asked again
+            state = load_run_state(root, change_id)
+            self.assertEqual(state["characterization"]["status"], "GREEN")
+            self.assertEqual(state["characterization"]["touched"], ["modules/orders/service.py"])
+            self.assertNotIn("pending_characterization", state)
+            subjects = git(root, "log", "--format=%s", "-8").splitlines()
+            self.assertIn(f"test({change_id}): characterize touched paths", subjects)
+            committed = git(root, "log", "--format=%H", "--grep", "characterize touched paths", "-1").strip()
+            self.assertIn("assertIn(", git(root, "show", f"{committed}:tests/test_characterize_service.py"))
+        finally:
+            temporary.cleanup()
+
     def test_gate_is_skipped_when_the_project_declares_no_test_roots(self):
         temporary, root, change_id = _repo({"unit_commands": [UNIT]})
         calls: list = []

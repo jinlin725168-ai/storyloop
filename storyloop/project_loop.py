@@ -88,6 +88,10 @@ def _run_change_locked(
         return _finalize_change(project, change, state)
     if fresh or state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED"}:
         _prepare_acceptance(project, change, services, state)
+    if state["status"] == "CHARACTERIZATION_FAILED":
+        paused = _resume_characterization(project, change, state, config)
+        if paused is not None:
+            return paused
     paused = _ensure_design(project, change, state, services, config) or \
         _ensure_characterization(project, change, state, services, config)
     if paused is not None:
@@ -186,6 +190,7 @@ def _open_run(project: Path, change: dict) -> tuple[dict, int, bool]:
         resumable = {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED",
                      "IMPLEMENTING", "BASE_CHANGE_REQUIRED",
                      "BOUNDARY_VIOLATION", "NEEDS_INPUT", "BUDGET_EXHAUSTED",
+                     "CHARACTERIZATION_FAILED",
                      "VERIFIED", "MANUAL_ACCEPTANCE_REQUIRED", "MERGED", "RECEIPTING",
                      "FINALIZING"}
         require(state.get("change_id") == change_id and state.get("status") in resumable,
@@ -683,19 +688,69 @@ def _characterize_paths(project: Path, change: dict, state: dict, services: Loop
     for path in touched:
         require(_exists_at(project, state["contract_commit"], path) and not matches_test_root(path, profile["test_roots"]),
                 f"Characterized path must be an existing non-test file: {path}")
+    pending = {"touched": touched, "tests": sorted(set(response["tests"]) | set(changed)), "changed": changed,
+               "extend": list(extend or [])}
+    return _verify_characterization(project, change_id, state, config, pending)
+
+
+def _verify_characterization(project: Path, change_id: str, state: dict, config: dict,
+                             pending: dict) -> dict | None:
+    """The gate itself: the whole unit layer green on the current code, then lock the tests in a commit.
+
+    A red result pauses with the pending lock kept in the run state, so the human can fix the tests
+    in place and `run` re-verifies them without asking the agent again.
+    """
+    profile = config["profile"]
     unit = run_commands_isolated(project, layer_commands(profile, "unit"), config["check_timeout_seconds"])
     if unit["status"] != "PASSED":
-        return _pause(project, state, "CHARACTERIZATION_FAILED", unit=unit,
-                      error="Characterization tests must be green on the current code before implementation",
-                      next="Fix the characterization tests (they lock existing behaviour), then storyloop run")
+        return _pause(project, state, "CHARACTERIZATION_FAILED", unit=unit, pending_characterization=pending,
+                      error="Characterization tests must be green on the current code before implementation")
+    previous = state.get("characterization") or {"touched": [], "tests": []}
+    present = _uncommitted(project, pending["changed"])  # a test the human deleted is simply not locked
     commits = list(previous.get("commits", []))
-    if changed:
-        commits.append(commit_paths(project, changed, f"test({change_id}): characterize touched paths")["commit"])
-    state["characterization"] = {"status": "GREEN", "touched": touched,
-                                 "tests": sorted(set(previous.get("tests", [])) | set(response["tests"]) | set(changed)),
+    if present:
+        commits.append(commit_paths(project, present, f"test({change_id}): characterize touched paths")["commit"])
+    state["characterization"] = {"status": "GREEN",
+                                 "touched": sorted(set(previous.get("touched", [])) | set(pending["touched"])),
+                                 "tests": sorted(set(previous.get("tests", [])) | set(pending["tests"])),
                                  "commits": commits}
+    for key in ("pending_characterization", "unit", "error", "next"):
+        state.pop(key, None)
     _save_run(project, state)
     return None
+
+
+def _resume_characterization(project: Path, change: dict, state: dict, config: dict) -> dict | None:
+    """Re-verify a red characterization after the human fixed the tests in place (no agent call).
+
+    The fix may only touch test files: any boundary violation still stops the run. A lock made
+    while extending an attempt costs that attempt, exactly as when it is green the first time.
+    """
+    pending = state.get("pending_characterization")
+    require(isinstance(pending, dict) and isinstance(pending.get("changed"), list),
+            "Paused characterization lacks its pending lock; start a new product change")
+    change_id = change["change_id"]
+    boundary = audit_project_changes(project, change_id)
+    if boundary["violations"]:
+        return _pause_for_boundary(project, state, boundary)
+    paused = _verify_characterization(project, change_id, state, config, pending)
+    if paused is not None:
+        return paused
+    state["status"] = "IMPLEMENTING"
+    if pending.get("extend"):
+        state["failures"].append({"attempt": state["attempt"],
+                                  "characterization": {"status": "FAILED", "uncharacterized": pending["extend"]}})
+    _save_run(project, state)
+    return None
+
+
+def _uncommitted(project: Path, paths: list[str]) -> list[str]:
+    """The given paths that still differ from HEAD (new, modified or deleted after being tracked)."""
+    if not paths:
+        return []
+    status = _git(project, "status", "--porcelain=v1", "--untracked-files=all", "-z", "--", *paths)
+    changed = {entry[3:] for entry in filter(None, status.split("\0"))}
+    return [path for path in paths if path in changed]
 
 
 def _uncharacterized_paths(project: Path, state: dict, boundary: dict, config: dict) -> list[str]:

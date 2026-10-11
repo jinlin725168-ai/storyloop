@@ -331,6 +331,7 @@ def main(argv: list[str] | None = None) -> int:
             "UNSAFE_CONTAINMENT", "WORKSPACE_TAINTED",
             "BUDGET_EXHAUSTED", "BASE_CHANGE_REQUIRED",
             "BOUNDARY_VIOLATION", "ERROR", "CHARACTERIZATION_FAILED",
+            "SMOKE_UPDATE_FAILED",
         }
         return 2 if result.get("status") in failures else 0
     except StoryLoopError as exc:

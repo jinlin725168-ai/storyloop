@@ -32,9 +32,11 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
                 f"代理执行了 git add），清理后 storyloop reset {where} --reason <原因>，再 {run}")
     if status == "BUDGET_EXHAUSTED":
         return (f"{log} 看每轮失败原因：验收用例本身有缺陷用 storyloop acceptance-repair {where} "
-                f"--reason <原因>；实现问题就修订合同或提高 max_attempts 后 {run}")
+                f"--reason <原因>；实现问题就提高 .storyloop/config.json 的 max_attempts 后 {run}，"
+                f"或另开新变更（运行开始后合同不能修订）")
     if status == "CHARACTERIZATION_FAILED":
-        return f"特征化测试在旧代码上不绿：修正测试（它们只锁定现有行为）后 {run}"
+        return (f"特征化测试在旧代码上不绿：就地修正 test_roots 里的这些测试（它们只锁定现有行为），"
+                f"不用提交；{run} 会重跑单元层，绿了再提交并继续")
     if status == "AGENT_CONTRACT_INVALID":
         return f"代理的回答不符合角色结构：{log} 查看该次调用的 response 与 schema_errors，再 {run} 重试"
     if status == "DRAFT":
