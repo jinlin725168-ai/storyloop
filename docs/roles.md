@@ -8,8 +8,8 @@
 | 产品经理 / BA | `product` | 无 | 意图、知识库的能力清单与活规格、澄清回答 | 合同：故事、EARS 规则、Given/When/Then 条件、澄清记录 | 人批准才生效 |
 | 测试 / QA | `acceptance` | `acceptance/changes/<id>/`（仅生成与修复时） | 合同、知识库的 testing 与 building-blocks | 变更验收套件（先红）；合并后的系统冒烟提议 | 套件是门；提议需人 `smoke-apply` |
 | 架构师（方案） | `design` | 无 | 合同、知识库的 extension / building-blocks / modules、既有代码 | 方案：Files、Data And Interfaces、Decisions、Risks，以及将修改的既有文件 `touched` | 否，但 `touched` 喂特征化门，方案是审查的对照物；故事数少于 `design_min_stories`（默认 2）时跳过 |
-| 开发（开工前） | `characterize` | `test_roots` | 合同、方案的 `touched` | 锁定现有行为的特征化测试，在旧代码上跑绿 | 是（机器验证） |
-| 开发 | `implement` | 可变区 + `test_roots`，既有文件只限 `touched` | 合同、方案、失败证据、答案、已锁定路径 | 代码；`design` 记录（Tests First、Decisions） | 由各层验证判定 |
+| 开发（开工前） | `characterize` | `test_roots` | 合同、完整方案（含 `touched`）、`test_roots`、已锁定清单、需补锁的路径 | 锁定现有行为的特征化测试，在旧代码上跑绿 | 是（机器验证）；没配置 `test_roots` 或 `unit_commands` 时跳过 |
+| 开发 | `implement` | 可变区 + `test_roots`；特征化门生效时，未锁定的既有文件改动会被还原、补锁并计一轮失败 | 合同、方案、失败证据、答案、特征化结果 | 代码；`design` 记录（Tests First、Decisions） | 由各层验证判定 |
 | 代码评审 | `review` | 无（只读 + 受限命令） | 合同、各层证据、方案、实现记录、知识库 | verdict + findings | 是 |
 | 产品负责人 | 人 | 批准、回答、人工验收、应用冒烟、批准底座 | 一切 | 决定 | 是 |
 
@@ -26,7 +26,7 @@ flowchart LR
     I --> V[单元 / 集成 / 验收 / 系统冒烟 / 静态检查]
     V --> R[review]
     R --> H2{manual 条件?}
-    H2 --> M[合并 + 归档]
+    H2 --> M[报告 + 文档 + 合并]
     M -.提议.-> A2[acceptance<br/>smoke-propose]
     A2 --> H3{人 smoke-apply}
 ```
@@ -35,7 +35,7 @@ flowchart LR
 
 - `review`：正确性、安全、架构合规（对照 design_plan、extension.md 与 building-blocks.md）、测试质量（Tests First 是否真实）四个视角并行，主评审汇总 verdict。Claude 适配器已实现（默认开启，`--review-perspectives` 可调）。
 - `implement`：全栈变更按方案拆后端、前端、SQL 通道并行，主实现者集成并跑分层检查。Claude 适配器已实现（`--implement-lanes name=前缀,…`，需要 design_plan；少于两条通道自动退回单会话）。
-- `acceptance`：接口用例与浏览器用例分开写。
+- `acceptance`：接口用例与浏览器用例分开写（规划中，Claude 适配器尚未实现）。
 
 这些不改引擎协议：引擎只看到角色的返回结构。
 

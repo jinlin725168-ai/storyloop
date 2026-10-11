@@ -1,12 +1,12 @@
 # 新底座接入手册
 
-把一个已有仓库接进 StoryLoop 需要准备三样项目侧的东西：**settings**（告诉引擎什么能改、怎么回归）、**冒烟执行器**（把候选副本跑起来并执行用例）、**代理规范**（告诉四个角色这个仓库的约定）。引擎本身不知道你的技术栈。参考实现是 RuoYi 底座仓库 `ruoyi-platform/acceptance/`，下文以它为例。
+把一个已有仓库接进 StoryLoop 需要准备三样项目侧的东西：**settings**（告诉引擎什么能改、怎么回归）、**冒烟执行器**（把候选副本跑起来并执行用例）、**代理规范**（告诉各个角色这个仓库的约定）。引擎本身不知道你的技术栈。参考实现是 RuoYi 底座仓库 `ruoyi-platform/acceptance/`，下文以它为例。
 
 ```mermaid
 flowchart LR
     S[storyloop-settings.json] --> I[storyloop init]
     I --> C[.storyloop/config.json 适配器]
-    T[acceptance/tools/<stack>_smoke.py] --> M[冒烟角色写的 manifest 命令]
+    T[acceptance/tools/<stack>_smoke.py] --> M[acceptance 角色写的 manifest 命令]
     G[acceptance/AGENT_GUIDE.md] --> A[适配器 --guide]
     S2[acceptance/smoke 系统冒烟基线] --> M
 ```
@@ -14,7 +14,7 @@ flowchart LR
 ## 1. 仓库准备
 
 - 单一 Git 根目录，工作树干净，处在有名字的本地分支。多个上游用 `git subtree add --squash` 引进来（`backend/`、`frontend/`），上游同步就是一次 BASE 迭代。
-- 能离线构建和跑测试。冒烟在候选副本里执行，环境只有 PATH 和临时目录变量，依赖必须已经在本机（Maven `-o`、`node_modules` 已装）。
+- 能离线构建和跑测试。冒烟在候选副本里执行，环境只有 `PATH`、`SYSTEMROOT`、`TEMP`、`TMP`，依赖必须已经在本机（Maven `-o`、`node_modules` 已装）。
 - 决定可变区。业务新增放哪里、哪些已有目录允许功能变更改（例如 `backend/ruoyi-modules`、`frontend/src`、`frontend/public`、`sql/biz`），其余都是底座。
 - 把仓库自己会生成的被忽略文件列出来（`target`、`node_modules`、`dist`、`logs`、`__pycache__`、unplugin 生成的 `auto-imports.d.ts`），它们要进 `scratch_paths`。
 
@@ -46,12 +46,12 @@ flowchart LR
 | `integration_commands` | 集成测试命令，与单元分开出结论；代码里也要分开放（Maven：单元 `*Test` 走 surefire，集成 `*IT` 放 `…/integration/` 包走 failsafe） | 混在一条命令里 |
 | `check_commands` | 静态检查，每轮尝试在隔离候选副本里跑，因此只能放离线、确定性、几十秒内完成的工具：格式（Spotless）、编码约束（Checkstyle 或 PMD p3c）、前端 lint 与类型（oxlint / Biome、vue-tsc）、密钥扫描（gitleaks）。依赖漏洞（Trivy、OWASP Dependency-Check）和 SAST（Semgrep、CodeQL）依赖外部数据，放项目自己的 CI | 候选副本没有 `node_modules`，直接 `pnpm exec` 会失败：前端工具要先同步到 scratch 再跑（参考 `frontend_check.py`） |
 | `test_roots` | 测试文件所在目录或通配；implement / characterize 可写，特征化门据此判断"只改了测试" | 没配，导致特征化门被跳过、代理加测试撞底座 |
-| `module_roots` | 可变区。可以是已有代码目录 | 漏掉测试目录，代理加测试就撞底座 |
+| `module_roots` | 可变区。可以是已有代码目录；测试目录用 `test_roots` 声明，不必放进来 | 范围太窄，代理在可变区外新建文件判 `BOUNDARY_VIOLATION` |
 | `integration_paths` | 构建清单，改动一律转 BASE 提案 | monorepo 里嵌套的 pom/package.json 没列 |
 | `candidate_allow` | 名字敏感（`.env*`、`*.key`、`credentials.json`）但确实是已跟踪配置的文件，放进候选副本 | 把真正的密钥文件放进仓库 |
 | `scratch_paths` | 代理可以就地产生的被忽略位置（目录名或相对路径） | 漏掉一个，第一次运行就 `WORKSPACE_TAINTED` |
 
-`storyloop init PATH --settings FILE` 锁定底座。**init 之后再改底座文件**（在任何变更之前）需要 `rm -rf .storyloop` 重新 init；有了变更之后改底座走 BASE 迭代。
+`storyloop init PATH --settings FILE` 锁定底座（要求在仓库根目录、工作树干净、处于一个有名字的分支）。**init 之后再改底座文件**走 BASE 迭代：`storyloop base-propose PATH --path … --reason …` → 在源分支单独提交 → `storyloop base-update`。`test_roots`、`scratch_paths`、`candidate_allow` 和各层命令存在 `.storyloop/config.json` 的 `profile` 里，可以直接编辑；`module_roots`、`integration_paths` 锁在底座里，只有在没有进行中变更时才能删掉 `.storyloop` 重新 init。运行参数（`max_attempts`、`design_min_stories`、适配器等）见 [api.md 的配置一节](api.md#三配置)。
 
 ## 3. 适配器
 
@@ -81,7 +81,7 @@ flowchart LR
 acceptance 角色写的变更验收 manifest 命令形如：
 
 ```json
-["{python}", "acceptance/tools/ruoyi_smoke.py", "acceptance/smoke/<id>/test_x.py", "acceptance/smoke/<id>/x.spec.ts"]
+["{python}", "acceptance/tools/ruoyi_smoke.py", "acceptance/changes/<id>/test_x.py", "acceptance/changes/<id>/x.spec.ts"]
 ```
 
 执行器要做的事，按顺序：
@@ -93,13 +93,13 @@ acceptance 角色写的变更验收 manifest 命令形如：
 5. **跑用例**：Python 用例用 unittest 按路径加载，环境里给 `SMOKE_BASE_URL`；浏览器用例起前端 dev server 指向临时后端，再跑 Playwright。只跑 manifest 里列出的文件，**不要**把别处的用例（例如 `acceptance/ui/`）附加进来。项目级系统冒烟（`acceptance/smoke/manifest.json`）用同一个执行器，条目多一个 `description`。
 6. **清理并映射退出码**：0 通过、1 行为失败、2 环境错误。RED 阶段只有 1 是有效红灯，环境错误会阻断而不是被当成红灯。
 
-给冒烟角色一个客户端积木（RuoYi 是 `ruoyi_client.py`：登录、带 token 请求、解析 `{code,msg,data}`），用例就不会各写各的登录。
+给 acceptance 角色一个客户端积木（RuoYi 是 `ruoyi_client.py`：登录、带 token 请求、解析 `{code,msg,data}`），用例就不会各写各的登录。
 
 **自测**：执行器自己带一组 self-test（`selftest_backend.py`、`selftest_ui.spec.ts`），接入完成后先跑通它们，再接引擎。
 
 ## 5. 代理规范 AGENT_GUIDE.md
 
-四个角色每次调用都会附带这份文件，写这些内容：
+Claude 适配器用 `--guide` 把这份文件附到每个角色的提示里，写这些内容：
 
 - 可变区与底座：哪些目录能改，改底座时不要动手而是在 summary/questions 里说明。
 - 后端约定：一个业务表对应哪些文件、放哪个包、权限串格式、跨模块调用方式，指向仓库里的参考实现。

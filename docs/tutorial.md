@@ -65,6 +65,8 @@ project: /tmp/todo-demo
 }
 ```
 
+init 写好的其他默认值：`agent_timeout_seconds` 14400（挂死保护）、`check_timeout_seconds` 300（单条测试命令上限）。完整配置表见 [api.md](api.md#三配置)。
+
 ## 2. 一句话变成合同
 
 ```bash
@@ -162,7 +164,9 @@ $SL approve /tmp/todo-demo --change FEAT-20260929-001
    change_id: FEAT-20260929-001
    ```
 
-这是本教程第一个需要人的地方。
+   当前版本的输出还会多一行 `next:`，给出可以直接复制的下一步：在源分支单独提交提案里的路径、`base-update`、把源分支合进功能分支、再 `run`。
+
+这是本教程第一个需要人的地方。任何停点都可以先跑 `$SL log /tmp/todo-demo --change FEAT-20260929-001`：它列出每次代理调用的结果、耗时、费用、会话 ID 与调用记录目录，每轮失败卡在哪一层，最后一行是下一步命令。
 
 ### 3a. 处理停点：把底座改动独立锁进去
 
@@ -291,6 +295,8 @@ $SL status /tmp/todo-demo --change FEAT-20260929-001 --json
  "telemetry": {"calls": 8, "cost_usd": 2.91, "agent_ms": 382390}}
 ```
 
+（节选。当前版本的返回还带 `next` 字段，`PASSED` 时提示 `storyloop report` 与可选的 `smoke-propose`。）
+
 ## 5. 在 CI 里重跑验收
 
 ```bash
@@ -306,10 +312,10 @@ change_id: FEAT-20260929-001
 
 ## 6. 接下来试试这些
 
-- **避免这次的停点**：如果你希望代理能改 README，把它列进 settings 的 `module_roots` 再 init；或者接受教程里的做法，让文档改动作为底座迭代单独审。
+- **避免这次的停点**：如果你希望代理能改 README，在没有进行中变更时把它列进 settings 的 `module_roots`，删掉 `.storyloop` 重新 init；或者接受教程里的做法，让文档改动作为底座迭代单独审。
 - **小改动不出方案**：再来一句只有一个故事的意图（"list 输出按编号倒序"），看 `design_plan.status` 变成 `SKIPPED`，原因是 `small change: 1 story < design_min_stories 2`。
 - **人工验收**：在意图里写一条机器判断不了的要求（"错误提示要让人看得懂"），产品角色会把它标成 `manual`，运行会停在 `MANUAL_ACCEPTANCE_REQUIRED`，用 `accept --criterion A12 --note "…"` 再 `run`。
-- **acceptance-repair**：故意把套件里的一个断言写错再批准，观察实现过不了后用 `acceptance-repair --reason "…"` 修套件并重证 RED。
+- **acceptance-repair**：套件是批准后由 acceptance 角色生成的受保护合同，人不能直接改。如果实现一直过不了、而你判断是用例本身有缺陷（定位器、时序、数据准备），用 `acceptance-repair --reason "…"` 让 acceptance 角色修自己的套件并从合同提交重证 RED。
 - **系统冒烟**：`smoke-propose --change FEAT-20260929-001` 看 acceptance 角色提议把哪条核心链路并入 `acceptance/smoke/`，审核后 `smoke-apply`，下一个变更的报告里 smoke 层就不再是 SKIPPED。
 - **第二个变更**：再来一句"待办可以撤销完成"，看它如何修改既有需求并在活规格里做取代记录。
 

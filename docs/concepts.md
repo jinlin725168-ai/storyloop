@@ -11,8 +11,8 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 | 分开的事 | 谁负责 | 怎么保证 |
 |---|---|---|
 | 需求是什么 | 人和产品角色共创，人批准 | 合同指纹锁定，任何修订让批准失效 |
-| 怎么算做完 | 冒烟角色在实现之前盲写验收用例 | 用例和合同一起提交、受保护，先跑一次证明失败（RED） |
-| 做没做完 | 外部进程跑回归、冒烟、独立审查 | 代理的"我做完了"不是证据；报告只接受真实命令结果 |
+| 怎么算做完 | acceptance 角色在实现之前盲写验收用例 | 用例和合同一起提交、受保护，先跑一次证明失败（RED） |
+| 做没做完 | 外部进程跑分层测试、边界审计、独立审查 | 代理的"我做完了"不是证据；报告只接受真实命令结果 |
 
 一句话：**验收驱动的 AI 开发闭环**。人做两件事，共创并批准合同、对机器判断不了的条件做人工验收；其余由引擎控制。
 
@@ -34,7 +34,7 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 
 **澄清（clarification）**：产品角色把真实歧义提成选择题（每轮至多 5 个，带推荐项和理由）。终端里逐条回答，回答立即触发修订并记入合同的 `clarifications`。
 
-**验收条件的两种 kind**：`automated` 必须被冒烟用例覆盖；`manual` 是机器判断不了的（体验、业务裁决），会让运行停在 `MANUAL_ACCEPTANCE_REQUIRED` 等人确认。
+**验收条件的两种 kind**：`automated` 必须被变更验收套件的某个用例覆盖；`manual` 是机器判断不了的（体验、业务裁决），会让运行停在 `MANUAL_ACCEPTANCE_REQUIRED` 等人确认。
 
 **能力（capability）**：一组变更共同演进的业务能力名，也是活规格的文件名。修改既有需求时沿用旧的需求标题，引擎据此做取代记录。
 
@@ -42,11 +42,11 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 
 **系统冒烟（system smoke）**：`acceptance/smoke/` 下项目级的核心链路套件，跨变更累积，每轮尝试、`ci`、`base-update` 都跑。功能变更不能改它；合并后由 acceptance 角色 `smoke-propose` 提议并入或更新，人 `smoke-apply` 批准。
 
-**特征化测试（characterization）**：实现之前，characterize 角色为将被修改的既有文件写只断言"必须不变"行为的测试（扩展的列表用 contains），引擎要求它们在旧代码上跑绿、只改了 `test_roots` 内的文件，才允许开工；实现若改了未声明的既有文件，引擎还原、补锁、重试。
+**特征化测试（characterization）**：实现之前，characterize 角色为将被修改的既有文件写只断言"必须不变"行为的测试（扩展的列表用 contains），引擎要求它们在旧代码上跑绿、只改了 `test_roots` 内的文件，才允许开工；实现若改了未声明的既有文件，引擎还原、补锁、重试。没配置 `test_roots` 或 `unit_commands` 时这道门跳过；design 方案的 `touched` 是必须锁定的范围。
 
 **单元与集成**：`unit_commands` 与 `integration_commands` 分开配置、分开放（不同目录或包）、分开出结论；`check_commands` 是静态检查层。
 
-**验收级 RED**：实现之前在隔离候选副本里跑一次冒烟，只有"行为断言失败"算有效红灯；环境错误、跳过、超时都不算。没有 RED 就不会调用实现代理。这是引擎观察到的外部红灯，和实现代理内部的 TDD 是两回事。
+**验收级 RED**：实现之前在隔离候选副本里跑一次变更验收套件，只有"行为断言失败"算有效红灯；环境错误、跳过、超时都不算。没有 RED 就不会调用实现代理。这是引擎观察到的外部红灯，和实现代理内部的 TDD 是两回事。
 
 **实现级先红后绿**：implement 角色内部的 TDD 纪律，先写会失败的单元测试，再写代码让它通过，再重构。它发生在一次实现尝试之内，产物是可变区里的单元测试和实现代码，由项目回归命令跑。implement 角色的提示词要求这样做，并在 design.md 的 Tests First 一节留下每个测试先失败后通过的记录；引擎不观察这个过程，只验收结果（回归通过、冒烟通过、审查通过）。
 
@@ -54,9 +54,11 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 
 **七个角色**：`survey`、`product`、`acceptance`、`design`、`characterize`、`implement`、`review`，按权限边界划分，见 [角色目录](roles.md)。都是无状态进程调用：stdin 一个请求、stdout 一个 JSON。适配器可以是 Codex CLI（默认）、Claude Code（`examples/claude-code/`）或人工桥接（manual）。
 
-**尝试（attempt）与预算**：一轮尝试 = 实现 → 回归 → 冒烟 → 边界审计 → 审查。`max_attempts` 是唯一的质量预算；`agent_timeout_seconds` 只是挂死保护；适配器的圈数上限只是检查点，到上限续同一会话。
+**方案（design）**：RED 之后、特征化之前，design 角色只读产出 Markdown 方案和 `touched`（将修改的既有非测试文件）。实现照方案做、审查对照方案查。故事数少于 `design_min_stories`（默认 2）的小改动跳过这一步。
 
-**边界审计**：每轮尝试后，引擎对全树快照做分类：可变区内的改动是功能改动，集成点和底座改动转成 BASE 提案，未声明的被忽略文件、暂存、控制面改动判 `WORKSPACE_TAINTED`。`scratch_paths` 声明代理可以就地产生的构建产物。
+**尝试（attempt）与预算**：一轮尝试 = 实现 → 边界审计 → 分层验证（单元、集成、变更验收、系统冒烟、静态检查）→ 独立审查；实现代理的回答结构不合法也计一轮失败。`max_attempts` 是唯一的质量预算；`agent_timeout_seconds` 只是挂死保护；适配器的圈数上限只是检查点，到上限续同一会话。
+
+**边界审计**：每轮尝试后，引擎对全树快照做分类：可变区和 `test_roots` 内的改动允许；集成点、底座和 CI 改动转成 BASE 提案；合同、验收套件、系统冒烟、可变区外的新文件判 `BOUNDARY_VIOLATION`；未声明的被忽略文件、暂存、控制面改动判 `WORKSPACE_TAINTED`。`scratch_paths` 声明代理可以就地产生的构建产物。
 
 **停点**：引擎只在明确的地方停下来，每个停点对应一个命令。
 
@@ -65,21 +67,26 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 | `NEEDS_INPUT` | 代理提出真实产品歧义 | 终端直接回答，或 `answer` |
 | `MANUAL_ACCEPTANCE_REQUIRED` | 自动验收全过，等人工条件 | `accept` 逐条，再 `run` |
 | `BASE_CHANGE_REQUIRED` | 功能触碰底座 | 在源分支独立提交后 `base-update`，把源分支合进功能分支，再 `run` |
+| `BOUNDARY_VIOLATION` | 代理写了不允许的路径 | `log` 查是哪次调用写的；还原（或经 BASE 迭代扩 `module_roots` / `test_roots`）后 `run` |
 | `WORKSPACE_TAINTED` | 工作区出现不该有的改动 | 清理后 `reset`，再 `run` |
-| `BUDGET_EXHAUSTED` | 尝试用尽 | 人判断：`acceptance-repair`、修订合同或放弃 |
-| `CHARACTERIZATION_FAILED` | 特征化测试在旧代码上不绿 | 修测试，再 `run` |
+| `BUDGET_EXHAUSTED` | 尝试用尽 | 人判断：用例有缺陷就 `acceptance-repair`；否则提高 `.storyloop/config.json` 的 `max_attempts` 后 `run`，或放弃并另开新变更（运行开始后合同不能再修订） |
+| `CHARACTERIZATION_FAILED` | 特征化测试在旧代码上不绿 | 就地修正测试后 `run`：引擎重跑单元层，绿了才提交并继续 |
+
+每个停点的输出都带 `next`：可以直接复制执行的下一步命令。`storyloop log` 汇总这个变更的每次代理调用和每轮失败原因，是排查任何停点的第一步。
 
 **acceptance-repair**：验收用例本身有缺陷（定位器、时序、数据准备）时的唯一修复通道。acceptance 角色修自己的套件，引擎从合同提交重建候选副本重新证明 RED，之前的尝试作废、预算归零，理由写进 decisions.md。
 
-**证据与指纹**：冒烟结果写入 `.storyloop/evidence/`，带套件字节指纹和**实现指纹**（Git 可见文件减去引擎产物）。人工验收记录也绑定实现指纹。报告的每条验收条件都追溯到真实命令、退出码、证据摘要、实现提交、合并提交。
+**证据与指纹**：变更验收结果写入 `.storyloop/evidence/<id>/acceptance-red.json` 与 `acceptance-result.json`，带套件字节指纹和**实现指纹**（Git 可见文件减去引擎产物）。人工验收记录也绑定实现指纹。报告的每条验收条件都追溯到真实命令、退出码、证据摘要、实现提交、合并提交。
 
-**归档（OpenSpec 格式）**：批准时生成增量规格 `openspec/changes/<id>/specs/<capability>/spec.md`；完成时写 `design.md`（实现代理的方案）、`decisions.md`（引擎汇总的人为决策），并把增量并入活规格 `openspec/specs/<capability>/spec.md`。变更目录不会被移走，它是受保护的合同和追溯锚点。装了 `openspec` CLI 时结构校验是门。
+**归档（OpenSpec 格式）**：批准时生成增量规格 `openspec/changes/<id>/specs/<capability>/spec.md`；完成时写 `design.md`（design 角色的方案加实现代理的实现记录）、`decisions.md`（引擎汇总的人为决策），并把增量并入活规格 `openspec/specs/<capability>/spec.md`。变更目录不会被移走，它是受保护的合同和追溯锚点。装了 `openspec` CLI 时结构校验是门。
 
-**页面事实资产（历史遗留）**：`acceptance/ui/<capability>/` 里是早期用 Playwright Test Agents 生成的页面计划与用例，不进冒烟、不是证据；acceptance 角色盲写浏览器用例时可复用其中的定位器与流程。完成阶段不再生成它们。
+**页面事实资产（历史遗留）**：旧版本在 `acceptance/ui/` 生成过页面计划与 Playwright 用例。它们不进候选副本、不是证据；acceptance 角色盲写浏览器用例时可复用其中的定位器与流程。引擎不再生成它们。
 
-**完成阶段**：实现提交 → 文档归档 → 活规格并入 → 报告 → 文档提交 → no-ff 合并 → 回执 → 基线推进；合并后由人触发系统冒烟维护。整个阶段幂等，崩溃后再次 `run` 不会重复调用代理、不会重复提交。
+**完成阶段**：实现提交 → 报告 → 文档归档与活规格并入（含取代记录）→ 文档提交 → no-ff 合并 → 回执 → 基线推进；合并后由人触发系统冒烟维护。整个阶段幂等，崩溃后再次 `run` 不会重复调用代理、不会重复提交。
 
-**遥测**：每次代理调用记录墙钟；适配器回报 `_telemetry` 时还记录轮数、token、费用。报告的"成本与耗时"一节按角色汇总。
+**遥测与诊断**：每次代理调用记录墙钟；适配器回报 `_telemetry` 时还记录轮数、token、费用。报告的"成本与耗时"一节按角色汇总。每次调用的请求、回答、stderr、会话 ID 落在 `.storyloop/state/telemetry/calls/<调用>/`，`storyloop log` 汇总查看；它们用于排障，不是证据。
+
+**角色返回结构**：每个角色的返回值有 JSON Schema（`storyloop/role_schemas.py`），由代理 CLI 原生约束；不符时在同一会话带着具体问题修复，仍不符报 `AGENT_CONTRACT_INVALID`（implement 计一轮失败，其他角色中断运行）。
 
 ## 3. 一次迭代长什么样
 
@@ -89,6 +96,8 @@ sequenceDiagram
     participant E as 引擎
     participant P as product
     participant S as acceptance
+    participant D as design
+    participant C as characterize
     participant I as implement
     participant R as review
     U->>E: change --idea
@@ -100,17 +109,20 @@ sequenceDiagram
     E->>S: 盲写变更验收套件
     S-->>E: files + manifest
     E->>E: 提交合同与套件，候选副本里跑 RED
-    E->>I: 特征化：锁定将改动的现有行为（旧代码上跑绿）
+    E->>D: 方案（故事数 ≥ design_min_stories 时）
+    D-->>E: design + touched
+    E->>C: 锁定将改动的现有行为
+    C-->>E: 特征化测试（引擎在旧代码上跑绿）
     loop 每轮尝试（max_attempts）
-        E->>I: change + failures + answers + touched
+        E->>I: change + failures + answers + design_plan
         I-->>E: summary + design（Tests First）
-        E->>E: 单元、集成、验收、系统冒烟、静态检查、边界审计
+        E->>E: 边界审计；单元、集成、变更验收、系统冒烟、静态检查
         E->>R: 证据
         R-->>E: pass / fail / needs_input
     end
     E->>U: MANUAL_ACCEPTANCE_REQUIRED（若有 manual 条件）
     U->>E: accept + run
-    E->>E: 实现提交、归档、活规格、UI 资产、报告、no-ff 合并、回执
+    E->>E: 实现提交、报告、归档与活规格、no-ff 合并、回执
 ```
 
 ## 4. 十条设计理由
@@ -125,7 +137,7 @@ sequenceDiagram
 6. 人只在明确停点介入：每个停点一个命令，不做半自动。
 7. `max_attempts` 是唯一质量预算：时间和圈数只是保护和检查点。
 8. 底座独立演进：功能变更不能顺手改工程入口。
-9. 采用业内实践而非自造：spec-kit、EARS、Gherkin、OpenSpec、Playwright Test Agents。
+9. 采用业内实践而非自造：spec-kit、EARS、Gherkin、OpenSpec。
 10. 不 push、不删分支、不重写历史：引擎的 Git 只做本地、可审计的事。
 
 ## 5. 它不是什么
