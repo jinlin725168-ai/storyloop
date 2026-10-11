@@ -62,7 +62,7 @@ class CompletionResilienceTests(unittest.TestCase):
             paused = run_change(root, change_id, _services(change_id))
             self.assertEqual(paused["status"], "MANUAL_ACCEPTANCE_REQUIRED", paused)
             record_manual_acceptance(root, change_id, ["AC-2"], "checked", now=lambda: NOW)
-            with patch("storyloop.project_loop.generate_change_report", side_effect=RuntimeError("disk full")), \
+            with patch("storyloop.project_loop_finish.generate_change_report", side_effect=RuntimeError("disk full")), \
                     self.assertRaises(RuntimeError):
                 run_change(root, change_id, _services(change_id))
             subject = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=root, capture_output=True,

@@ -84,7 +84,10 @@ INSTRUCTIONS = {
         "root; a human reviews and applies it. "
         "When payload.change.repair is present you are repairing your own suite: fix only the test defects "
         "shown in failure_evidence (locators, timing, data setup), keep every criterion covered, never weaken "
-        "an assertion about product behavior, and return the complete suite (all files and the manifest)."
+        "an assertion about product behavior, and return the complete suite (all files and the manifest). "
+        "When failure_evidence.status is EXISTING_GREEN the suite passed on the code before implementation "
+        "(criteria_green lists the criteria it failed to fail): strengthen those tests so they assert the "
+        "new behaviour the contract requires and fail on the current code."
     ),
     "implement": (
         "Implement the approved change in this repository. Modify only new files under configured module "

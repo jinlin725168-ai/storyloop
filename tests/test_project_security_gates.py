@@ -102,8 +102,11 @@ class ProjectSecurityGateTests(unittest.TestCase):
                  "command": ["{python}", f"acceptance/changes/{change_id}/pass.py"],
                  "timeout_seconds": 10},
             ]})
-            with self.assertRaisesRegex(StoryLoopError, "every automated criterion"):
+            # A criterion that already passes is the same stop as a wholly green suite: it is repairable.
+            with self.assertRaisesRegex(StoryLoopError, "criteria passing: AC-2") as raised:
                 run_smoke(root, change_id, expect_red=True)
+            self.assertEqual(raised.exception.code, "EXISTING_GREEN")
+            self.assertEqual(raised.exception.details["criteria_green"], ["AC-2"])
 
     def test_regression_command_cannot_commit_ci_changes_from_isolated_candidate(self):
         with tempfile.TemporaryDirectory() as folder:

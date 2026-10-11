@@ -1,0 +1,207 @@
+"""The two gates between RED and the first implementation attempt: design and characterization.
+
+design (the architect) runs once per change and names the existing files the change will touch;
+characterization locks the current behaviour of those files with tests that must be green on the
+old code before anyone changes it.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from .answers import load_answers
+from .baseline import _git
+from .models import require
+from .project_boundaries import audit_project_changes
+from .project_git import commit_paths
+from .project_loop_guards import exists_at, read_only_call, require_git_visible, write_safely
+from .project_loop_support import pause, pause_for_boundary, save_run
+from .project_profile import layer_commands, matches_test_root
+from .smoke_runner import run_commands_isolated
+
+if TYPE_CHECKING:  # the loop imports this module; the services type is only an annotation
+    from .project_loop import LoopServices
+
+
+def design_plan(state: dict) -> dict | None:
+    plan = state.get("design_plan") or {}
+    if plan.get("status") != "DONE":
+        return None
+    return {"summary": plan["summary"], "touched": list(plan["touched"]), "design": plan["design"]}
+
+
+def ensure_design(project: Path, change: dict, state: dict, services: LoopServices,
+                  config: dict) -> dict | None:
+    """The architect step, once per change after RED: a read-only plan naming the files to modify.
+
+    Its `touched` list seeds the characterization gate and its Markdown is what implement follows
+    and review checks against. Design questions pause the run like any other agent question.
+    Small changes skip it: fewer stories than `design_min_stories` (default 2) means the
+    characterize and implement roles work from the contract alone.
+    """
+    current = state.get("design_plan") or {}
+    if current.get("status") in {"DONE", "SKIPPED"}:
+        return None
+    reason = None
+    if services.design is None:
+        reason = "no design service"
+    else:
+        minimum = config.get("design_min_stories", 2)
+        require(type(minimum) is int and minimum >= 1, "design_min_stories must be a positive integer")
+        stories = len(change["product"]["stories"])
+        if stories < minimum:
+            reason = (f"small change: {stories} {'story' if stories == 1 else 'stories'} "
+                      f"< design_min_stories {minimum}")
+    if reason:
+        state["design_plan"] = {"status": "SKIPPED", "reason": reason, "touched": [], "design": ""}
+        save_run(project, state)
+        return None
+    change_id = change["change_id"]
+    context = {"change": change, "answers": load_answers(project, change_id)}
+    response = read_only_call(project, change_id, lambda: services.design(project, context))
+    require(isinstance(response, dict) and isinstance(response.get("summary"), str)
+            and isinstance(response.get("touched"), list) and all(isinstance(p, str) for p in response["touched"])
+            and isinstance(response.get("design"), str) and isinstance(response.get("questions"), list)
+            and all(isinstance(q, str) and q.strip() for q in response["questions"]),
+            "Design agent returned an invalid result")
+    if response["questions"]:
+        return pause(project, state, "NEEDS_INPUT", questions=response["questions"])
+    require(response["design"].strip(), "Design must contain the plan as Markdown")
+    touched = sorted(set(response["touched"]))
+    for path in touched:
+        require(exists_at(project, state["contract_commit"], path),
+                f"Design names a file that does not exist at the contract commit: {path}")
+    state["design_plan"] = {"status": "DONE", "summary": response["summary"], "touched": touched,
+                            "design": response["design"].rstrip("\n") + "\n"}
+    state.pop("questions", None)
+    save_run(project, state)
+    return None
+
+
+def ensure_characterization(project: Path, change: dict, state: dict, services: LoopServices,
+                            config: dict) -> dict | None:
+    """Layer 3 gate, once per change: lock the current behaviour of the paths about to change."""
+    current = state.get("characterization") or {}
+    if current.get("status") in {"GREEN", "SKIPPED"}:
+        return None
+    profile = config["profile"]
+    reason = None
+    if not profile.get("test_roots"):
+        reason = "test_roots not configured"
+    elif not layer_commands(profile, "unit"):
+        reason = "unit_commands not configured"
+    elif services.characterize is None:
+        reason = "no characterize service"
+    if reason:
+        state["characterization"] = {"status": "SKIPPED", "reason": reason, "touched": [], "tests": []}
+        save_run(project, state)
+        return None
+    return characterize_paths(project, change, state, services, config, extend=None)
+
+
+def characterize_paths(project: Path, change: dict, state: dict, services: LoopServices, config: dict,
+                       extend: list[str] | None) -> dict | None:
+    change_id = change["change_id"]
+    profile = config["profile"]
+    previous = state.get("characterization") or {"touched": [], "tests": []}
+    plan = design_plan(state)
+    context = {"change": change, "test_roots": profile["test_roots"], "extend": list(extend or []),
+               "characterization": previous if previous.get("status") == "GREEN" else None,
+               "design": plan}
+    response, written = write_safely(project, change_id, lambda: services.characterize(project, context))
+    require(isinstance(response, dict) and isinstance(response.get("summary"), str)
+            and isinstance(response.get("touched"), list) and isinstance(response.get("tests"), list)
+            and all(isinstance(p, str) for p in response["touched"] + response["tests"]),
+            "Characterization agent returned an invalid result")
+    require(not response.get("questions"), "Characterization asks no questions; it locks what exists")
+    boundary = audit_project_changes(project, change_id)
+    require_git_visible(written, boundary)
+    # Judge only what this call wrote: in extend mode the implementation's own edits are already present.
+    changed = sorted({item.path for item in written if not item.path.endswith("/")})
+    violating = {item["path"] for item in boundary["violations"]}
+    outside = [path for path in changed if path in violating or not matches_test_root(path, profile["test_roots"])]
+    if outside:
+        violations = [{"path": p, "category": "NOT_A_TEST_PATH"} for p in outside]
+        return pause(project, state, "BOUNDARY_VIOLATION", violations=violations, base_proposal=None,
+                     error="Characterization may only write test files")
+    touched = sorted(set(previous.get("touched", [])) | set(response["touched"]) | set(extend or [])
+                     | set(plan["touched"] if plan else []))
+    for path in touched:
+        require(exists_at(project, state["contract_commit"], path) and not matches_test_root(path, profile["test_roots"]),
+                f"Characterized path must be an existing non-test file: {path}")
+    pending = {"touched": touched, "tests": sorted(set(response["tests"]) | set(changed)), "changed": changed,
+               "extend": list(extend or [])}
+    return _verify_characterization(project, change_id, state, config, pending)
+
+
+def _verify_characterization(project: Path, change_id: str, state: dict, config: dict,
+                             pending: dict) -> dict | None:
+    """The gate itself: the whole unit layer green on the current code, then lock the tests in a commit.
+
+    A red result pauses with the pending lock kept in the run state, so the human can fix the tests
+    in place and `run` re-verifies them without asking the agent again.
+    """
+    profile = config["profile"]
+    unit = run_commands_isolated(project, layer_commands(profile, "unit"), config["check_timeout_seconds"])
+    if unit["status"] != "PASSED":
+        return pause(project, state, "CHARACTERIZATION_FAILED", unit=unit, pending_characterization=pending,
+                     error="Characterization tests must be green on the current code before implementation")
+    previous = state.get("characterization") or {"touched": [], "tests": []}
+    present = _uncommitted(project, pending["changed"])  # a test the human deleted is simply not locked
+    commits = list(previous.get("commits", []))
+    if present:
+        commits.append(commit_paths(project, present, f"test({change_id}): characterize touched paths")["commit"])
+    state["characterization"] = {"status": "GREEN",
+                                 "touched": sorted(set(previous.get("touched", [])) | set(pending["touched"])),
+                                 "tests": sorted(set(previous.get("tests", [])) | set(pending["tests"])),
+                                 "commits": commits}
+    for key in ("pending_characterization", "unit", "error", "next"):
+        state.pop(key, None)
+    save_run(project, state)
+    return None
+
+
+def resume_characterization(project: Path, change: dict, state: dict, config: dict) -> dict | None:
+    """Re-verify a red characterization after the human fixed the tests in place (no agent call).
+
+    The fix may only touch test files: any boundary violation still stops the run. A lock made
+    while extending an attempt costs that attempt, exactly as when it is green the first time.
+    """
+    pending = state.get("pending_characterization")
+    require(isinstance(pending, dict) and isinstance(pending.get("changed"), list),
+            "Paused characterization lacks its pending lock; start a new product change")
+    change_id = change["change_id"]
+    boundary = audit_project_changes(project, change_id)
+    if boundary["violations"]:
+        return pause_for_boundary(project, state, boundary)
+    paused = _verify_characterization(project, change_id, state, config, pending)
+    if paused is not None:
+        return paused
+    state["status"] = "IMPLEMENTING"
+    if pending.get("extend"):
+        state["failures"].append({"attempt": state["attempt"],
+                                  "characterization": {"status": "FAILED", "uncharacterized": pending["extend"]}})
+    save_run(project, state)
+    return None
+
+
+def _uncommitted(project: Path, paths: list[str]) -> list[str]:
+    """The given paths that still differ from HEAD (new, modified or deleted after being tracked)."""
+    if not paths:
+        return []
+    status = _git(project, "status", "--porcelain=v1", "--untracked-files=all", "-z", "--", *paths)
+    changed = {entry[3:] for entry in filter(None, status.split("\0"))}
+    return [path for path in paths if path in changed]
+
+
+def uncharacterized_paths(project: Path, state: dict, boundary: dict, config: dict) -> list[str]:
+    """Pre-existing non-test files the implementation modified without a characterization lock."""
+    characterization = state.get("characterization") or {}
+    if characterization.get("status") != "GREEN":
+        return []
+    roots = config["profile"].get("test_roots") or []
+    touched = set(characterization.get("touched", []))
+    return sorted(item["path"] for item in boundary["allowed"]
+                  if item["path"] not in touched and not matches_test_root(item["path"], roots)
+                  and exists_at(project, state["contract_commit"], item["path"]))

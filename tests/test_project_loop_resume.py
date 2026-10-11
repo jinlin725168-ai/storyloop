@@ -86,7 +86,7 @@ class ProjectLoopResumeTests(unittest.TestCase):
                     "verdict": "pass", "summary": "ok", "findings": [], "questions": [],
                 },
             )
-            with patch("storyloop.project_loop._set_change_status",
+            with patch("storyloop.project_loop_finish.set_change_status",
                        side_effect=StoryLoopError("simulated finalization crash")):
                 with self.assertRaisesRegex(StoryLoopError, "simulated finalization"):
                     run_change(root, change_id, services)

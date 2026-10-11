@@ -39,12 +39,18 @@ def run_smoke(
     failures = [item for item in results if item["status"] == "FAIL"]
     if expect_red:
         require(not errors, "Smoke RED proof encountered an environment error")
-        if not failures:
-            raise StoryLoopError("Smoke suite is already green and did not prove RED", code="EXISTING_GREEN")
         criteria = {criterion for item in manifest["tests"] for criterion in item["criteria"]}
         failed_criteria = {criterion for item in failures for criterion in item["criteria"]}
-        require(criteria <= failed_criteria,
-                "RED proof must fail at least one test for every automated criterion")
+        if not criteria <= failed_criteria:
+            # Green on the code before implementation (wholly or for some criteria): the suite
+            # does not assert the new behaviour. The results travel with the error so the run can
+            # record them and acceptance-repair can show them to the suite's owner.
+            green = sorted(criteria - failed_criteria)
+            raise StoryLoopError(
+                "Acceptance suite is already green before implementation and did not prove RED"
+                + (f" (criteria passing: {', '.join(green)})" if failures else ""),
+                code="EXISTING_GREEN",
+                details={"criteria_green": green, "results": [_tail(item) for item in results]})
         status = "RED"
     elif errors:
         status = "ERROR"
@@ -71,6 +77,12 @@ def run_smoke(
     )
     write_json(path, evidence, max_bytes=4_000_000)
     return {**evidence, "evidence_path": str(path), "evidence_sha256": _sha256(path)}
+
+
+def _tail(result: dict) -> dict:
+    """A bounded copy of one test result for a stop record (full output stays in the evidence)."""
+    return {"id": result.get("id"), "status": result.get("status"),
+            "stdout": str(result.get("stdout", ""))[-6000:], "stderr": str(result.get("stderr", ""))[-6000:]}
 
 
 def run_smoke_isolated(project: Path, change_id: str, expect_red: bool = False,

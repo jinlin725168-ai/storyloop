@@ -62,7 +62,7 @@ class ProjectLoopRecoverySecurityTests(unittest.TestCase):
     def test_verified_resume_rejects_an_extra_unverified_commit(self):
         temporary, root, change_id = self._approved()
         try:
-            with patch("storyloop.project_loop.finish_feature",
+            with patch("storyloop.project_loop_finish.finish_feature",
                        side_effect=StoryLoopError("simulated merge crash")):
                 with self.assertRaisesRegex(StoryLoopError, "simulated"):
                     run_change(root, change_id, self._services(change_id))
@@ -87,7 +87,7 @@ class ProjectLoopRecoverySecurityTests(unittest.TestCase):
                 git(project, "commit", "--amend", "--no-edit", "--no-verify")
                 raise StoryLoopError("simulated crash")
 
-            with patch("storyloop.project_loop.finish_feature", side_effect=tampered_merge):
+            with patch("storyloop.project_loop_finish.finish_feature", side_effect=tampered_merge):
                 with self.assertRaisesRegex(StoryLoopError, "simulated crash"):
                     run_change(root, change_id, self._services(change_id))
             with self.assertRaisesRegex(StoryLoopError, "tree differs"):
@@ -121,7 +121,7 @@ class ProjectLoopRecoverySecurityTests(unittest.TestCase):
     def test_forged_report_only_child_of_merge_is_rejected(self):
         temporary, root, change_id = self._approved()
         try:
-            with patch("storyloop.project_loop._finish_receipting",
+            with patch("storyloop.project_loop_finish.finish_receipting",
                        side_effect=StoryLoopError("simulated receipt pause")):
                 with self.assertRaisesRegex(StoryLoopError, "receipt pause"):
                     run_change(root, change_id, self._services(change_id))

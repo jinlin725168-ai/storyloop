@@ -13,7 +13,8 @@ from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project, load_project_config
 from storyloop.changes import create_change
 from storyloop.models import StoryLoopError
-from storyloop.project_loop import LoopServices, load_run_state, repair_smoke, run_change
+from storyloop.acceptance_repair import repair_smoke
+from storyloop.project_loop import LoopServices, load_run_state, run_change
 from storyloop.smoke_runner import _copy_candidate
 from storyloop.storage import write_json
 from tests.test_baseline_behavior import git, repository
@@ -27,6 +28,13 @@ def defective_payload(change_id: str) -> dict:
     """Fails whatever the implementation does (a test defect), yet proves RED like a real suite."""
     payload = good_payload(change_id)
     payload["files"][0]["content"] = "raise SystemExit(1)\n"
+    return payload
+
+
+def weak_payload(change_id: str) -> dict:
+    """Passes on the code before implementation: it cannot prove RED."""
+    payload = good_payload(change_id)
+    payload["files"][0]["content"] = "raise SystemExit(0)\n"
     return payload
 
 
@@ -85,7 +93,7 @@ class SmokeRepairTests(unittest.TestCase):
 
             result = repair_smoke(root, change_id, "loading-mask locator is a test defect",
                                   services(change_id, repaired_smoke), now=lambda: NOW)
-            self.assertEqual(result["status"], "SMOKE_REPAIRED", result)
+            self.assertEqual(result["status"], "ACCEPTANCE_REPAIRED", result)
             self.assertEqual(seen["repair"]["reason"], "loading-mask locator is a test defect")
             self.assertTrue(any(f["path"] == "flow.py" for f in seen["repair"]["existing_files"]))
             self.assertFalse(any(f["path"] == "manifest.json" for f in seen["repair"]["existing_files"]))
@@ -96,7 +104,7 @@ class SmokeRepairTests(unittest.TestCase):
             self.assertNotEqual(new_state["red_evidence_sha256"], old_red)
             self.assertEqual(new_state["repairs"][0]["reason"], "loading-mask locator is a test defect")
             log = subprocess.run(["git", "log", "--oneline", "-3"], cwd=root, capture_output=True, text=True).stdout
-            self.assertIn("repair smoke suite", log)
+            self.assertIn("repair acceptance suite", log)
             # implementation files from the failed attempt are still in the tree, uncommitted
             self.assertTrue((root / "modules/orders/service.py").is_file())
             red = json.loads((root / ".storyloop/evidence" / change_id / "acceptance-red.json").read_text(encoding="utf-8"))
@@ -122,6 +130,41 @@ class SmokeRepairTests(unittest.TestCase):
             run_change(root, change_id, services(change_id, lambda p, s: good_payload(change_id)))
             with self.assertRaises(StoryLoopError):
                 repair_smoke(root, change_id, "already passed", services(change_id, lambda p, s: good_payload(change_id)))
+
+
+    def test_a_suite_green_before_implementation_stops_and_is_repairable(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"test_commands": []})
+            value = rich_product(); value["questions"] = []
+            change_id = create_change(root, "orders", value, now=lambda: NOW)["change_id"]
+            approve_change(root, change_id, now=lambda: NOW)
+            weak = services(change_id, lambda p, s: weak_payload(change_id))
+
+            stopped = run_change(root, change_id, weak)
+            self.assertEqual(stopped["status"], "EXISTING_GREEN", stopped)
+            self.assertIn("acceptance-repair", stopped["next"])
+            state = load_run_state(root, change_id)
+            self.assertEqual(state["status"], "EXISTING_GREEN")
+            self.assertTrue(state["contract_commit"])
+            # Resuming without a fix proves nothing new: it stops at the same place, no agent call.
+            self.assertEqual(run_change(root, change_id, weak)["status"], "EXISTING_GREEN")
+
+            seen = {}
+
+            def stronger(project, change):
+                seen["evidence"] = change["repair"]["failure_evidence"]
+                return good_payload(change_id)
+
+            result = repair_smoke(root, change_id, "suite did not assert the new behaviour",
+                                  services(change_id, stronger), now=lambda: NOW)
+            self.assertEqual(result["status"], "ACCEPTANCE_REPAIRED", result)
+            self.assertEqual(seen["evidence"]["status"], "EXISTING_GREEN")
+            self.assertEqual(load_run_state(root, change_id)["status"], "IMPLEMENTING")
+            done = run_change(root, change_id, services(change_id, lambda p, s: good_payload(change_id)))
+            self.assertEqual(done["status"], "PASSED", done)
+
 
 
 if __name__ == "__main__":

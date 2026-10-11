@@ -6,6 +6,7 @@ import hashlib
 from pathlib import Path
 
 from .baseline import _git
+from .next_steps import next_step
 from .smoke import RED_EVIDENCE, RESULT_EVIDENCE
 from .storage import write_json
 
@@ -54,6 +55,21 @@ def set_change_status(project: Path, change: dict, status: str) -> None:
     updated["status"] = status
     write_json(project / ".storyloop/state/changes" / f"{change['change_id']}.json",
                updated, max_bytes=2_000_000)
+
+
+def pause_for_boundary(project: Path, state: dict, boundary: dict) -> dict:
+    return pause(project, state, boundary["status"],
+                 violations=boundary["violations"],
+                 base_proposal=boundary["base_proposal"])
+
+
+def pause(project: Path, state: dict, status: str, **details) -> dict:
+    """Persist an explicit stop with its details; the result always names the next command."""
+    state["status"] = status
+    state.update(details)
+    save_run(project, state)
+    hint = details.get("next") or next_step(status, state["change_id"], project, details)
+    return {"status": status, "change_id": state["change_id"], **details, "next": hint}
 
 
 def _path_digest(project: Path, relative_paths: list[str]) -> str:

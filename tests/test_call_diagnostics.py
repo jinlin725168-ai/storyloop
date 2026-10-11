@@ -121,7 +121,7 @@ class LogAndNextStepTests(unittest.TestCase):
 class ExitCodeTests(unittest.TestCase):
     def test_stops_that_need_a_human_fix_exit_2_and_manual_acceptance_exits_0(self):
         expected = {"CHARACTERIZATION_FAILED": 2, "BUDGET_EXHAUSTED": 2, "NEEDS_INPUT": 2,
-                    "SMOKE_UPDATE_FAILED": 2, "MANUAL_ACCEPTANCE_REQUIRED": 0, "PASSED": 0,
+                    "SMOKE_UPDATE_FAILED": 2, "EXISTING_GREEN": 2, "MANUAL_ACCEPTANCE_REQUIRED": 0, "PASSED": 0,
                     "SMOKE_APPLIED": 0}
         for status, code in expected.items():
             with self.subTest(status=status), \

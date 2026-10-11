@@ -34,6 +34,10 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
         return (f"{log} 看每轮失败原因：验收用例本身有缺陷用 storyloop acceptance-repair {where} "
                 f"--reason <原因>；实现问题就提高 .storyloop/config.json 的 max_attempts 后 {run}，"
                 f"或另开新变更（运行开始后合同不能修订）")
+    if status == "EXISTING_GREEN":
+        return (f"变更验收套件在实现之前就已通过，证明不了 RED：需求若其实已经实现，放弃这个变更；"
+                f"若是用例没有断言新行为，storyloop acceptance-repair {where} --reason <原因> "
+                f"让 acceptance 角色加强套件并重证 RED，再 {run}")
     if status == "CHARACTERIZATION_FAILED":
         return (f"特征化测试在旧代码上不绿：就地修正 test_roots 里的这些测试（它们只锁定现有行为），"
                 f"不用提交；{run} 会重跑单元层，绿了再提交并继续")

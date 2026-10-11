@@ -22,7 +22,8 @@ from .openspec_docs import document_change
 from .models import StoryLoopError, require
 from .processutil import redact
 from .project_agents import invoke_project_agent
-from .project_loop import load_run_state, repair_smoke, run_change
+from .acceptance_repair import repair_smoke
+from .project_loop import load_run_state, run_change
 from .run_recovery import reset_run
 from .smoke_runner import run_ci
 from .storage import load_json
@@ -61,7 +62,9 @@ def parser() -> argparse.ArgumentParser:
         child.add_argument("--json", action="store_true", help="输出完整 JSON")
         if command == "init":
             child.add_argument("--settings", type=Path,
-                               help="可选 JSON：显式 test_commands/module_roots/integration_paths")
+                               help="可选 JSON 工程画像：unit_commands（旧名 test_commands）、integration_commands、"
+                                    "check_commands、test_roots、module_roots、integration_paths、"
+                                    "candidate_allow、scratch_paths")
         elif command == "change":
             child.add_argument("--idea")
             child.add_argument("--change", dest="change_id")
@@ -331,7 +334,7 @@ def main(argv: list[str] | None = None) -> int:
             "UNSAFE_CONTAINMENT", "WORKSPACE_TAINTED",
             "BUDGET_EXHAUSTED", "BASE_CHANGE_REQUIRED",
             "BOUNDARY_VIOLATION", "ERROR", "CHARACTERIZATION_FAILED",
-            "SMOKE_UPDATE_FAILED",
+            "SMOKE_UPDATE_FAILED", "EXISTING_GREEN",
         }
         return 2 if result.get("status") in failures else 0
     except StoryLoopError as exc:
