@@ -19,7 +19,7 @@
 | `answer` | `--change ID --answer TEXT [--answer TEXT …]` | `ANSWERED` |
 | `accept` | `--change ID --criterion ID [--criterion ID …] --note TEXT` | `ACCEPTED`，或仍有未确认条件时 `MANUAL_ACCEPTANCE_REQUIRED` |
 | `reset` | `--change ID --reason TEXT` | `IMPLEMENTING` |
-| `acceptance-repair`（旧名 `smoke-repair`） | `--change ID --reason TEXT` | `SMOKE_REPAIRED` |
+| `acceptance-repair`（旧名 `smoke-repair`） | `--change ID --reason TEXT` | `ACCEPTANCE_REPAIRED` |
 | `document` | `--change ID [--design FILE] [--capability NAME]` | `DOCUMENTED` |
 | `smoke-propose` | `--change ID` | `SMOKE_PROPOSED` |
 | `smoke-apply` | `--change ID` | `SMOKE_APPLIED` 或 `SMOKE_UPDATE_FAILED` |
@@ -37,6 +37,7 @@
 | 状态 | 含义 | 能否 `run` 续跑 |
 |---|---|---|
 | `PREPARING` / `CONTRACT_READY` / `CONTRACT_COMMITTED` | 建分支、物化合同、生成并提交验收套件、证明 RED | 能 |
+| `EXISTING_GREEN` | 验收套件在实现之前就已通过（全部或部分条件），证明不了 RED | `acceptance-repair` 加强套件后能；不修复直接 `run` 只会再停在这里 |
 | `IMPLEMENTING` | 方案、特征化、实现—验证—审查循环 | 能 |
 | `NEEDS_INPUT` | design、implement 或 review 提了问题 | 回答后能 |
 | `BASE_CHANGE_REQUIRED` | 功能触碰底座，已开 BASE 提案 | `base-update` 并合回功能分支后能 |
@@ -59,7 +60,6 @@
 | `BLOCKED` | 默认：前置条件不满足（未 init、状态不允许、校验失败、`openspec validate` 不通过等） |
 | `NEEDS_INPUT` | manual 适配器在等人工回答 |
 | `AGENT_CONTRACT_INVALID` | 代理回答修复后仍不符合角色 schema（implement 计一轮失败，不会冒到这里） |
-| `EXISTING_GREEN` | 变更验收套件在旧代码上已经通过，RED 不成立 |
 | `WORKSPACE_TAINTED` | 控制面、暂存区或工作区被意外改动（RED、方案、特征化阶段只报错，不落盘为运行状态） |
 | `GIT_BLOCKED` / `GIT_CONFLICT` | Git 命令失败 / no-ff 合并失败（功能分支保留） |
 | `UNSAFE_CONTAINMENT` | 子进程树没能在受控方式下回收 |
@@ -69,7 +69,7 @@
 | 退出码 | 情形 |
 |---|---|
 | `0` | 正常结束，包括停在 `MANUAL_ACCEPTANCE_REQUIRED`（自动验收已全过，只是等人） |
-| `2` | 返回状态属于 `FAILED`、`BLOCKED`、`NEEDS_INPUT`、`INTERRUPTED`、`UNSAFE_CONTAINMENT`、`WORKSPACE_TAINTED`、`BUDGET_EXHAUSTED`、`BASE_CHANGE_REQUIRED`、`BOUNDARY_VIOLATION`、`ERROR`、`CHARACTERIZATION_FAILED`、`SMOKE_UPDATE_FAILED`，或任何错误码 |
+| `2` | 返回状态属于 `FAILED`、`BLOCKED`、`NEEDS_INPUT`、`INTERRUPTED`、`UNSAFE_CONTAINMENT`、`WORKSPACE_TAINTED`、`BUDGET_EXHAUSTED`、`BASE_CHANGE_REQUIRED`、`BOUNDARY_VIOLATION`、`ERROR`、`CHARACTERIZATION_FAILED`、`EXISTING_GREEN`、`SMOKE_UPDATE_FAILED`，或任何错误码 |
 | `130` | Ctrl-C 中断，状态已保存 |
 
 脚本请判断 `status` 与 `next`，不要只看退出码（例如 `MANUAL_ACCEPTANCE_REQUIRED` 是 0）。
@@ -132,7 +132,7 @@
 |---|---|---|
 | `product` | 新建 `{idea}`；修订 `{change_id, message, answers:[{question_id,question,answer}], current_product}` | 完整产品对象（见下）。ID 匹配 `[A-Za-z0-9][A-Za-z0-9_-]{0,79}` 且全局唯一；每个故事至少一条验收条件；`depends_on` 只能引用排在前面的故事；`recommended` 必须在 `options` 里 |
 | `acceptance`（生成） | `{change, suite_root}` | `{files:[{path,content}], manifest}`。files 非空、路径相对且不是 CI、不能叫 `manifest.json`、单个 ≤2 MB；测试 ID 唯一；`criteria` 只能引用并必须覆盖全部 `automated` 条件；`timeout_seconds` 1–3600 |
-| `acceptance`（修复） | `{change: {…, repair:{reason, existing_files, manifest, failure_evidence}}, suite_root}` | 同上；返回里的 `manifest.json` 文件被忽略 |
+| `acceptance`（修复） | `{change: {…, repair:{reason, existing_files, manifest, failure_evidence}}, suite_root}`；`EXISTING_GREEN` 时 `failure_evidence` 为 `{status:"EXISTING_GREEN", criteria_green, results}` | 同上；返回里的 `manifest.json` 文件被忽略 |
 | `acceptance`（冒烟维护） | `{mode:"smoke-maintenance", change, acceptance_suite, system_smoke, smoke_root}` | `{files, manifest:{version:1, tests:[{id,description,command,timeout_seconds}]}, rationale}`；测试非空、文件 ≤200 个 |
 | `design` | `{change, answers}` | `{summary, touched:[path], design, questions:[string]}`。questions 非空停 `NEEDS_INPUT`；`design` 不能为空；`touched` 必须是合同提交里存在的文件 |
 | `characterize` | `{change, test_roots, extend:[path], characterization, design}`（`characterization` 只在之前为 GREEN 时给，`design` 为方案或 null） | `{summary, touched, tests, questions:[]}`。只能写 `test_roots`（否则 `BOUNDARY_VIOLATION`，类别 `NOT_A_TEST_PATH`）；`touched` 必须是既有非测试文件；单元层必须全绿（否则 `CHARACTERIZATION_FAILED`） |

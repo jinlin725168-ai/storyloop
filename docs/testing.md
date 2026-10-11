@@ -5,7 +5,7 @@
 ## 一、单元与端到端测试
 
 - 框架：标准库 `unittest`，不依赖第三方包、模型账号或网络。
-- 位置：`tests/`，56 个文件、225 个测试用例；本机（WSL2）全量约 10 分钟。
+- 位置：`tests/`，56 个文件、226 个测试用例；本机（WSL2）全量约 10 分钟。
 - 原理：每个测试在临时目录建一个真实 Git 仓库，`init` 锁底座，用脚本化的 `LoopServices`（Python 函数代替代理）或假的 `codex` / `claude` 可执行文件驱动闭环，断言状态、文件和 Git 历史。
 
 运行：
@@ -25,7 +25,6 @@
 | `repository(root)`、`git(root, ...)` | `tests/test_baseline_behavior.py` | 建带 CI 文件的临时 Git 仓库、跑 git 命令 |
 | `smoke_payload(...)` | `tests/test_project_loop.py` | 一个能在候选副本里跑的变更验收套件 |
 
-`tests/support.py` 里的 `check()`、`config()` 是早期实例模式留下的结构，已无调用方（见第五节）。
 
 ### 测试地图
 
@@ -68,4 +67,3 @@
 - 测试默认分支名不能假定为 `master`；CI 设置了 `init.defaultBranch main`，本地也建议设置。
 - Windows 上 `autocrlf` 会改变检出字节：套件指纹按 LF 规范化，新增指纹逻辑也要这样做。
 - Python 3.12 的 `unittest` 在没有用例时退出码为 5：夹具仓库里要放至少一个单元测试。
-- `tests/support.py` 的 `check()`、`config()` 保留了已删除模式的字段（`storyloop.check.v1`、`max_seconds`、`repeated_failure_limit`），不要在新测试里使用。

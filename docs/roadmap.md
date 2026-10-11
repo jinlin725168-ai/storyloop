@@ -15,17 +15,12 @@
 - 角色按权限边界划分（决策 0016，2026-09-24）：新增 design（架构师）角色，`design_min_stories`（默认 2）让单故事变更跳过方案；Claude 适配器的 review 四视角并行子代理、implement 按层拆通道。
 - Windows 回归：GitHub Actions 的 windows-latest 作业全量通过（2026-09-24，与 Linux 同为必过作业）。修掉的三类问题：套件指纹按 LF 规范化、候选副本控制文件按解析后的路径定位（8.3 短名）、交互提示在 cp1252 控制台安全输出。
 - 精简（2026-09-30）：角色返回结构由 CLI 原生约束（`--output-schema` / `--json-schema`）；调用诊断记录与 `storyloop log`；每个停点与报错附带可复制的下一步命令；`CHARACTERIZATION_FAILED` 退出码改为 2；删除早期实例模式与 v2 Stage/DAG 引擎（约 4000 行，存档于本地 tag `archive/legacy-modes`）。
-- 停点修复（2026-10-11）：`CHARACTERIZATION_FAILED` 可就地修正测试后续跑（引擎重新验证，不再调用代理）；`BUDGET_EXHAUSTED` 的提示不再建议修订合同；`smoke-apply` 失败退出码为 2。
+- 停点修复（2026-10-11，文档核对时发现）：`CHARACTERIZATION_FAILED` 可就地修正测试后续跑（引擎重新验证，不再调用代理）；`EXISTING_GREEN`（套件在实现前就已通过，全部或部分条件）成为可记录、可续跑的停点，`acceptance-repair` 可从这里加强套件；`acceptance-repair` 返回 `ACCEPTANCE_REPAIRED`、提交为 `repair acceptance suite`；`BUDGET_EXHAUSTED` 的提示不再建议修订合同；`smoke-apply` 失败与 `EXISTING_GREEN` 退出码为 2；`init --settings` 帮助列全八个键；实现指纹范围以代码为准补决策 0017；`project_loop.py` 拆成 loop / gates / guards / finish / acceptance_repair，每个文件都在 500 行以内；删掉测试里已删除模式的遗留夹具。
 - 文档知识库（2026-10-11）：`docs/` 按模块、架构、扩展、接口、能力、积木、测试重组，并对照代码修正漂移。
 
-## 已知问题（2026-10-11 文档核对时发现）
+## 已知问题
 
-1. `init --settings` 的帮助文字只列了三个键，已过时。
-2. `acceptance-repair` 仍返回旧状态名 `SMOKE_REPAIRED`。
-3. `EXISTING_GREEN`（验收套件在旧代码上已绿）没有出路：此时不能 `acceptance-repair`。
-4. 决策 0010 写的实现指纹排除范围比代码窄（代码排除整个 `GENERATED_PATHS`），需要补一条决策或改代码。
-5. `project_loop.py` 约 980 行，超出单文件 500 行的约定。
-6. `tests/support.py` 的 `check()`、`config()` 是已删除模式的遗留夹具。
+暂无。2026-10-11 文档核对时发现的九个问题已全部修复（见上面的"停点修复"一条）。新发现的代码与文档不一致记在这里，修复后移到"已完成"。
 
 ## 下一步（按价值排序）
 

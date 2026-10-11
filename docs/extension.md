@@ -17,8 +17,8 @@
 
 | 步骤 | 文件 | 做什么 |
 |---|---|---|
-| 1 | `storyloop/project_loop.py` | 用 `_pause(project, state, "NEW_STATUS", **details)` 停下，状态写进 `.storyloop/state/runs/<id>.json` |
-| 2 | `_open_run()` 的 `resumable` | 能用 `run` 续跑的状态加进去，否则续跑会报 `Run state cannot be resumed` |
+| 1 | `storyloop/project_loop*.py` | 用 `project_loop_support.pause(project, state, "NEW_STATUS", **details)` 停下，状态写进 `.storyloop/state/runs/<id>.json`；续跑时需要的信息放进 details 一起保存 |
+| 2 | `project_loop._open_run()` 的 `resumable` | 能用 `run` 续跑的状态加进去，否则续跑会报 `Run state cannot be resumed`；再在 `_run_change_locked()` 里决定从这个状态续跑时做什么（参考 `CHARACTERIZATION_FAILED`、`EXISTING_GREEN`） |
 | 3 | `storyloop/next_steps.py` | 给出可复制的下一步命令 |
 | 4 | `storyloop/cli.py` 的 `failures` | 需要人处理的停点退出码为 2 |
 | 5 | 文档 | [api.md](api.md) 的状态表、[FAQ](faq.md) 按停点组织的一节、[使用指南](product-iteration-guide.md) |
@@ -29,7 +29,7 @@
 |---|---|---|
 | 1 | `storyloop/project_agents.py` | `ROLES` 加名字；`INSTRUCTIONS` 写角色说明（写给代理看，含 `FOUNDATION_NOTE` 与精确的返回形状）；Codex 沙箱在 `_codex()` 里按角色选 `read-only` 或 `workspace-write` |
 | 2 | `storyloop/role_schemas.py` | `SCHEMAS` 加返回结构，遵守严格子集（对象封闭、全部 required、可选字段用 `_nullable`） |
-| 3 | `storyloop/project_loop.py` | `LoopServices` 加可选字段（默认 `None` 时该环节跳过并记录原因）；`_default_services()` 接上 `invoke_project_agent`；调用包在 `_read_only_call` 或 `_write_safely` 里 |
+| 3 | `storyloop/project_loop.py` | `LoopServices` 加可选字段（默认 `None` 时该环节跳过并记录原因）；`_default_services()` 接上 `invoke_project_agent`；调用包在 `project_loop_guards.read_only_call` 或 `write_safely` 里；RED 之后、实现之前的门放在 `project_loop_gates` |
 | 4 | `examples/claude-code/claude_agent.py` | `ROLE_TOOLS` 给出工具集，`SCHEMA_HINTS` 给出返回形状提示；写入型角色才给 `Edit/Write` |
 | 5 | 文档与决策 | [角色目录](roles.md)、[api.md](api.md) 的角色表；按权限边界新增角色需要一条决策记录（参考 [0016](decisions/0016-roles-by-authority.md)） |
 

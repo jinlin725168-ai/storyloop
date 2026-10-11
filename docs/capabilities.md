@@ -28,18 +28,18 @@
 | 能力 | 入口 | 实现 | 决策 | 测试 |
 |---|---|---|---|---|
 | 外部闭环持有判定权，代理声明不是证据 | `approve`、`run` | `project_loop.run_change` | [0001](decisions/0001-external-loop-owns-verdict.md) | `test_project_loop*`、`test_product_e2e` |
-| 变更验收套件实现前盲写、与合同一起提交、候选副本里证明 RED | 批准后自动 | `project_loop._prepare_acceptance`、`smoke`、`smoke_runner` | [0002](decisions/0002-smoke-before-implementation.md)、[0008](decisions/0008-smoke-core-flow-only.md) | `test_smoke`、`test_acceptance_layout` |
-| design（架构师）只读出方案与 `touched`；故事数少于 `design_min_stories`（默认 2）时跳过 | RED 之后 | `project_loop._ensure_design` | [0016](decisions/0016-roles-by-authority.md) | `test_design_role` |
-| 特征化门：既有文件改动前先用绿测试锁定现有行为；未声明的改动还原、补锁、重试 | 方案之后 | `project_loop._ensure_characterization`、`_uncharacterized_paths` | [0015](decisions/0015-test-layers.md) | `test_characterization` |
+| 变更验收套件实现前盲写、与合同一起提交、候选副本里证明 RED；实现前就已通过（全部或部分条件）停在 `EXISTING_GREEN` | 批准后自动 | `project_loop._prepare_acceptance`、`smoke`、`smoke_runner` | [0002](decisions/0002-smoke-before-implementation.md)、[0008](decisions/0008-smoke-core-flow-only.md) | `test_smoke`、`test_acceptance_layout` |
+| design（架构师）只读出方案与 `touched`；故事数少于 `design_min_stories`（默认 2）时跳过 | RED 之后 | `project_loop_gates.ensure_design` | [0016](decisions/0016-roles-by-authority.md) | `test_design_role` |
+| 特征化门：既有文件改动前先用绿测试锁定现有行为；未声明的改动还原、补锁、重试；跑红时人就地修正后续跑 | 方案之后 | `project_loop_gates.ensure_characterization`、`uncharacterized_paths`、`resume_characterization` | [0015](decisions/0015-test-layers.md) | `test_characterization` |
 | 实现—验证—审查循环，失败回喂；`max_attempts` 是唯一质量预算 | 每轮尝试 | `project_loop._run_attempt` | [0005](decisions/0005-budget-semantics.md)、[0012](decisions/0012-implementation-tdd-by-prompt.md) | `test_project_loop` |
 | 五层验证各出结论：单元、集成、变更验收、系统冒烟、静态检查 | 每轮尝试 | `project_loop._run_checks_safely`、`layers_green` | [0015](decisions/0015-test-layers.md) | `test_test_layers` |
-| 边界审计与 BASE 停点；控制面、暂存、未声明忽略文件判 `WORKSPACE_TAINTED`；`scratch_paths` 放行构建产物 | 每次代理调用前后 | `project_boundaries`、`boundaries`、`project_loop._write_safely` | [0004](decisions/0004-foundation-vs-mutable-area.md) | `test_project_boundaries`、`test_boundaries`、`test_workspace_scratch`、`test_project_loop_tampering` |
+| 边界审计与 BASE 停点；控制面、暂存、未声明忽略文件判 `WORKSPACE_TAINTED`；`scratch_paths` 放行构建产物 | 每次代理调用前后 | `project_boundaries`、`boundaries`、`project_loop_guards.write_safely` | [0004](decisions/0004-foundation-vs-mutable-area.md) | `test_project_boundaries`、`test_boundaries`、`test_workspace_scratch`、`test_project_loop_tampering` |
 | 独立审查（只读），`fail` 回喂、`needs_input` 停点 | 验证全绿后 | `project_loop._perform_review`、`project_contracts.validate_review` | [0001](decisions/0001-external-loop-owns-verdict.md) | `test_project_loop` |
 | 问答停点：代理提问停在 `NEEDS_INPUT`，终端直接问或 `answer`，回答进后续调用 | `run`、`answer` | `answers`、`cli.run_with_answers` | — | `test_answers` |
-| 人工验收停点：`manual` 条件逐条 `accept`，记录绑定实现指纹 | `accept` | `manual_acceptance`、`project_loop._manual_acceptance_gate` | [0010](decisions/0010-implementation-digest.md) | `test_manual_acceptance` |
-| 验收用例缺陷通道：acceptance 角色修自己的套件，从合同提交重证 RED | `acceptance-repair`（旧名 `smoke-repair`） | `project_loop.repair_smoke` | [0009](decisions/0009-smoke-repair-channel.md) | `test_smoke_repair` |
+| 人工验收停点：`manual` 条件逐条 `accept`，记录绑定实现指纹 | `accept` | `manual_acceptance`、`project_loop._manual_acceptance_gate` | [0010](decisions/0010-implementation-digest.md)、[0017](decisions/0017-implementation-digest-scope.md) | `test_manual_acceptance` |
+| 验收用例缺陷通道：acceptance 角色修自己的套件（含 `EXISTING_GREEN` 时加强断言），从合同提交重证 RED | `acceptance-repair`（旧名 `smoke-repair`） | `acceptance_repair.repair_smoke` | [0009](decisions/0009-smoke-repair-channel.md) | `test_smoke_repair`、`test_project_security_gates` |
 | 人工复位卡住的运行，理由留痕 | `reset` | `run_recovery.reset_run` | — | `test_run_reset` |
-| 幂等完成阶段：实现提交、文档、报告、no-ff 合并、回执，崩溃后续跑不重复 | 审查通过后 | `project_loop._complete` 起的各 `_finish_*`、`project_receipt` | [0011](decisions/0011-no-push-no-history-rewrite.md) | `test_completion_resilience`、`test_project_loop_resume`、`test_project_loop_recovery_security` |
+| 幂等完成阶段：实现提交、文档、报告、no-ff 合并、回执，崩溃后续跑不重复 | 审查通过后 | `project_loop_finish`、`project_receipt` | [0011](decisions/0011-no-push-no-history-rewrite.md) | `test_completion_resilience`、`test_project_loop_resume`、`test_project_loop_recovery_security` |
 
 ## 四、证据与可观测性
 

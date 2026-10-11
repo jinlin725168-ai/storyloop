@@ -17,7 +17,7 @@
 | `start_feature` / `commit_paths` / `finish_feature` | `storyloop/project_git.py` | 建 `feature/<id>` 分支、只暂存显式路径并 `--no-verify` 提交、切回源分支 `--no-ff` 合并 | 引擎的每个提交都走 `commit_paths(project, paths, "type(id): subject")` |
 | `capture_snapshot` / `snapshot_changes` | `storyloop/boundaries.py` | 写入者停止后的全树快照与差异，拒绝链接、硬链接、采集中变化 | 包住一次代理调用：前后各拍一次，比较 |
 | `audit_project_changes` | `storyloop/project_boundaries.py` | 把 Git 可见改动分类（可变区 / 集成点 / 底座 / CI / 违规）并在需要时开 BASE 提案 | 每轮实现后、验证后 |
-| `_write_safely` / `_read_only_call` | `storyloop/project_loop.py` | 代理调用的护栏：控制面、暂存区不变；只读调用不能改树（scratch 与允许的证据除外） | 新增一个会调用代理的环节时照抄 |
+| `write_safely` / `read_only_call` | `storyloop/project_loop_guards.py` | 代理调用的护栏：控制面、暂存区不变；只读调用不能改树（scratch 与允许的证据除外） | 新增一个会调用代理的环节时把调用包进去 |
 | `run_smoke_isolated` / `run_commands_isolated` | `storyloop/smoke_runner.py` | 在 Git 可见文件构成的临时候选副本里跑套件或回归命令，绑定输入指纹 | 新增一层验证时用它，不要在工作树里直接跑 |
 | `implementation_digest` | `storyloop/smoke_runner.py` | “人验收的那份代码”的指纹：Git 可见文件减去引擎产物 | 人工记录、证据与它绑定 |
 | `layer_commands` / `matches_test_root` | `storyloop/project_profile.py` | 取某层的回归命令（兼容旧 `test_commands`）；判断路径是否测试文件（目录或 `**`/`*` glob） | |

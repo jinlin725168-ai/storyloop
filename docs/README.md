@@ -53,7 +53,7 @@
 
 ## 已知空白
 
-- 代码与文档不一致之处以代码为准，已知问题集中在 [roadmap.md 的已知问题](roadmap.md#已知问题2026-10-11-文档核对时发现)。
+- 代码与文档不一致之处以代码为准，发现时记在 [roadmap.md 的已知问题](roadmap.md#已知问题)。
 - [tutorial.md](tutorial.md) 记录的是 2026-09-29 的一次真实运行，之后新增的 `storyloop log`、`next` 字段已补充说明，但输出样例没有重跑。
 - [case-studies.md](case-studies.md) 是历史数据，角色名与完成阶段已加注说明。
 

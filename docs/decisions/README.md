@@ -12,11 +12,12 @@
 | [0006](0006-industry-practices-over-local-plugins.md) | 采用 spec-kit、EARS、Gherkin、OpenSpec、Playwright Test Agents，不自造 | 2026-09-21 | 部分取代：Playwright Test Agents 与"OpenSpec 归档"由 0007、0015 取代 |
 | [0007](0007-change-dir-never-archived.md) | 变更目录不归档，活规格由引擎并入 | 2026-09-21 | 有效 |
 | [0008](0008-smoke-core-flow-only.md) | 冒烟只含核心链路，UI 回归资产不进冒烟、不是证据 | 2026-09-21 | 有效；其中的 UI 回归资产已由 0015 撤掉 |
-| [0009](0009-smoke-repair-channel.md) | 冒烟缺陷走 smoke-repair，从合同提交重证 RED | 2026-09-21 | 有效；命令改名 `acceptance-repair`，`smoke-repair` 保留为别名 |
-| [0010](0010-implementation-digest.md) | 证据与人工验收绑定实现指纹，引擎产物不算 | 2026-09-22 | 有效；代码实际排除整个引擎区域（`GENERATED_PATHS`），比正文更宽，待补记录或改代码 |
+| [0009](0009-smoke-repair-channel.md) | 冒烟缺陷走 smoke-repair，从合同提交重证 RED | 2026-09-21 | 有效；命令改名 `acceptance-repair`（`smoke-repair` 保留为别名），提交改为 `repair acceptance suite`，返回 `ACCEPTANCE_REPAIRED`；也可用于 `EXISTING_GREEN` 停点 |
+| [0010](0010-implementation-digest.md) | 证据与人工验收绑定实现指纹，引擎产物不算 | 2026-09-22 | 有效；实现指纹的排除范围由 0017 修正为整个引擎区域 |
 | [0011](0011-no-push-no-history-rewrite.md) | 引擎不 push、不删分支、不重写历史 | 2026-09-12 | 有效 |
 | [0012](0012-implementation-tdd-by-prompt.md) | 实现级先红后绿由提示词要求并记录，引擎不证明 | 2026-09-23 | 有效 |
 | [0013](0013-foundation-knowledge-base.md) | 底座知识库由 survey 角色摸底产出，挂底座受保护，每个角色先读 | 2026-09-23 | 有效 |
 | [0014](0014-skills-as-packaged-modules.md) | 摸底做成引擎自带的技能包，装进项目供 Claude Code 与 Codex 通用，引擎角色读同一份 | 2026-09-23 | 有效 |
 | [0015](0015-test-layers.md) | 五层测试各在其环节：系统冒烟、变更验收、特征化门、单元/集成分开、静态检查；撤掉 ui_regression | 2026-09-23 | 有效 |
 | [0016](0016-roles-by-authority.md) | 角色按权限边界而非岗位表划分；新增 design（架构师）角色，细分工用角色内子代理 | 2026-09-24 | 有效 |
+| [0017](0017-implementation-digest-scope.md) | 实现指纹排除整个引擎区域（`GENERATED_PATHS`），以代码为准修正 0010 的范围 | 2026-10-11 | 有效 |

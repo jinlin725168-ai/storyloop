@@ -11,8 +11,12 @@
 | 命令面 | `cli` | 解析参数、分发命令、终端澄清与问答、诚实退出码 | `main`、`dispatch`、`clarify_interactively`、`run_with_answers` |
 | | `next_steps` | 每个停点与错误码对应的可复制下一步命令 | `next_step` |
 | | `change_log` | `storyloop log`：从已有状态拼出一个变更的全过程 | `change_log`、`render_log` |
-| 编排 | `project_loop` | 外部闭环状态机：RED、方案、特征化门、实现—分层验证—审查循环、人工验收停点、幂等完成阶段、`acceptance-repair` | `run_change`、`repair_smoke`、`LoopServices`、`layers_green` |
-| | `project_loop_support` | 运行状态的持久化与控制面指纹 | `save_run`、`run_path`、`control_digest` |
+| 编排 | `project_loop` | 外部闭环状态机：从运行状态恢复、物化合同与证明 RED（含 `EXISTING_GREEN` 停点）、实现—边界审计—分层验证—审查循环、人工验收停点 | `run_change`、`LoopServices`、`layers_green`、`load_run_state` |
+| | `project_loop_gates` | RED 与第一轮实现之间的两道门：design 方案、特征化（含红了之后就地修正再续跑） | `ensure_design`、`ensure_characterization`、`characterize_paths`、`resume_characterization` |
+| | `project_loop_guards` | 每次代理调用的护栏：写入型调用不能动控制面与暂存区，只读调用不能改树 | `write_safely`、`read_only_call`、`scratch_paths` |
+| | `project_loop_finish` | 幂等完成阶段：实现提交、报告、文档与活规格、no-ff 合并、回执 | `complete_change`、`finish_verified`、`finish_merged`、`finish_receipting`、`finalize_change` |
+| | `acceptance_repair` | `acceptance-repair`：acceptance 角色修自己的套件，从合同提交重证 RED | `repair_smoke` |
+| | `project_loop_support` | 运行状态的持久化、控制面指纹、停点 | `save_run`、`run_path`、`control_digest`、`pause` |
 | | `project_receipt` | 合并回执的崩溃安全生成与核验 | `ensure_merge_receipt`、`recover_completed_merge` |
 | | `change_report` | 需求—故事—验收条件—测试—证据的追溯报告 | `generate_change_report` |
 | | `run_recovery` | `reset`：把卡住的运行复位到 IMPLEMENTING，理由留痕 | `reset_run` |
@@ -51,7 +55,7 @@
 
 ```mermaid
 flowchart TD
-    CLI[命令面<br/>cli next_steps change_log] --> ORCH[编排<br/>project_loop base_upgrade change_report<br/>project_receipt run_recovery]
+    CLI[命令面<br/>cli next_steps change_log] --> ORCH[编排<br/>project_loop 及 gates guards finish support<br/>acceptance_repair base_upgrade change_report<br/>project_receipt run_recovery]
     CLI --> AGT
     CLI --> CON
     ORCH --> AGT[代理<br/>project_agents role_schemas skills<br/>foundation_survey call_log telemetry]
@@ -66,7 +70,7 @@ flowchart TD
 
 - 代理调用只经 `project_agents.invoke_project_agent`；编排层通过 `LoopServices` 注入，测试用脚本化服务替换真实代理。
 - 子进程经 `processutil.run_process`；已知例外是 `openspec validate`（`openspec_docs`）与 `git archive`（`smoke_runner` 构造历史提交的候选副本）直接用 `subprocess.run`。
-- Git 命令统一经 `baseline._git`（禁用 hooks、最小环境、30 秒上限）；建分支、提交、合并只在 `project_git`。`project_loop` 与 `system_smoke` 另有几处 `git checkout -- <path>` 用于还原引擎产物或未锁定的改动。
+- Git 命令统一经 `baseline._git`（禁用 hooks、最小环境、30 秒上限）；建分支、提交、合并只在 `project_git`。`project_loop`、`project_loop_finish` 与 `system_smoke` 另有几处 `git checkout -- <path>` 用于还原引擎产物或未锁定的改动。
 - 状态文件只经 `storage` 写。
 - 两处循环依赖用函数内局部导入化解：`baseline` → `system_smoke`（init 时采纳已提交的系统冒烟）、`foundation_survey` ↔ `project_agents`。新增代码不要再加循环。
 - 禁止方向：基础层不导入任何上层模块；验证层不调用代理；`cli` 之外不读 `sys.argv`、不做终端交互。

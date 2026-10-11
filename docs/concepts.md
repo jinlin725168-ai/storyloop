@@ -70,6 +70,7 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 | `BOUNDARY_VIOLATION` | 代理写了不允许的路径 | `log` 查是哪次调用写的；还原（或经 BASE 迭代扩 `module_roots` / `test_roots`）后 `run` |
 | `WORKSPACE_TAINTED` | 工作区出现不该有的改动 | 清理后 `reset`，再 `run` |
 | `BUDGET_EXHAUSTED` | 尝试用尽 | 人判断：用例有缺陷就 `acceptance-repair`；否则提高 `.storyloop/config.json` 的 `max_attempts` 后 `run`，或放弃并另开新变更（运行开始后合同不能再修订） |
+| `EXISTING_GREEN` | 验收套件在实现之前就已通过，证明不了 RED | 需求已实现就放弃变更；用例太弱就 `acceptance-repair` |
 | `CHARACTERIZATION_FAILED` | 特征化测试在旧代码上不绿 | 就地修正测试后 `run`：引擎重跑单元层，绿了才提交并继续 |
 
 每个停点的输出都带 `next`：可以直接复制执行的下一步命令。`storyloop log` 汇总这个变更的每次代理调用和每轮失败原因，是排查任何停点的第一步。
