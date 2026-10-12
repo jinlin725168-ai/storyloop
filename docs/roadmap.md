@@ -24,6 +24,8 @@
 
 ## 下一步（按价值排序）
 
+演进方向以 [演进体系总体设计](superpowers/specs/2026-10-12-演进体系-design.md) 为准，按其中六个子项目的顺序推进：变更性质与判据 → 分类与档位 → 报告 → 角色画像 → 分层记忆 → 外环。下列条目中与之重叠的（成本治理、`verify-specs`）并入相应子项目。
+
 1. **接入模板化**：`storyloop init` 按技术栈生成冒烟执行器骨架、AGENT_GUIDE 模板和 settings 草案；把 `smoke_harness.py` 的积木从 vendored 文件变成引擎能力。目标：接入一个新底座从两天缩到半天。
 2. **老仓库迁移工具**：把 `acceptance/smoke/<id>/` 搬到 `acceptance/changes/`、settings 自动拆层。
 3. **`verify-specs`**：事后检查活规格与代码、冒烟用例的漂移，输出"代码错了"或"规格过时"的分诊建议，不自动改规格。

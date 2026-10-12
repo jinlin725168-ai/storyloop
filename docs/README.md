@@ -49,6 +49,7 @@
 | [roadmap.md](roadmap.md) | 已完成、已知问题、下一步、明确不做 |
 | [contributing.md](contributing.md) | 约束、先写测试、改了什么要同步哪份文档 |
 | [references.md](references.md) | 研究来源 |
+| [superpowers/specs/](superpowers/specs/2026-10-12-演进体系-design.md) | 设计规格。当前是演进体系总体设计：定位、原则、决策分层、六个子项目 |
 | `plans/` | 历史实施计划，只读存档，内容不再随代码更新 |
 
 ## 已知空白
