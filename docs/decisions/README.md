@@ -8,7 +8,7 @@
 | [0002](0002-smoke-before-implementation.md) | 验收用例在实现前盲写，与合同一起提交，先证明 RED | 2026-09-16 | 有效；套件路径已改为 `acceptance/changes/<id>/`（0015） |
 | [0003](0003-single-repo-with-subtree.md) | 单仓库底座，多个上游用 git subtree 引入 | 2026-09-17 | 有效 |
 | [0004](0004-foundation-vs-mutable-area.md) | 底座与可变区分离，底座只通过 BASE 迭代演进 | 2026-09-17 | 有效 |
-| [0005](0005-budget-semantics.md) | max_attempts 是唯一质量预算，超时是挂死保护，圈数是检查点 | 2026-09-20 | 有效 |
+| [0005](0005-budget-semantics.md) | max_attempts 是唯一质量预算，超时是挂死保护，圈数是检查点 | 2026-09-20 | 有效；2026-10-12 补齐：代理没给出回答（`AGENT_UNAVAILABLE`）的一轮交还，不计入预算 |
 | [0006](0006-industry-practices-over-local-plugins.md) | 采用 spec-kit、EARS、Gherkin、OpenSpec、Playwright Test Agents，不自造 | 2026-09-21 | 部分取代：Playwright Test Agents 与"OpenSpec 归档"由 0007、0015 取代 |
 | [0007](0007-change-dir-never-archived.md) | 变更目录不归档，活规格由引擎并入 | 2026-09-21 | 有效 |
 | [0008](0008-smoke-core-flow-only.md) | 冒烟只含核心链路，UI 回归资产不进冒烟、不是证据 | 2026-09-21 | 有效；其中的 UI 回归资产已由 0015 撤掉 |

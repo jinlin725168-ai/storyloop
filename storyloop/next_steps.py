@@ -41,6 +41,9 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
     if status == "CHARACTERIZATION_FAILED":
         return (f"特征化测试在旧代码上不绿：就地修正 test_roots 里的这些测试（它们只锁定现有行为），"
                 f"不用提交；{run} 会重跑单元层，绿了再提交并继续")
+    if status == "AGENT_UNAVAILABLE":
+        return (f"代理进程没有给出回答（超时、限流、崩溃或 CLI 不可用），这一轮不计入 max_attempts：{log} "
+                f"看该次调用的 stderr.log，处理后 {run} 会重试同一轮")
     if status == "AGENT_CONTRACT_INVALID":
         return f"代理的回答不符合角色结构：{log} 查看该次调用的 response 与 schema_errors，再 {run} 重试"
     if status == "DRAFT":

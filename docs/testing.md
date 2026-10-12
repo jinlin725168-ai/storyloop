@@ -5,7 +5,7 @@
 ## 一、单元与端到端测试
 
 - 框架：标准库 `unittest`，不依赖第三方包、模型账号或网络。
-- 位置：`tests/`，56 个文件、226 个测试用例；本机（WSL2）全量约 10 分钟。
+- 位置：`tests/`，57 个文件、231 个测试用例；本机（WSL2）全量约 10 分钟。
 - 原理：每个测试在临时目录建一个真实 Git 仓库，`init` 锁底座，用脚本化的 `LoopServices`（Python 函数代替代理）或假的 `codex` / `claude` 可执行文件驱动闭环，断言状态、文件和 Git 历史。
 
 运行：
@@ -33,7 +33,7 @@
 | 端到端样板 | `test_product_e2e`（干净仓库 → 合同 → RED → 实现 → 报告 → no-ff 合并，CI 文件字节不变） |
 | 底座与探测 | `test_baseline_*`、`test_project_profile*`、`test_monorepo_detection`、`test_base_propose`、`test_base_upgrade`、`test_resume_after_base_upgrade` |
 | 合同与规格 | `test_changes_*`、`test_change_approval`、`test_product_spec`、`test_spec_gates`、`test_openspec_docs` |
-| 闭环与停点 | `test_project_loop*`、`test_design_role`、`test_characterization`、`test_test_layers`、`test_answers`、`test_manual_acceptance`、`test_run_reset`、`test_smoke_repair`、`test_completion_resilience` |
+| 闭环与停点 | `test_project_loop*`、`test_agent_unavailable`、`test_design_role`、`test_characterization`、`test_test_layers`、`test_answers`、`test_manual_acceptance`、`test_run_reset`、`test_smoke_repair`、`test_completion_resilience` |
 | 验收套件与冒烟 | `test_smoke`、`test_acceptance_layout`、`test_system_smoke`、`test_smoke_maintenance`、`test_ci_runner`、`test_candidate_allow` |
 | 安全与边界 | `test_boundaries`、`test_project_boundaries`、`test_project_security_gates`、`test_project_loop_tampering`、`test_workspace_scratch`、`test_ci_path_safety`、`test_windows_path_guards`、`test_process_containment` |
 | 代理与适配器 | `test_project_agents`、`test_codex_adapter`、`test_claude_adapter`、`test_role_schemas`、`test_structured_output` |

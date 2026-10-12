@@ -215,6 +215,8 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
         return result
     except StoryLoopError as exc:
         error = exc
+        if exc.code == "AGENT_UNAVAILABLE":
+            exc.details.setdefault("role", role)
         raise
     finally:
         wall_ms = int((time.monotonic() - started) * 1000)
@@ -292,7 +294,8 @@ def _command(project: Path, request: dict, config: dict, schema: dict, trace: di
     argv = [_expand(item, project) for item in command]
     require(all(isinstance(item, str) and item for item in argv), "Agent argv is invalid")
     executable = argv[0] if Path(argv[0]).is_absolute() else shutil.which(argv[0])
-    require(bool(executable), "Agent executable is unavailable")
+    if not executable:
+        raise StoryLoopError("Agent executable is unavailable", code="AGENT_UNAVAILABLE")
     require(Path(executable).suffix.lower() not in {".cmd", ".bat", ".ps1"},
             "Use a native executable or explicit interpreter for the agent")
     argv[0] = str(executable)
@@ -383,7 +386,8 @@ def _codex_executable() -> list[str]:
         node = str(root / "node.exe") if (root / "node.exe").is_file() else shutil.which("node")
         if entry.is_file() and node:
             return [node, str(entry)]
-    raise StoryLoopError("Codex CLI is not available. Configure a manual or command adapter.")
+    raise StoryLoopError("Codex CLI is not available. Configure a manual or command adapter.",
+                         code="AGENT_UNAVAILABLE")
 
 
 def _codex_once(project: Path, argv: list[str], prompt: str, timeout: int, telemetry: dict,
@@ -433,7 +437,9 @@ def _check_process(result: dict) -> None:
             reasons.append(f"exit {result['returncode']}")
         tail = redact(str(result.get("stderr") or "")).strip().splitlines()[-3:]
         detail = "; ".join(reasons) + (" | " + " / ".join(tail)[:600] if tail else "")
-        raise StoryLoopError(f"Project agent process failed safely ({detail})")
+        # The agent never produced an answer (crash, timeout, rate limit, lost containment): an
+        # infrastructure failure, distinct from an answer the loop can judge.
+        raise StoryLoopError(f"Project agent process failed safely ({detail})", code="AGENT_UNAVAILABLE")
 
 
 def _parse(output: str) -> dict:

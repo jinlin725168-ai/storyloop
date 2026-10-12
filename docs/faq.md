@@ -72,6 +72,9 @@ Bash 规则按前缀逐段匹配：`git -C x diff`、`git --no-pager diff`、带
 **Codex 适配器返回非 JSON**
 角色结构已由 `--output-schema` 原生约束，很少发生。仍发生时引擎用 `codex exec resume` 在同一会话里让它补出 JSON（结构不符时附上具体问题），最多两次。仍失败时 `storyloop log` 看该次调用的 `response.txt`、`schema_errors` 与 `stderr.log`。
 
+**`AGENT_UNAVAILABLE`：代理进程没有给出回答**
+超时、限流、崩溃、CLI 不可用都归这一类。它不是质量问题，所以实现循环里出现时这一轮不计入 `max_attempts`，记在 `status --json` 的 `run.agent_failures` 里。`storyloop log` 找到该次调用的 `stderr.log` 看原因，处理后 `run` 会重试同一轮。如果代理在出错前已经改了工作区，会判 `WORKSPACE_TAINTED`，走 `reset`（同样不计预算）。
+
 **`AGENT_CONTRACT_INVALID`**
 代理的最终回答在修复后仍不符合角色的 JSON Schema。implement 角色的这种失败计为一轮失败尝试并回喂给下一轮；其他角色会中断运行，`storyloop log` 查看后直接 `run` 续跑。自定义 `command` 适配器应读取请求里的 `response_schema` 并交给自己的 CLI 约束。
 

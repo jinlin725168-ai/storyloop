@@ -59,6 +59,7 @@
 |---|---|
 | `BLOCKED` | 默认：前置条件不满足（未 init、状态不允许、校验失败、`openspec validate` 不通过等） |
 | `NEEDS_INPUT` | manual 适配器在等人工回答 |
+| `AGENT_UNAVAILABLE` | 代理进程没有给出回答（超时、限流、崩溃、CLI 不可用、进程树没能回收）。实现循环里出现时这一轮交还、不计入 `max_attempts`，记在 `run.agent_failures`；`run` 重试同一轮 |
 | `AGENT_CONTRACT_INVALID` | 代理回答修复后仍不符合角色 schema（implement 计一轮失败，不会冒到这里） |
 | `WORKSPACE_TAINTED` | 控制面、暂存区或工作区被意外改动（RED、方案、特征化阶段只报错，不落盘为运行状态） |
 | `GIT_BLOCKED` / `GIT_CONFLICT` | Git 命令失败 / no-ff 合并失败（功能分支保留） |

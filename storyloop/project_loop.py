@@ -114,6 +114,8 @@ def _run_change_locked(
             if exc.code == "WORKSPACE_TAINTED":
                 state.update({"status": "WORKSPACE_TAINTED", "error": str(exc)})
                 save_run(project, state)
+            elif exc.code == "AGENT_UNAVAILABLE":
+                _hand_back_attempt(project, state, exc)
             raise
         if outcome is not None:
             return outcome
@@ -237,12 +239,30 @@ def _run_attempt(
     return complete_change(project, change, state, **verified)
 
 
+def _hand_back_attempt(project: Path, state: dict, error: StoryLoopError) -> None:
+    """An agent that never answered (crash, timeout, rate limit) did not spend the quality budget.
+
+    `max_attempts` counts answers the loop could judge (decision 0005), so the interrupted attempt is
+    handed back: the next `run` retries the same attempt number. The failure stays on record for the
+    log and the outer loop. A writer that changed the workspace before dying is WORKSPACE_TAINTED
+    instead, and `reset` hands that attempt back.
+    """
+    moment = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    state.setdefault("agent_failures", []).append({
+        "attempt": state["attempt"], "role": error.details.get("role"), "code": error.code,
+        "message": str(error)[:600], "at": moment})
+    state["attempt"] = max(int(state["attempt"]) - 1, 0)
+    save_run(project, state)
+
+
 def _implement_answer(services: LoopServices, project: Path, context: dict) -> dict:
     """The implement call; an answer that breaks the role schema even after the adapter's own
     repairs becomes a marker instead of an exception, so it is judged like any failed attempt."""
     try:
         return services.implement(project, context)
     except StoryLoopError as exc:
+        if exc.code == "AGENT_UNAVAILABLE":
+            exc.details.setdefault("role", "implement")
         if exc.code != "AGENT_CONTRACT_INVALID":
             raise
         return {"_contract_error": str(exc)}
@@ -395,9 +415,14 @@ def _perform_review(
                "layers": layers, "boundary": boundary, "design_plan": design_plan(state),
                "answers": load_answers(project, change["change_id"]),
                "design": state.get("design") or ""}
-    return read_only_call(
-        project, change["change_id"], lambda: services.review(project, context)
-    )
+    try:
+        return read_only_call(
+            project, change["change_id"], lambda: services.review(project, context)
+        )
+    except StoryLoopError as exc:
+        if exc.code == "AGENT_UNAVAILABLE":
+            exc.details.setdefault("role", "review")
+        raise
 
 
 def _new_run_state(change_id: str, started: dict, contract_digest: str) -> dict:
