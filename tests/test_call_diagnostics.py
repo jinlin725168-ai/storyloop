@@ -99,7 +99,8 @@ class LogAndNextStepTests(unittest.TestCase):
         try:
             result = run_change(root, change_id, services)
             self.assertEqual(result["status"], "BUDGET_EXHAUSTED")
-            self.assertIn(f"storyloop acceptance-repair {root} --change {change_id}", result["next"])
+            # The engine names the resolved project path (on Windows the temp dir may be an 8.3 short name).
+            self.assertIn(f"storyloop acceptance-repair {root.resolve()} --change {change_id}", result["next"])
             # A started run's contract cannot be revised, so the hint must not suggest it.
             self.assertNotIn("修订合同", result["next"])
             self.assertIn("max_attempts", result["next"])
