@@ -13,7 +13,7 @@ import time
 from .baseline import load_project_config
 from .models import StoryLoopError, require
 from .foundation_survey import foundation_payload
-from .skills import skill_text
+from .skills import ROLE_SKILLS, skill_text
 from .call_log import close_call, open_call
 from .processutil import redact, run_process
 from .role_schemas import normalize, schema_errors, schema_for, wire_schema
@@ -30,6 +30,9 @@ FOUNDATION_NOTE = (
 INSTRUCTIONS = {
     "product": (
         "Co-create only product-level intent and return the complete StoryLoop product v1 JSON. "
+        "Decide the change's nature first: a defect report is a fix, a structural goal with unchanged behaviour "
+        "is a refactor, anything else is a feature; one change has one nature, so split mixed requests. "
+        "Follow the oracle-craft skill below for row types, exemptions and the consumer matrix. "
         + FOUNDATION_NOTE + "Never re-specify a capability the base already provides: reference it, "
         "and when a story changes an existing requirement reuse that requirement's title. "
         "Structure (spec-kit style): goal; non_goals; stories ordered by priority P1/P2/P3, each "
@@ -53,10 +56,17 @@ INSTRUCTIONS = {
         "`clarifications` entry; when the request carries answers, apply them to rules and "
         "criteria, drop the answered questions, and keep the decisions in `clarifications`. "
         "Exact shape: {version:1, goal:string, non_goals:[string], capability?:slug, "
+        "nature?:'feature'|'fix'|'refactor', defect?:{observed,expected,reproduction:[string],"
+        "reporter_hypothesis?,root_cause:[{statement,location:'path:line'}],confirmed:[string],"
+        "unconfirmed:[string],sibling_entries?:[string],origin_change?}, refactor?:{subtype:'structure'|"
+        "'dependency-swap',scope:[string],invariants:[string],structural_goals:[string],"
+        "migration_map?:[{from,to,assertion}]}, consumers?:[{id,consumer,trigger,path,in_scope:boolean,"
+        "verification}], coverage_exemptions?:[{row_type,reason}], test_removals?:[{path,reason}], "
         "clarifications?:[{session,question,answer}], questions:[{id,text,options:[string],"
         "recommended?:string,why?:string}], stories:[{id,title,priority:'P1'|'P2'|'P3',"
         "independent_test:string,as_a,want,so_that,rules:[string],out_of_scope:[string],"
-        "depends_on:[string],acceptance:[{id,given,when,then,kind:'automated'|'manual'}]}]}; "
+        "depends_on:[string],acceptance:[{id,given,when,then,kind:'automated'|'manual',row_type?,oracle_class?,"
+        "consumers?:[string],reproduces_defect?:boolean}]}]}; "
         "every non-optional key is required even when empty, IDs unique across the product, no extra keys. "
         "Write all human-facing text (goal, stories, rules, criteria, questions) in the language of the request. "
         "If openspec/specs/<capability>/spec.md exists, it is the current behavior: a story that changes an "
@@ -67,6 +77,11 @@ INSTRUCTIONS = {
         "Act as independent external acceptance QA. Return exactly {files:[{path,content}],manifest}. "
         + FOUNDATION_NOTE + "Use testing.md and building-blocks.md for the acceptance client, how the "
         "app is started, and the API conventions. "
+        "Follow the oracle-craft skill below. For a fix, write the reproduction tests for criteria marked "
+        "reproduces_defect. For a refactor, the suite is the structural assertions of the contract's structural "
+        "goals (they must fail on the current code). Put must-be-red and must-already-hold criteria in different "
+        "tests, and set tier: heavy only for criteria with oracle_class auto-heavy. Keep each runner's summary "
+        "line in the output. "
         "Generate a small core-flow smoke suite under payload.suite_root: verify every criterion that can be "
         "observed through the API with API tests, and use a browser only for criteria that are inherently visual. "
         "If acceptance/ui/ exists it holds "
@@ -100,6 +115,8 @@ INSTRUCTIONS = {
         "the summary. "
         + FOUNDATION_NOTE + "Follow extension.md for where a new feature's files go and reuse what "
         "building-blocks.md lists instead of re-implementing it. "
+        "Never delete an existing test unless the contract's test_removals lists it. In a refactor, behaviour "
+        "must not change and nothing beyond the structural goals is 'improved'. "
         "Never edit the foundation, OpenSpec contract, acceptance "
         "tests, reports, CI, or .storyloop. Do not commit or push. "
         "Work test-first: for each behaviour, write a unit test in the project's own test layout, run it "
@@ -121,6 +138,8 @@ INSTRUCTIONS = {
         "payload.design is the implementer's design record; check that the unit tests it lists under "
         "## Tests First exist in the repository and cover the behaviours claimed, and treat a missing or "
         "hollow Tests First section as a finding. "
+        "Follow the oracle-craft skill below: a test that only asserts presence or non-emptiness, a deleted "
+        "test, or an integration oracle replaced by mocks is a finding. "
         "Do not edit files. Return exactly {verdict:'pass'|'fail'|'needs_input',summary:string,"
         "findings:[object],questions:[string]}. Pass only with no findings or questions."
     ),
@@ -151,6 +170,8 @@ INSTRUCTIONS = {
         "behaviour. Run the tests: they must pass on the current code. payload.extend lists paths the engine "
         "found modified without a lock; when present, characterize exactly those (payload.characterization "
         "shows what is already locked). If nothing existing will change, return touched: [] and tests: []. "
+        "Follow the oracle-craft skill below. For a refactor, touched must include every existing file inside "
+        "the contract's refactor.scope that the change will modify. "
         "Do not modify non-test files, do not commit. Return exactly {summary:string, touched:[string], "
         "tests:[string], questions:[]}."
     ),
@@ -164,15 +185,14 @@ INSTRUCTIONS = {
 }
 
 
-SKILL_ROLES = {"survey": "foundation-survey"}
 FOUNDATION_LEDGER = "foundation"  # survey calls are base work, billed apart from any change
 
 
 def instructions_for(project: Path, role: str) -> str:
-    """Role instructions; roles defined by a packaged skill embed the skill (project copy first)."""
+    """Role instructions with the role's packaged skills embedded (project copy first)."""
     text_ = INSTRUCTIONS[role]
-    if role in SKILL_ROLES:
-        text_ += "\n\nSkill:\n" + skill_text(project, SKILL_ROLES[role])
+    for name in ROLE_SKILLS.get(role, ()):
+        text_ += f"\n\nSkill {name}:\n" + skill_text(project, name)
     return text_
 
 

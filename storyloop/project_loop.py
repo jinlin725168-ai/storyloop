@@ -40,6 +40,7 @@ from .project_receipt import recover_completed_merge
 from .system_smoke import run_system_smoke_isolated
 from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, load_smoke_manifest, protection_path
 from .smoke import suite_relative, suite_root as acceptance_suite_root
+from .skills import ROLE_SKILLS, used_skills
 from .smoke_runner import implementation_digest, run_commands_isolated, run_smoke_isolated
 from .storage import load_json, locked
 
@@ -160,6 +161,7 @@ def _open_run(project: Path, change: dict) -> tuple[dict, int, bool]:
     verify_baseline(project)
     state = _new_run_state(change_id, start_feature(project, change_id),
                            change["approval"]["contract_digest"])
+    state["skills_used"] = used_skills(project, sorted({n for names in ROLE_SKILLS.values() for n in names}))
     save_run(project, state)
     return state, 1, True
 

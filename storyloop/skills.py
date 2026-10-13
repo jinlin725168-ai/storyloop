@@ -20,6 +20,25 @@ from .models import require
 
 SKILLS_ROOT = Path(__file__).resolve().parent / "skills"
 SKILL_TARGETS = (".claude/skills", ".codex/skills")
+# Packaged skills each engine role reads; the text is embedded in that role's instructions.
+ROLE_SKILLS: dict[str, tuple[str, ...]] = {
+    "survey": ("foundation-survey",),
+    "product": ("oracle-craft",),
+    "acceptance": ("oracle-craft",),
+    "characterize": ("oracle-craft",),
+    "review": ("oracle-craft",),
+}
+
+
+def used_skills(project: Path, names: list[str]) -> dict[str, str]:
+    """name -> version of the copy `skill_text` would read (project copy first, packaged fallback)."""
+    project = Path(project).resolve()
+    versions = {}
+    for name in names:
+        roots = [project / target / name for target in SKILL_TARGETS] + [SKILLS_ROOT / name]
+        root = next(r for r in roots if (r / "SKILL.md").is_file())
+        versions[name] = _frontmatter((root / "SKILL.md").read_text(encoding="utf-8")).get("version", "0")
+    return versions
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 
 

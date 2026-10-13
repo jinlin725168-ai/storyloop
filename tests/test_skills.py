@@ -7,6 +7,8 @@ import sys
 import tempfile
 import unittest
 
+from storyloop.project_agents import instructions_for
+from storyloop.skills import ROLE_SKILLS, used_skills
 from storyloop.baseline import bootstrap_project
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import instructions_for, invoke_project_agent
@@ -86,6 +88,29 @@ class SurveyUsesSkillTests(unittest.TestCase):
                 invoke_project_agent(root, "survey", {"baseline_version": "1.0.0"})
             request = load_json(root / ".storyloop/requests/project-survey.json")
             self.assertIn("Foundation Survey", request["instructions"])
+
+
+
+class OracleCraftTests(unittest.TestCase):
+    def test_oracle_craft_ships_and_reaches_the_oracle_roles(self):
+        self.assertIn("oracle-craft", packaged_skills())
+        for role in ("product", "acceptance", "characterize", "review"):
+            self.assertIn("oracle-craft", ROLE_SKILLS[role])
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            text = instructions_for(root, "acceptance")
+            self.assertIn("unknown_state", text)          # from references/acceptance-matrix.md
+            self.assertIn("contains", instructions_for(root, "characterize"))
+            self.assertNotIn("oracle-craft", instructions_for(root, "implement"))
+
+    def test_the_project_copy_version_is_what_gets_recorded(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            local = root / SKILL_TARGETS[0] / "oracle-craft"
+            local.mkdir(parents=True)
+            (local / "SKILL.md").write_text("---\nname: oracle-craft\nversion: 9.9.9\ndescription: x\n---\n",
+                                            encoding="utf-8")
+            self.assertEqual(used_skills(root, ["oracle-craft"]), {"oracle-craft": "9.9.9"})
 
 
 if __name__ == "__main__":
