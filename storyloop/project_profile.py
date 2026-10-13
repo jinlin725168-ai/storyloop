@@ -75,7 +75,25 @@ def validate_project_settings(root: Path, overrides: dict | None = None) -> dict
     protected = set(profile["protected_paths"])
     require(not protected.intersection(profile["module_roots"]),
             "Protected CI paths cannot be module roots")
+    _reject_skill_directories(profile)
     return profile
+
+
+SKILL_DIRECTORIES = (".claude/skills", ".codex/skills")
+
+
+def _reject_skill_directories(profile: dict) -> None:
+    """Skill packs shape how oracles are written: the implementer may never own them."""
+    probes = [f"{directory}/any-skill/SKILL.md" for directory in SKILL_DIRECTORIES]
+    for root in profile["module_roots"]:
+        normalized = root.rstrip("/")
+        covers = any(probe.startswith(normalized + "/") for probe in probes)  # root contains a skill dir
+        inside = any(normalized == d or normalized.startswith(d + "/") for d in SKILL_DIRECTORIES)
+        require(normalized not in {"", "."} and not covers and not inside,
+                f"module_roots cannot include the skill packs: {root}")
+    for probe in probes:
+        require(not matches_test_root(probe, profile["test_roots"]),
+                f"test_roots cannot include the skill packs: {probe.rsplit('/', 2)[0]}")
 
 
 LAYERS = ("unit", "integration", "checks")
