@@ -15,7 +15,8 @@ import tempfile
 
 from .baseline import _git, load_project_config
 from .boundaries import capture_snapshot, snapshot_changes
-from .models import StoryLoopError, require
+from .changes import load_change
+from .models import StoryLoopError, criterion_expects_red, require
 from .oracle_counts import count_tests, project_patterns
 from .path_security import safe_target
 from .project_profile import GENERATED_PATHS
@@ -40,19 +41,7 @@ def run_smoke(
     errors = [item for item in results if item["status"] == "ERROR"]
     failures = [item for item in results if item["status"] == "FAIL"]
     if expect_red:
-        require(not errors, "Smoke RED proof encountered an environment error")
-        criteria = {criterion for item in manifest["tests"] for criterion in item["criteria"]}
-        failed_criteria = {criterion for item in failures for criterion in item["criteria"]}
-        if not criteria <= failed_criteria:
-            # Green on the code before implementation (wholly or for some criteria): the suite
-            # does not assert the new behaviour. The results travel with the error so the run can
-            # record them and acceptance-repair can show them to the suite's owner.
-            green = sorted(criteria - failed_criteria)
-            raise StoryLoopError(
-                "Acceptance suite is already green before implementation and did not prove RED"
-                + (f" (criteria passing: {', '.join(green)})" if failures else ""),
-                code="EXISTING_GREEN",
-                details={"criteria_green": green, "results": [_tail(item) for item in results]})
+        _judge_red(results, manifest, load_change(project, change_id))
         status = "RED"
     elif errors:
         status = "ERROR"
@@ -79,6 +68,36 @@ def run_smoke(
     )
     write_json(path, evidence, max_bytes=4_000_000)
     return {**evidence, "evidence_path": str(path), "evidence_sha256": _sha256(path)}
+
+
+def _judge_red(results: list[dict], manifest: dict, change: dict) -> None:
+    """RED by row type: new-behaviour rows must fail, kept-behaviour rows must already pass.
+
+    Only fast tests decide (heavy ones are recorded, not judged). A failure that executed zero tests
+    is a collection or import error, not a behaviour failure, so it never counts as RED.
+    """
+    tiers = {test["id"]: test.get("tier", "fast") for test in manifest["tests"]}
+    fast = [item for item in results if tiers[item["id"]] == "fast"]
+    broken = [item for item in fast if item["status"] == "ERROR" or (
+        item["status"] == "FAIL" and (item.get("counts") or {}).get("executed") == 0)]
+    require(not broken, "Smoke RED proof encountered an environment error")
+    expects_red = {criterion["id"]: criterion_expects_red(criterion)
+                   for story in change["product"]["stories"] for criterion in story["acceptance"]}
+    failed = {criterion for item in fast if item["status"] == "FAIL" for criterion in item["criteria"]}
+    covered = {criterion for item in fast for criterion in item["criteria"]}
+    tails = [_tail(item) for item in results]
+    must_hold = sorted(c for c in covered if not expects_red[c] and c in failed)
+    if must_hold:
+        raise StoryLoopError(
+            "Criteria that must already hold fail on the code before implementation: "
+            + ", ".join(must_hold) + " (the tests are wrong, not the code)",
+            code="ORACLE_DEFECT", details={"criteria_failing": must_hold, "results": tails})
+    green = sorted(c for c in covered if expects_red[c] and c not in failed)
+    if green:
+        raise StoryLoopError(
+            "Acceptance suite is already green before implementation and did not prove RED"
+            + f" (criteria passing: {', '.join(green)})",
+            code="EXISTING_GREEN", details={"criteria_green": green, "results": tails})
 
 
 def _tail(result: dict) -> dict:

@@ -87,7 +87,10 @@ INSTRUCTIONS = {
         "an assertion about product behavior, and return the complete suite (all files and the manifest). "
         "When failure_evidence.status is EXISTING_GREEN the suite passed on the code before implementation "
         "(criteria_green lists the criteria it failed to fail): strengthen those tests so they assert the "
-        "new behaviour the contract requires and fail on the current code."
+        "new behaviour the contract requires and fail on the current code. "
+        "When failure_evidence.status is ORACLE_DEFECT, tests for criteria that must already hold "
+        "(row types regression, state_preservation, non_goal) failed on the current code: fix those tests so "
+        "they pass on the current code, and keep every assertion about new behaviour."
     ),
     "implement": (
         "Implement the approved change in this repository. Modify only new files under configured module "

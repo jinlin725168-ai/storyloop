@@ -92,7 +92,7 @@ def _run_change_locked(
         return finish_receipting(project, change, state)
     if state["status"] == "FINALIZING":
         return finalize_change(project, change, state)
-    if fresh or state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED", "EXISTING_GREEN"}:
+    if fresh or state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}:
         paused = _prepare_acceptance(project, change, services, state)
         if paused is not None:
             return paused
@@ -134,7 +134,7 @@ def _open_run(project: Path, change: dict) -> tuple[dict, int, bool]:
         resumable = {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED",
                      "IMPLEMENTING", "BASE_CHANGE_REQUIRED",
                      "BOUNDARY_VIOLATION", "NEEDS_INPUT", "BUDGET_EXHAUSTED",
-                     "CHARACTERIZATION_FAILED", "EXISTING_GREEN",
+                     "CHARACTERIZATION_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT",
                      "VERIFIED", "MANUAL_ACCEPTANCE_REQUIRED", "MERGED", "RECEIPTING",
                      "FINALIZING"}
         require(state.get("change_id") == change_id and state.get("status") in resumable,
@@ -322,10 +322,10 @@ def _prepare_acceptance(
     try:
         red = _ensure_red_evidence(project, change_id)
     except StoryLoopError as exc:
-        if exc.code != "EXISTING_GREEN":
+        if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
             raise
-        return pause(project, state, "EXISTING_GREEN", error=str(exc),
-                     acceptance={"status": "EXISTING_GREEN", **exc.details})
+        return pause(project, state, exc.code, error=str(exc),
+                     acceptance={"status": exc.code, **exc.details})
     for key in ("acceptance", "error", "next"):
         state.pop(key, None)
     state.update({"status": "IMPLEMENTING",

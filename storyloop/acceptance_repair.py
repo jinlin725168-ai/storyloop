@@ -25,7 +25,7 @@ if TYPE_CHECKING:  # the loop imports this module; the services type is only an 
     from .project_loop import LoopServices
 
 
-REPAIRABLE = {"IMPLEMENTING", "BUDGET_EXHAUSTED", "NEEDS_INPUT", "EXISTING_GREEN"}
+REPAIRABLE = {"IMPLEMENTING", "BUDGET_EXHAUSTED", "NEEDS_INPUT", "EXISTING_GREEN", "ORACLE_DEFECT"}
 
 
 def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServices | None = None,
@@ -44,7 +44,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     require(path.exists(), "Repair needs a started run with a committed contract")
     state = load_json(path)
     require(state.get("status") in REPAIRABLE and state.get("contract_commit"),
-            f"Acceptance repair is only possible while implementing or after EXISTING_GREEN "
+            f"Acceptance repair is only possible while implementing or after EXISTING_GREEN / ORACLE_DEFECT "
             f"(current: {state.get('status')})")
     require(current_branch(project) == state["feature_branch"], "Check out the run's feature branch first")
     if services is None:
@@ -85,7 +85,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
 
 def _last_smoke_evidence(project: Path, change_id: str, state: dict) -> dict:
     """Tails of the latest acceptance output, so the repairing agent sees what actually happened."""
-    if state.get("status") == "EXISTING_GREEN" and isinstance(state.get("acceptance"), dict):
+    if state.get("status") in {"EXISTING_GREEN", "ORACLE_DEFECT"} and isinstance(state.get("acceptance"), dict):
         return state["acceptance"]  # green before implementation: the suite must assert the new behaviour
     for failure in reversed(state.get("failures") or []):
         smoke = failure.get("acceptance") or failure.get("smoke")
