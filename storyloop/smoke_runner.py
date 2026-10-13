@@ -36,8 +36,7 @@ def run_smoke(
     project = Path(project).resolve()
     manifest = load_smoke_manifest(project, change_id)
     started = _timestamp()
-    patterns = project_patterns(project)
-    results = [_run_test(project, item, patterns) for item in manifest["tests"]]
+    results = _run_tiered(project, manifest["tests"], project_patterns(project), run_all=expect_red)
     errors = [item for item in results if item["status"] == "ERROR"]
     failures = [item for item in results if item["status"] == "FAIL"]
     if expect_red:
@@ -45,7 +44,7 @@ def run_smoke(
         status = "RED"
     elif errors:
         status = "ERROR"
-    elif failures:
+    elif failures or any(item["status"] == "NOT_RUN" for item in results):
         status = "FAILED"
     else:
         status = "PASSED"
@@ -68,6 +67,26 @@ def run_smoke(
     )
     write_json(path, evidence, max_bytes=4_000_000)
     return {**evidence, "evidence_path": str(path), "evidence_sha256": _sha256(path)}
+
+
+def _run_tiered(project: Path, tests: list[dict], patterns: list[dict], run_all: bool) -> list[dict]:
+    """Fast tests first; heavy ones only once every fast test passed (always, when proving RED)."""
+    fast = [test for test in tests if test.get("tier", "fast") == "fast"]
+    heavy = [test for test in tests if test.get("tier", "fast") == "heavy"]
+    results = {test["id"]: {**_run_test(project, test, patterns), "tier": "fast"} for test in fast}
+    go = run_all or all(item["status"] == "PASS" for item in results.values())
+    for test in heavy:
+        results[test["id"]] = ({**_run_test(project, test, patterns), "tier": "heavy"} if go
+                               else _not_run(test))
+    return [results[test["id"]] for test in tests]
+
+
+def _not_run(test: dict) -> dict:
+    return {"id": test["id"], "criteria": list(test["criteria"]), "command": list(test["command"]),
+            "status": "NOT_RUN", "reason": "fast oracle did not pass", "returncode": None,
+            "timed_out": False, "tier": "heavy",
+            "counts": {"executed": None, "failed": None, "skipped": None, "parser": None},
+            "stdout": "", "stderr": ""}
 
 
 def _judge_red(results: list[dict], manifest: dict, change: dict) -> None:

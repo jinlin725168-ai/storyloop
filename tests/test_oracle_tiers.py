@@ -156,5 +156,41 @@ class OracleDefectLoopTests(unittest.TestCase):
             self.assertEqual(done["status"], "PASSED", done)
 
 
+
+class TieredRunTests(unittest.TestCase):
+    def _suite(self, fast_exit: int) -> tuple[Path, str]:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        root = Path(folder.name)
+        value = product()
+        value["stories"][0]["acceptance"].append({
+            "id": "AC-2", "given": "g", "when": "w", "then": "t", "kind": "automated",
+            "oracle_class": "auto-heavy"})
+        change_id = approved(root, value)
+        files = [{"path": "fast.py", "content": script(fast_exit)},
+                 {"path": "heavy.py", "content": "from pathlib import Path\nPath('ran-heavy').touch()\n"}]
+        manifest = {"version": 1, "tests": [
+            {"id": "FAST", "criteria": ["AC-1"], "command": ["{python}", f"acceptance/changes/{change_id}/fast.py"],
+             "timeout_seconds": 10},
+            {"id": "HEAVY", "criteria": ["AC-2"], "tier": "heavy",
+             "command": ["{python}", f"acceptance/changes/{change_id}/heavy.py"], "timeout_seconds": 10}]}
+        install_smoke_suite(root, change_id, files, manifest)
+        return root, change_id
+
+    def test_heavy_runs_only_after_fast_is_green(self):
+        root, change_id = self._suite(fast_exit=1)
+        result = run_smoke(root, change_id)
+        self.assertEqual(result["status"], "FAILED")
+        heavy = next(item for item in result["results"] if item["id"] == "HEAVY")
+        self.assertEqual((heavy["status"], heavy["tier"]), ("NOT_RUN", "heavy"))
+        self.assertFalse((root / "ran-heavy").exists())
+
+    def test_heavy_runs_when_fast_is_green(self):
+        root, change_id = self._suite(fast_exit=0)
+        result = run_smoke(root, change_id)
+        heavy = next(item for item in result["results"] if item["id"] == "HEAVY")
+        self.assertEqual(heavy["status"], "PASS")
+
+
 if __name__ == "__main__":
     unittest.main()
