@@ -32,6 +32,15 @@ characterize 角色写的特征化测试在旧代码上没跑绿（`unit_command
 **`BOUNDARY_VIOLATION`**
 代理写了不允许的路径：受保护的合同或验收套件、可变区外的新文件、链接，或特征化写了 `test_roots` 以外的文件（类别 `NOT_A_TEST_PATH`）。`storyloop log` 找到是哪次调用写的，还原这些文件后 `run`；确实需要扩大可写范围就走 BASE 迭代。它不能用 `acceptance-repair` 处理。
 
+**`ORACLE_DEFECT`：应当保持成立的条件在旧代码上就失败**
+行类型为 `regression`、`state_preservation`、`non_goal` 的验收条件断言的是"保持不变"，在旧代码上本来就该通过。它们失败说明用例写错了，不是代码的问题。用 `storyloop acceptance-repair PATH --change ID --reason "…"` 让 acceptance 角色修正这些用例（它能看到 `criteria_failing` 和输出），重证 RED 后 `run` 继续。
+
+**报告的"判据自证"里写着"未能统计"**
+引擎没能从这条命令的输出里认出测试工具的汇总行，所以这一层没有执行数自证。常见原因：Gradle 全部通过时默认不打印数量；Go 没加 `-v`；自定义的测试脚本不打印汇总。处理：让命令输出汇总，或在 settings 里加 `test_count_patterns`。
+
+**单元层失败，原因是"执行数从 N 降到 M"**
+实现删掉了测试。确实需要删（例如随死代码一起删）的，在合同的 `test_removals` 里声明路径和理由；否则这是在削弱判据。
+
 **`EXISTING_GREEN`：RED 阶段验收套件已经是绿的**
 变更验收套件在实现之前就通过了，全部或部分条件（`run.acceptance.criteria_green` 列出没能失败的条件）。要么合同描述的行为其实已经存在，要么用例没有断言新行为。先确认需求是否已经实现：已实现就放弃这个变更；用例太弱就 `storyloop acceptance-repair PATH --change ID --reason "…"`，acceptance 角色拿到这次的结果加强断言，从合同提交重新证明 RED 后 `run` 继续。不修复直接 `run` 只会再停在这里。
 

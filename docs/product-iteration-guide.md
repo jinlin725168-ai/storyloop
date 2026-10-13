@@ -118,6 +118,20 @@ storyloop change C:\work\my-project `
 
 未决的产品歧义以选择题形式提出：角色说明要求每轮最多 5 个，每个 2 到 5 个互斥选项、一个推荐项和一句"为什么重要"（这是提示词约束，引擎只校验推荐项必须在选项里；终端每轮问 5 个）。在终端里执行 `change` 时会逐条提问（回车选推荐项，输入序号或自由文本，`q` 结束本轮），回答立即触发一次修订，代理据此改写规则和验收条件，回答本身进入合同的 `clarifications`（按会话日期记录，之后的修订不会丢失），并出现在 proposal.md 的"澄清记录"里。任何回答都会改变合同摘要，因此旧批准自动失效。`--no-interactive` 或无终端时问题保持开放，用 `change --message` 回答。
 
+### 变更性质与判据
+
+product 角色先判定变更性质，一个变更只有一种：
+
+| 性质 | 合同多出的部分 | 判据 |
+|---|---|---|
+| `feature` | 无（现状） | 验收套件先红后绿 + 特征化 |
+| `fix` | `defect`：现象、期望、复现步骤、报告者猜测（只作背景）、根因（1–5 条，每条 `path:line`，引擎核对在基线上存在）、已确认 / 待确认、同类入口 | 标 `reproduces_defect` 的复现测试先红后绿 |
+| `refactor` | `refactor`：子类（`structure` / `dependency-swap`）、范围、不变行为、结构目标、迁移映射表（dependency-swap 必填） | 结构断言先红后绿；特征化不能跳过，仓库必须配置 `test_roots` 与 `unit_commands` |
+
+验收条件可以带 `row_type`（行类型）、`oracle_class`（`auto-fast` / `auto-heavy` / `manual`）、`consumers`（引用合同 `consumers` 消费端矩阵里的 ID）。批准前的检查表会报出：缺复现条件、根因位置不存在、某个行类型既无条件也无豁免、范围内的消费端没被覆盖、重构的特征化未配置。没有 `nature` 的旧合同对这些新检查只给 warning。
+
+验收清单里的测试可以标 `tier: heavy`（端到端、浏览器等慢用例），它们在每轮的快判据全绿后才运行，否则记为 `NOT_RUN`；RED 只由快判据判定。合同 `test_removals` 列出本次允许删除的测试，否则单元或集成层的执行数下降按失败处理。
+
 ## 4. 批准后自动完成
 
 ```powershell
@@ -290,7 +304,7 @@ storyloop run C:\work\my-project --change FEAT-20260916-001
 - `NEEDS_INPUT`：已批准合同仍出现真实产品歧义。在终端里执行 `run` 或 `approve` 时会直接逐条提问并继续（回车表示让代理按现有约定自行决定）；非交互环境用 `storyloop answer PATH --change ID --answer "…"`。回答按尝试号记录在 `.storyloop/state/answers/`，随后的实现和审查都能看到问答配对；问题未回答前 `run` 拒绝续跑，`--no-interactive` 可关闭终端提问。
 - `WORKSPACE_TAINTED`：代理或其他进程在工作区里产生了不该有的改动（未声明的被忽略文件、暂存、控制面文件）。常见原因：残留的 dev server、未声明的构建目录、代理超时或出错时已改动工作区。只有在实现尝试循环里出现时它才是落盘的运行状态：人先判断原因，处理后执行 `storyloop reset PATH --change ID --reason "…"` 再 `storyloop run`。复位不动任何文件，被中断的那一轮不计入尝试预算，理由写入运行状态。在 RED、方案或特征化阶段出现时它只是一个错误码（`run.status` 仍是之前的状态），清理后直接 `run`，`reset` 会被拒绝。
 - `CHARACTERIZATION_FAILED`：特征化测试在旧代码上不绿，说明锁定现有行为的测试写错了。就地修正 `test_roots` 里的这些测试（不用提交）后 `run`：引擎不再调用代理，重跑整个单元层，绿了才提交这些测试并继续；仍然红就再停在这里。修正只能改测试文件，碰到其他路径会停在 `BOUNDARY_VIOLATION`。
-- 变更验收用例本身有缺陷（定位器、时序、数据准备）而实现无法通过时：由人判断并执行 `storyloop acceptance-repair PATH --change ID --reason "…"`（旧名 `smoke-repair`）。只在 `IMPLEMENTING`、`BUDGET_EXHAUSTED`、`NEEDS_INPUT`、`EXISTING_GREEN` 状态可用。acceptance 角色拿到现有套件文件和最近的失败证据修复自己的套件（不得放宽行为断言；`manifest.json` 由引擎重建，代理不用返回），新套件以 `test(<id>): repair acceptance suite` 提交到功能分支后，引擎从合同提交重建候选副本（`git archive` + 当前套件）重新证明 RED，之前的尝试作废、预算归零，修复记录写入运行状态和 decisions.md。实现代理永远不能改验收用例。
+- 变更验收用例本身有缺陷（定位器、时序、数据准备）而实现无法通过时：由人判断并执行 `storyloop acceptance-repair PATH --change ID --reason "…"`（旧名 `smoke-repair`）。只在 `IMPLEMENTING`、`BUDGET_EXHAUSTED`、`NEEDS_INPUT`、`EXISTING_GREEN`、`ORACLE_DEFECT` 状态可用。acceptance 角色拿到现有套件文件和最近的失败证据修复自己的套件（不得放宽行为断言；`manifest.json` 由引擎重建，代理不用返回），新套件以 `test(<id>): repair acceptance suite` 提交到功能分支后，引擎从合同提交重建候选副本（`git archive` + 当前套件）重新证明 RED，之前的尝试作废、预算归零，修复记录写入运行状态和 decisions.md。实现代理永远不能改验收用例。
 - `MANUAL_ACCEPTANCE_REQUIRED`：自动验收、回归和独立审查都已通过，但合同里有 `manual` 验收条件。此时功能分支上的代码就是待验收版本；逐条执行 `storyloop accept PATH --change ID --criterion A2 --note "看到了什么"`，再 `storyloop run PATH --change ID` 生成报告并合并。验收记录与当时的代码指纹绑定，代码一变就失效。
 - `BOUNDARY_VIOLATION`：代理写到了未授权路径。`storyloop log` 找到是哪次调用写的，还原后 `run`。
 - `BUDGET_EXHAUSTED`：达到自动尝试上限。用例缺陷走 `acceptance-repair`；否则提高 `max_attempts` 后 `run`，或另开新变更（运行开始后合同不能修订）。
@@ -305,6 +319,7 @@ storyloop run C:\work\my-project --change FEAT-20260916-001
 | 状态 | 含义 | 下一步 |
 |---|---|---|
 | `PREPARING` / `CONTRACT_READY` / `CONTRACT_COMMITTED` | 建分支、物化合同、生成并提交验收套件 | 自动 |
+| `ORACLE_DEFECT` | 应当保持成立的条件（回归、状态保持、非目标）在旧代码上就失败，用例写错了 | `acceptance-repair` |
 | `EXISTING_GREEN` | 验收套件在实现之前就已通过，证明不了 RED | 需求已实现就放弃；用例太弱就 `acceptance-repair` |
 | `IMPLEMENTING` | RED 与特征化门已过，实现—分层验证—审查循环中 | 自动；可 `acceptance-repair` |
 | `CHARACTERIZATION_FAILED` | 特征化测试在旧代码上不绿 | 就地修正测试后 `run`（重新验证，不再调用代理） |

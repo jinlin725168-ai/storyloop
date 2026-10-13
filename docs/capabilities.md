@@ -41,6 +41,12 @@
 | 人工复位卡住的运行，理由留痕 | `reset` | `run_recovery.reset_run` | — | `test_run_reset` |
 | 幂等完成阶段：实现提交、文档、报告、no-ff 合并、回执，崩溃后续跑不重复 | 审查通过后 | `project_loop_finish`、`project_receipt` | [0011](decisions/0011-no-push-no-history-rewrite.md) | `test_completion_resilience`、`test_project_loop_resume`、`test_project_loop_recovery_security` |
 
+| 变更性质：feature / fix / refactor，各自的合同块与判据；ID 前缀随性质 | `change`、`approve` | `models`、`requirement_checklist`、`changes` | — | `test_change_nature`、`test_nature_e2e` |
+| 行类型决定实现前状态：应红的红、应绿的绿；应绿的先失败停在 `ORACLE_DEFECT` | RED 证明 | `smoke_runner._judge_red`、`project_loop._prepare_acceptance` | — | `test_oracle_tiers` |
+| 判据自证：执行数统计、旧代码基线、零执行与下降判失败 | 每轮验证 | `oracle_counts` | — | `test_oracle_counts`、`test_oracle_baseline` |
+| 判据分级：快判据每轮，重判据在快判据全绿后 | 每轮验证 | `smoke_runner._run_tiered` | — | `test_oracle_tiers` |
+| 技能包 `oracle-craft` 嵌入判据相关角色；技能包目录不能成为可变区 | 每次调用 | `skills.ROLE_SKILLS`、`project_profile` | — | `test_skills`、`test_oracle_protection` |
+
 ## 四、证据与可观测性
 
 | 能力 | 入口 | 实现 | 决策 | 测试 |

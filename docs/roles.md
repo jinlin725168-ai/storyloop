@@ -6,7 +6,7 @@
 |---|---|---|---|---|---|
 | 架构师 / 技术负责人（摸底） | `survey` | 无（只读） | 整个仓库 | `openspec/foundation/` 底座知识库（经 BASE 迭代受保护） | 否，是所有角色的输入 |
 | 产品经理 / BA | `product` | 无 | 意图、知识库的能力清单与活规格、澄清回答 | 合同：故事、EARS 规则、Given/When/Then 条件、澄清记录 | 人批准才生效 |
-| 测试 / QA | `acceptance` | `acceptance/changes/<id>/`（仅生成与修复时） | 合同、知识库的 testing 与 building-blocks | 变更验收套件（先红）；合并后的系统冒烟提议 | 套件是门；提议需人 `smoke-apply` |
+| 测试 / QA | `acceptance` | `acceptance/changes/<id>/`（仅生成与修复时） | 合同、知识库的 testing 与 building-blocks | 变更验收套件：feature 的验收用例、fix 的复现测试、refactor 的结构断言；按行类型应红的先红、应绿的先绿；合并后的系统冒烟提议 | 套件是门；提议需人 `smoke-apply` |
 | 架构师（方案） | `design` | 无 | 合同、知识库的 extension / building-blocks / modules、既有代码 | 方案：Files、Data And Interfaces、Decisions、Risks，以及将修改的既有文件 `touched` | 否，但 `touched` 喂特征化门，方案是审查的对照物；故事数少于 `design_min_stories`（默认 2）时跳过 |
 | 开发（开工前） | `characterize` | `test_roots` | 合同、完整方案（含 `touched`）、`test_roots`、已锁定清单、需补锁的路径 | 锁定现有行为的特征化测试，在旧代码上跑绿 | 是（机器验证）；没配置 `test_roots` 或 `unit_commands` 时跳过 |
 | 开发 | `implement` | 可变区 + `test_roots`；特征化门生效时，未锁定的既有文件改动会被还原、补锁并计一轮失败 | 合同、方案、失败证据、答案、特征化结果 | 代码；`design` 记录（Tests First、Decisions） | 由各层验证判定 |
@@ -45,3 +45,7 @@ flowchart LR
 - 技术文档：design.md、decisions.md、活规格、报告由引擎生成。
 - UX：先用 `manual` 验收条件承接，由人核对。
 - 底座升级提议者（依赖升级、上游同步）：需要时再加，模式与 `smoke-propose` 相同：代理提议、人批准。
+
+## 判据相关角色的技能包
+
+product、acceptance、characterize、review 的角色说明里嵌入 `oracle-craft` 技能包（行类型、特征化写法、结构断言、执行器退出码）。项目可以在 `.claude/skills/` 或 `.codex/skills/` 放同名副本覆盖；这两个目录属于底座，实现者不能修改，运行状态的 `skills_used` 记录本次实际使用的版本。

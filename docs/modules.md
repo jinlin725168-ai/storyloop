@@ -29,7 +29,8 @@
 | | `call_log` | 每次代理调用的诊断记录（不是证据） | `open_call`、`close_call` |
 | | `telemetry` | 每个变更的调用账本：墙钟、轮数、token、费用 | `record_call`、`summarize` |
 | 验证 | `smoke` | 第 2 层变更验收套件：安装、清单、字节保护 | `install_smoke_suite`、`load_smoke_manifest`、`suite_root` |
-| | `smoke_runner` | 隔离候选副本里跑套件与回归命令，证据与指纹 | `run_smoke_isolated`、`run_commands_isolated`、`implementation_digest`、`run_ci` |
+| | `smoke_runner` | 隔离候选副本里跑套件与回归命令（快、重两级），RED 按行类型判定，证据与指纹 | `run_smoke_isolated`、`run_commands_isolated`、`implementation_digest`、`visible_paths`、`run_ci` |
+| | `oracle_counts` | 判据自证：从测试工具输出统计执行数、旧代码基线采样、零执行与下降检查 | `count_tests`、`sample_baseline`、`check_layers` |
 | | `system_smoke` | 第 1 层项目级系统冒烟：保护、隔离运行、`smoke-propose` / `smoke-apply` | `run_system_smoke_isolated`、`propose_smoke_update`、`apply_smoke_update` |
 | 合同 | `changes` | 草案创建与修订、合同指纹、预览文件 | `create_change`、`revise_change`、`load_change`、`contract_digest` |
 | | `requirement_checklist` | 批准前的确定性需求质量门 | `evaluate_checklist`、`blocking_items` |

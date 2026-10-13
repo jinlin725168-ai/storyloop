@@ -34,6 +34,12 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 
 **澄清（clarification）**：产品角色把真实歧义提成选择题（每轮至多 5 个，带推荐项和理由）。终端里逐条回答，回答立即触发修订并记入合同的 `clarifications`。
 
+**变更性质（nature）**：每个变更只有一种性质，决定判据的形式。`feature` 用验收套件先红后绿，并用特征化锁定改到的既有文件；`fix` 用能复现缺陷的测试先红后绿，合同里写现象、复现步骤和带 `path:line` 的根因；`refactor` 用结构断言先红后绿（由 acceptance 角色盲写，例如"某目录下不再引用 legacy"），行为不变由特征化、回归和系统冒烟保证，特征化不能跳过。变更 ID 的前缀随性质：`FEAT-`、`FIX-`、`REF-`。
+
+**行类型（row_type）**：验收条件按行类型组织：`positive`、`degradation`、`unknown_state`、`form_parity` 断言新的或改变的行为，实现前必须红；`regression`、`state_preservation`、`non_goal` 断言保持不变的行为，实现前必须已经绿。feature 和 fix 的七个行类型要么有条件，要么写明豁免理由。
+
+**判据自证**：判据要证明自己真的运行过。引擎从测试工具的输出里统计执行数（unittest、pytest、Maven、Gradle、Jest、Vitest、Go，settings 可补自定义规则），实现前在旧代码上采一次基线；某层执行数为 0，或低于基线而合同的 `test_removals` 没有声明，判这一层失败。统计不出来的命令标"未能统计"，不设门。
+
 **验收条件的两种 kind**：`automated` 必须被变更验收套件的某个用例覆盖；`manual` 是机器判断不了的（体验、业务裁决），会让运行停在 `MANUAL_ACCEPTANCE_REQUIRED` 等人确认。
 
 **能力（capability）**：一组变更共同演进的业务能力名，也是活规格的文件名。修改既有需求时沿用旧的需求标题，引擎据此做取代记录。
@@ -46,7 +52,7 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 
 **单元与集成**：`unit_commands` 与 `integration_commands` 分开配置、分开放（不同目录或包）、分开出结论；`check_commands` 是静态检查层。
 
-**验收级 RED**：实现之前在隔离候选副本里跑一次变更验收套件，只有"行为断言失败"算有效红灯；环境错误、跳过、超时都不算。没有 RED 就不会调用实现代理。这是引擎观察到的外部红灯，和实现代理内部的 TDD 是两回事。
+**验收级 RED**：实现之前在隔离候选副本里跑一次变更验收套件的快判据，按行类型核对：应红的条件必须有测试因行为断言失败（退出码 1），应绿的条件必须通过；环境错误、跳过、超时、执行数为 0 的失败都不算 RED。没有 RED 就不会调用实现代理。这是引擎观察到的外部红灯，和实现代理内部的 TDD 是两回事。
 
 **实现级先红后绿**：implement 角色内部的 TDD 纪律，先写会失败的单元测试，再写代码让它通过，再重构。它发生在一次实现尝试之内，产物是可变区里的单元测试和实现代码，由项目回归命令跑。implement 角色的提示词要求这样做，并在 design.md 的 Tests First 一节留下每个测试先失败后通过的记录；引擎不观察这个过程，只验收结果（回归通过、冒烟通过、审查通过）。
 
@@ -70,6 +76,7 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 | `BOUNDARY_VIOLATION` | 代理写了不允许的路径 | `log` 查是哪次调用写的；还原（或经 BASE 迭代扩 `module_roots` / `test_roots`）后 `run` |
 | `WORKSPACE_TAINTED` | 工作区出现不该有的改动 | 清理后 `reset`，再 `run` |
 | `BUDGET_EXHAUSTED` | 尝试用尽 | 人判断：用例有缺陷就 `acceptance-repair`；否则提高 `.storyloop/config.json` 的 `max_attempts` 后 `run`，或放弃并另开新变更（运行开始后合同不能再修订） |
+| `ORACLE_DEFECT` | 应当保持成立的验收条件在旧代码上就失败了，是用例写错了 | `acceptance-repair` 修正用例，再 `run` |
 | `EXISTING_GREEN` | 验收套件在实现之前就已通过，证明不了 RED | 需求已实现就放弃变更；用例太弱就 `acceptance-repair` |
 | `CHARACTERIZATION_FAILED` | 特征化测试在旧代码上不绿 | 就地修正测试后 `run`：引擎重跑单元层，绿了才提交并继续 |
 

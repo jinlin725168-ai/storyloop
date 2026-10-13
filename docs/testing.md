@@ -5,7 +5,7 @@
 ## 一、单元与端到端测试
 
 - 框架：标准库 `unittest`，不依赖第三方包、模型账号或网络。
-- 位置：`tests/`，57 个文件、231 个测试用例；本机（WSL2）全量约 10 分钟。
+- 位置：`tests/`，63 个文件、272 个测试用例；本机（WSL2）全量约 10 分钟。
 - 原理：每个测试在临时目录建一个真实 Git 仓库，`init` 锁底座，用脚本化的 `LoopServices`（Python 函数代替代理）或假的 `codex` / `claude` 可执行文件驱动闭环，断言状态、文件和 Git 历史。
 
 运行：
@@ -36,6 +36,7 @@
 | 闭环与停点 | `test_project_loop*`、`test_agent_unavailable`、`test_design_role`、`test_characterization`、`test_test_layers`、`test_answers`、`test_manual_acceptance`、`test_run_reset`、`test_smoke_repair`、`test_completion_resilience` |
 | 验收套件与冒烟 | `test_smoke`、`test_acceptance_layout`、`test_system_smoke`、`test_smoke_maintenance`、`test_ci_runner`、`test_candidate_allow` |
 | 安全与边界 | `test_boundaries`、`test_project_boundaries`、`test_project_security_gates`、`test_project_loop_tampering`、`test_workspace_scratch`、`test_ci_path_safety`、`test_windows_path_guards`、`test_process_containment` |
+| 判据与性质 | `test_change_nature`、`test_oracle_counts`、`test_oracle_tiers`、`test_oracle_baseline`、`test_oracle_protection`、`test_nature_e2e` |
 | 代理与适配器 | `test_project_agents`、`test_codex_adapter`、`test_claude_adapter`、`test_role_schemas`、`test_structured_output` |
 | 可观测性 | `test_telemetry`、`test_call_diagnostics`、`test_change_report` |
 | 命令面与技能 | `test_cli`、`test_product_cli`、`test_core`、`test_skills`、`test_foundation_survey` |

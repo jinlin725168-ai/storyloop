@@ -37,6 +37,7 @@
 | 状态 | 含义 | 能否 `run` 续跑 |
 |---|---|---|
 | `PREPARING` / `CONTRACT_READY` / `CONTRACT_COMMITTED` | 建分支、物化合同、生成并提交验收套件、证明 RED | 能 |
+| `ORACLE_DEFECT` | 应当保持成立的验收条件在旧代码上就失败（用例写错了） | `acceptance-repair` 修正后能 |
 | `EXISTING_GREEN` | 验收套件在实现之前就已通过（全部或部分条件），证明不了 RED | `acceptance-repair` 加强套件后能；不修复直接 `run` 只会再停在这里 |
 | `IMPLEMENTING` | 方案、特征化、实现—验证—审查循环 | 能 |
 | `NEEDS_INPUT` | design、implement 或 review 提了问题 | 回答后能 |
@@ -70,7 +71,7 @@
 | 退出码 | 情形 |
 |---|---|
 | `0` | 正常结束，包括停在 `MANUAL_ACCEPTANCE_REQUIRED`（自动验收已全过，只是等人） |
-| `2` | 返回状态属于 `FAILED`、`BLOCKED`、`NEEDS_INPUT`、`INTERRUPTED`、`UNSAFE_CONTAINMENT`、`WORKSPACE_TAINTED`、`BUDGET_EXHAUSTED`、`BASE_CHANGE_REQUIRED`、`BOUNDARY_VIOLATION`、`ERROR`、`CHARACTERIZATION_FAILED`、`EXISTING_GREEN`、`SMOKE_UPDATE_FAILED`，或任何错误码 |
+| `2` | 返回状态属于 `FAILED`、`BLOCKED`、`NEEDS_INPUT`、`INTERRUPTED`、`UNSAFE_CONTAINMENT`、`WORKSPACE_TAINTED`、`BUDGET_EXHAUSTED`、`BASE_CHANGE_REQUIRED`、`BOUNDARY_VIOLATION`、`ERROR`、`CHARACTERIZATION_FAILED`、`EXISTING_GREEN`、`ORACLE_DEFECT`、`SMOKE_UPDATE_FAILED`，或任何错误码 |
 | `130` | Ctrl-C 中断，状态已保存 |
 
 脚本请判断 `status` 与 `next`，不要只看退出码（例如 `MANUAL_ACCEPTANCE_REQUIRED` 是 0）。
@@ -91,6 +92,9 @@
 | `integration_paths` | 自动探测的构建清单（`pom.xml`、`build.gradle*`、`settings.gradle*`、`package.json`、`pnpm-workspace.yaml`、`pyproject.toml`、`setup.py`、`setup.cfg`、`requirements.txt`） | 改动转 BASE 提案 |
 | `candidate_allow` | `[]` | 名字敏感但确实是已跟踪配置的文件，允许进入候选副本 |
 | `scratch_paths` | `[]` | 代理可以产生的被忽略位置：不含 `/` 的名字在任意层级匹配，含 `/` 的按相对路径前缀匹配 |
+| `test_count_patterns` | `[]` | 补充或覆盖执行数统计：`[{"match": <命令里的子串>, "executed": <带命名组 executed 的正则>}]`；内置支持 unittest、pytest、Maven、Gradle、Jest、Vitest、Go |
+
+`module_roots` 与 `test_roots` 不能包含 `.claude/skills`、`.codex/skills` 或它们的上级目录（技能包影响判据的写法，实现者不能拥有）。
 
 本机找不到的可执行文件、Windows 上的 `.cmd/.bat/.ps1` 包装器会被跳过并记为 warning。settings 结果存在 `.storyloop/config.json` 的 `profile` 里：`test_roots`、`scratch_paths`、`candidate_allow` 与各层命令每次现读，可以直接编辑；`module_roots`、`integration_paths` 同时锁在 `baseline.json` 里，只能重新 init（没有进行中变更时）或走 BASE 迭代改变。
 
@@ -132,7 +136,7 @@
 | 角色 | payload | 返回与引擎附加校验 |
 |---|---|---|
 | `product` | 新建 `{idea}`；修订 `{change_id, message, answers:[{question_id,question,answer}], current_product}` | 完整产品对象（见下）。ID 匹配 `[A-Za-z0-9][A-Za-z0-9_-]{0,79}` 且全局唯一；每个故事至少一条验收条件；`depends_on` 只能引用排在前面的故事；`recommended` 必须在 `options` 里 |
-| `acceptance`（生成） | `{change, suite_root}` | `{files:[{path,content}], manifest}`。files 非空、路径相对且不是 CI、不能叫 `manifest.json`、单个 ≤2 MB；测试 ID 唯一；`criteria` 只能引用并必须覆盖全部 `automated` 条件；`timeout_seconds` 1–3600 |
+| `acceptance`（生成） | `{change, suite_root}` | `{files:[{path,content}], manifest}`。files 非空、路径相对且不是 CI、不能叫 `manifest.json`、单个 ≤2 MB；测试 ID 唯一；`criteria` 只能引用并必须覆盖全部 `automated` 条件；`timeout_seconds` 1–3600；`tier` 为 `fast`（缺省）或 `heavy`，须与条件的 `oracle_class` 对应；一个测试只能覆盖同一种实现前状态（应红或应绿）的条件 |
 | `acceptance`（修复） | `{change: {…, repair:{reason, existing_files, manifest, failure_evidence}}, suite_root}`；`EXISTING_GREEN` 时 `failure_evidence` 为 `{status:"EXISTING_GREEN", criteria_green, results}` | 同上；返回里的 `manifest.json` 文件被忽略 |
 | `acceptance`（冒烟维护） | `{mode:"smoke-maintenance", change, acceptance_suite, system_smoke, smoke_root}` | `{files, manifest:{version:1, tests:[{id,description,command,timeout_seconds}]}, rationale}`；测试非空、文件 ≤200 个 |
 | `design` | `{change, answers}` | `{summary, touched:[path], design, questions:[string]}`。questions 非空停 `NEEDS_INPUT`；`design` 不能为空；`touched` 必须是合同提交里存在的文件 |
@@ -177,6 +181,18 @@ survey 的说明由 `foundation-survey` 技能包生成：引擎把 SKILL.md 与
 
 每次调用写 `.storyloop/state/telemetry/calls/<调用 ID>/`：`request.json`（脱敏）、`response.json` 或解析失败时的 `response.txt`、`stderr.log`、`meta.json`（结果、错误码、`schema_errors`、修复次数、会话 ID）。账本条目的 `call` 与 `session` 字段指向它。它们用于排障，不是证据。
 
+### 合同的性质字段
+
+| 字段 | 规则 |
+|---|---|
+| `nature` | `feature`（缺省）/ `fix` / `refactor` |
+| `defect` | fix 必填：`observed`、`expected`、`reproduction`、`root_cause`（1–5 条 `{statement, location: "path:line"}`）、`confirmed`、`unconfirmed`；可选 `reporter_hypothesis`、`sibling_entries`、`origin_change` |
+| `refactor` | refactor 必填：`subtype`（`structure` / `dependency-swap`）、`scope`、`invariants`、`structural_goals`（至少 1 条）；dependency-swap 必有 `migration_map: [{from, to, assertion}]` |
+| `consumers` | `[{id, consumer, trigger, path, in_scope, verification}]` |
+| `coverage_exemptions` | `[{row_type, reason}]` |
+| `test_removals` | `[{path, reason}]` |
+| 验收条件新增 | `row_type`（七选一，缺省 `positive`）、`oracle_class`、`consumers`、`reproduces_defect` |
+
 ## 五、验收套件文件约定
 
 变更验收套件在 `acceptance/changes/<change-id>/`（改名前的仓库是 `acceptance/smoke/<change-id>/`，已存在时沿用）：
@@ -192,5 +208,6 @@ survey 的说明由 `foundation-survey` 技能包生成：引擎把 SKILL.md 与
 - 副本由 Git 可见且未忽略的文件构成，排除 `acceptance/ui/`；名字敏感的文件（`.env*`、`*.key`、`*.pem`、`credentials.json`、`secrets.yaml`）必须列入 `candidate_allow`，否则阻断。
 - 环境只有 `PATH`、`SYSTEMROOT`、`TEMP`、`TMP`，外加 `PYTHONDONTWRITEBYTECODE`、`PYTHONIOENCODING`。
 - 写入副本即判失败。
-- 退出码 0 通过、1 行为失败、其他为环境错误；RED 阶段只有 1 算有效红灯。
+- 退出码 0 通过、1 行为失败、其他为环境错误；RED 阶段只有 1 算有效红灯，且执行数为 0 的失败不算。
+- 每个测试结果带 `counts`（`executed`、`failed`、`skipped`、`parser`），由输出统计；统计不出来为 `null`。
 - 证据写在 `.storyloop/evidence/<change-id>/acceptance-red.json` 与 `acceptance-result.json`。
