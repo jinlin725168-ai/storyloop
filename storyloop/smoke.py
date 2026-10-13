@@ -12,7 +12,7 @@ import hashlib
 from pathlib import Path
 
 from .changes import load_change
-from .models import StoryLoopError, fields, identifier, require
+from .models import StoryLoopError, criterion_expects_red, criterion_tier, fields, identifier, require
 from .path_security import repository_relative, safe_target
 from .project_profile import is_ci_path
 from .storage import load_json, write_json, write_text_atomic
@@ -118,31 +118,42 @@ def _validate_manifest(manifest: object, change: dict) -> dict:
     require(manifest["version"] == 1 and isinstance(manifest["tests"], list)
             and bool(manifest["tests"]), "Smoke manifest needs tests")
     automated = {
-        criterion["id"]
+        criterion["id"]: criterion
         for story in change["product"]["stories"]
         for criterion in story["acceptance"] if criterion["kind"] == "automated"
     }
     seen: set[str] = set()
     covered: set[str] = set()
     for test in manifest["tests"]:
-        fields(test, {"id", "criteria", "command", "timeout_seconds"})
-        test_id = identifier(test["id"], "smoke test id")
-        require(test_id not in seen, "Duplicate smoke test id")
-        seen.add(test_id)
-        require(isinstance(test["criteria"], list)
-                and all(isinstance(item, str) for item in test["criteria"]),
-                "Smoke criteria must be a list")
-        require(set(test["criteria"]) <= automated, "Smoke test references unknown criterion")
-        command = test["command"]
-        require(isinstance(command, list) and bool(command),
-                "Smoke command must be a nonempty argv array")
-        require(len(command) <= 100 and all(isinstance(arg, str) and bool(arg) for arg in command),
-                "Smoke command argv is invalid")
-        require(type(test["timeout_seconds"]) is int
-                and 1 <= test["timeout_seconds"] <= 3600, "Invalid smoke timeout")
+        _validate_manifest_test(test, automated, seen)
         covered.update(test["criteria"])
-    require(automated <= covered, "Automated acceptance criteria are uncovered")
+    require(set(automated) <= covered, "Automated acceptance criteria are uncovered")
     return manifest
+
+
+def _validate_manifest_test(test: dict, automated: dict, seen: set) -> None:
+    fields(test, {"id", "criteria", "command", "timeout_seconds"}, {"tier"})
+    test_id = identifier(test["id"], "smoke test id")
+    require(test_id not in seen, "Duplicate smoke test id")
+    seen.add(test_id)
+    require(isinstance(test["criteria"], list)
+            and all(isinstance(item, str) for item in test["criteria"]),
+            "Smoke criteria must be a list")
+    require(set(test["criteria"]) <= set(automated), "Smoke test references unknown criterion")
+    tier = test.get("tier", "fast")
+    require(tier in {"fast", "heavy"}, "Smoke test tier must be fast or heavy")
+    criteria = [automated[item] for item in test["criteria"]]
+    require(len({criterion_expects_red(c) for c in criteria}) <= 1,
+            "One test cannot mix criteria with different expected pre-implementation states")
+    require(all(criterion_tier(c) == tier for c in criteria),
+            "A test's tier must match its criteria's oracle_class (auto-fast → fast, auto-heavy → heavy)")
+    command = test["command"]
+    require(isinstance(command, list) and bool(command),
+            "Smoke command must be a nonempty argv array")
+    require(len(command) <= 100 and all(isinstance(arg, str) and bool(arg) for arg in command),
+            "Smoke command argv is invalid")
+    require(type(test["timeout_seconds"]) is int
+            and 1 <= test["timeout_seconds"] <= 3600, "Invalid smoke timeout")
 
 
 def _validate_files(files: object) -> list[tuple[str, str]]:
