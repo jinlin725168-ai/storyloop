@@ -38,7 +38,8 @@ from .oracle_counts import check_layers, ensure_baseline
 from .project_profile import layer_commands
 from .project_receipt import recover_completed_merge
 from .system_smoke import run_system_smoke_isolated
-from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, load_smoke_manifest, protection_path
+from .smoke import (RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, load_smoke_manifest, protection_path,
+                    without_manifest_echo)
 from .smoke import suite_relative, suite_root as acceptance_suite_root
 from .skills import ROLE_SKILLS, used_skills
 from .smoke_runner import implementation_digest, run_commands_isolated, run_smoke_isolated
@@ -313,7 +314,7 @@ def _prepare_acceptance(
         )
         require(isinstance(generated, dict) and set(generated) == {"files", "manifest"},
                 "Smoke agent returned an invalid contract")
-        install_smoke_suite(project, change_id, generated["files"], generated["manifest"])
+        install_smoke_suite(project, change_id, without_manifest_echo(generated["files"]), generated["manifest"])
     smoke_root = acceptance_suite_root(project, change_id)
     paths = relative_files(project, [contract_root, smoke_root])
     if state["status"] == "PREPARING":

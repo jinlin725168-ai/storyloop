@@ -17,7 +17,7 @@ from .oracle_counts import ensure_baseline
 from .project_git import commit_paths, current_branch
 from .project_loop_guards import read_only_call
 from .project_loop_support import relative_files, run_path, save_run
-from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite
+from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, without_manifest_echo
 from .smoke import suite_root as acceptance_suite_root
 from .smoke_runner import run_smoke_isolated
 from .storage import load_json
@@ -61,8 +61,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     generated = read_only_call(project, change_id, lambda: services.generate_smoke(project, request))
     require(isinstance(generated, dict) and set(generated) == {"files", "manifest"},
             "Smoke agent returned an invalid contract")
-    files = [item for item in generated["files"]
-             if not (isinstance(item, dict) and item.get("path") == "manifest.json")]  # manifest travels separately
+    files = without_manifest_echo(generated["files"])
     install_smoke_suite(project, change_id, files, generated["manifest"], replace=True)
     for name in (RED_EVIDENCE, RESULT_EVIDENCE):
         (project / ".storyloop/evidence" / change_id / name).unlink(missing_ok=True)

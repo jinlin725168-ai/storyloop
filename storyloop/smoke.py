@@ -43,6 +43,13 @@ def protection_path(project: Path, change_id: str) -> Path:
     return legacy if legacy.is_file() else project / PROTECTION_DIR / name
 
 
+def without_manifest_echo(files: object) -> object:
+    """The manifest travels separately; an agent that also lists manifest.json among its files only echoes it."""
+    if not isinstance(files, list):
+        return files
+    return [item for item in files if not (isinstance(item, dict) and item.get("path") == "manifest.json")]
+
+
 def install_smoke_suite(
     project: Path, change_id: str, files: list[dict], manifest: dict, replace: bool = False,
 ) -> dict:

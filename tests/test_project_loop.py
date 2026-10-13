@@ -77,6 +77,30 @@ class ProjectLoopTests(unittest.TestCase):
         finally:
             temporary.cleanup()
 
+    def test_a_manifest_echoed_among_the_generated_files_is_ignored(self):
+        """Found in real acceptance: the acceptance agent listed manifest.json among its files; the
+        repair path already ignored that echo, first generation refused it and blocked the run."""
+        temporary, root, change_id = self._approved()
+
+        def generate(project, state):
+            payload = smoke_payload(change_id)
+            payload["files"].append({"path": "manifest.json", "content": "{}"})
+            return payload
+
+        def implement(project, context):
+            target = project / "modules/orders/service.py"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("VALUE = 1\n", encoding="utf-8")
+            return {"summary": "done", "questions": []}
+
+        services = LoopServices(
+            generate_smoke=generate, implement=implement,
+            review=lambda project, context: {"verdict": "pass", "summary": "ok", "findings": [], "questions": []})
+        try:
+            self.assertEqual(run_change(root, change_id, services)["status"], "PASSED")
+        finally:
+            temporary.cleanup()
+
     def test_base_change_pauses_on_feature_branch_and_creates_proposal(self):
         temporary, root, change_id = self._approved(add_core=True)
 
