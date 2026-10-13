@@ -103,6 +103,13 @@ class OracleCraftTests(unittest.TestCase):
             self.assertIn("contains", instructions_for(root, "characterize"))
             self.assertNotIn("oracle-craft", instructions_for(root, "implement"))
 
+    def test_the_product_role_is_told_what_a_reproduction_is(self):
+        """Found in real acceptance: the agent marked a must-hold row as reproducing the defect."""
+        with tempfile.TemporaryDirectory() as folder:
+            text = instructions_for(Path(folder), "product")
+        self.assertTrue("reproduces_defect: true only on a criterion that fails on the current, defective code" in text)
+        self.assertTrue("never on regression, state_preservation or non_goal" in text)
+
     def test_the_project_copy_version_is_what_gets_recorded(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
