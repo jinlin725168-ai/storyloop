@@ -13,6 +13,9 @@ from storyloop.baseline import bootstrap_project
 from storyloop.changes import create_change
 from tests.test_baseline_behavior import git, repository
 
+from storyloop.baseline import load_project_config
+from storyloop.requirement_checklist import evaluate_checklist
+from storyloop.storage import write_json
 from storyloop.models import (StoryLoopError, criterion_expects_red, criterion_tier, nature_of,
                               validate_product)
 from storyloop.role_schemas import SCHEMAS, normalize, schema_errors
@@ -146,6 +149,58 @@ class ChangeIdTests(unittest.TestCase):
                              "FIX-20261013-001")
             self.assertTrue(create_change(root, "c", refactor_product(), now=lambda: NOW)["change_id"]
                             .startswith("REF-20261013-"))
+
+
+
+def errors_of(product_value: dict, root: Path | None = None) -> list[str]:
+    return [item["text"] for item in evaluate_checklist(product_value, root) if item["level"] == "error"]
+
+
+class NatureChecklistTests(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.root = Path(self.folder.name)
+        nature_repository(self.root)
+        bootstrap_project(self.root, {"test_commands": []})
+
+    def tearDown(self):
+        self.folder.cleanup()
+
+    def test_a_complete_fix_has_no_blocking_items(self):
+        self.assertEqual(errors_of(fix_product(), self.root), [])
+
+    def test_a_root_cause_outside_the_base_blocks(self):
+        value = fix_product()
+        value["defect"]["root_cause"][0]["location"] = "modules/orders/missing.py:3"
+        self.assertTrue(any("root cause" in text for text in errors_of(value, self.root)))
+        value["defect"]["root_cause"][0]["location"] = "modules/orders/service.py:99"
+        self.assertTrue(any("root cause" in text for text in errors_of(value, self.root)))
+
+    def test_a_fix_needs_a_reproduction_and_every_row_type_covered_or_exempted(self):
+        value = fix_product(); del value["stories"][0]["acceptance"][0]["reproduces_defect"]
+        self.assertTrue(any("reproduces" in text for text in errors_of(value, self.root)))
+        value = fix_product(); value["coverage_exemptions"].pop()
+        self.assertTrue(any("non_goal" in text for text in errors_of(value, self.root)))
+
+    def test_an_in_scope_consumer_must_be_covered(self):
+        value = fix_product()
+        value["consumers"] = [{"id": "C1", "consumer": "导出按钮", "trigger": "点击", "path": "web",
+                               "in_scope": True, "verification": "接口"}]
+        self.assertTrue(any("C1" in text for text in errors_of(value, self.root)))
+        value["stories"][0]["acceptance"][0]["consumers"] = ["C1"]
+        self.assertEqual(errors_of(value, self.root), [])
+
+    def test_a_refactor_needs_its_characterization_gate_configured(self):
+        self.assertTrue(any("test_roots" in text for text in errors_of(refactor_product(), self.root)))
+        config = load_project_config(self.root)
+        config["profile"].update({"test_roots": ["tests"], "unit_commands": [["{python}", "-V"]]})
+        write_json(self.root / ".storyloop/config.json", config)
+        self.assertEqual(errors_of(refactor_product(), self.root), [])
+
+    def test_legacy_contracts_only_get_warnings_for_the_new_checks(self):
+        self.assertEqual(errors_of(product(), self.root), [])
+        texts = [item["text"] for item in evaluate_checklist(product(), self.root) if item["level"] == "warning"]
+        self.assertTrue(any("degradation" in text for text in texts))
 
 
 if __name__ == "__main__":

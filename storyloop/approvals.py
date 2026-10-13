@@ -27,7 +27,7 @@ def approve_change(
     product = state["product"]
     require(not product["questions"], "Resolve all product questions before approval")
     require(bool(product["stories"]), "Approval requires at least one user story")
-    blocking = blocking_items(evaluate_checklist(product))
+    blocking = blocking_items(evaluate_checklist(product, project))
     require(not blocking, "Requirement checklist has blocking items; revise the contract: "
             + "; ".join(item["text"] for item in blocking[:3]))
     approved_by = text(approved_by, "approver")

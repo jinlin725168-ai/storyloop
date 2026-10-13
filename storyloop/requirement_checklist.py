@@ -1,12 +1,17 @@
 """Deterministic requirement-quality checklist ("unit tests for requirements", spec-kit style).
 
-Evaluated from the product contract alone: no agent call, same result every time. Errors block
-approval; warnings are recorded in the change's checklist.md for the approver to weigh.
+Evaluated from the product contract (plus, when a project is given, its locked base and settings):
+no agent call, same result every time. Errors block approval; warnings are recorded in the change's
+checklist.md for the approver to weigh. Contracts without a `nature` predate these checks and only
+get warnings for them.
 """
 
 from __future__ import annotations
 
 import re
+from pathlib import Path
+
+from .models import ROW_TYPES, criterion_expects_red, nature_of
 
 NEEDS_CLARIFICATION = re.compile(r"\[NEEDS CLARIFICATION[^\]]*\]", re.I)
 VAGUE_WORDS = ("appropriate", "fast", "quickly", "user-friendly", "etc", "tbd", "todo", "as needed",
@@ -14,7 +19,7 @@ VAGUE_WORDS = ("appropriate", "fast", "quickly", "user-friendly", "etc", "tbd", 
 EARS_MARKERS = ("SHALL", "MUST", "应", "必须", "须")
 
 
-def evaluate_checklist(product: dict) -> list[dict]:
+def evaluate_checklist(product: dict, project: Path | None = None) -> list[dict]:
     """Return checklist items: {id, dimension, level: ok|warning|error, text}."""
     items: list[dict] = []
     add = _adder(items)
@@ -45,7 +50,87 @@ def evaluate_checklist(product: dict) -> list[dict]:
         automated = [c["id"] for c in story.get("acceptance") or [] if c.get("kind") == "automated"]
         add("Coverage", "warning" if manual and not automated else "ok",
             f"{sid} has at least one automated criterion" + (f" (only manual: {', '.join(manual)})" if manual and not automated else ""))
+    _nature_items(add, product, project)
     return items
+
+
+IDENTIFIER_LIKE = re.compile(r"\b[a-z]+[A-Z]\w*\b|\b\w+\(\)")
+
+
+def _nature_items(add, product: dict, project: Path | None) -> None:
+    """Checks that follow from the change's nature; legacy contracts (no nature) only get warnings."""
+    nature = nature_of(product)
+    strict = "nature" in product
+    criteria = [c for story in product.get("stories") or [] for c in story.get("acceptance") or []]
+    automated = [c for c in criteria if c.get("kind") == "automated"]
+    if nature in {"feature", "fix"}:
+        add("Coverage", "error" if strict and not any(criterion_expects_red(c) for c in automated) else "ok",
+            "At least one automated criterion asserts new behaviour (must be red before implementation)")
+        _row_coverage(add, product, criteria, "error" if strict else "warning")
+    if nature == "fix":
+        _fix_items(add, product, automated, project)
+    if nature == "refactor":
+        _refactor_items(add, product, automated, project)
+    _consumer_items(add, product, criteria, "error" if strict else "warning")
+    named = [c["id"] for c in criteria if IDENTIFIER_LIKE.search(" ".join(
+        str(c.get(part, "")) for part in ("given", "when", "then")))]
+    add("Clarity", "warning" if named else "ok",
+        "Criteria describe observable behaviour, not class or function names"
+        + (f" (check: {', '.join(named[:3])})" if named else ""))
+
+
+def _row_coverage(add, product: dict, criteria: list, level: str) -> None:
+    present = {c.get("row_type", "positive") for c in criteria}
+    exempt = {item["row_type"] for item in product.get("coverage_exemptions") or []}
+    for row in ROW_TYPES:
+        add("Coverage", level if row not in present | exempt else "ok",
+            f"Row type {row} has a criterion or a stated exemption")
+
+
+def _fix_items(add, product: dict, automated: list, project: Path | None) -> None:
+    defect = product["defect"]
+    add("Coverage", "ok" if any(c.get("reproduces_defect") for c in automated) else "error",
+        "An automated criterion reproduces the defect")
+    for cause in defect["root_cause"]:
+        found = project is None or _location_exists(project, cause["location"])
+        add("Traceability", "ok" if found else "error",
+            f"root cause location exists at the base: {cause['location']}")
+    hypothesis = defect.get("reporter_hypothesis", "").strip()
+    rules = " ".join(rule for story in product["stories"] for rule in story["rules"])
+    add("Clarity", "warning" if hypothesis and hypothesis in rules else "ok",
+        "The reporter's hypothesis is not copied into the rules as a requirement")
+
+
+def _refactor_items(add, product: dict, automated: list, project: Path | None) -> None:
+    goals = product["refactor"]["structural_goals"]
+    red = [c for c in automated if criterion_expects_red(c)]
+    add("Coverage", "ok" if len(red) >= len(goals) else "error",
+        f"Every structural goal has an automated criterion ({len(red)} for {len(goals)} goals)")
+    if project is not None:
+        from .baseline import load_project_config  # local import keeps the checklist usable without a project
+        profile = load_project_config(project)["profile"]
+        configured = bool(profile.get("test_roots")) and bool(profile.get("unit_commands") or profile.get("test_commands"))
+        add("Feasibility", "ok" if configured else "error",
+            "A refactor's characterization gate is configured (test_roots and unit_commands)")
+
+
+def _consumer_items(add, product: dict, criteria: list, level: str) -> None:
+    covered = {consumer for c in criteria for consumer in c.get("consumers") or []}
+    for consumer in product.get("consumers") or []:
+        if consumer["in_scope"]:
+            add("Coverage", level if consumer["id"] not in covered else "ok",
+                f"In-scope consumer {consumer['id']} is covered by a criterion")
+
+
+def _location_exists(project: Path, location: str) -> bool:
+    """`path:line` names an existing line of a file at the locked base commit."""
+    from .baseline import _git, load_baseline
+    path, line = location.rsplit(":", 1)
+    try:
+        content = _git(project, "show", f"{load_baseline(project)['source_head']}:{path}")
+    except Exception:  # noqa: BLE001  git reports a missing path through a non-zero exit
+        return False
+    return 1 <= int(line) <= max(len(content.splitlines()), 1)
 
 
 def render_checklist(items: list[dict]) -> str:
