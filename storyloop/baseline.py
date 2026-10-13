@@ -10,7 +10,7 @@ import shutil
 from .models import StoryLoopError, require
 from .path_security import safe_target
 from .processutil import run_process
-from .project_profile import GENERATED_PATHS, validate_project_settings
+from .project_profile import GENERATED_PATHS, matches_test_root, validate_project_settings
 from .storage import load_json, write_json
 
 BASELINE_PATH = Path(".storyloop/baseline.json")
@@ -145,8 +145,10 @@ def _verify_index_flags(project: Path, baseline: dict) -> None:
 def _verify_tracked_scope(project: Path, baseline: dict, profile: dict) -> None:
     known = set(baseline["files"])
     roots = [*baseline["module_roots"], *profile["generated_paths"]]
+    tests = profile.get("test_roots") or []  # earlier changes may merge tests there, outside module_roots
     escaped = [path for path in _tracked_files(project)
-               if path not in known and not any(_inside(path, root) for root in roots)]
+               if path not in known and not any(_inside(path, root) for root in roots)
+               and not matches_test_root(path, tests)]
     require(not escaped, "Tracked files outside feature modules require a base iteration")
 
 

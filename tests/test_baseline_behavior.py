@@ -4,7 +4,7 @@ import subprocess
 import tempfile
 import unittest
 
-from storyloop.baseline import bootstrap_project, load_baseline
+from storyloop.baseline import bootstrap_project, load_baseline, verify_baseline
 from storyloop.models import StoryLoopError
 
 
@@ -65,6 +65,22 @@ class BaselineBehaviorTests(unittest.TestCase):
             with self.assertRaisesRegex(StoryLoopError, "clean"):
                 bootstrap_project(root)
 
+
+    def test_tests_merged_by_an_earlier_change_do_not_block_the_next_one(self):
+        """Found in real acceptance: tests a merged change added under test_roots (outside module_roots)
+        made every later change refuse to start."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"test_commands": [], "module_roots": ["app"], "test_roots": ["tests"]})
+            (root / "tests").mkdir()
+            (root / "tests/test_added.py").write_text("pass\n", encoding="utf-8")
+            git(root, "add", "."); git(root, "commit", "-q", "-m", "merged change")
+            self.assertEqual(verify_baseline(root)["status"], "BASELINE_VERIFIED")
+            (root / "stray.py").write_text("x = 1\n", encoding="utf-8")
+            git(root, "add", "."); git(root, "commit", "-q", "-m", "outside every root")
+            with self.assertRaisesRegex(StoryLoopError, "outside feature modules"):
+                verify_baseline(root)
 
 if __name__ == "__main__":
     unittest.main()
