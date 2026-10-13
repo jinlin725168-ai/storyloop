@@ -29,6 +29,8 @@ def generate_change_report(
     review: dict,
     manual_acceptance: list[dict] | None = None,
     telemetry: dict | None = None,
+    oracle: dict | None = None,
+    skills_used: dict | None = None,
 ) -> Path:
     """Write a passing report only when every layer is green and every criterion has real evidence."""
     project = Path(project).resolve()
@@ -53,6 +55,7 @@ def generate_change_report(
         "review": review,
         "traceability": traceability,
         "telemetry": _telemetry_view(telemetry),
+        "oracle": _oracle_view(layers, oracle, skills_used),
     }
     root = project / "reports" / "storyloop" / change_id
     path = root / "report.json"
@@ -209,9 +212,38 @@ def _render_markdown(report: dict) -> str:
         passed = sum(1 for r in results if r.get("status") in {"PASS", "PASSED"})
         lines.append(f"| {name}（{names[name]}） | {layer.get('status', '-')} | {passed}/{len(results)} | "
                      f"{_markdown(layer.get('reason', ''))} |")
+    lines.extend(_oracle_markdown(report.get("oracle") or {"baseline": {}, "executed": {}, "uncounted": [],
+                                                           "skills_used": {}}))
     lines.extend(["", "## 独立审查", "", _markdown(report["review"]["summary"]), ""])
     lines.extend(_telemetry_markdown(report.get("telemetry") or {}))
     return "\n".join(lines)
+
+
+def _oracle_view(layers: dict, oracle: dict | None, skills_used: dict | None) -> dict:
+    """Did each oracle prove it ran: executed counts per command against the old code's baseline."""
+    counts = {name: [{"id": item.get("id"), **(item.get("counts") or {})}
+                     for item in (layers.get(name) or {}).get("results") or []]
+              for name in ("unit", "integration", "acceptance", "smoke")}
+    uncounted = sorted({f"{name}:{item}" for name in counts
+                        for item in (layers.get(name) or {}).get("uncounted") or []})
+    return {"baseline": (oracle or {}).get("baseline") or {}, "executed": counts, "uncounted": uncounted,
+            "skills_used": dict(skills_used or {})}
+
+
+def _oracle_markdown(view: dict) -> list[str]:
+    lines = ["", "## 判据自证", "", "| 层 | 命令 / 用例 | 执行数 | 基线 | 解析器 |", "|---|---|---|---|---|"]
+    for name, items in view["executed"].items():
+        baseline = view["baseline"].get(name) or []
+        for index, item in enumerate(items):
+            before = baseline[index] if index < len(baseline) else "-"
+            executed = "未能统计" if item.get("executed") is None else item["executed"]
+            lines.append(f"| {name} | {_markdown(item.get('id'))} | {executed} | {before} | "
+                         f"{item.get('parser') or '-'} |")
+    if view["uncounted"]:
+        lines += ["", "未能统计执行数（这些命令没有自证）：" + ", ".join(view["uncounted"])]
+    skills = ", ".join(f"{name} {version}" for name, version in sorted(view["skills_used"].items()))
+    lines += ["", f"使用的技能包：{skills or '-'}"]
+    return lines
 
 
 def _telemetry_view(value: dict | None) -> dict:

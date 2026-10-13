@@ -57,6 +57,7 @@ def complete_change(
     report_path = generate_change_report(
         project, change_id, implementation["commit"], layers, review,
         manual_acceptance=manual, telemetry=telemetry,
+        oracle=state.get("oracle"), skills_used=state.get("skills_used"),
     )
     state["manual_acceptance"] = manual
     state["telemetry"] = telemetry

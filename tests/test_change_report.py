@@ -77,5 +77,30 @@ class ChangeReportTests(unittest.TestCase):
             temporary.cleanup()
 
 
+    def test_the_report_shows_the_oracle_self_check(self):
+        temporary, root, change_id, smoke = self._setup()
+        try:
+            layers = _layers(smoke)
+            layers["unit"] = {"status": "PASSED", "uncounted": [], "results": [
+                {"id": "REGRESSION-001", "status": "PASS",
+                 "counts": {"executed": 2, "failed": 0, "skipped": 0, "parser": "unittest"}}]}
+            path = generate_change_report(
+                root, change_id, git(root, "rev-parse", "HEAD"), layers,
+                {"verdict": "pass", "summary": "ok", "findings": [], "questions": []},
+                oracle={"baseline": {"unit": [2], "integration": []}},
+                skills_used={"oracle-craft": "1.0.0"},
+            )
+            report = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(report["oracle"]["baseline"]["unit"], [2])
+            self.assertEqual(report["oracle"]["executed"]["unit"][0]["executed"], 2)
+            self.assertEqual(report["oracle"]["skills_used"], {"oracle-craft": "1.0.0"})
+            markdown = path.with_suffix(".md").read_text(encoding="utf-8")
+            self.assertIn("## 判据自证", markdown)
+            self.assertIn("| unit | REGRESSION-001 | 2 | 2 | unittest |", markdown)
+            self.assertIn("oracle-craft 1.0.0", markdown)
+        finally:
+            temporary.cleanup()
+
+
 if __name__ == "__main__":
     unittest.main()
