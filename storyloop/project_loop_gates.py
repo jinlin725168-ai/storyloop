@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from .answers import load_answers
 from .baseline import _git
-from .models import require
+from .models import StoryLoopError, nature_of, require
 from .project_boundaries import audit_project_changes
 from .project_git import commit_paths
 from .project_loop_guards import exists_at, read_only_call, require_git_visible, write_safely
@@ -95,6 +95,9 @@ def ensure_characterization(project: Path, change: dict, state: dict, services: 
     elif services.characterize is None:
         reason = "no characterize service"
     if reason:
+        if nature_of(change["product"]) == "refactor":
+            # Characterization is a refactor's behaviour oracle; without it nothing proves "unchanged".
+            raise StoryLoopError(f"Refactor needs its characterization gate ({reason})")
         state["characterization"] = {"status": "SKIPPED", "reason": reason, "touched": [], "tests": []}
         save_run(project, state)
         return None

@@ -16,6 +16,7 @@ from tests.test_baseline_behavior import git, repository
 from storyloop.baseline import load_project_config
 from storyloop.requirement_checklist import evaluate_checklist
 from storyloop.storage import write_json
+from storyloop.project_loop import LoopServices, run_change
 from storyloop.models import (StoryLoopError, criterion_expects_red, criterion_tier, nature_of,
                               validate_product)
 from storyloop.role_schemas import SCHEMAS, normalize, schema_errors
@@ -201,6 +202,32 @@ class NatureChecklistTests(unittest.TestCase):
         self.assertEqual(errors_of(product(), self.root), [])
         texts = [item["text"] for item in evaluate_checklist(product(), self.root) if item["level"] == "warning"]
         self.assertTrue(any("degradation" in text for text in texts))
+
+
+
+class RefactorGateTests(unittest.TestCase):
+    def test_a_refactor_without_a_characterize_service_cannot_skip_the_gate(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            nature_repository(root)
+            (root / "tests").mkdir()
+            (root / "tests/test_x.py").write_text("pass\n", encoding="utf-8")
+            git(root, "add", "."); git(root, "commit", "-q", "-m", "tests")
+            bootstrap_project(root, {"unit_commands": [["{python}", "-V"]], "test_roots": ["tests"]})
+            value = refactor_product()
+            change_id = create_change(root, "r", value, now=lambda: NOW)["change_id"]
+            from storyloop.approvals import approve_change
+            approve_change(root, change_id, now=lambda: NOW)
+            suite = {"files": [{"path": "s.py", "content": "import sys; sys.exit(1)\n"}],
+                     "manifest": {"version": 1, "tests": [{"id": "S", "criteria": ["AC-1"],
+                                  "command": ["{python}", f"acceptance/changes/{change_id}/s.py"],
+                                  "timeout_seconds": 10}]}}
+            services = LoopServices(generate_smoke=lambda p, s: suite,
+                                    implement=lambda p, c: {"summary": "x", "questions": []},
+                                    review=lambda p, c: {"verdict": "pass", "summary": "", "findings": [],
+                                                         "questions": []})
+            with self.assertRaisesRegex(StoryLoopError, "Refactor needs its characterization gate"):
+                run_change(root, change_id, services)
 
 
 if __name__ == "__main__":
