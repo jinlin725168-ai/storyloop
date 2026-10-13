@@ -36,14 +36,32 @@ def _nullable(schema: dict) -> dict:
 
 
 FILES = {"type": "array", "items": _obj({"path": STRING, "content": STRING})}
-ACCEPTANCE_TEST = _obj({"id": STRING, "criteria": STRINGS, "command": STRINGS,
-                        "timeout_seconds": {"type": "integer"}})
 SYSTEM_SMOKE_TEST = _obj({"id": STRING, "description": STRING, "command": STRINGS,
                           "timeout_seconds": {"type": "integer"}})
 QUESTION = _obj({"id": STRING, "text": STRING, "options": STRINGS,
                  "recommended": _nullable(STRING), "why": _nullable(STRING)})
+ROW_TYPE = {"type": "string", "enum": ["positive", "degradation", "unknown_state", "form_parity",
+                                       "regression", "state_preservation", "non_goal"]}
+ACCEPTANCE_TEST = _obj({"id": STRING, "criteria": STRINGS, "command": STRINGS,
+                        "timeout_seconds": {"type": "integer"},
+                        "tier": _nullable({"type": "string", "enum": ["fast", "heavy"]})})
 CRITERION = _obj({"id": STRING, "given": STRING, "when": STRING, "then": STRING,
-                  "kind": {"type": "string", "enum": ["automated", "manual"]}})
+                  "kind": {"type": "string", "enum": ["automated", "manual"]},
+                  "row_type": _nullable(ROW_TYPE),
+                  "oracle_class": _nullable({"type": "string", "enum": ["auto-fast", "auto-heavy", "manual"]}),
+                  "consumers": _nullable(STRINGS),
+                  "reproduces_defect": _nullable({"type": "boolean"})})
+DEFECT = _obj({"observed": STRING, "expected": STRING, "reproduction": STRINGS,
+               "reporter_hypothesis": _nullable(STRING),
+               "root_cause": {"type": "array", "items": _obj({"statement": STRING, "location": STRING})},
+               "confirmed": STRINGS, "unconfirmed": STRINGS,
+               "sibling_entries": _nullable(STRINGS), "origin_change": _nullable(STRING)})
+REFACTOR = _obj({"subtype": {"type": "string", "enum": ["structure", "dependency-swap"]},
+                 "scope": STRINGS, "invariants": STRINGS, "structural_goals": STRINGS,
+                 "migration_map": _nullable({"type": "array", "items": _obj(
+                     {"from": STRING, "to": STRING, "assertion": STRING})})})
+CONSUMER = _obj({"id": STRING, "consumer": STRING, "trigger": STRING, "path": STRING,
+                 "in_scope": {"type": "boolean"}, "verification": STRING})
 STORY = _obj({
     "id": STRING, "title": STRING,
     "priority": _nullable({"type": "string", "enum": ["P1", "P2", "P3"]}),
@@ -63,6 +81,13 @@ SCHEMAS = {
             {"session": STRING, "question": STRING, "answer": STRING})}),
         "questions": {"type": "array", "items": QUESTION},
         "stories": {"type": "array", "items": STORY},
+        "nature": _nullable({"type": "string", "enum": ["feature", "fix", "refactor"]}),
+        "defect": _nullable(DEFECT),
+        "refactor": _nullable(REFACTOR),
+        "consumers": _nullable({"type": "array", "items": CONSUMER}),
+        "coverage_exemptions": _nullable({"type": "array", "items": _obj(
+            {"row_type": ROW_TYPE, "reason": STRING})}),
+        "test_removals": _nullable({"type": "array", "items": _obj({"path": STRING, "reason": STRING})}),
     }),
     "acceptance": _obj({"files": FILES, "manifest": _obj({
         "version": {"type": "integer", "enum": [1]},
