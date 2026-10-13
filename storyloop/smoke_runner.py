@@ -16,6 +16,7 @@ import tempfile
 from .baseline import _git, load_project_config
 from .boundaries import capture_snapshot, snapshot_changes
 from .models import StoryLoopError, require
+from .oracle_counts import count_tests, project_patterns
 from .path_security import safe_target
 from .project_profile import GENERATED_PATHS
 from .processutil import redact, run_process
@@ -34,7 +35,8 @@ def run_smoke(
     project = Path(project).resolve()
     manifest = load_smoke_manifest(project, change_id)
     started = _timestamp()
-    results = [_run_test(project, item) for item in manifest["tests"]]
+    patterns = project_patterns(project)
+    results = [_run_test(project, item, patterns) for item in manifest["tests"]]
     errors = [item for item in results if item["status"] == "ERROR"]
     failures = [item for item in results if item["status"] == "FAIL"]
     if expect_red:
@@ -210,7 +212,8 @@ def _require_only_evidence_changed(before, after, allowed: str) -> None:
         )
 
 
-def run_commands(project: Path, commands: list[list[str]], timeout_seconds: int) -> dict:
+def run_commands(project: Path, commands: list[list[str]], timeout_seconds: int,
+                 patterns: list[dict] | None = None) -> dict:
     """Run generic project regression commands with the same safe process contract."""
     require(isinstance(commands, list), "Regression commands must be a list")
     if not commands:
@@ -220,7 +223,7 @@ def run_commands(project: Path, commands: list[list[str]], timeout_seconds: int)
          "timeout_seconds": timeout_seconds}
         for index, command in enumerate(commands, start=1)
     ]
-    results = [_run_test(Path(project).resolve(), item) for item in tests]
+    results = [_run_test(Path(project).resolve(), item, patterns) for item in tests]
     status = "PASSED" if all(item["status"] == "PASS" for item in results) else "FAILED"
     return {"status": status, "results": results}
 
@@ -236,7 +239,7 @@ def run_commands_isolated(
             candidate = Path(folder)
             paths = _copy_candidate(project, candidate)
             candidate_digest = _files_digest(candidate, paths)
-            result = run_commands(candidate, commands, timeout_seconds)
+            result = run_commands(candidate, commands, timeout_seconds, project_patterns(project))
     finally:
         after = capture_snapshot(project, include_control=True, include_ignored=True)
         if snapshot_changes(before, after):
@@ -279,7 +282,7 @@ def _files_digest(root: Path, paths: list[str]) -> str:
     return digest.hexdigest()
 
 
-def _run_test(project: Path, test: dict) -> dict:
+def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> dict:
     argv = [_expand(item) for item in test["command"]]
     executable = argv[0] if Path(argv[0]).is_absolute() else shutil.which(argv[0])
     require(bool(executable), "Smoke executable is unavailable")
@@ -312,6 +315,8 @@ def _run_test(project: Path, test: dict) -> dict:
         "status": status,
         "returncode": outcome.get("returncode"),
         "timed_out": bool(outcome.get("timed_out")),
+        "counts": count_tests(argv, str(outcome.get("stdout", "")) + "\n" + str(outcome.get("stderr", "")),
+                              patterns),
         "stdout": redact(str(outcome.get("stdout", "")))[:100_000],
         "stderr": redact(str(outcome.get("stderr", "")))[:100_000],
     }
