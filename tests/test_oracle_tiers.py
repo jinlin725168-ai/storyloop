@@ -193,5 +193,50 @@ class TieredRunTests(unittest.TestCase):
         self.assertEqual(heavy["status"], "PASS")
 
 
+class FailedRepairTests(unittest.TestCase):
+    """Found in real acceptance: a repair whose new suite could not prove RED left that suite installed
+    and committed while the run kept its old RED fingerprint, so raising the budget would have let the
+    implementer work against an unproven oracle. And resuming re-proved RED on the workspace, where the
+    implementation already exists, instead of on the contract commit."""
+
+    def test_a_failed_repair_is_a_recorded_stop_and_red_is_re_proven_at_the_contract_commit(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = approved(root, two_row_product())
+            calls = []
+
+            def implement(project, context):
+                calls.append(context["attempt"])
+                (project / "modules/orders").mkdir(parents=True, exist_ok=True)
+                (project / "modules/orders/service.py").write_text("VALUE = 1\n", encoding="utf-8")
+                return {"summary": "done", "questions": []}
+
+            review = lambda project, context: {"verdict": "fail", "summary": "no", "findings": [
+                {"message": "keep going"}], "questions": []}
+            run_change(root, change_id, LoopServices(generate_smoke=lambda p, s: suite(change_id, 1, 0),
+                                                     implement=implement, review=review))
+            self.assertEqual(load_run_state(root, change_id)["status"], "BUDGET_EXHAUSTED")
+            # New suite: AC-1 passes once the implementation exists; AC-2 ("must hold") checks a file that only
+            # the implementation creates, so it fails on the contract commit: the suite itself is defective.
+            exists = ("from pathlib import Path\nimport sys\n"
+                      "sys.exit(0 if Path('modules/orders/service.py').is_file() else 1)\n")
+            broken = suite(change_id, 1, 0)
+            broken["files"][0]["content"] = exists
+            broken["files"][1]["content"] = exists
+            result = repair_smoke(root, change_id, "AC-2 写错了",
+                                  LoopServices(generate_smoke=lambda p, c: broken, implement=implement, review=review))
+            self.assertEqual(result["status"], "ORACLE_DEFECT")
+            state = load_run_state(root, change_id)
+            self.assertEqual(state["status"], "ORACLE_DEFECT")
+            self.assertNotIn("red_evidence_sha256", state)
+            attempts_before = len(calls)
+            # Resuming re-proves RED on the contract commit (no implementation there), not on the workspace
+            # (where AC-1 would already pass and the stop would wrongly read EXISTING_GREEN).
+            again = run_change(root, change_id, LoopServices(generate_smoke=lambda p, s: broken,
+                                                             implement=implement, review=review))
+            self.assertEqual(again["status"], "ORACLE_DEFECT")
+            self.assertEqual(len(calls), attempts_before)  # the implementer never ran on an unproven oracle
+
+
 if __name__ == "__main__":
     unittest.main()

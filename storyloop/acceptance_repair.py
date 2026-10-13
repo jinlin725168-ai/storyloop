@@ -12,11 +12,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .changes import load_change
-from .models import identifier, require, text
+from .models import StoryLoopError, identifier, require, text
 from .oracle_counts import ensure_baseline
 from .project_git import commit_paths, current_branch
 from .project_loop_guards import read_only_call
-from .project_loop_support import relative_files, run_path, save_run
+from .project_loop_support import pause, relative_files, run_path, save_run
 from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, without_manifest_echo
 from .smoke import suite_root as acceptance_suite_root
 from .smoke_runner import run_smoke_isolated
@@ -67,14 +67,19 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
         (project / ".storyloop/evidence" / change_id / name).unlink(missing_ok=True)
     paths = relative_files(project, [suite_root])
     commit = commit_paths(project, paths, f"test({change_id}): repair acceptance suite")
-    red = read_only_call(
-        project, change_id,
-        lambda: run_smoke_isolated(project, change_id, expect_red=True, at_commit=state["contract_commit"]),
-        allowed_evidence=RED_EVIDENCE,
-    )
     moment = (now or (lambda: datetime.now(timezone.utc)))().astimezone(timezone.utc).isoformat(timespec="seconds")
     state.setdefault("repairs", []).append({"at": moment, "reason": reason, "commit": commit["commit"],
                                             "voided_attempts": int(state.get("attempt", 0))})
+    try:
+        red = read_only_call(
+            project, change_id,
+            lambda: run_smoke_isolated(project, change_id, expect_red=True, at_commit=state["contract_commit"]),
+            allowed_evidence=RED_EVIDENCE,
+        )
+    except StoryLoopError as exc:
+        if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
+            raise
+        return _unproven_suite(project, state, exc)
     for key in ("questions", "error", "pending", "acceptance", "next"):
         state.pop(key, None)
     ensure_baseline(project, state, change["product"])  # a stop before RED never sampled one
@@ -82,6 +87,20 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     save_run(project, state)
     return {"status": "ACCEPTANCE_REPAIRED", "change_id": change_id, "commit": commit["commit"],
             "next": f"storyloop run <project> --change {change_id}"}
+
+
+def _unproven_suite(project: Path, state: dict, error: StoryLoopError) -> dict:
+    """The repaired suite is installed and committed but did not prove RED: record that as the stop.
+
+    The old RED fingerprint belongs to the replaced suite, so it goes; the run cannot implement until a
+    suite proves RED again (another repair, or `run` re-proving it on the contract commit).
+    """
+    state.pop("red_evidence_sha256", None)
+    state["attempt"] = 0
+    for key in ("questions", "pending", "next"):
+        state.pop(key, None)
+    return pause(project, state, error.code, error=str(error),
+                 acceptance={"status": error.code, **error.details})
 
 
 def _last_smoke_evidence(project: Path, change_id: str, state: dict) -> dict:

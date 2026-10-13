@@ -325,7 +325,7 @@ def _prepare_acceptance(
                       "contract_commit": _ensure_contract_commit(project, state, paths)})
         save_run(project, state)
     try:
-        red = _ensure_red_evidence(project, change_id)
+        red = _ensure_red_evidence(project, change_id, state["contract_commit"])
     except StoryLoopError as exc:
         if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
             raise
@@ -358,7 +358,9 @@ def _ensure_contract_commit(project: Path, state: dict, paths: list[str]) -> str
     return head
 
 
-def _ensure_red_evidence(project: Path, change_id: str) -> dict:
+def _ensure_red_evidence(project: Path, change_id: str, contract_commit: str) -> dict:
+    """RED is proven on the contract commit plus the current suite: never on the workspace, which after a
+    stop may already hold implementation edits that would make the new behaviour look present."""
     path = project / ".storyloop/evidence" / change_id / RED_EVIDENCE
     if path.exists():
         value = load_json(path)
@@ -368,7 +370,7 @@ def _ensure_red_evidence(project: Path, change_id: str) -> dict:
                 "evidence_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
     return read_only_call(
         project, change_id,
-        lambda: run_smoke_isolated(project, change_id, expect_red=True),
+        lambda: run_smoke_isolated(project, change_id, expect_red=True, at_commit=contract_commit),
         allowed_evidence=RED_EVIDENCE,
     )
 
