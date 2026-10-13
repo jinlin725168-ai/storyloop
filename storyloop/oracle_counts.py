@@ -133,3 +133,60 @@ def project_patterns(project: Path) -> list[dict]:
         return []
     profile = load_project_config(project).get("profile", {})
     return list(profile.get("test_count_patterns") or [])
+
+
+COUNTED_LAYERS = ("unit", "integration", "acceptance", "smoke")
+BASELINE_LAYERS = ("unit", "integration")
+
+
+def executed_list(layer: dict) -> list:
+    return [(item.get("counts") or {}).get("executed") for item in layer.get("results") or []]
+
+
+def sample_baseline(project: Path, config: dict) -> dict:
+    """Executed counts of the unit and integration commands on the code before implementation."""
+    from .project_profile import layer_commands
+    from .smoke_runner import run_commands_isolated
+    profile, timeout = config["profile"], config["check_timeout_seconds"]
+    baseline = {}
+    for name in BASELINE_LAYERS:
+        commands = layer_commands(profile, name)
+        baseline[name] = executed_list(run_commands_isolated(project, commands, timeout)) if commands else []
+    return baseline
+
+
+def removals_explained(project: Path, product: dict) -> bool:
+    """A drop in executed tests is explained only when every declared removal really happened."""
+    removals = product.get("test_removals") or []
+    return bool(removals) and all(not (Path(project) / item["path"]).exists() for item in removals)
+
+
+def check_layers(layers: dict, oracle: dict | None, explained: bool) -> dict:
+    """Fail a green layer that executed nothing, or fewer tests than its baseline without explanation."""
+    baseline = (oracle or {}).get("baseline") or {}
+    checked = dict(layers)
+    for name in COUNTED_LAYERS:
+        if name in layers:
+            checked[name] = _check_layer(layers[name], baseline.get(name), explained)
+    return checked
+
+
+def _check_layer(layer: dict, baseline: list | None, explained: bool) -> dict:
+    results = layer.get("results") or []
+    uncounted = [item["id"] for item in results if (item.get("counts") or {}).get("executed") is None]
+    out = {**layer, "uncounted": uncounted}
+    if layer.get("status") != "PASSED":
+        return out
+    problems = []
+    for index, item in enumerate(results):
+        executed = (item.get("counts") or {}).get("executed")
+        if executed is None:
+            continue
+        if executed == 0:
+            problems.append(f"{item['id']}: 执行数为 0")
+        before = baseline[index] if baseline and index < len(baseline) else None
+        if before is not None and executed < before and not explained:
+            problems.append(f"{item['id']}: 执行数从 {before} 降到 {executed}")
+    if problems:
+        out.update({"status": "FAILED", "oracle_problems": problems})
+    return out

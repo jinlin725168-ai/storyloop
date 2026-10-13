@@ -154,9 +154,16 @@ def run_smoke_isolated(project: Path, change_id: str, expect_red: bool = False,
             "evidence_sha256": _sha256(target)}
 
 
+def visible_paths(project: Path) -> set[str]:
+    """Tracked and untracked-unignored files that exist now; a tracked file deleted in the workspace
+    (e.g. by a refactor) is part of the change, not a candidate input."""
+    listed = set(filter(None, _git(project, "ls-files", "-co", "--exclude-standard", "-z").split("\0")))
+    deleted = set(filter(None, _git(project, "ls-files", "-d", "-z").split("\0")))
+    return listed - deleted
+
+
 def _copy_candidate(project: Path, candidate: Path) -> list[str]:
-    output = _git(project, "ls-files", "-co", "--exclude-standard", "-z")
-    paths = sorted(path for path in set(filter(None, output.split("\0"))) if not _is_regression_asset(path))
+    paths = sorted(path for path in visible_paths(project) if not _is_regression_asset(path))
     allowed = _candidate_allow(project)
     for relative in paths:
         source = safe_target(project, relative, "candidate source")
@@ -289,15 +296,13 @@ def run_commands_isolated(
 def git_visible_digest(project: Path) -> str:
     """Bind every tracked or unignored file, regardless of directory name (whole working tree)."""
     project = Path(project).resolve()
-    output = _git(project, "ls-files", "-co", "--exclude-standard", "-z")
-    return _files_digest(project, sorted(set(filter(None, output.split("\0")))))
+    return _files_digest(project, sorted(visible_paths(project)))
 
 
 def implementation_digest(project: Path) -> str:
     """What a human accepts: Git-visible files minus engine outputs (openspec, ui assets, reports)."""
     project = Path(project).resolve()
-    output = _git(project, "ls-files", "-co", "--exclude-standard", "-z")
-    paths = sorted(path for path in set(filter(None, output.split("\0")))
+    paths = sorted(path for path in visible_paths(project)
                    if not any(path.startswith(root + "/") for root in GENERATED_PATHS))
     return _files_digest(project, paths)
 
@@ -305,8 +310,7 @@ def implementation_digest(project: Path) -> str:
 def candidate_digest(project: Path) -> str:
     """The digest an acceptance candidate of this tree would carry (regression assets excluded)."""
     project = Path(project).resolve()
-    output = _git(project, "ls-files", "-co", "--exclude-standard", "-z")
-    paths = sorted(path for path in set(filter(None, output.split("\0"))) if not _is_regression_asset(path))
+    paths = sorted(path for path in visible_paths(project) if not _is_regression_asset(path))
     return _files_digest(project, paths)
 
 

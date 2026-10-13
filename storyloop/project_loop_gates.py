@@ -17,6 +17,7 @@ from .project_boundaries import audit_project_changes
 from .project_git import commit_paths
 from .project_loop_guards import exists_at, read_only_call, require_git_visible, write_safely
 from .project_loop_support import pause, pause_for_boundary, save_run
+from .oracle_counts import executed_list
 from .project_profile import layer_commands, matches_test_root
 from .smoke_runner import run_commands_isolated
 
@@ -156,6 +157,8 @@ def _verify_characterization(project: Path, change_id: str, state: dict, config:
                                  "touched": sorted(set(previous.get("touched", [])) | set(pending["touched"])),
                                  "tests": sorted(set(previous.get("tests", [])) | set(pending["tests"])),
                                  "commits": commits}
+    # The characterization run is on the old code plus the new locks: it is the better unit baseline.
+    state.setdefault("oracle", {}).setdefault("baseline", {})["unit"] = executed_list(unit)
     for key in ("pending_characterization", "unit", "error", "next"):
         state.pop(key, None)
     save_run(project, state)

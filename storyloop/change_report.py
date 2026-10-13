@@ -106,8 +106,10 @@ def _validate_gate(
     evidence_path = project / ".storyloop/evidence" / change["change_id"] / RESULT_EVIDENCE
     evidence = load_json(evidence_path)
     evidence_digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+    # `uncounted` / `oracle_problems` are the loop's annotations derived from these same results
+    # (oracle_counts.check_layers), not part of the evidence file.
     supplied = {key: value for key, value in smoke.items()
-                if key not in {"evidence_path", "evidence_sha256"}}
+                if key not in {"evidence_path", "evidence_sha256", "uncounted", "oracle_problems"}}
     require(smoke.get("evidence_sha256") == evidence_digest and supplied == evidence,
             "Smoke evidence does not match the protected evidence file")
     require(evidence.get("suite_digests") == smoke_digests(project, change["change_id"]),
