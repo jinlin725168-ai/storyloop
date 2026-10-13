@@ -110,6 +110,14 @@ class OracleCraftTests(unittest.TestCase):
         self.assertTrue("reproduces_defect: true only on a criterion that fails on the current, defective code" in text)
         self.assertTrue("never on regression, state_preservation or non_goal" in text)
 
+    def test_oracle_writers_learn_the_candidate_and_contract_commit_rules(self):
+        """Found in real acceptance: an oracle used git in a candidate that has no .git and silently passed,
+        and a repaired must-hold criterion referenced a file this change itself created."""
+        with tempfile.TemporaryDirectory() as folder:
+            text = instructions_for(Path(folder), "acceptance")
+        for phrase in ("候选副本里没有 .git", "前提不满足时必须失败", "合同提交时的代码上判定", "不写成验收条件"):
+            self.assertTrue(phrase in text, phrase)
+
     def test_the_project_copy_version_is_what_gets_recorded(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
