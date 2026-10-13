@@ -5,6 +5,14 @@ from __future__ import annotations
 from copy import deepcopy
 import unittest
 
+from datetime import datetime, timezone
+from pathlib import Path
+import tempfile
+
+from storyloop.baseline import bootstrap_project
+from storyloop.changes import create_change
+from tests.test_baseline_behavior import git, repository
+
 from storyloop.models import (StoryLoopError, criterion_expects_red, criterion_tier, nature_of,
                               validate_product)
 from storyloop.role_schemas import SCHEMAS, normalize, schema_errors
@@ -114,6 +122,30 @@ class RoleSchemaTests(unittest.TestCase):
         self.assertEqual(schema_errors(answer, SCHEMAS["acceptance"]), [])
         answer["manifest"]["tests"][0]["tier"] = "slow"
         self.assertTrue(schema_errors(answer, SCHEMAS["acceptance"]))
+
+
+NOW = datetime(2026, 10, 13, tzinfo=timezone.utc)
+
+
+def nature_repository(root: Path) -> None:
+    """A repo whose service file exists at the base, so root-cause locations resolve."""
+    repository(root)
+    (root / "modules/orders").mkdir(parents=True)
+    (root / "modules/orders/service.py").write_text("VALUE = 0\n", encoding="utf-8")
+    git(root, "add", "."); git(root, "commit", "-q", "-m", "service")
+
+
+class ChangeIdTests(unittest.TestCase):
+    def test_the_id_prefix_names_the_nature(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            nature_repository(root)
+            bootstrap_project(root, {"test_commands": []})
+            self.assertTrue(create_change(root, "a", product(), now=lambda: NOW)["change_id"].startswith("FEAT-"))
+            self.assertEqual(create_change(root, "b", fix_product(), now=lambda: NOW)["change_id"],
+                             "FIX-20261013-001")
+            self.assertTrue(create_change(root, "c", refactor_product(), now=lambda: NOW)["change_id"]
+                            .startswith("REF-20261013-"))
 
 
 if __name__ == "__main__":

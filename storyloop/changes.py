@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from .baseline import load_baseline
-from .models import identifier, require, text, validate_product
+from .models import identifier, nature_of, require, text, validate_product
 from .openspec_docs import capability_of, render_delta_spec
 from .requirement_checklist import evaluate_checklist, render_checklist
 from .storage import load_json, write_json, write_text_atomic
@@ -27,7 +27,7 @@ def create_change(
     idea = text(idea, "product idea")
     canonical = _validated_copy(product)
     moment = (now or _utc_now)()
-    change_id = _next_id(project, moment)
+    change_id = _next_id(project, moment, nature_of(canonical))
     timestamp = _timestamp(moment)
     state = {
         "version": 1,
@@ -201,8 +201,11 @@ def _write_text(path: Path, content: str) -> None:
     write_text_atomic(path, content)
 
 
-def _next_id(project: Path, moment: datetime) -> str:
-    prefix = "FEAT-" + moment.astimezone(timezone.utc).strftime("%Y%m%d") + "-"
+ID_PREFIXES = {"feature": "FEAT", "fix": "FIX", "refactor": "REF"}
+
+
+def _next_id(project: Path, moment: datetime, nature: str = "feature") -> str:
+    prefix = ID_PREFIXES[nature] + "-" + moment.astimezone(timezone.utc).strftime("%Y%m%d") + "-"
     root = project / ".storyloop" / "state" / "changes"
     existing = {path.stem for path in root.glob(prefix + "*.json")} if root.is_dir() else set()
     for number in range(1, 1000):
