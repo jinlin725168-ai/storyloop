@@ -206,7 +206,8 @@ def _copy_candidate_from_commit(project: Path, candidate: Path, commit: str, cha
     for stale in sorted((candidate / suite_relative(project, change_id)).rglob("*"), reverse=True):
         if stale.is_file():
             stale.unlink()
-    paths = {path for path in paths if not path.startswith(f"acceptance/smoke/{change_id}/")}
+    stale_root = suite_relative(project, change_id) + "/"  # the suite at the commit is replaced, not merged
+    paths = {path for path in paths if not path.startswith(stale_root)}
     for source in sorted(path for path in suite.rglob("*") if path.is_file()):
         relative = source.relative_to(project).as_posix()
         target = safe_target(candidate, relative, "candidate target")

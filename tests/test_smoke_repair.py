@@ -17,6 +17,7 @@ from storyloop.acceptance_repair import repair_smoke
 from storyloop.project_loop import LoopServices, load_run_state, run_change
 from storyloop.smoke_runner import _copy_candidate
 from storyloop.storage import write_json
+from tests.support import product
 from tests.test_baseline_behavior import git, repository
 from tests.test_project_loop import smoke_payload as good_payload
 from tests.test_product_spec import rich_product
@@ -166,6 +167,26 @@ class SmokeRepairTests(unittest.TestCase):
             self.assertEqual(done["status"], "PASSED", done)
 
 
+
+    def test_a_repair_that_drops_files_commits_their_deletion(self):
+        """Found in real acceptance: replacing a suite deleted the old files but committed only the new
+        ones, so the next attempt saw uncommitted deletions in the protected suite (BOUNDARY_VIOLATION)."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"test_commands": []})
+            config = load_project_config(root); config["max_attempts"] = 1
+            write_json(root / ".storyloop/config.json", config)
+            change_id = create_change(root, "orders", product(), now=lambda: NOW)["change_id"]
+            approve_change(root, change_id, now=lambda: NOW)
+            first = defective_payload(change_id)
+            first["files"].append({"path": "helpers/extra.txt", "content": "only in the first suite\n"})
+            run_change(root, change_id, services(change_id, lambda p, s: first))
+            repair_smoke(root, change_id, "the first suite is defective",
+                         services(change_id, lambda p, c: good_payload(change_id)), now=lambda: NOW)
+            self.assertEqual(git(root, "status", "--porcelain=v1", "--untracked-files=all", "--", "acceptance"), "")
+            done = run_change(root, change_id, services(change_id, lambda p, s: good_payload(change_id)))
+            self.assertEqual(done["status"], "PASSED", done)
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,7 +18,7 @@ from .project_git import commit_paths, current_branch
 from .project_loop_guards import read_only_call
 from .project_loop_support import pause, relative_files, run_path, save_run
 from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, without_manifest_echo
-from .smoke import suite_root as acceptance_suite_root
+from .smoke import suite_relative, suite_root as acceptance_suite_root
 from .smoke_runner import run_smoke_isolated
 from .storage import load_json
 
@@ -62,10 +62,11 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     require(isinstance(generated, dict) and set(generated) == {"files", "manifest"},
             "Smoke agent returned an invalid contract")
     files = without_manifest_echo(generated["files"])
+    previous = _tracked_under(project, suite_relative(project, change_id))  # replaced files are committed as deletions
     install_smoke_suite(project, change_id, files, generated["manifest"], replace=True)
     for name in (RED_EVIDENCE, RESULT_EVIDENCE):
         (project / ".storyloop/evidence" / change_id / name).unlink(missing_ok=True)
-    paths = relative_files(project, [suite_root])
+    paths = sorted(set(relative_files(project, [suite_root])) | set(previous))
     commit = commit_paths(project, paths, f"test({change_id}): repair acceptance suite")
     moment = (now or (lambda: datetime.now(timezone.utc)))().astimezone(timezone.utc).isoformat(timespec="seconds")
     state.setdefault("repairs", []).append({"at": moment, "reason": reason, "commit": commit["commit"],
@@ -87,6 +88,11 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     save_run(project, state)
     return {"status": "ACCEPTANCE_REPAIRED", "change_id": change_id, "commit": commit["commit"],
             "next": f"storyloop run <project> --change {change_id}"}
+
+
+def _tracked_under(project: Path, relative: str) -> list[str]:
+    from .baseline import _git
+    return [path for path in _git(project, "ls-files", "-z", "--", relative).split("\0") if path]
 
 
 def _unproven_suite(project: Path, state: dict, error: StoryLoopError) -> dict:
