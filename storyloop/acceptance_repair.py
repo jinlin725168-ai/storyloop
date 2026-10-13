@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from .changes import load_change
 from .models import identifier, require, text
+from .oracle_counts import ensure_baseline
 from .project_git import commit_paths, current_branch
 from .project_loop_guards import read_only_call
 from .project_loop_support import relative_files, run_path, save_run
@@ -77,6 +78,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
                                             "voided_attempts": int(state.get("attempt", 0))})
     for key in ("questions", "error", "pending", "acceptance", "next"):
         state.pop(key, None)
+    ensure_baseline(project, state, change["product"])  # a stop before RED never sampled one
     state.update({"status": "IMPLEMENTING", "attempt": 0, "red_evidence_sha256": red["evidence_sha256"]})
     save_run(project, state)
     return {"status": "ACCEPTANCE_REPAIRED", "change_id": change_id, "commit": commit["commit"],

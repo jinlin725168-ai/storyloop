@@ -17,7 +17,7 @@ class ParserTests(unittest.TestCase):
         samples = {
             "unittest": ("..s\n----\nRan 3 tests in 0.01s\n\nOK (skipped=1)\n", 2, 0),
             "pytest": ("==== 4 passed, 1 failed, 2 skipped in 0.31s ====\n", 5, 1),
-            "maven": ("Tests run: 2, Failures: 0, Errors: 0, Skipped: 0\n[INFO] Results:\n"
+            "maven": ("Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.1 s -- in a.T\n[INFO] Results:\n"
                       "[INFO] Tests run: 7, Failures: 1, Errors: 1, Skipped: 1\n", 6, 2),
             "gradle": ("12 tests completed, 2 failed, 1 skipped\n", 11, 2),
             "jest": ("Tests:       1 failed, 1 skipped, 4 passed, 6 total\n", 5, 1),
@@ -29,6 +29,14 @@ class ParserTests(unittest.TestCase):
                 counts = count_tests(["runner"], output)
                 self.assertEqual((counts["parser"], counts["executed"], counts["failed"]),
                                  (parser, executed, failed))
+
+    def test_a_maven_reactor_sums_its_module_summaries(self):
+        output = ("[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.3 s -- in a.ATest\n"
+                  "[INFO] Results:\n[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0\n"
+                  "[WARNING] Tests run: 2, Failures: 0, Errors: 0, Skipped: 2, Time elapsed: 0.01 s -- in b.BTest\n"
+                  "[INFO] Results:\n[WARNING] Tests run: 2, Failures: 0, Errors: 0, Skipped: 2\n")
+        counts = count_tests(["mvn", "test"], output)
+        self.assertEqual((counts["parser"], counts["executed"], counts["skipped"]), ("maven", 5, 2))
 
     def test_unrecognized_output_is_uncounted_not_zero(self):
         self.assertEqual(count_tests(["make", "test"], "all good\n")["executed"], None)

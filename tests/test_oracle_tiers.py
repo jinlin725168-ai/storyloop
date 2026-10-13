@@ -151,6 +151,7 @@ class OracleDefectLoopTests(unittest.TestCase):
                                   LoopServices(generate_smoke=regenerate, implement=implement, review=review))
             self.assertEqual(result["status"], "ACCEPTANCE_REPAIRED")
             self.assertEqual(seen["evidence"]["status"], "ORACLE_DEFECT")
+            self.assertIn("unit", load_run_state(root, change_id)["oracle"]["baseline"])
             done = run_change(root, change_id, LoopServices(generate_smoke=lambda p, s: repaired,
                                                             implement=implement, review=review))
             self.assertEqual(done["status"], "PASSED", done)

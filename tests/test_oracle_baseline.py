@@ -26,17 +26,19 @@ def review(project, context):
     return {"verdict": "pass", "summary": "ok", "findings": [], "questions": []}
 
 
-def counting_repo(root: Path, value: dict) -> str:
+def counting_repo(root: Path, value: dict, names=("test_a.py", "test_b.py"), max_attempts: int = 1) -> str:
     """Unit 'runner' reports one test per tests/test_*.py file, so deleting a file drops the count."""
     repository(root)
     (root / "tools").mkdir()
     (root / "tools/count.py").write_text(COUNTER, encoding="utf-8")
+    (root / "modules/orders").mkdir(parents=True)
+    (root / "modules/orders/other.py").write_text("OTHER = 0\n", encoding="utf-8")
     (root / "tests").mkdir()
-    for name in ("test_a.py", "test_b.py"):
+    for name in names:
         (root / "tests" / name).write_text("pass\n", encoding="utf-8")
     git(root, "add", "."); git(root, "commit", "-q", "-m", "tests")
     bootstrap_project(root, {"unit_commands": [["{python}", "tools/count.py"]], "test_roots": ["tests"]})
-    config = load_project_config(root); config["max_attempts"] = 1
+    config = load_project_config(root); config["max_attempts"] = max_attempts
     write_json(root / ".storyloop/config.json", config)
     change_id = create_change(root, "orders", value)["change_id"]
     approve_change(root, change_id)
@@ -57,14 +59,14 @@ class LayerCheckTests(unittest.TestCase):
     def test_zero_executed_fails_a_green_layer_and_uncounted_is_reported(self):
         layers = {"unit": {"status": "PASSED", "results": [
             {"id": "R1", "counts": {"executed": 0}}, {"id": "R2", "counts": {"executed": None}}]}}
-        checked = check_layers(layers, None, explained=False)
+        checked = check_layers(layers, None)
         self.assertEqual(checked["unit"]["status"], "FAILED")
         self.assertIn("R1", checked["unit"]["oracle_problems"][0])
         self.assertEqual(checked["unit"]["uncounted"], ["R2"])
 
     def test_a_run_from_before_the_upgrade_has_no_baseline_and_still_works(self):
         layers = {"unit": {"status": "PASSED", "results": [{"id": "R1", "counts": {"executed": 3}}]}}
-        self.assertEqual(check_layers(layers, {}, explained=False)["unit"]["status"], "PASSED")
+        self.assertEqual(check_layers(layers, {})["unit"]["status"], "PASSED")
 
 
 class BaselineLoopTests(unittest.TestCase):
@@ -104,6 +106,53 @@ class DeletedFileCandidateTests(unittest.TestCase):
             check = [sys.executable, "-c", "import os, sys; sys.exit(1 if os.path.exists('gone.py') else 0)"]
             self.assertEqual(run_commands_isolated(root, [check], 30)["status"], "PASSED")
             self.assertEqual(len(implementation_digest(root)), 64)
+
+
+class BaselineFloorTests(unittest.TestCase):
+    def test_declared_removals_excuse_only_the_declared_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            value = product()
+            value["test_removals"] = [{"path": "tests/test_b.py", "reason": "随死代码一起删除"}]
+            change_id = counting_repo(root, value, names=("test_a.py", "test_b.py", "test_c.py"))
+
+            def implement(project, context):
+                implementer(True)(project, context)
+                (project / "tests/test_c.py").unlink(missing_ok=True)  # an undeclared deletion rides along
+                return {"summary": "done", "questions": []}
+
+            result = run_change(root, change_id, LoopServices(
+                generate_smoke=lambda p, s: smoke_payload(change_id), implement=implement, review=review))
+            self.assertEqual(result["status"], "BUDGET_EXHAUSTED", result)
+            state = load_run_state(root, change_id)
+            self.assertEqual(state["oracle"]["baseline"]["unit"], [2])  # floor: the old suite minus test_b
+            self.assertIn("从 2 降到 1", state["failures"][0]["unit"]["oracle_problems"][0])
+
+    def test_an_extend_lock_cannot_mask_a_deleted_test(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = counting_repo(root, product(), max_attempts=2)
+
+            def characterize(project, context):
+                if context["extend"]:
+                    (project / "tests/test_lock.py").write_text("pass\n", encoding="utf-8")
+                    return {"summary": "locked", "touched": context["extend"], "tests": ["tests/test_lock.py"],
+                            "questions": []}
+                return {"summary": "nothing existing changes", "touched": [], "tests": [], "questions": []}
+
+            def implement(project, context):
+                implementer(True)(project, context)
+                if context["attempt"] == 1:  # touches an existing file nobody locked: the engine extends the lock
+                    (project / "modules/orders/other.py").write_text("OTHER = 1\n", encoding="utf-8")
+                return {"summary": "done", "questions": []}
+
+            result = run_change(root, change_id, LoopServices(
+                generate_smoke=lambda p, s: smoke_payload(change_id), implement=implement, review=review,
+                characterize=characterize))
+            self.assertEqual(result["status"], "BUDGET_EXHAUSTED", result)
+            state = load_run_state(root, change_id)
+            self.assertEqual(state["oracle"]["baseline"]["unit"], [3])  # test_a, test_b and the new lock
+            self.assertIn("降到", state["failures"][-1]["unit"]["oracle_problems"][0])
 
 
 if __name__ == "__main__":

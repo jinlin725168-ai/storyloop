@@ -45,11 +45,19 @@ def _pytest(text: str) -> dict | None:
     return {"executed": executed, "failed": failed, "skipped": words.get("skipped", 0)}
 
 
+MAVEN_LINE = r"Tests run: (\d+), Failures: (\d+), Errors: (\d+), Skipped: (\d+)(.*)$"
+
+
 def _maven(text: str) -> dict | None:
-    line = _last(r"Tests run: (\d+), Failures: (\d+), Errors: (\d+), Skipped: (\d+)", text)
-    if not line:
+    """Sum the per-module summaries of a reactor build (lines without "Time elapsed"); a build that
+    printed only per-class lines is summed over those instead. Taking just the last line would count
+    only the last module, so a green multi-module build could read as zero executed."""
+    lines = [match.groups() for match in re.finditer(MAVEN_LINE, text, re.M)]
+    if not lines:
         return None
-    run, failures, errors, skipped = (int(group) for group in line.groups())
+    summaries = [line for line in lines if "Time elapsed" not in line[4]]
+    chosen = summaries or lines
+    run, failures, errors, skipped = (sum(int(line[i]) for line in chosen) for i in range(4))
     return {"executed": run - skipped, "failed": failures + errors, "skipped": skipped}
 
 
@@ -143,35 +151,50 @@ def executed_list(layer: dict) -> list:
     return [(item.get("counts") or {}).get("executed") for item in layer.get("results") or []]
 
 
-def sample_baseline(project: Path, config: dict) -> dict:
-    """Executed counts of the unit and integration commands on the code before implementation."""
+def removal_paths(product: dict) -> list[str]:
+    return [item["path"] for item in product.get("test_removals") or []]
+
+
+def sample_layer(project: Path, config: dict, commit: str, layer: str, removals: list[str]) -> list:
+    """Executed counts of one layer on a commit's tree, without the tests the contract allows to delete.
+
+    The tree comes from the commit, never from the workspace, so implementation edits (including
+    deleted tests) cannot lower it; excluding the declared removals makes it the floor the
+    implementation must still reach, so a declaration excuses exactly those files and nothing more.
+    """
     from .project_profile import layer_commands
-    from .smoke_runner import run_commands_isolated
-    profile, timeout = config["profile"], config["check_timeout_seconds"]
-    baseline = {}
-    for name in BASELINE_LAYERS:
-        commands = layer_commands(profile, name)
-        baseline[name] = executed_list(run_commands_isolated(project, commands, timeout)) if commands else []
-    return baseline
+    from .smoke_runner import run_commands_at_commit
+    commands = layer_commands(config["profile"], layer)
+    if not commands:
+        return []
+    return executed_list(run_commands_at_commit(project, commit, commands, config["check_timeout_seconds"],
+                                                exclude=removals))
 
 
-def removals_explained(project: Path, product: dict) -> bool:
-    """A drop in executed tests is explained only when every declared removal really happened."""
-    removals = product.get("test_removals") or []
-    return bool(removals) and all(not (Path(project) / item["path"]).exists() for item in removals)
+def sample_baseline(project: Path, config: dict, commit: str, removals: list[str]) -> dict:
+    """The unit and integration floors on the code before implementation."""
+    return {name: sample_layer(project, config, commit, name, removals) for name in BASELINE_LAYERS}
 
 
-def check_layers(layers: dict, oracle: dict | None, explained: bool) -> dict:
-    """Fail a green layer that executed nothing, or fewer tests than its baseline without explanation."""
+def ensure_baseline(project: Path, state: dict, product: dict) -> None:
+    """Sample the floors once, on the contract commit; idempotent for every path back to IMPLEMENTING."""
+    if "oracle" not in state:
+        from .baseline import load_project_config
+        state["oracle"] = {"baseline": sample_baseline(project, load_project_config(project),
+                                                       state["contract_commit"], removal_paths(product))}
+
+
+def check_layers(layers: dict, oracle: dict | None) -> dict:
+    """Fail a green layer that executed nothing, or fewer tests than its baseline floor."""
     baseline = (oracle or {}).get("baseline") or {}
     checked = dict(layers)
     for name in COUNTED_LAYERS:
         if name in layers:
-            checked[name] = _check_layer(layers[name], baseline.get(name), explained)
+            checked[name] = _check_layer(layers[name], baseline.get(name))
     return checked
 
 
-def _check_layer(layer: dict, baseline: list | None, explained: bool) -> dict:
+def _check_layer(layer: dict, baseline: list | None) -> dict:
     results = layer.get("results") or []
     uncounted = [item["id"] for item in results if (item.get("counts") or {}).get("executed") is None]
     out = {**layer, "uncounted": uncounted}
@@ -185,7 +208,7 @@ def _check_layer(layer: dict, baseline: list | None, explained: bool) -> dict:
         if executed == 0:
             problems.append(f"{item['id']}: 执行数为 0")
         before = baseline[index] if baseline and index < len(baseline) else None
-        if before is not None and executed < before and not explained:
+        if before is not None and executed < before:
             problems.append(f"{item['id']}: 执行数从 {before} 降到 {executed}")
     if problems:
         out.update({"status": "FAILED", "oracle_problems": problems})

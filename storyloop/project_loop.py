@@ -34,7 +34,7 @@ from .project_loop_guards import (read_only_call, require_control_unchanged, req
                                   verify_read_only_snapshot, write_safely)
 from .project_loop_support import (control_digest, pause, pause_for_boundary, relative_files, run_path,
                                    save_run)
-from .oracle_counts import check_layers, removals_explained, sample_baseline
+from .oracle_counts import check_layers, ensure_baseline
 from .project_profile import layer_commands
 from .project_receipt import recover_completed_merge
 from .system_smoke import run_system_smoke_isolated
@@ -221,7 +221,7 @@ def _run_attempt(
         save_run(project, state)
         return None
     layers, boundary = _run_checks_safely(project, change_id, config, boundary)
-    layers = check_layers(layers, state.get("oracle"), removals_explained(project, change["product"]))
+    layers = check_layers(layers, state.get("oracle"))
     if boundary["violations"]:
         return pause_for_boundary(project, state, boundary)
     if not layers_green(layers):
@@ -330,8 +330,7 @@ def _prepare_acceptance(
             raise
         return pause(project, state, exc.code, error=str(exc),
                      acceptance={"status": exc.code, **exc.details})
-    if "oracle" not in state:  # sampled once, on the code before implementation
-        state["oracle"] = {"baseline": sample_baseline(project, load_project_config(project))}
+    ensure_baseline(project, state, change["product"])  # sampled once, on the code before implementation
     for key in ("acceptance", "error", "next"):
         state.pop(key, None)
     state.update({"status": "IMPLEMENTING",

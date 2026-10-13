@@ -17,7 +17,8 @@ from .project_boundaries import audit_project_changes
 from .project_git import commit_paths
 from .project_loop_guards import exists_at, read_only_call, require_git_visible, write_safely
 from .project_loop_support import pause, pause_for_boundary, save_run
-from .oracle_counts import executed_list
+from .changes import load_change
+from .oracle_counts import removal_paths, sample_layer
 from .project_profile import layer_commands, matches_test_root
 from .smoke_runner import run_commands_isolated
 
@@ -160,8 +161,13 @@ def _verify_characterization(project: Path, change_id: str, state: dict, config:
                                  "touched": sorted(set(previous.get("touched", [])) | set(pending["touched"])),
                                  "tests": sorted(set(previous.get("tests", [])) | set(pending["tests"])),
                                  "commits": commits}
-    # The characterization run is on the old code plus the new locks: it is the better unit baseline.
-    state.setdefault("oracle", {}).setdefault("baseline", {})["unit"] = executed_list(unit)
+    # The locks are committed on top of the contract commit and the implementation is not: HEAD is the
+    # old code plus every lock, so its unit count is the floor. The workspace would not do: in extend
+    # mode it already carries the implementation's edits, deleted tests included.
+    removals = removal_paths(load_change(project, change_id)["product"])
+    head = _git(project, "rev-parse", "HEAD").strip()
+    state.setdefault("oracle", {}).setdefault("baseline", {})["unit"] = sample_layer(
+        project, config, head, "unit", removals)
     for key in ("pending_characterization", "unit", "error", "next"):
         state.pop(key, None)
     save_run(project, state)

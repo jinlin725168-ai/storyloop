@@ -293,6 +293,23 @@ def run_commands_isolated(
     return {**result, "candidate_sha256": candidate_digest}
 
 
+def run_commands_at_commit(project: Path, commit: str, commands: list[list[str]], timeout_seconds: int,
+                           exclude: list[str] | tuple = ()) -> dict:
+    """Run regression commands on a commit's tree (workspace edits excluded), minus `exclude` paths."""
+    project = Path(project).resolve()
+    skipped = set(exclude)
+    with tempfile.TemporaryDirectory(prefix="storyloop-baseline-") as folder:
+        candidate = Path(folder)
+        archive = subprocess.run(["git", "archive", "--format=tar", commit], cwd=project,
+                                 capture_output=True, check=True).stdout
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            members = [m for m in tar.getmembers() if m.isfile() and m.name not in skipped]
+            for member in members:
+                safe_target(candidate, member.name, "baseline target")
+            tar.extractall(candidate, members=members, filter="data")
+        return run_commands(candidate, commands, timeout_seconds, project_patterns(project))
+
+
 def git_visible_digest(project: Path) -> str:
     """Bind every tracked or unignored file, regardless of directory name (whole working tree)."""
     project = Path(project).resolve()
