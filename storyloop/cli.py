@@ -17,7 +17,7 @@ from .system_smoke import apply_smoke_update, propose_smoke_update
 from .change_log import change_log, render_log
 from .changes import create_change, load_change, revise_change
 from .manual_acceptance import record_manual_acceptance
-from .next_steps import next_step
+from .next_steps import draft_next, next_step
 from .openspec_docs import document_change
 from .models import StoryLoopError, require
 from .processutil import redact
@@ -155,11 +155,13 @@ def _change(project: Path, args) -> dict:
         product = invoke_project_agent(project, "product", {"idea": args.idea})
         created = create_change(project, args.idea, product)
         adopt_pending(project, created["change_id"])
-        return clarify_interactively(project, created["change_id"], _revise_with_agent, interactive)
+        state = clarify_interactively(project, created["change_id"], _revise_with_agent, interactive)
+        return {**state, "next": draft_next(project, state)}
     require(args.change_id and args.message,
             "Revision needs both --change and --message")
-    revised = _revise_with_agent(project, args.change_id, args.message, [])
-    return clarify_interactively(project, args.change_id, _revise_with_agent, interactive)
+    _revise_with_agent(project, args.change_id, args.message, [])
+    state = clarify_interactively(project, args.change_id, _revise_with_agent, interactive)
+    return {**state, "next": draft_next(project, state)}
 
 
 def _revise_with_agent(project: Path, change_id: str, message: str, answers: list[dict]) -> dict:
@@ -251,7 +253,8 @@ def _product_dispatch(project: Path, args) -> dict:
         return {"status": change["status"], "change_id": change_id,
                 "revision": change["revision"], "run": run,
                 "telemetry": summarize(project, change_id),
-                "next": next_step((run or {}).get("status") or change["status"], change_id, project, run)}
+                "next": (draft_next(project, change) if run is None and change["status"] == "DRAFT"
+                         else next_step((run or {}).get("status") or change["status"], change_id, project, run))}
     if args.command == "log":
         return change_log(project, change_id)
     if args.command == "reset":

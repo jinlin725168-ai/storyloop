@@ -60,3 +60,22 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
     if status in {"BLOCKED", "FAILED", "ERROR", "INTERRUPTED"}:
         return f"{log} 查看最近的代理调用与失败原因；处理后 {run} 可续跑"
     return None
+
+
+def draft_next(project: Path | str, change: dict) -> str:
+    """A draft's next step names its open questions and blocking checklist items before suggesting approve."""
+    from .requirement_checklist import blocking_items, evaluate_checklist
+    change_id = change["change_id"]
+    where = f"{project} --change {change_id}"
+    questions = len(change["product"].get("questions") or [])
+    blocking = len(blocking_items(evaluate_checklist(change["product"], Path(project))))
+    if not questions and not blocking:
+        return next_step("DRAFT", change_id, project)
+    drafts = f".storyloop/drafts/{change_id}"
+    found = []
+    if questions:
+        found.append(f"{questions} 个待决问题（见 {drafts}/proposal.md 的“待决问题”）")
+    if blocking:
+        found.append(f"{blocking} 个阻断项（见 {drafts}/checklist.md）")
+    return (f"草案还有{'、'.join(found)}，approve 会被拒绝：storyloop change {where} "
+            f"--message \"Q1 选推荐项；Q2 …\" 回答或修订，清零后再 storyloop approve {where}")

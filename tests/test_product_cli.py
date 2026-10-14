@@ -36,6 +36,31 @@ class ProductCliTests(unittest.TestCase):
             self.assertEqual(result["status"], "PASSED")
             run.assert_called_once_with(root.resolve(), created["change_id"])
 
+    def test_a_draft_with_open_questions_says_where_they_are_and_not_to_approve_yet(self):
+        """Found following the tutorial: `change --no-interactive` printed only DRAFT, and the hint said
+        "satisfied? approve" while the checklist still had blocking items that make approve refuse."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            asking = product()
+            asking["questions"] = [{"id": "Q1", "text": "Can a booking be cancelled?",
+                                    "options": ["Yes", "No"], "recommended": "Yes", "why": "Frees rooms."}]
+            args = parser().parse_args(["change", str(root), "--idea", "增加预订", "--no-interactive"])
+            with patch("storyloop.cli.invoke_project_agent", return_value=asking):
+                created = dispatch(args)
+            self.assertIn("1 个待决问题", created["next"])
+            self.assertIn("proposal.md", created["next"])
+            self.assertNotIn("满意后", created["next"])
+            status = dispatch(parser().parse_args(["status", str(root), "--change", created["change_id"]]))
+            self.assertEqual(status["next"], created["next"])
+
+            answered = product()
+            with patch("storyloop.cli.invoke_project_agent", return_value=answered):
+                revised = dispatch(parser().parse_args(["change", str(root), "--change", created["change_id"],
+                                                        "--message", "Q1 选推荐项", "--no-interactive"]))
+            self.assertIn("storyloop approve", revised["next"])
+
 
 if __name__ == "__main__":
     unittest.main()
