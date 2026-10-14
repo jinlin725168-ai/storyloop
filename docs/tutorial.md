@@ -2,7 +2,9 @@
 
 用一个最小的 Python 待办清单仓库，从初始化到 no-ff 合并走一遍。所有输出都来自一次真实运行（2026-09-29，Claude Code 适配器，总费用 2.91 USD，代理累计 6 分 22 秒，闭环墙钟 8 分钟）。读完你会知道每个命令做了什么、仓库里长出了什么、哪里需要人。这次运行还真实撞上了一次停点（实现代理改了底座里的 README），教程照实记录了怎么处理。
 
-前置：Linux/WSL2 或 Windows，Python 3.11+，Git，已登录的 Claude Code 或 Codex CLI。
+2026-10-14 用当前版本从干净仓库照本教程重走了一遍（Claude Code 适配器，8 次调用，4.79 USD）：同样停在 README 的底座停点，按 3a 处理后第 2 轮 PASSED，Git 历史与第 4 节一致。代理每次提的问题、写的测试文件名和条数会不同，下文的输出以 2026-09-29 那次为准，与当前版本不同的地方单独注明。
+
+前置：Linux/WSL2 或 Windows，Python 3.11+，Git（已配置提交身份：`git config --global user.name/user.email`，或在仓库里单独配置；闭环用这个身份提交），已登录的 Claude Code 或 Codex CLI。
 
 ## 0. 安装引擎并准备示例仓库
 
@@ -54,7 +56,7 @@ project: /tmp/todo-demo
 
 发生了什么：`.storyloop/` 出现（写进 `.git/info/exclude`，不进 Git），`baseline.json` 记下每个已跟踪文件的 SHA-256 和底座版本 `1.0.0`。可变区之外的文件（`README.md`、`.gitignore`、`storyloop-settings.json`）现在是底座，功能变更改它们会停下来。第 3 节会真的撞上这条规则。
 
-默认适配器是 Codex。用 Claude Code 时改 `.storyloop/config.json`（`design_min_stories` 是 init 写好的默认值，两个故事以上才出方案）：
+默认适配器是 Codex。用 Claude Code 时改 `.storyloop/config.json` 里的 `adapter` 和 `agent_command` 两项，其余字段（包括 init 写入的 `profile`）保持不动，不要用下面的片段整体覆盖文件（`design_min_stories` 是 init 写好的默认值，两个故事以上才出方案）：
 
 ```json
 {
@@ -89,7 +91,7 @@ Q3 标记一个不存在的编号时，命令应如何反馈？
    2) 静默忽略，以退出码 0 结束
 ```
 
-回车选推荐项，输入序号或自由文本选别的，`q` 结束本轮。每个回答立即触发一次修订。没有终端时（CI、后台）加 `--no-interactive`，问题保持开放，用一条消息回答：
+回车选推荐项，输入序号或自由文本选别的，`q` 结束本轮。每个回答立即触发一次修订。没有终端时（CI、后台）加 `--no-interactive`，问题保持开放：输出的 `next:` 会写明有几个待决问题、几个阻断项，问题全文在草案 `proposal.md` 的“待决问题”一节（`--json` 输出里是 `product.questions`）。用一条消息回答：
 
 ```bash
 $SL change /tmp/todo-demo --change FEAT-20260929-001 \
@@ -128,6 +130,8 @@ A9  GIVEN 存储中有一条已完成的待办"1 买牛奶"
 ```
 
 A6 值得注意：意图里没提旧数据，是产品角色读了 `app/store.py` 后自己补上的兼容要求。`checklist.md` 是需求质量门的结果，这次 18 项全过、0 阻断。有阻断项（未回答的问题、没有验收条件的故事）时 `approve` 会拒绝。
+
+当前版本的合同还会按行类型组织验收条件（新行为、回归、状态保持、非目标等，见[概念手册](concepts.md)），检查表项数随之增加；2026-10-14 那次是 5 个问题、13 条验收条件、32 项全过。
 
 ## 3. 批准，然后等
 
@@ -252,6 +256,8 @@ tests/test_characterization_{store,cli,readme}.py  tests/test_completion.py
 | S1 标记待办完成并在列表中显示状态 | A6 这条待办显示为"[ ] 1 买牛奶"       | s1-list-status | PASS | 9dcd58f8… |
 | S2 拒绝重复标记已完成的待办       | A9 存储内容与操作前完全相同           | s2-repeat-mark | PASS | 9dcd58f8… |
 ```
+
+当前版本的报告在分层验证之后还有一节“判据自证”：每条测试命令实际执行了多少个用例、旧代码上的基线是多少。执行数为 0 或低于基线，这一层判失败，防止“一个用例都没跑却显示通过”。2026-10-14 那次单元层执行 29 个、基线 19 个。
 
 分层验证一节把五层都列出来，没配置的层是 SKIPPED 并给出原因：
 
