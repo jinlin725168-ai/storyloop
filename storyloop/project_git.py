@@ -43,7 +43,7 @@ def commit_paths(project: Path, paths: list[str], message: str) -> dict:
         # Commits carry the repository's own configured identity: the loop acts for its user.
         _git(project, "commit", "--no-verify", "-m", message)
     except StoryLoopError as exc:
-        raise StoryLoopError("Local Git commit failed", code="GIT_BLOCKED") from exc
+        raise StoryLoopError(f"Local Git commit failed: {exc}", code="GIT_BLOCKED") from exc
     return {"status": "COMMITTED", "commit": _git(project, "rev-parse", "HEAD").strip(),
             "branch": _git(project, "branch", "--show-current").strip()}
 
