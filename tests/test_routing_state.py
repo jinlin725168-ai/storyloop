@@ -1,4 +1,7 @@
 """Versioned run selection and quality budgets."""
+from tests.test_structured_output import passing_review
+from tests.test_routing_planning import answer
+from storyloop.design_approval import approve_design
 from copy import deepcopy
 import unittest
 from storyloop.models import StoryLoopError
@@ -106,14 +109,12 @@ class RunRoutingTests(unittest.TestCase):
         from storyloop.storage import write_json
         from tests.test_agent_unavailable import implement_after, unavailable
         from tests.test_project_loop import smoke_payload
-        from tests.test_structured_output import passing_review
         calls = []
         implement = implement_after(1, calls)
         budgets = []
         def run_implement(project, context):
             budgets.append(context['max_attempts'])
             return implement(project, context)
-        from tests.test_routing_planning import answer
         def design(project, context):
             plan = answer()
             plan['options'][0]['creates'] = ['modules/orders/service.py']
@@ -129,6 +130,8 @@ class RunRoutingTests(unittest.TestCase):
         services = LoopServices(lambda p, c: smoke_payload(self.identifier),
                                 run_implement, passing_review, characterize=characterize,
                                 design=design)
+        paused = run_change(self.root, self.identifier, services)
+        approve_design(self.root, self.identifier, paused['plan_id'])
         with self.assertRaises(StoryLoopError) as raised:
             run_change(self.root, self.identifier, services)
         self.assertEqual(raised.exception.code, 'AGENT_UNAVAILABLE')

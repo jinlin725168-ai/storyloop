@@ -28,6 +28,7 @@ from .project_contracts import validate_agent_summary, validate_review
 from .project_git import current_branch, start_feature
 from .project_loop_finish import (complete_change, finalize_change, finish_merged, finish_receipting,
                                   finish_verified, passed_result)
+from .design_approval import ensure_design_approval
 from .planning import ensure_routing_plan, review_focus
 from .project_loop_gates import (characterize_paths, design_plan, ensure_characterization, ensure_design,
                                  resume_characterization, uncharacterized_paths)
@@ -139,14 +140,13 @@ def _resume_and_prepare(project: Path, change: dict, state: dict, services: Loop
         paused = _prepare_acceptance(project, change, services, state)
         if paused is not None:
             return paused
-    if state["status"] == "CHARACTERIZATION_FAILED":
-        paused = resume_characterization(project, change, state, config)
-        if paused is not None:
-            return paused
     plan_gate = ensure_routing_plan if is_routed(change, state) else ensure_design
     paused = plan_gate(project, change, state, services, config)
     if paused is None:
-        # Routed design approval and consistency gates belong here, before characterization.
+        paused = ensure_design_approval(project, change, state, config)
+    if paused is None and state["status"] == "CHARACTERIZATION_FAILED":
+        paused = resume_characterization(project, change, state, config)
+    if paused is None:
         paused = ensure_characterization(project, change, state, services, config)
     if paused is not None:
         return paused
@@ -183,7 +183,7 @@ def _open_run(project: Path, change: dict, routing: dict | None = None) -> tuple
                      "IMPLEMENTING", "BASE_CHANGE_REQUIRED",
                      "BOUNDARY_VIOLATION", "NEEDS_INPUT", "BUDGET_EXHAUSTED",
                      "CHARACTERIZATION_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_SPEC_FIX",
-                     "NO_PROGRESS",
+                     "NO_PROGRESS", "DESIGN_APPROVAL_REQUIRED", "DESIGN_REVISION_REQUIRED", "SPLIT_RECOMMENDED",
                      "VERIFIED", "MANUAL_ACCEPTANCE_REQUIRED", "MERGED", "RECEIPTING",
                      "FINALIZING"}
         require(state.get("change_id") == change_id and state.get("status") in resumable,

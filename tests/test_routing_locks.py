@@ -20,9 +20,16 @@ class RoutedLockTests(unittest.TestCase):
                             passing_review, characterize=characterize,
                             design=lambda p, c: answer())
 
+    def approve(self, services):
+        from storyloop.design_approval import approve_design
+        paused = run_change(self.root, self.identifier, services)
+        self.assertEqual(paused['status'], 'DESIGN_APPROVAL_REQUIRED')
+        approve_design(self.root, self.identifier, paused['plan_id'])
+
     def test_empty_characterization_cannot_claim_planned_paths(self):
         services = self.services(lambda p, c: {
             'summary': 'No locks', 'touched': [], 'tests': [], 'questions': []})
+        self.approve(services)
         with self.assertRaisesRegex(StoryLoopError, 'coverage|artifact'):
             run_change(self.root, self.identifier, services)
         services.implement.assert_not_called()
@@ -33,6 +40,7 @@ class RoutedLockTests(unittest.TestCase):
         services = self.services(lambda p, c: {
             'summary': 'Claimed lock', 'touched': ['app/service.py'],
             'tests': ['tests/missing.py'], 'questions': []})
+        self.approve(services)
         with self.assertRaisesRegex(StoryLoopError, 'artifact'):
             run_change(self.root, self.identifier, services)
         services.implement.assert_not_called()
@@ -46,6 +54,7 @@ class RoutedLockTests(unittest.TestCase):
             return {'summary': 'Undeclared', 'touched': [],
                     'tests': ['tests/test_lock.py'], 'questions': []}
         services = self.services(characterize)
+        self.approve(services)
         with self.assertRaisesRegex(StoryLoopError, 'coverage'):
             run_change(self.root, self.identifier, services)
         services.implement.assert_not_called()

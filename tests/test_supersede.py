@@ -141,17 +141,15 @@ class SupersedeTests(unittest.TestCase):
             updated = revise_change(root, new["change_id"], revised({}), "clarify")
             self.assertEqual(updated["supersedes"], new["supersedes"])
 
-    def test_new_run_must_start_from_old_source_branch(self):
+    def test_start_run_source_branch_precondition(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             old_id = contract_stop(root)
             new = supersede_change(root, old_id, "revise", revised)
-            approve_change(root, new["change_id"])
-            services = LoopServices(
-                generate_smoke=lambda _p, _s: smoke_payload(new["change_id"]),
-                implement=implementer([]), review=failing_review())
+            from storyloop.project_loop import _start_run
+            # Isolate the branch precondition; the new routed draft has not passed intake yet.
             with self.assertRaises(StoryLoopError) as caught:
-                run_change(root, new["change_id"], services)
+                _start_run(root, new, None)
             self.assertIn("git checkout", str(caught.exception))
             self.assertEqual(git(root, "branch", "--show-current"), f"feature/{old_id}")
 
