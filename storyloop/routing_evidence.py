@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 
 from .baseline import GIT_ENVIRONMENT, load_project_config
@@ -84,6 +85,8 @@ def _reference_count(project: Path, commit: str, symbol: str, profile: dict) -> 
     if result["returncode"] == 1:
         return 0
     if result["returncode"] != 0:
+        return None
+    if "\ufffd" in result["stdout"]:
         return None
     prefix = commit + ":"
     paths = set()
@@ -171,9 +174,11 @@ def _repository_and_commit(project: Path, commit: object) -> tuple[Path, str]:
     result = _run(project, "rev-parse", "--verify", "--end-of-options", f"{commit}^{{commit}}")
     require(not _unavailable(result) and result["returncode"] == 0, "Unknown Git commit")
     resolved = result["stdout"].strip()
-    require(len(resolved) == 40, "Unknown Git commit")
+    require(re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", resolved) is not None,
+            "Unknown Git commit")
     top = _run(project, "rev-parse", "--show-toplevel")
     require(not _unavailable(top) and top["returncode"] == 0, "Git project is required")
+    require("\ufffd" not in top["stdout"], "Git path evidence unavailable")
     require(Path(top["stdout"].strip()).resolve() == project, "Project must be the Git repository root")
     return project, resolved
 
@@ -247,6 +252,9 @@ def _hotspots(project: Path, commit: str, paths: list[str]) -> dict[str, int | N
         if _unavailable(process) or process["returncode"]:
             result[path] = None
             continue
+        if "\ufffd" in process["stdout"]:
+            result[path] = None
+            continue
         result[path] = sum(line == path for line in process["stdout"].splitlines())
     return result
 
@@ -261,6 +269,7 @@ def _nul_paths(output: str) -> list[str]:
 
 
 def _decode_path(raw: str) -> str:
+    require("\ufffd" not in raw, "Git path evidence unavailable")
     return repository_relative(raw, "Git path")
 
 

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -179,6 +180,36 @@ class EvidenceTests(unittest.TestCase):
             linked = Path(parent) / "linked"
             git(self.root, "worktree", "add", "-q", "--detach", str(linked), self.head)
             self.assertEqual(reference_count(linked, self.head, "serve"), 1)
+
+    def test_invalid_utf8_git_path_makes_path_evidence_unavailable(self):
+        raw = os.fsencode(self.root / "app") + b"/invalid-\xff.py"
+        descriptor = os.open(raw, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(b"INVALID_PATH_SYMBOL = 1\n")
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "invalid utf8 path")
+        head = git(self.root, "rev-parse", "HEAD")
+        scope = {"touched": ["app/service.py"], "creates": [], "interfaces": [], "symbols": []}
+        with self.assertRaisesRegex(StoryLoopError, "evidence unavailable"):
+            measure_scope(self.root, head, scope, validate_policy(None))
+        self.assertIsNone(reference_count(self.root, head, "INVALID_PATH_SYMBOL"))
+
+    def test_sha256_repository_commit_is_supported_when_git_supports_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            try:
+                git(root, "init", "-q", "--object-format=sha256")
+            except AssertionError as exc:
+                self.skipTest(f"Git SHA-256 repositories unavailable: {exc}")
+            git(root, "config", "user.email", "storyloop@example.invalid")
+            git(root, "config", "user.name", "StoryLoop Test")
+            (root / "app").mkdir()
+            (root / "app/service.py").write_text("def serve(): pass\n", encoding="utf-8")
+            git(root, "add", ".")
+            git(root, "commit", "-q", "-m", "initial")
+            head = git(root, "rev-parse", "HEAD")
+            self.assertEqual(len(head), 64)
+            self.assertEqual(reference_count(root, head, "serve"), 1)
 
     def test_actual_scope_reports_delete_rename_new_and_unknown_semantics(self):
         (self.root / "app/service.py").unlink()
