@@ -148,6 +148,20 @@ class StopReportTests(unittest.TestCase):
 
 
 class FailureViewCompatibilityTests(unittest.TestCase):
+    def test_red_layer_is_not_hidden_by_a_review_without_findings(self):
+        for verdict in ("pass", "fail"):
+            with self.subTest(verdict=verdict):
+                view = failure_view({"attempt": 1, "acceptance": {"status": "FAILED"},
+                                     "review": {"verdict": verdict, "summary": "ok", "findings": []}})
+                self.assertEqual(view, {"attempt": 1, "gate": "layers", "reason": "acceptance=FAILED"})
+
+    def test_findings_and_questions_keep_review_priority_over_red_layers(self):
+        for review in ({"verdict": "fail", "findings": [{"message": "bad oracle"}]},
+                       {"verdict": "needs_input", "summary": "clarify", "findings": []}):
+            with self.subTest(review=review):
+                view = failure_view({"attempt": 1, "acceptance": {"status": "FAILED"}, "review": review})
+                self.assertEqual(view["gate"], "review")
+
     def test_legacy_review_and_layer_failures_keep_the_old_view(self):
         self.assertEqual(failure_view({
             "attempt": 2, "review": {"findings": [{"message": "broken"}]},

@@ -1,8 +1,7 @@
 """External autonomous loop for approved product changes.
 
-This module owns the state machine: resume from the saved run, prepare the contract and prove
-RED, pass the design and characterization gates, then loop implement → boundary audit → layered
-verification → review until the change passes or stops at an explicit pause. The gates live in
+Resume the run, prepare the contract and prove RED, pass design and characterization, then loop
+implement → boundary audit → layered verification → review until pass or pause. The gates live in
 project_loop_gates, the agent-call guards in project_loop_guards, the completion stage in
 project_loop_finish and the acceptance-repair channel in acceptance_repair.
 """
@@ -264,16 +263,16 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
     layers = check_layers(layers, state.get("oracle"))
     if boundary["violations"]:
         return record_boundary(project, state, boundary)
-    if not layers_green(layers):
+    if not layers_green(layers) and layer_attribution(layers) == "environment":
         return record_failure(project, state, {"attempt": state["attempt"], **layers},
-                              layer_attribution(layers))
+                              "environment")
     review = _perform_review(project, change, state, services, boundary, layers)
     verdict = validate_review(review)
     merge_facts(project, state, review.get("facts"), "review")
-    if verdict == "needs_input":
+    if verdict == "needs_input" and layers_green(layers):
         return pause(project, state, "NEEDS_INPUT", questions=review["questions"])
-    if verdict == "fail":
-        return route_review(project, change, state, review)
+    if verdict == "fail" or not layers_green(layers):
+        return route_review(project, change, state, review, layers)
     verified = {"boundary": boundary, "layers": layers, "review": review}
     paused = _manual_acceptance_gate(project, change, state, verified)
     if paused is not None:

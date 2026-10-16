@@ -55,11 +55,15 @@
 
 单元测试不调用模型。真实闭环在目标仓库上跑，记录在 [案例与成本参考](case-studies.md)；入门教程（[tutorial.md](tutorial.md)）用 `examples/todo-demo/` 可在本机复现一次。
 
-子项目 2a 的 [Q8 验收](superpowers/specs/2026-10-14-子项目2a-纠偏-design.md#13-实现差异与验收状态) 已获授权执行，使用隔离 todo-demo 与原生 Codex。实际通过路径为 `NO_PROGRESS` → `supersede --reason` → 新变更 PASSED，以及修复实现提示后重构 PASSED；未触发原定 `NEEDS_SPEC_FIX` 与 `ORACLE_DEFECT`，归属分流的自动测试是独立证据，不能替代这两个真实停点。
+子项目 2a 首轮 [Q8 验收](superpowers/specs/2026-10-14-子项目2a-纠偏-design.md#13-实现差异与验收状态) 已获授权执行，使用隔离 todo-demo 与原生 Codex。实际通过路径为 `NO_PROGRESS` → `supersede --reason` → 新变更 PASSED，以及修复实现提示后重构 PASSED；该轮未触发原定 `NEEDS_SPEC_FIX` 与 `ORACLE_DEFECT`；随后定位到功能红层跳过 review 的问题并修复，补验见下。
 
 31 次角色调用中有 3 次失败（2 次 Claude 订阅禁用、1 次原生 Codex 停滞）；旧合同还实际触发 product、acceptance 各一次语义补正。Codex 未报告费用，账本 `cost_usd` 为 null，金额未知。两个通过变更各有 9 项单元测试、6 项验收通过；integration、smoke、checks 未配置，均 SKIPPED。
 
 2026-10-16 自动测试记录：此前 `.venv/bin/python -m unittest discover -s tests -t .` 运行 405 项、890.334 秒，`OK (skipped=1)`，审查修复后的 92 项定点回归通过。本轮加入真实验收修复后，全量 406 项、894.176 秒，1 ERROR、1 skipped：`test_an_extend_lock_cannot_mask_a_deleted_test` 触发 ignored-file 保护；单测和有限前序组合复现均通过，根因尚未定位。最终通过仓库外诊断包装运行同一全量：`/home/jinlin/work/storyloop/.venv/bin/python /tmp/storyloop-q8-diagnostic-runner.py`，407 项、899.306 秒，`OK (skipped=1)`。包装仅在 ignored-file 异常时补充路径和 Git 状态，不改变引擎判断；输出中的拦截记录均为安全测试预期行为。前一次非预期错误未复现，不据此宣称已定位或修复其根因。
+
+Q8 补验在新的隔离 todo-demo 上进行：初始产品合同与套件来自上轮真实产出的回放，判据场景显式注入 Git 缺失时提前 return 的缺陷，对照实验验证该缺陷可让空实现误过；不计为模型自然生成缺陷。特征化、实现、审查调用真实原生 Codex。两个场景首轮分别达到 `NEEDS_SPEC_FIX` 与 `ORACLE_DEFECT`，并继续标准修订与判据修复流程。自动测试新增功能红层分流、review pass 不覆盖失败、纯环境跳过审查、混合发现与驳回、问答中断连续失败及只读保护。
+
+补验最终结果：合同经 `supersede` 后的新变更首轮 PASSED（unit 8、acceptance 5）；判据经 `acceptance-repair` 后新 epoch 首轮 PASSED（unit 11、acceptance 6）。integration、smoke、checks 未配置，均 SKIPPED。新增 14 次真实角色调用、0 次代理失败，费用金额未知。普通全量 `python -m unittest discover -s tests -t .`：416 项、971.629 秒，`OK (skipped=1)`；全量启动后只有恢复提示文字另改，26 项 CLI/停止报告回归通过，补丁及提示文案均独立审查通过。偶发 Git 可见性错误未再次出现，新增路径诊断但根因仍未证明。
 
 ## 四、会被跳过的测试
 

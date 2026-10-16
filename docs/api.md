@@ -67,7 +67,7 @@
 | `run.routed` | 审查分流来源 `{source:"review", target, findings}`；决定是否允许驳回 |
 | `run.overrules` / `run.overruled` | 人的驳回记录（时间、状态、轮次、理由、发现标识）/ 已驳回发现的稳定标识集合 |
 | `run.mode` | 普通轮为 null，根因调查轮为 `root_cause` |
-| `run.failures[]` 新字段 | `attribution`（`implement/oracle/contract/base/environment`）、`epoch`（判据修复次数）、`mode`、`signature`；连续性要求同一 epoch 的实际 `attempt` 相邻，且紧邻将调用的轮次；`NEEDS_INPUT` 打断连续性，交还的轮次不打断，不另存 `progress` 计数 |
+| `run.failures[]` 新字段 | `attribution`（`implement/oracle/contract/base/environment`）、`epoch`（判据修复次数）、`mode`、`signature`；功能红层记录同时含各层结果与校验后的 `review`。连续性要求同一 epoch 的实际 `attempt` 相邻，且紧邻将调用的轮次；红层 review 的 `NEEDS_INPUT` 保留该轮证据但打断连续性，交还的轮次不打断，不另存 `progress` 计数 |
 | 变更 `supersedes` | `{change_id, message, reason, blocker, source_branch, design_summary}`，指向旧变更 |
 | 变更与旧运行 `superseded_by` | 新变更 ID；旧变更和运行状态均为 `SUPERSEDED` |
 
@@ -87,7 +87,7 @@
 | `NEEDS_INPUT` | manual 适配器在等人工回答 |
 | `AGENT_UNAVAILABLE` | 代理进程没有给出回答（超时、限流、崩溃、CLI 不可用、进程树没能回收）。实现循环里出现时这一轮交还、不计入 `max_attempts`，记在 `run.agent_failures`；`run` 重试同一轮 |
 | `AGENT_CONTRACT_INVALID` | 代理回答修复后仍不符合角色 schema（implement 计一轮失败，不会冒到这里） |
-| `WORKSPACE_TAINTED` | 控制面、暂存区或工作区被意外改动；已有运行状态时保存停止报告，清理后 `reset` 再 `run` |
+| `WORKSPACE_TAINTED` | 控制面、暂存区或工作区被意外改动；Git 不可见改动的消息最多列 20 条相对路径，Python `StoryLoopError.details.invisible[]` 保留全部 `{path, kind}`（CLI 错误 JSON 不新增该字段）；已有运行状态时保存停止报告，清理后 `reset` 再 `run` |
 | `GIT_BLOCKED` / `GIT_CONFLICT` | Git 命令失败 / no-ff 合并失败（功能分支保留） |
 | `UNSAFE_CONTAINMENT` | 子进程树没能在受控方式下回收 |
 
@@ -167,7 +167,7 @@
 | `design` | `{change, answers, facts}` | `{summary, touched:[path], design, questions:[string], facts?}`。questions 非空停 `NEEDS_INPUT`；`design` 不能为空；`touched` 必须是合同提交里存在的文件 |
 | `characterize` | `{change, test_roots, extend:[path], characterization, design}`（`characterization` 只在之前为 GREEN 时给，`design` 为方案或 null） | `{summary, touched, tests, questions:[]}`。只能写 `test_roots`（否则 `BOUNDARY_VIOLATION`，类别 `NOT_A_TEST_PATH`）；`touched` 必须是既有非测试文件；单元层必须全绿（否则 `CHARACTERIZATION_FAILED`） |
 | `implement` | `{change, attempt, max_attempts, failures, answers, characterization, design_plan, facts, mode}`（`characterization`、`design_plan` 可为 null；`facts` 为列表，`mode` 为 null 或 `root_cause`） | `{summary, questions:[string], design, facts?}`。通过直接改工作区实现；questions 非空停 `NEEDS_INPUT`；结构不符计一轮失败 |
-| `review` | `{change, attempt, layers, boundary, design_plan, answers, design, facts}` | `{verdict:"pass"|"fail"|"needs_input", summary, findings:[{message, perspective?, criterion_id?, evidence?, target?, location?, …}], questions, facts?}`；`pass` 不能带 findings 或 questions |
+| `review` | `{change, attempt, layers, boundary, design_plan, answers, design, facts}` | `{verdict:"pass"|"fail"|"needs_input", summary, findings:[{message, perspective?, criterion_id?, evidence?, target?, location?, …}], questions, facts?}`；功能红层也会调用，纯环境错误不会调用；`pass` 不能带 findings 或 questions，也不能覆盖任何红层 |
 | `survey` | `{baseline_version, foundation_root, required_documents, module_roots, integration_paths, reason}` | `{documents:[{path,content}]}`：1–40 份 `.md`、每份 ≤512 KB、八份必需文档齐全、不含配置里的密钥值或带口令的 URL |
 
 survey 的说明由 `foundation-survey` 技能包生成：引擎把 SKILL.md 与 references 原文附在角色说明后（优先用项目 `.claude/skills/` 或 `.codex/skills/` 里的副本）。
@@ -175,6 +175,8 @@ survey 的说明由 `foundation-survey` 技能包生成：引擎把 SKILL.md 与
 ### 归属、事实与语义修复
 
 review finding 可选 `target: implementation|oracle|contract`（缺省 implementation）及 `location: "path:line[:col]"`。非实现归属还须有合同内 `criterion_id` 和存在的安全源码行；oracle 只能指向当前验收套件或已锁定的特征化测试。`evidence` 可提供解释性说明，引擎不要求该字段非空。无效归属降回 implementation 并附 `attribution_note`，不会凭文字直接停到合同或判据修复。
+
+分层验证存在功能失败时，引擎仍调用受只读保护的 review，并把原始层结果与校验后的 review 一并写入失败记录。review 返回 `needs_input` 时先保留该轮证据再暂停；没有有效 finding 或提问时，停止摘要显示实际失败层。
 
 design、implement、review 可选返回 `facts: [{statement, location}]`（缺省空）；statement 最长 500 字符，location 必须定位真实安全源码行。引擎附角色与轮次后传给后续调用。supersede 的 product 请求包含 `{idea, message, current_product, supersede}`，其中 supersede 含旧变更 ID、理由、阻塞点、源分支、方案摘要、facts 与 evidence。新设计可收到 `prior_design` 与 `prior_facts`，明确标注旧变更来源，仅供参考。
 

@@ -35,7 +35,7 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
                 f"--reason <原因>；实现问题就提高 .storyloop/config.json 的 max_attempts 后 {run}，"
                 f"或另开新变更（运行开始后合同不能修订）")
     if status == "ORACLE_DEFECT":
-        return (f"必须保持成立的验收条件在旧代码上就失败了，是用例写错了：storyloop acceptance-repair {where} "
+        return (f"验收判据被判定存在缺陷，请根据停止报告中的证据修正：storyloop acceptance-repair {where} "
                 f"--reason <哪条断言写错了> 让 acceptance 角色修正，再 {run}")
     if status == "EXISTING_GREEN":
         return (f"变更验收套件在实现之前就已通过，证明不了 RED：需求若其实已经实现，放弃这个变更；"

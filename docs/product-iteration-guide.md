@@ -149,8 +149,8 @@ storyloop approve C:\work\my-project --change FEAT-20260916-001
 7. 特征化门：characterize 角色以方案的 `touched` 为必锁清单，为这些既有文件写只断言"必须不变"行为的测试（扩展的列表用 contains），引擎要求整个单元层（`unit_commands`）在旧代码加新测试上跑绿、只改了 `test_roots` 内的文件，然后提交。项目没配 `test_roots` 或单元命令时跳过。
 8. 调用实现代理（TDD 先红后绿）。代理提出真实产品歧义时停在 `NEEDS_INPUT`；回答不符合角色结构计一轮失败。
 9. 边界审计：底座、模块、集成点、测试、系统冒烟和 CI 边界；集成点变化转为底座提案，越界停在 `BOUNDARY_VIOLATION`。实现改了未被特征化锁定的既有文件时，引擎把它们还原到合同提交、补做特征化，这一轮计为失败。
-10. 依次跑：单元测试 → 集成测试 → 变更验收 → 系统冒烟 → 静态检查，每层各自出结论；任何一层红就带着证据进入下一轮尝试。验证结束后再审计一次，确认验证没有改动实现。
-11. 进行独立审查（对照方案、design 记录的 Tests First、知识库的积木与扩展机制）；实现问题回喂下一轮，判据问题停 `ORACLE_DEFECT`、合同问题停 `NEEDS_SPEC_FIX`，`needs_input` 停点。连续两轮失败特征相同，下一轮先调查根因；仍无进展停 `NO_PROGRESS`。
+10. 依次跑：单元测试 → 集成测试 → 变更验收 → 系统冒烟 → 静态检查，每层各自出结论。验证结束后再审计一次，确认验证没有改动实现。
+11. 进行独立只读审查（对照方案、design 记录的 Tests First、知识库的积木与扩展机制）；功能红层也交给 review 判断是实现、判据还是合同问题，纯环境错误则直接记录。原始分层证据与校验后的 review 一起保留，review 的 pass 不能覆盖红层。实现问题回喂下一轮，判据问题停 `ORACLE_DEFECT`、合同问题停 `NEEDS_SPEC_FIX`，`needs_input` 保存红层证据后停点并打断连续失败计数。连续两轮失败特征相同，下一轮先调查根因；仍无进展停 `NO_PROGRESS`。
 12. 有 `manual` 验收条件时停在 `MANUAL_ACCEPTANCE_REQUIRED`，等人 `accept` 后 `run` 继续。
 13. 提交实现；生成 `reports/storyloop/<change-id>/report.json` 和 `report.md`（含追溯、分层验证、成本）；写 design.md、decisions.md，把增量并入活规格并校验；报告与文档一起提交。
 14. 切回原分支执行本地 `--no-ff` 合并，将合并提交写回验收报告，提交合并回执并推进基线血缘。
@@ -254,7 +254,7 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 3. **可选操作**：选修判据、修合同重开或驳回审查归属；替换命令里的占位符并写清理由。
 4. **恢复**：先完成所选处理，再执行报告里的恢复命令。`next` 仍保留供旧脚本使用。
 
-`stop.attempts` 含每轮归属、失败特征短摘要；完整签名和失败载荷在 `run.failures`。`log` 同时显示代理进程失败，便于区分“改了但没通过”和“代理没有回答”。
+`stop.attempts` 含每轮归属、失败特征短摘要；完整签名和失败载荷在 `run.failures`。组合记录没有有效 finding 或 `needs_input` 时，摘要显示实际失败层，不会用 review pass 的摘要遮住红层。`log` 同时显示代理进程失败，便于区分“改了但没通过”和“代理没有回答”。
 
 例如，审查认为合同错误时：
 
@@ -329,7 +329,7 @@ storyloop run C:\work\my-project --change FEAT-20260916-001
 
 - `BASE_CHANGE_REQUIRED`：功能依赖底座修改。
 - `NEEDS_INPUT`：已批准合同仍出现真实产品歧义。在终端里执行 `run` 或 `approve` 时会直接逐条提问并继续（回车表示让代理按现有约定自行决定）；非交互环境用 `storyloop answer PATH --change ID --answer "…"`。回答按尝试号记录在 `.storyloop/state/answers/`，随后的实现和审查都能看到问答配对；问题未回答前 `run` 拒绝续跑，`--no-interactive` 可关闭终端提问。
-- `WORKSPACE_TAINTED`：代理或其他进程在工作区里产生了不该有的改动（未声明的被忽略文件、暂存、控制面文件）。常见原因：残留的 dev server、未声明的构建目录、代理超时或出错时已改动工作区。已有运行状态时会保存停止报告：人先判断原因，处理后执行 `storyloop reset PATH --change ID --reason "…"` 再 `storyloop run`。复位不动任何文件，被中断的实现轮次不计入尝试预算，理由写入运行状态。复位会恢复污染前的阶段；验收生成或 RED 阶段被中断时，下一次运行仍先证明 RED 并采样实现前基线，再进入实现。方案或特征化阶段也按同样流程复位。
+- `WORKSPACE_TAINTED`：代理或其他进程在工作区里产生了不该有的改动（未声明的被忽略文件、Git 不可见改动、暂存、控制面文件）。Git 不可见错误的消息最多列 20 条仓库相对路径，Python `StoryLoopError.details` 的 `invisible` 列出每项 `path` 与 `kind`（CLI 错误 JSON 不新增该字段）；这些字段用于捕获偶发问题，不表示其根因已经修复。常见原因：残留的 dev server、未声明的构建目录、代理超时或出错时已改动工作区。已有运行状态时会保存停止报告：人先判断原因，处理后执行 `storyloop reset PATH --change ID --reason "…"` 再 `storyloop run`。复位不动任何文件，被中断的实现轮次不计入尝试预算，理由写入运行状态。复位会恢复污染前的阶段；验收生成或 RED 阶段被中断时，下一次运行仍先证明 RED 并采样实现前基线，再进入实现。方案或特征化阶段也按同样流程复位。
 - `CHARACTERIZATION_FAILED`：特征化测试在旧代码上不绿，说明锁定现有行为的测试写错了。就地修正 `test_roots` 里的这些测试（不用提交）后 `run`：引擎不再调用代理，重跑整个单元层，绿了才提交这些测试并继续；仍然红就再停在这里。修正只能改测试文件，碰到其他路径会停在 `BOUNDARY_VIOLATION`。
 - 变更验收用例本身有缺陷（定位器、时序、数据准备）而实现无法通过时：由人判断并执行 `storyloop acceptance-repair PATH --change ID --reason "…"`（旧名 `smoke-repair`）。只在 `CONTRACT_COMMITTED`、`IMPLEMENTING`、`BUDGET_EXHAUSTED`、`NEEDS_INPUT`、`EXISTING_GREEN`、`ORACLE_DEFECT`、`NO_PROGRESS` 状态且已有合同提交时可用。`CONTRACT_COMMITTED` 支持套件已提交、但证明 RED 时因套件写入候选副本等副作用报 `BLOCKED` 的恢复；`PREPARING` 和已完成的 `PASSED` 不允许修复。acceptance 角色拿到现有套件文件和最近的失败证据修复自己的套件（不得放宽行为断言；`manifest.json` 由引擎重建，代理不用返回），新套件以 `test(<id>): repair acceptance suite` 提交到功能分支后，引擎从合同提交重建候选副本（`git archive` + 当前套件）重新证明 RED，之前的尝试作废、预算归零，修复记录写入运行状态和 decisions.md。实现代理永远不能改验收用例。
 - `MANUAL_ACCEPTANCE_REQUIRED`：自动验收、回归和独立审查都已通过，但合同里有 `manual` 验收条件。此时功能分支上的代码就是待验收版本；逐条执行 `storyloop accept PATH --change ID --criterion A2 --note "看到了什么"`，再 `storyloop run PATH --change ID` 生成报告并合并。验收记录与当时的代码指纹绑定，代码一变就失效。

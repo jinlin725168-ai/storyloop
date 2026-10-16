@@ -76,10 +76,13 @@ def _options(status: str, project: str, change_id: str, routed: bool) -> list[di
 def failure_view(failure: dict) -> dict:
     """Return the established compact view of an old or new attempt failure."""
     attempt = failure.get("attempt")
+    red = [name for name in LAYER_NAMES
+           if isinstance(failure.get(name), dict)
+           and failure[name].get("status") not in {"PASSED", "SKIPPED"}]
     if "contract" in failure:
         return {"attempt": attempt, "gate": "contract", "reason": failure["contract"].get("message", "")}
-    if "review" in failure:
-        review = failure["review"] or {}
+    review = failure.get("review") or {}
+    if "review" in failure and (review.get("findings") or review.get("verdict") == "needs_input" or not red):
         findings = review.get("findings") or []
         first = findings[0].get("message", "") if findings and isinstance(findings[0], dict) else ""
         reason = f"{len(findings)} finding(s): {first or review.get('summary', '')}"[:300]
@@ -95,9 +98,6 @@ def failure_view(failure: dict) -> dict:
         paths = failure["characterization"].get("uncharacterized") or []
         reason = "modified without a lock, restored and locked: " + ", ".join(paths[:5])
         return {"attempt": attempt, "gate": "characterization", "reason": reason}
-    red = [name for name in LAYER_NAMES
-           if isinstance(failure.get(name), dict)
-           and failure[name].get("status") not in {"PASSED", "SKIPPED"}]
     if red:
         reason = ", ".join(f"{name}={failure[name].get('status')}" for name in red)
         return {"attempt": attempt, "gate": "layers", "reason": reason}

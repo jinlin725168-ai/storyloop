@@ -68,7 +68,10 @@ class ProjectSecurityGateTests(unittest.TestCase):
                 (project / "runtime.flag").write_text("local-only\n", encoding="utf-8")
                 return {"summary": "used ignored state", "questions": []}
 
-            with self.assertRaisesRegex(StoryLoopError, "ignored"):
+            with self.assertRaisesRegex(
+                StoryLoopError,
+                r"Implementation created or modified ignored files: runtime\.flag",
+            ) as raised:
                 run_change(root, change_id, LoopServices(
                     generate_smoke=lambda project, change: smoke_payload(change_id),
                     implement=implement,
@@ -76,6 +79,9 @@ class ProjectSecurityGateTests(unittest.TestCase):
                         "verdict": "pass", "summary": "ok", "findings": [], "questions": [],
                     },
                 ))
+            self.assertEqual(raised.exception.details, {
+                "invisible": [{"path": "runtime.flag", "kind": "added"}],
+            })
             self.assertEqual(load_run_state(root, change_id)["status"], "WORKSPACE_TAINTED")
 
     def test_red_must_cover_every_automated_criterion(self):

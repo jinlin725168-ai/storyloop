@@ -134,6 +134,10 @@ INSTRUCTIONS = {
     ),
     "review": (
         "Independently review the real implementation against the approved stories and acceptance evidence. "
+        "payload.layers includes the actual verification evidence, including functional failures. "
+        "When a layer is red, investigate whether implementation, oracle, or contract owns its root cause; "
+        "a red test alone does not prove the implementation is wrong. A pass verdict cannot override a "
+        "failed layer. Preserve the approved behaviour and report evidence-backed findings. "
         + FOUNDATION_NOTE + "Treat re-implementation of a listed building block, or a feature placed "
         "against extension.md, as a finding. "
         "payload.design_plan (when present) is the architect's plan: an implementation that departs from its "

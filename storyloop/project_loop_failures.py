@@ -61,11 +61,17 @@ def _checked_findings(project: Path, change: dict, state: dict, review: dict) ->
     return checked
 
 
-def route_review(project: Path, change: dict, state: dict, review: dict) -> dict | None:
+def route_review(project: Path, change: dict, state: dict, review: dict,
+                 layers: dict | None = None) -> dict | None:
+    """Attribute checked findings without discarding the deterministic layer evidence."""
     findings = _checked_findings(project, change, state, review)
     review = {**review, "findings": findings}
-    entry = {"attempt": state["attempt"], "review": review}
+    entry = {"attempt": state["attempt"], **(layers or {}), "review": review}
     target = route(findings)
+    if review["verdict"] == "needs_input":
+        # Preserve this judged red attempt even though clarification takes priority over routing.
+        state["failures"].append(_failure(state, entry, "implement" if target == "implementation" else target))
+        return pause(project, state, "NEEDS_INPUT", questions=review["questions"])
     if target == "implementation":
         return record_failure(project, state, entry, "implement")
     state["failures"].append(_failure(state, entry, target))

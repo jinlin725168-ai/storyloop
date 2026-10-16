@@ -146,7 +146,9 @@ def _counted(failures: list[dict], epoch: int) -> list[dict]:
 
 
 def _consecutive(failures: list[dict]) -> bool:
-    """失败记录在真实轮次中必须相邻；问答等未记失败的轮次会中断连续性。"""
+    """失败必须在真实轮次中相邻；问答即使保留红层证据，也中断连续性。"""
+    if any((item.get("review") or {}).get("verdict") == "needs_input" for item in failures):
+        return False
     attempts = [item.get("attempt") for item in failures]
     return (all(type(attempt) is int and attempt > 0 for attempt in attempts)
             and all(right == left + 1 for left, right in zip(attempts, attempts[1:])))
