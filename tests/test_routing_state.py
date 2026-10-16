@@ -80,7 +80,7 @@ class RunRoutingTests(unittest.TestCase):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.root = Path(self.folder.name)
-        readiness_repository(self.root)
+        readiness_repository(self.root, module_roots=["app", "modules"], test_roots=["tests"])
         ready = inspect_readiness(self.root)
         approve_readiness(self.root, ready['digest'], 'Local tests verified')
         change = create_change(self.root, 'orders', assessed_product())
@@ -113,8 +113,22 @@ class RunRoutingTests(unittest.TestCase):
         def run_implement(project, context):
             budgets.append(context['max_attempts'])
             return implement(project, context)
+        from tests.test_routing_planning import answer
+        def design(project, context):
+            plan = answer()
+            plan['options'][0]['creates'] = ['modules/orders/service.py']
+            return plan
+        def characterize(project, context):
+            (project / 'tests/test_lock.py').write_text(
+                'import unittest\nfrom app.service import serve\n'
+                'class Lock(unittest.TestCase):\n'
+                '    def test_behavior(self):\n'
+                '        self.assertEqual(serve(), "ok")\n')
+            return {'summary': 'Lock serve', 'touched': ['app/service.py'],
+                    'tests': ['tests/test_lock.py'], 'questions': []}
         services = LoopServices(lambda p, c: smoke_payload(self.identifier),
-                                run_implement, passing_review)
+                                run_implement, passing_review, characterize=characterize,
+                                design=design)
         with self.assertRaises(StoryLoopError) as raised:
             run_change(self.root, self.identifier, services)
         self.assertEqual(raised.exception.code, 'AGENT_UNAVAILABLE')

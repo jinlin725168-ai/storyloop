@@ -93,6 +93,23 @@ ASSESSMENT = _obj({
                               'evidence': EVIDENCE}) for key in RISK_FIELDS}),
     'criteria': {'type': 'array', 'items': ASSESSMENT_CRITERION}})
 
+PLAN_OPTION = _obj({
+    'id': STRING, 'summary': STRING,
+    **ASSESSMENT['properties']['scope']['properties'],
+    'risks': ASSESSMENT['properties']['risks'], 'forbidden_paths': STRINGS,
+    'constraints': {'type': 'array', 'items': _obj(
+        {'criterion_id': STRING, 'path': STRING, 'rule': STRING})},
+    'regression': STRINGS, 'migration': _obj({'steps': STRINGS, 'reason': STRING}),
+    'dependencies': {'type': 'array', 'items': _obj({
+        'ecosystem': STRING, 'name': STRING, 'version': STRING,
+        'verification': _obj({'check_index': {'type': 'integer'}})})},
+    'principle_checks': {'type': 'array', 'items': _obj({
+        'principle_id': STRING, 'verdict': {'type': 'string', 'enum': [
+            'complies', 'deviates', 'not_applicable', 'unknown']}, 'reason': STRING})}})
+ROUTING_PLAN = _obj({'main_option': STRING,
+                    'options': {'type': 'array', 'items': PLAN_OPTION},
+                    'questions': STRINGS, 'design': STRING, 'facts': FACTS})
+
 SCHEMAS = {
     "product": _obj({
         "version": {"type": "integer", "enum": [1]}, "goal": STRING, "non_goals": STRINGS,
@@ -133,6 +150,8 @@ def schema_for(role: str, payload: dict) -> dict:
     """The engine-side schema of one call (acceptance changes shape in smoke-maintenance mode)."""
     if role == "acceptance" and payload.get("mode") == "smoke-maintenance":
         return SCHEMAS["smoke-maintenance"]
+    if role == "design" and payload.get("mode") == "routing-plan":
+        return ROUTING_PLAN
     return SCHEMAS[role]
 
 

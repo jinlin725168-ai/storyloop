@@ -10,7 +10,7 @@ import unittest
 
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
-from storyloop.changes import create_change
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.project_loop import LoopServices, load_run_state, run_change
 from tests.test_baseline_behavior import git
 from tests.test_change_nature import fix_product, nature_repository, refactor_product
@@ -78,6 +78,11 @@ class RefactorEndToEndTests(unittest.TestCase):
                         "tests": ["tests/test_lock_service.py"], "questions": []}
 
             def implement(project, context):
+                from storyloop.storage import load_json
+                from storyloop.smoke import RED_EVIDENCE
+                red = load_json(project / '.storyloop/evidence' / change_id / RED_EVIDENCE)
+                self.assertEqual(red['status'], 'RED')
+                self.assertTrue(red['suite_digests'])
                 (project / "modules/orders/service.py").write_text("VALUE = 1\n", encoding="utf-8")
                 return {"summary": "removed legacy", "questions": []}
 

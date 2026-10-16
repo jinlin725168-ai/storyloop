@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .planning import plan_projection, required_locks
 from .answers import load_answers
 from .baseline import _git
 from .facts import merge_facts
@@ -29,6 +30,8 @@ if TYPE_CHECKING:  # the loop imports this module; the services type is only an 
 
 
 def design_plan(state: dict) -> dict | None:
+    if state.get("routing", {}).get("version") == 1:
+        return plan_projection(state)
     plan = state.get("design_plan") or {}
     if plan.get("status") != "DONE":
         return None
@@ -130,13 +133,22 @@ def ensure_characterization(project: Path, change: dict, state: dict, services: 
     elif services.characterize is None:
         reason = "no characterize service"
     if reason:
-        if nature_of(change["product"]) == "refactor":
+        if nature_of(change["product"]) == "refactor" or _mandatory_locks(change, state, config):
             # Characterization is a refactor's behaviour oracle; without it nothing proves "unchanged".
-            raise StoryLoopError(f"Refactor needs its characterization gate ({reason})")
+            raise StoryLoopError(f"Refactor or heavy plan needs its characterization gate ({reason})")
         state["characterization"] = {"status": "SKIPPED", "reason": reason, "touched": [], "tests": []}
         save_run(project, state)
         return None
     return characterize_paths(project, change, state, services, config, extend=None)
+
+
+def _mandatory_locks(change: dict, state: dict, config: dict) -> list[str]:
+    plan = plan_projection(state)
+    if not plan:
+        return []
+    return required_locks(state['routing']['effective_tier'], nature_of(change['product']),
+                          [p for p in plan['touched'] if not matches_test_root(
+                              p, config['profile'].get('test_roots', []))])
 
 
 def characterize_paths(project: Path, change: dict, state: dict, services: LoopServices, config: dict,
@@ -144,7 +156,11 @@ def characterize_paths(project: Path, change: dict, state: dict, services: LoopS
     change_id = change["change_id"]
     profile = config["profile"]
     previous = state.get("characterization") or {"touched": [], "tests": []}
-    plan = design_plan(state)
+    plan = (plan_projection(state, locks_only=True, nature=nature_of(change['product']))
+            if state.get('routing', {}).get('version') == 1 else design_plan(state))
+    if plan and state.get("routing", {}).get("version") == 1:
+        plan['touched'] = [p for p in plan['touched']
+                           if not matches_test_root(p, profile.get('test_roots', []))]
     context = {"change": change, "test_roots": profile["test_roots"], "extend": list(extend or []),
                "characterization": previous if previous.get("status") == "GREEN" else None,
                "design": plan}

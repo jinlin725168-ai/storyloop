@@ -28,6 +28,7 @@ from .project_contracts import validate_agent_summary, validate_review
 from .project_git import current_branch, start_feature
 from .project_loop_finish import (complete_change, finalize_change, finish_merged, finish_receipting,
                                   finish_verified, passed_result)
+from .planning import ensure_routing_plan, review_focus
 from .project_loop_gates import (characterize_paths, design_plan, ensure_characterization, ensure_design,
                                  resume_characterization, uncharacterized_paths)
 from .project_loop_guards import (read_only_call, require_control_unchanged, require_git_visible,
@@ -142,8 +143,11 @@ def _resume_and_prepare(project: Path, change: dict, state: dict, services: Loop
         paused = resume_characterization(project, change, state, config)
         if paused is not None:
             return paused
-    paused = ensure_design(project, change, state, services, config) or \
-        ensure_characterization(project, change, state, services, config)
+    plan_gate = ensure_routing_plan if is_routed(change, state) else ensure_design
+    paused = plan_gate(project, change, state, services, config)
+    if paused is None:
+        # Routed design approval and consistency gates belong here, before characterization.
+        paused = ensure_characterization(project, change, state, services, config)
     if paused is not None:
         return paused
     return None
@@ -411,7 +415,7 @@ def _perform_review(
                "facts": list(state.get("facts") or []),
                "layers": layers, "boundary": boundary, "design_plan": design_plan(state),
                "answers": load_answers(project, change["change_id"]),
-               "design": state.get("design") or ""}
+               "design": state.get("design") or "", **review_focus(state)}
     try:
         return read_only_call(
             project, change["change_id"], lambda: services.review(project, context)

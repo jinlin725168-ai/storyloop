@@ -146,6 +146,7 @@ INSTRUCTIONS = {
         + FACTS_NOTE
     ),
     "review": (
+        "Use payload.review_focus when provided to organize the single review; it never waives any checks. "
         "Independently review the real implementation against the approved stories and acceptance evidence. "
         "payload.layers includes the actual verification evidence, including functional failures. "
         "When a layer is red, investigate whether implementation, oracle, or contract owns its root cause; "
@@ -173,6 +174,17 @@ INSTRUCTIONS = {
         + FACTS_NOTE
     ),
     "design": (
+        "When payload.mode is routing-plan, use the routing-plan output schema instead of the legacy "
+        "summary/touched schema below. Return main_option, 1-3 genuinely distinct options, questions, "
+        "design and optional facts. Each option needs id, summary, touched, creates, interfaces, symbols "
+        "({path,symbol} covering every existing business file), intake-shaped risks with evidence, "
+        "forbidden_paths, constraints ({criterion_id,path,rule}), regression steps, migration "
+        "({steps,reason}; explain if none), dependencies ({ecosystem,name,version,verification:{check_index}}), "
+        "and principle_checks ({principle_id,verdict,reason}; verdict complies/deviates/not_applicable/unknown). "
+        "Use existing principle IDs; no configured principles means []. Evidence locations are path:line, "
+        "search_scope contains relative paths. Do not generate plan id, binding or status. Unknown scope "
+        "or risk needs clarification; never invent zero references. Do not write files. "
+        "Otherwise use the legacy answer described below. "
         "You are the architect. The contract is approved and its acceptance suite already proved RED; "
         "before anyone writes code, produce the solution design. "
         + FOUNDATION_NOTE + "Follow extension.md for where each layer's files go, reuse what "
