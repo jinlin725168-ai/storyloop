@@ -7,10 +7,38 @@ from storyloop.baseline import bootstrap_project, load_project_config
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import invoke_project_agent
 from storyloop.storage import write_json
-from tests.test_baseline_behavior import repository
+from tests.test_baseline_behavior import git, repository
 
 
 class ProjectAgentTests(unittest.TestCase):
+    def test_implement_request_allows_existing_and_new_module_and_test_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            (root / "app").mkdir()
+            (root / "app/cli.py").write_text("VALUE = 0\n", encoding="utf-8")
+            (root / "tests").mkdir()
+            (root / "tests/test_cli.py").write_text("pass\n", encoding="utf-8")
+            git(root, "add", "app", "tests")
+            git(root, "commit", "-q", "-m", "app")
+            bootstrap_project(root, {"module_roots": ["app"], "test_roots": ["tests"]})
+            config = load_project_config(root)
+            config["adapter"] = "manual"
+            write_json(root / ".storyloop/config.json", config)
+
+            with self.assertRaisesRegex(StoryLoopError, "Manual input"):
+                invoke_project_agent(root, "implement", {"change": {"change_id": "FEAT-1"}})
+            request = json.loads(
+                (root / ".storyloop/requests/project-implement.json").read_text(encoding="utf-8")
+            )
+            instructions = request["instructions"]
+            self.assertIn("both existing and new files under the configured module roots and test roots",
+                          instructions)
+            self.assertIn(".storyloop/config.json", instructions)
+            self.assertIn("integration path or foundation file", instructions)
+            self.assertIn("existing non-test file outside its `touched` list", instructions)
+            self.assertNotIn("Modify only new files", instructions)
+
     def test_manual_agent_response_is_bound_to_exact_request_and_consumed(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

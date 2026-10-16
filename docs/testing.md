@@ -55,7 +55,11 @@
 
 单元测试不调用模型。真实闭环在目标仓库上跑，记录在 [案例与成本参考](case-studies.md)；入门教程（[tutorial.md](tutorial.md)）用 `examples/todo-demo/` 可在本机复现一次。
 
-子项目 2a 的 [Q8 验收](superpowers/specs/2026-10-14-子项目2a-纠偏-design.md#2-需要确认的设计取舍) 尚未执行：需在 todo-demo 上验证合同矛盾 → `NEEDS_SPEC_FIX` → 修订重开 → PASSED，以及 A33 型判据缺陷 → 首轮 `ORACLE_DEFECT` → 修判据 → PASSED。真实模型调用产生费用，须获授权后再跑；自动化假代理测试不能替代这两项验收。2026-10-16 本次工作分支执行 `.venv/bin/python -m unittest discover -s tests -t .`：405 项、890.334 秒，`OK (skipped=1)`；审查修复后的 92 项定点回归通过，独立整分支审查发现已修复并复审通过。
+子项目 2a 的 [Q8 验收](superpowers/specs/2026-10-14-子项目2a-纠偏-design.md#13-实现差异与验收状态) 已获授权执行，使用隔离 todo-demo 与原生 Codex。实际通过路径为 `NO_PROGRESS` → `supersede --reason` → 新变更 PASSED，以及修复实现提示后重构 PASSED；未触发原定 `NEEDS_SPEC_FIX` 与 `ORACLE_DEFECT`，归属分流的自动测试是独立证据，不能替代这两个真实停点。
+
+31 次角色调用中有 3 次失败（2 次 Claude 订阅禁用、1 次原生 Codex 停滞）；旧合同还实际触发 product、acceptance 各一次语义补正。Codex 未报告费用，账本 `cost_usd` 为 null，金额未知。两个通过变更各有 9 项单元测试、6 项验收通过；integration、smoke、checks 未配置，均 SKIPPED。
+
+2026-10-16 自动测试记录：此前 `.venv/bin/python -m unittest discover -s tests -t .` 运行 405 项、890.334 秒，`OK (skipped=1)`，审查修复后的 92 项定点回归通过。本轮加入真实验收修复后，全量 406 项、894.176 秒，1 ERROR、1 skipped：`test_an_extend_lock_cannot_mask_a_deleted_test` 触发 ignored-file 保护；单测和有限前序组合复现均通过，根因尚未定位。最终通过仓库外诊断包装运行同一全量：`/home/jinlin/work/storyloop/.venv/bin/python /tmp/storyloop-q8-diagnostic-runner.py`，407 项、899.306 秒，`OK (skipped=1)`。包装仅在 ignored-file 异常时补充路径和 Git 状态，不改变引擎判断；输出中的拦截记录均为安全测试预期行为。前一次非预期错误未复现，不据此宣称已定位或修复其根因。
 
 ## 四、会被跳过的测试
 

@@ -26,8 +26,8 @@ if TYPE_CHECKING:  # the loop imports this module; the services type is only an 
     from .project_loop import LoopServices
 
 
-REPAIRABLE = {"IMPLEMENTING", "BUDGET_EXHAUSTED", "NEEDS_INPUT", "EXISTING_GREEN", "ORACLE_DEFECT",
-              "NO_PROGRESS"}
+REPAIRABLE = {"CONTRACT_COMMITTED", "IMPLEMENTING", "BUDGET_EXHAUSTED", "NEEDS_INPUT",
+              "EXISTING_GREEN", "ORACLE_DEFECT", "NO_PROGRESS"}
 
 
 def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServices | None = None,
@@ -46,7 +46,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     require(path.exists(), "Repair needs a started run with a committed contract")
     state = load_json(path)
     require(state.get("status") in REPAIRABLE and state.get("contract_commit"),
-            f"Acceptance repair is only possible while implementing or after EXISTING_GREEN / ORACLE_DEFECT "
+            f"Acceptance repair needs a committed contract that has not completed "
             f"(current: {state.get('status')})")
     require(current_branch(project) == state["feature_branch"], "Check out the run's feature branch first")
     if services is None:

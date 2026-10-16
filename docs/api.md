@@ -36,7 +36,8 @@
 
 | 状态 | 含义 | 能否 `run` 续跑 |
 |---|---|---|
-| `PREPARING` / `CONTRACT_READY` / `CONTRACT_COMMITTED` | 建分支、物化合同、生成并提交验收套件、证明 RED | 能 |
+| `PREPARING` / `CONTRACT_READY` | 建分支、物化合同、生成验收套件 | 能 |
+| `CONTRACT_COMMITTED` | 合同与套件已提交，待证明 RED | 能；套件副作用阻断 RED 时可先 `acceptance-repair` |
 | `ORACLE_DEFECT` | RED 检查或审查发现判据缺陷 | `acceptance-repair`；仅审查归属可用 `run --overrule TEXT` |
 | `NEEDS_SPEC_FIX` | 审查发现合同缺陷 | `change --supersede ID --message TEXT`，或 `run --overrule TEXT` |
 | `NO_PROGRESS` | 根因调查后失败特征未变且无原失败用例转绿 | 处理后 `run`；或修判据、修合同重开 |
@@ -73,6 +74,8 @@
 `run --overrule` 必须给非空理由，只允许审查判定的 `ORACLE_DEFECT` 或 `NEEDS_SPEC_FIX`。对应发现改为 `implementation` 并重算归属；混合发现中剩余的判据问题仍会停下。实现前 RED 检查的判据错误不可驳回。
 
 `change --supersede` 与 `--idea`、`--change` 互斥，必须有非空 `--message`。除 `NEEDS_SPEC_FIX` 外必须有 `--reason`；`--reason` 只用于 supersede。允许的旧运行状态为 `NEEDS_SPEC_FIX`、`BUDGET_EXHAUSTED`、`NO_PROGRESS`、`ORACLE_DEFECT`、`EXISTING_GREEN`、`NEEDS_INPUT`、`IMPLEMENTING`、`BOUNDARY_VIOLATION`、`CHARACTERIZATION_FAILED`。已合并的变更不允许作废。重复同一修订请求返回已有新草案，不重复创建；新运行必须从旧运行的当前源分支启动，不能从旧功能分支继续。
+
+`acceptance-repair` 要求已有合同提交，允许的运行状态为 `CONTRACT_COMMITTED`、`IMPLEMENTING`、`BUDGET_EXHAUSTED`、`NEEDS_INPUT`、`EXISTING_GREEN`、`ORACLE_DEFECT`、`NO_PROGRESS`。其中 `CONTRACT_COMMITTED` 用于套件已提交、证明 RED 时因套件写入候选副本等副作用报 `BLOCKED` 的恢复；`PREPARING` 与 `PASSED` 仍禁止修复。修复套件提交后，引擎仍从合同提交重建候选副本并重新证明 RED，不跳过判据门。
 
 ### 错误码
 

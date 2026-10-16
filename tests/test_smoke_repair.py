@@ -39,6 +39,17 @@ def weak_payload(change_id: str) -> dict:
     return payload
 
 
+def self_writing_payload(change_id: str) -> dict:
+    """Fails RED proof because the suite writes an unprotected sibling file in its candidate."""
+    payload = good_payload(change_id)
+    payload["files"][0]["content"] = (
+        "from pathlib import Path\n"
+        "Path(__file__).with_suffix('.observation.json').write_text('{}', encoding='utf-8')\n"
+        "raise SystemExit(1)\n"
+    )
+    return payload
+
+
 def services(change_id: str, smoke) -> LoopServices:
     def implement(project, context):
         target = project / "modules/orders/service.py"
@@ -68,6 +79,43 @@ class CandidateTests(unittest.TestCase):
 
 
 class SmokeRepairTests(unittest.TestCase):
+    def test_contract_committed_before_red_can_repair_a_self_writing_suite(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"test_commands": []})
+            value = rich_product(); value["questions"] = []
+            change_id = create_change(root, "orders", value, now=lambda: NOW)["change_id"]
+            approve_change(root, change_id, now=lambda: NOW)
+
+            with self.assertRaisesRegex(StoryLoopError, "Protected smoke suite was modified") as raised:
+                run_change(root, change_id,
+                           services(change_id, lambda p, s: self_writing_payload(change_id)))
+            self.assertEqual(raised.exception.code, "BLOCKED")
+            stopped = load_run_state(root, change_id)
+            self.assertEqual(stopped["status"], "CONTRACT_COMMITTED")
+            self.assertEqual(stopped["attempt"], 0)
+            self.assertNotIn("red_evidence_sha256", stopped)
+            suite = root / "acceptance/changes" / change_id
+            self.assertFalse((suite / "flow.observation.json").exists())
+
+            result = repair_smoke(
+                root, change_id, "acceptance test writes an observation beside itself",
+                services(change_id, lambda p, s: good_payload(change_id)), now=lambda: NOW,
+            )
+            self.assertEqual(result["status"], "ACCEPTANCE_REPAIRED", result)
+            repaired = load_run_state(root, change_id)
+            self.assertEqual(repaired["status"], "IMPLEMENTING")
+            self.assertEqual(repaired["attempt"], 0)
+            self.assertTrue(repaired["red_evidence_sha256"])
+            self.assertEqual(repaired["oracle"]["baseline"], {"unit": [], "integration": []})
+            self.assertEqual(repaired["repairs"][0]["reason"],
+                             "acceptance test writes an observation beside itself")
+
+            done = run_change(root, change_id,
+                              services(change_id, lambda p, s: good_payload(change_id)))
+            self.assertEqual(done["status"], "PASSED", done)
+
     def test_repair_replaces_suite_reproves_red_at_contract_commit_and_run_passes(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -128,8 +176,20 @@ class SmokeRepairTests(unittest.TestCase):
             with self.assertRaises(StoryLoopError):
                 repair_smoke(root, change_id, "too early", services(change_id, lambda p, s: good_payload(change_id)))
             approve_change(root, change_id, now=lambda: NOW)
+
+            def unavailable(project, change):
+                raise StoryLoopError("acceptance generator unavailable")
+
+            with self.assertRaisesRegex(StoryLoopError, "generator unavailable"):
+                run_change(root, change_id, services(change_id, unavailable))
+            self.assertEqual(load_run_state(root, change_id)["status"], "PREPARING")
+            with self.assertRaisesRegex(StoryLoopError, "current: PREPARING"):
+                repair_smoke(root, change_id, "still too early",
+                             services(change_id, lambda p, s: good_payload(change_id)))
+
             run_change(root, change_id, services(change_id, lambda p, s: good_payload(change_id)))
-            with self.assertRaises(StoryLoopError):
+            self.assertEqual(load_run_state(root, change_id)["status"], "PASSED")
+            with self.assertRaisesRegex(StoryLoopError, "current: PASSED"):
                 repair_smoke(root, change_id, "already passed", services(change_id, lambda p, s: good_payload(change_id)))
 
 

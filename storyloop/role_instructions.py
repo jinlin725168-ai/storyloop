@@ -104,11 +104,13 @@ INSTRUCTIONS = {
         "and keep every assertion about required behaviour."
     ),
     "implement": (
-        "Implement the approved change in this repository. Modify only new files under configured module "
-        "roots. If an integration or foundation file must change, explain that need without editing it. "
+        "Implement the approved change in this repository. Read profile.module_roots and profile.test_roots "
+        "from .storyloop/config.json before editing. You may create or modify both existing and new files under "
+        "the configured module roots and test roots, subject to the protected paths below. If an integration "
+        "path or foundation file must change, explain that need without editing it. "
         "payload.design_plan (when present) is the architect's plan: follow its Files, Data And Interfaces and "
-        "Decisions; modify no existing file outside its `touched` list; if you must deviate, say exactly why in "
-        "the summary. "
+        "Decisions; modify no existing non-test file outside its `touched` list; if you must deviate, say exactly "
+        "why in the summary. "
         + FOUNDATION_NOTE + "Follow extension.md for where a new feature's files go and reuse what "
         "building-blocks.md lists instead of re-implementing it. "
         "Never delete an existing test unless the contract's test_removals lists it. In a refactor, behaviour "
