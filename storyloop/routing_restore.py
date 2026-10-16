@@ -54,3 +54,22 @@ def resume_restore(project: Path, state: dict) -> None:
         save_run(project, state)
     restore['phase'] = 'DONE'
     save_run(project, state)
+
+
+def retire_restore(state: dict) -> None:
+    """Retire a completed write intent after all gates; keep its mandatory locks and audit history."""
+    planning = state['planning']
+    restore = planning.get('restore')
+    if not restore:
+        return
+    require(restore['phase'] == 'DONE' and all(entry['done'] for entry in restore['paths']),
+            'Cannot retire pending restore intent')
+    planning.setdefault('restore_history', []).append({**restore, 'retired_attempt': state['attempt']})
+    planning.pop('restore')
+
+
+def restore_lock_paths(state: dict) -> set[str]:
+    """Restoring source requires coverage even after the write intent has retired."""
+    planning = state.get('planning', {})
+    restores = [*planning.get('restore_history', []), planning.get('restore', {})]
+    return {entry['path'] for restore in restores for entry in restore.get('paths', [])}

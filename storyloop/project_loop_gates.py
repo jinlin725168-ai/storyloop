@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .planning import plan_projection, required_locks
+from .routing_restore import restore_lock_paths
 from .characterization_locks import (capture_locks, routed_coverage, require_saved_coverage, verified_locks)
 from .answers import load_answers
 from .baseline import _git
@@ -160,8 +161,7 @@ def _mandatory_locks(change: dict, state: dict, config: dict) -> list[str]:
     required = required_locks(state['routing']['effective_tier'], nature_of(change['product']),
                               [p for p in plan['touched'] if not matches_test_root(
                                   p, config['profile'].get('test_roots', []))])
-    restored = state.get('planning', {}).get('restore', {}).get('paths', [])
-    return sorted(set(required) | {entry['path'] for entry in restored})
+    return sorted(set(required) | restore_lock_paths(state))
 
 
 def characterize_paths(project: Path, change: dict, state: dict, services: LoopServices, config: dict,

@@ -7,7 +7,7 @@ from .intake import digest
 from .planning import ensure_routing_plan
 from .project_loop_gates import ensure_characterization, ensure_design, resume_characterization
 from .project_loop_support import pause, save_run
-from .routing_restore import resume_restore
+from .routing_restore import resume_restore, retire_restore
 from .routing_characterization import candidate_manifest, verify_characterization_candidate
 from .routing_state import is_routed
 from .routing_upgrade import check_l3
@@ -58,6 +58,7 @@ def prepare_execution(project, change, state, services, config):
             return result
         planning.pop('characterization_input', None)
         state.pop('phase', None)
+        retire_restore(state)
         planning.update(phase='READY', execution_digest=implementation_digest(project))
         planning['processed_candidate'] = planning['candidate_digest']
         save_run(project, state)
