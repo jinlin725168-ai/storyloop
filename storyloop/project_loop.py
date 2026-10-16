@@ -10,23 +10,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import hashlib
 from pathlib import Path
 from typing import Callable
 
 from .answers import _pending as _unanswered, load_answers
-from .approvals import materialize_approved_change
 from .baseline import _git, load_baseline, load_project_config, verify_baseline
 from .boundaries import capture_snapshot
 from .changes import load_change
+from .intake import require_intake
+from .routing_state import is_routed, open_routing, run_config
 from .manual_acceptance import load_manual_acceptance, pending_manual_criteria
 from .failure_attribution import layer_attribution, next_mode
 from .facts import merge_facts
 from .models import StoryLoopError, require, text
-from .openspec_docs import validate_with_cli
 from .project_boundaries import audit_project_changes
 from .project_contracts import validate_agent_summary, validate_review
-from .project_git import commit_paths, current_branch, start_feature
+from .project_git import current_branch, start_feature
 from .project_loop_finish import (complete_change, finalize_change, finish_merged, finish_receipting,
                                   finish_verified, passed_result)
 from .project_loop_gates import (characterize_paths, design_plan, ensure_characterization, ensure_design,
@@ -35,16 +34,16 @@ from .project_loop_guards import (read_only_call, require_control_unchanged, req
                                   verify_read_only_snapshot, write_safely)
 from .project_loop_failures import (apply_overrule, epoch_of, record_boundary, record_failure,
                                     require_routed_choice, route_review)
-from .project_loop_support import control_digest, pause, relative_files, run_path, save_run
-from .oracle_counts import check_layers, ensure_baseline
+from .project_loop_support import control_digest, pause, run_path, save_run
+from .oracle_counts import check_layers
+from .project_preparation import _prepare_acceptance
 from .project_profile import layer_commands
 from .processutil import redact
 from .project_receipt import recover_completed_merge
 from .system_smoke import run_system_smoke_isolated
-from .smoke import (RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, load_smoke_manifest, protection_path,
-                    validate_suite, without_manifest_echo)
-from .semantic_repair import REPAIR_KEYS, answer_with_repair
-from .smoke import suite_relative, suite_root as acceptance_suite_root
+from .smoke import RESULT_EVIDENCE
+from .semantic_repair import REPAIR_KEYS
+from .smoke import suite_relative
 from .skills import ROLE_SKILLS, used_skills
 from .smoke_runner import implementation_digest, run_commands_isolated, run_smoke_isolated
 from .storage import load_json, locked
@@ -99,7 +98,22 @@ def _run_change_locked(
             "Change must be approved before automatic execution")
     services = services or _default_services()
     config = load_project_config(project)
-    state, start_attempt, fresh = _open_run(project, change)
+    routing = None
+    if saved is None and is_routed(change):
+        require_intake(project, change)
+        routing = open_routing(change, config.get("routing"), config)
+    state, start_attempt, fresh = _open_run(project, change, routing)
+    config = run_config(config, change, state)
+    save_run(project, state)
+    paused = _resume_and_prepare(project, change, state, services, config, fresh, overrule)
+    if paused is not None:
+        return paused
+    return _attempts(project, change, state, services, config, start_attempt)
+
+
+def _resume_and_prepare(project: Path, change: dict, state: dict, services: LoopServices,
+                        config: dict, fresh: bool, overrule: str | None) -> dict | None:
+    change_id = change['change_id']
     state.pop("stop", None)
     require_routed_choice(state, overrule)
     if overrule:
@@ -132,6 +146,11 @@ def _run_change_locked(
         ensure_characterization(project, change, state, services, config)
     if paused is not None:
         return paused
+    return None
+
+
+def _attempts(project: Path, change: dict, state: dict, services: LoopServices,
+              config: dict, start_attempt: int) -> dict:
     for attempt in range(start_attempt, config["max_attempts"] + 1):
         state["attempt"] = attempt
         state["status"] = "IMPLEMENTING"
@@ -151,7 +170,7 @@ def load_run_state(project: Path, change_id: str) -> dict:
     return load_json(run_path(Path(project).resolve(), change_id))
 
 
-def _open_run(project: Path, change: dict) -> tuple[dict, int, bool]:
+def _open_run(project: Path, change: dict, routing: dict | None = None) -> tuple[dict, int, bool]:
     change_id = change["change_id"]
     path = run_path(project, change_id)
     if path.exists():
@@ -182,6 +201,11 @@ def _open_run(project: Path, change: dict) -> tuple[dict, int, bool]:
             )
             _follow_base_upgrade(project, state)
         return state, int(state.get("attempt", 0)) + 1, False
+    return _start_run(project, change, routing)
+
+
+def _start_run(project: Path, change: dict, routing: dict | None) -> tuple[dict, int, bool]:
+    change_id = change['change_id']
     link = change.get("supersedes")
     if link:
         branch = current_branch(project)
@@ -191,6 +215,8 @@ def _open_run(project: Path, change: dict) -> tuple[dict, int, bool]:
     verify_baseline(project)
     state = _new_run_state(change_id, start_feature(project, change_id),
                            change["approval"]["contract_digest"])
+    if routing is not None:
+        state["routing"] = routing
     state["skills_used"] = used_skills(project, sorted({n for names in ROLE_SKILLS.values() for n in names}))
     save_run(project, state)
     return state, 1, True
@@ -335,86 +361,6 @@ def _resume_manual_acceptance(project: Path, change: dict, state: dict) -> dict:
     if paused is not None:
         return paused
     return complete_change(project, change, state, **verified)
-
-
-def _prepare_acceptance(
-    project: Path, change: dict, services: LoopServices, state: dict,
-) -> dict | None:
-    change_id = change["change_id"]
-    contract_root = materialize_approved_change(project, change_id)
-    state.setdefault("openspec", {})["delta"] = validate_with_cli(project, "change", change_id)
-    smoke_state = protection_path(project, change_id)
-    if smoke_state.exists():
-        load_smoke_manifest(project, change_id)
-    else:
-        def validate(answer: object) -> None:
-            require(isinstance(answer, dict) and set(answer) == {"files", "manifest"},
-                    "Smoke agent returned an invalid contract")
-            validate_suite(change, answer["files"], answer["manifest"])
-
-        generated = answer_with_repair(
-            lambda request: read_only_call(
-                project, change_id, lambda: services.generate_smoke(project, request)),
-            change, validate)
-        install_smoke_suite(project, change_id, without_manifest_echo(generated["files"]), generated["manifest"])
-    smoke_root = acceptance_suite_root(project, change_id)
-    paths = relative_files(project, [contract_root, smoke_root])
-    if state["status"] == "PREPARING":
-        state["status"] = "CONTRACT_READY"
-        save_run(project, state)
-    if state["status"] == "CONTRACT_READY":
-        state.update({"status": "CONTRACT_COMMITTED",
-                      "contract_commit": _ensure_contract_commit(project, state, paths)})
-        save_run(project, state)
-    try:
-        red = _ensure_red_evidence(project, change_id, state["contract_commit"])
-    except StoryLoopError as exc:
-        if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
-            raise
-        return pause(project, state, exc.code, error=str(exc),
-                     acceptance={"status": exc.code, **exc.details})
-    ensure_baseline(project, state, change["product"])  # sampled once, on the code before implementation
-    for key in ("acceptance", "error", "next"):
-        state.pop(key, None)
-    state.update({"status": "IMPLEMENTING",
-                  "red_evidence_sha256": red["evidence_sha256"]})
-    save_run(project, state)
-    return None
-
-
-def _ensure_contract_commit(project: Path, state: dict, paths: list[str]) -> str:
-    status = _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip()
-    if status:
-        result = commit_paths(
-            project, paths,
-            f"test({state['change_id']}): lock approved contract and smoke acceptance",
-        )
-        return result["commit"]
-    head = _git(project, "rev-parse", "HEAD").strip()
-    parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
-    changed = set(filter(None, _git(
-        project, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", head
-    ).split("\0")))
-    require(len(parents) == 2 and parents[1] == state["source_head"]
-            and changed == set(paths), "Cannot recover the contract commit safely")
-    return head
-
-
-def _ensure_red_evidence(project: Path, change_id: str, contract_commit: str) -> dict:
-    """RED is proven on the contract commit plus the current suite: never on the workspace, which after a
-    stop may already hold implementation edits that would make the new behaviour look present."""
-    path = project / ".storyloop/evidence" / change_id / RED_EVIDENCE
-    if path.exists():
-        value = load_json(path)
-        require(value.get("change_id") == change_id and value.get("status") == "RED",
-                "Stored RED evidence is invalid")
-        return {**value, "evidence_path": str(path),
-                "evidence_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
-    return read_only_call(
-        project, change_id,
-        lambda: run_smoke_isolated(project, change_id, expect_red=True, at_commit=contract_commit),
-        allowed_evidence=RED_EVIDENCE,
-    )
 
 
 LAYER_ORDER = ("unit", "integration", "acceptance", "smoke", "checks")

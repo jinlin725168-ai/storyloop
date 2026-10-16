@@ -69,7 +69,7 @@ class PrepareResetTests(unittest.TestCase):
             if stage == "acceptance":
                 run_change(root, change_id, LoopServices(generate, services.implement, services.review))
             else:
-                with patch("storyloop.project_loop.run_smoke_isolated", side_effect=red):
+                with patch("storyloop.project_preparation.run_smoke_isolated", side_effect=red):
                     run_change(root, change_id, services)
         self.assertEqual(raised.exception.code, "WORKSPACE_TAINTED")
 

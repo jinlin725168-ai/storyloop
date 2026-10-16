@@ -27,7 +27,8 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
             "Project must be the Git repository root")
     require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
             "Git worktree must be clean before initialization")
-    profile = validate_project_settings(project, overrides)
+    settings, budget = _bootstrap_settings(overrides)
+    profile = validate_project_settings(project, settings)
     tracked = _tracked_files(project)
     files = {relative: _sha256(project / relative) for relative in tracked}
     source_head = _git(project, "rev-parse", "HEAD").strip()
@@ -40,11 +41,11 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
         "mode": "product-iteration",
         "adapter": "codex",
         "agent_command": [],
-        "max_attempts": 3,
         "agent_timeout_seconds": 14400,  # liveness guard only; the budget is max_attempts
         "check_timeout_seconds": 300,
         "design_min_stories": 2,  # the architect step runs for changes with at least this many stories
         "profile": profile,
+        **budget,
     }
     baseline = {
         "version": 1,
@@ -64,6 +65,16 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
     require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
             "StoryLoop control files must stay outside Git changes")
     return _bootstrap_result(project, baseline, profile)
+
+
+def _bootstrap_settings(overrides: dict | None) -> tuple[dict, dict]:
+    settings = dict(overrides or {})
+    budget = {}
+    if 'max_attempts' in settings:
+        value = settings.pop('max_attempts')
+        require(type(value) is int and value > 0, 'Invalid max_attempts')
+        budget['max_attempts'] = value
+    return settings, budget
 
 
 def _bootstrap_result(project: Path, baseline: dict, profile: dict) -> dict:

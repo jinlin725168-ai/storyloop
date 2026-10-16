@@ -8,7 +8,7 @@ import unittest
 from storyloop.acceptance_repair import repair_smoke
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project, load_project_config
-from storyloop.changes import create_change
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.cli import parser, run_with_answers
 from storyloop.evidence_locations import evidence_location_exists
 from storyloop.models import StoryLoopError

@@ -6,9 +6,10 @@ from unittest.mock import patch
 
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
-from storyloop.changes import create_change
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
-from storyloop.project_loop import LoopServices, run_change
+from storyloop.project_loop import LoopServices, run_change, load_run_state
+from storyloop.changes import contract_digest
 from tests.support import product
 from tests.test_baseline_behavior import git, repository
 from tests.test_project_loop import smoke_payload
@@ -28,7 +29,8 @@ class ProjectLoopResumeTests(unittest.TestCase):
                 now=lambda: datetime(2026, 9, 16, tzinfo=timezone.utc),
             )
             change_id = state["change_id"]
-            approve_change(root, change_id)
+            approved = approve_change(root, change_id)
+            self.assertEqual(approved["approval"]["contract_digest"], contract_digest(product()))
 
             def base_change(project, context):
                 (project / "core.py").write_text("STABLE = False\n", encoding="utf-8")
@@ -42,6 +44,7 @@ class ProjectLoopResumeTests(unittest.TestCase):
                 },
             ))
             self.assertEqual(first["status"], "BASE_CHANGE_REQUIRED")
+            self.assertNotIn("routing", load_run_state(root, change_id))
             (root / "core.py").write_text("STABLE = True\n", encoding="utf-8")
 
             def feature_change(project, context):
@@ -50,13 +53,15 @@ class ProjectLoopResumeTests(unittest.TestCase):
                 path.write_text("VALUE = 1\n", encoding="utf-8")
                 return {"summary": "implemented", "questions": []}
 
-            second = run_change(root, change_id, LoopServices(
-                generate_smoke=lambda project, change: self.fail("smoke must not regenerate"),
-                implement=feature_change,
-                review=lambda project, context: {
-                    "verdict": "pass", "summary": "ok", "findings": [], "questions": [],
-                },
-            ))
+            with patch("storyloop.project_loop.require_intake",
+                       side_effect=AssertionError("legacy must not run intake")):
+                second = run_change(root, change_id, LoopServices(
+                    generate_smoke=lambda project, change: self.fail("smoke must not regenerate"),
+                    implement=feature_change,
+                    review=lambda project, context: {
+                        "verdict": "pass", "summary": "ok", "findings": [], "questions": [],
+                    },
+                ))
 
             self.assertEqual(second["status"], "PASSED")
             self.assertEqual(second["attempts"], 2)
@@ -71,7 +76,8 @@ class ProjectLoopResumeTests(unittest.TestCase):
                 now=lambda: datetime(2026, 9, 16, tzinfo=timezone.utc),
             )
             change_id = state["change_id"]
-            approve_change(root, change_id)
+            approved = approve_change(root, change_id)
+            self.assertEqual(approved["approval"]["contract_digest"], contract_digest(product()))
 
             def implement(project, context):
                 path = project / "modules/orders/service.py"

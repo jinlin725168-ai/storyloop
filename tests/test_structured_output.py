@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project, load_project_config
-from storyloop.changes import create_change
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import conform, invoke_project_agent
 from storyloop.project_loop import LoopServices, run_change
