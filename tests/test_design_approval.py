@@ -248,3 +248,67 @@ class DesignApprovalTests(unittest.TestCase):
         save_run(self.root, state)
         self.approve()
         self.assertNotIn('consistency', load_run_state(self.root, self.identifier)['planning'])
+
+    def failed_characterization(self):
+        response = answer()
+        alternate = deepcopy(response['options'][0])
+        alternate.update(id='alternate', creates=['app/extra.py'])
+        response['options'].append(alternate)
+        self.start(response)
+        self.approve()
+        seen = []
+        def characterize(project, context):
+            seen.append(context['design']['id'])
+            expected = 'wrong' if len(seen) == 1 else 'ok'
+            (project / 'tests/test_lock.py').write_text(
+                'import unittest\nfrom app.service import serve\n'
+                'class Lock(unittest.TestCase):\n'
+                '    def test_behavior(self):\n'
+                f'        self.assertEqual(serve(), {expected!r})\n')
+            return {'summary': 'Lock serve', 'touched': ['app/service.py'],
+                    'tests': ['tests/test_lock.py'], 'questions': []}
+        services = LoopServices(lambda p, c: smoke_payload(self.identifier),
+                                lambda p, c: {'summary': 'Reached implement', 'questions': ['Stop here']},
+                                passing_review, characterize=characterize, design=lambda p, c: response)
+        self.assertEqual(run_change(self.root, self.identifier, services)['status'],
+                         'CHARACTERIZATION_FAILED')
+        return services, seen
+
+    def assert_characterization_restarted(self, services, seen, option):
+        state = load_run_state(self.root, self.identifier)
+        self.assertEqual(state['status'], 'DESIGN_APPROVAL_REQUIRED')
+        self.assertEqual(state['phase'], 'planning')
+        self.assertEqual(state['attempt'], 0)
+        self.assertEqual(state['routing']['limit'], 4)
+        for key in ('pending_characterization', 'stop', 'unit', 'error', 'next'):
+            self.assertNotIn(key, state)
+        self.assertEqual(run_change(self.root, self.identifier, services)['status'], 'NEEDS_INPUT')
+        state = load_run_state(self.root, self.identifier)
+        self.assertEqual(seen, ['main', option])
+        self.assertEqual(state['characterization']['status'], 'GREEN')
+        self.assertEqual(set(state['characterization']['locks']), {'app/service.py'})
+        self.assertEqual(state['attempt'], 1)
+
+    def test_failed_characterization_change_option_restarts_gate(self):
+        services, seen = self.failed_characterization()
+        self.approve('alternate')
+        self.assert_characterization_restarted(services, seen, 'alternate')
+
+    def test_failed_characterization_stale_same_option_restarts_gate(self):
+        services, seen = self.failed_characterization()
+        state = load_run_state(self.root, self.identifier)
+        state['planning']['plan']['approval']['binding']['suite_digest'] = 'stale'
+        save_run(self.root, state)
+        self.approve()
+        self.assert_characterization_restarted(services, seen, 'main')
+
+    def test_idempotent_approval_preserves_failed_characterization_resume(self):
+        services, seen = self.failed_characterization()
+        before = load_run_state(self.root, self.identifier)
+        self.approve()
+        self.assertEqual(load_run_state(self.root, self.identifier), before)
+        path = self.root / 'tests/test_lock.py'
+        path.write_text(path.read_text().replace("'wrong'", "'ok'"))
+        self.assertEqual(run_change(self.root, self.identifier, services)['status'], 'NEEDS_INPUT')
+        self.assertEqual(seen, ['main'])
+        self.assertEqual(load_run_state(self.root, self.identifier)['characterization']['status'], 'GREEN')

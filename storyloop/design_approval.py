@@ -80,6 +80,10 @@ def _clear_checks(state: dict) -> None:
     state.pop('consistency', None)
     state.pop('characterization', None)
     state.pop('pending_characterization', None)
+    # Pending locks are gone: resume must rebuild them, not retry the old failed gate.
+    for key in ('stop', 'unit', 'error', 'next', 'questions'):
+        state.pop(key, None)
+    state.update(status='DESIGN_APPROVAL_REQUIRED', phase='planning')
 
 
 def _valid_design(plan: dict, binding: dict) -> bool:
