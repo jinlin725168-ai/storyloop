@@ -106,7 +106,8 @@ class LogAndNextStepTests(unittest.TestCase):
             self.assertTrue(result["next"])
             with patch("sys.stdout", new_callable=io.StringIO) as out:
                 code = cli.main(["status", str(root), "--change", change_id, "--json"])
-            self.assertEqual(code, 0)
+            self.assertEqual(code, 2)
+            self.assertEqual(json.loads(out.getvalue())["status"], "NO_PROGRESS")
             self.assertIn("storyloop run", json.loads(out.getvalue())["next"])
             with patch("sys.stdout", new_callable=io.StringIO) as out:
                 code = cli.main(["log", str(root), "--change", change_id])

@@ -124,7 +124,8 @@ def ensure_characterization(project: Path, change: dict, state: dict, services: 
                             config: dict) -> dict | None:
     """Layer 3 gate, once per change: lock the current behaviour of the paths about to change."""
     current = state.get("characterization") or {}
-    if current.get("status") in {"GREEN", "SKIPPED"}:
+    routed = state.get("routing", {}).get("version") == 1
+    if current.get("status") == "GREEN" or (current.get("status") == "SKIPPED" and not routed):
         if state.get('routing', {}).get('version') == 1:
             required = _mandatory_locks(change, state, config)
             missing = sorted(set(required) - set(verified_locks(project, state, config)))
@@ -133,6 +134,13 @@ def ensure_characterization(project: Path, change: dict, state: dict, services: 
                         'L3 requires a characterization service for missing locks')
                 return characterize_paths(project, change, state, services, config, extend=missing)
             require_saved_coverage(project, state, config, required)
+        return None
+    if (state.get('routing', {}).get('version') == 1
+            and state['routing']['effective_tier'] != 'heavy'
+            and nature_of(change['product']) != 'refactor'
+            and not _mandatory_locks(change, state, config)):
+        state['characterization'] = {'status': 'DEFERRED', 'touched': [], 'tests': []}
+        save_run(project, state)
         return None
     profile = config["profile"]
     reason = None
@@ -289,7 +297,8 @@ def uncharacterized_paths(project: Path, state: dict, boundary: dict, config: di
     """Pre-existing non-test files the implementation modified without a characterization lock."""
     characterization = state.get("characterization") or {}
     routed = state.get("routing", {}).get("version") == 1
-    if characterization.get("status") != "GREEN":
+    if characterization.get("status") != "GREEN" and not (
+            routed and characterization.get("status") == "DEFERRED"):
         return []
     roots = config["profile"].get("test_roots") or []
     touched = (set(verified_locks(project, state, config)) if routed

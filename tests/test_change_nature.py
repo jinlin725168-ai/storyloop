@@ -215,7 +215,8 @@ class RefactorGateTests(unittest.TestCase):
             git(root, "add", "."); git(root, "commit", "-q", "-m", "tests")
             bootstrap_project(root, {"unit_commands": [["{python}", "-V"]], "test_roots": ["tests"]})
             value = refactor_product()
-            change_id = create_change(root, "r", value, now=lambda: NOW)["change_id"]
+            from tests.routing_support import legacy_create_change
+            change_id = legacy_create_change(root, "r", value, now=lambda: NOW)["change_id"]
             from storyloop.approvals import approve_change
             approve_change(root, change_id, now=lambda: NOW)
             suite = {"files": [{"path": "s.py", "content": "import sys; sys.exit(1)\n"}],
@@ -226,7 +227,7 @@ class RefactorGateTests(unittest.TestCase):
                                     implement=lambda p, c: {"summary": "x", "questions": []},
                                     review=lambda p, c: {"verdict": "pass", "summary": "", "findings": [],
                                                          "questions": []})
-            with self.assertRaisesRegex(StoryLoopError, "Refactor needs its characterization gate"):
+            with self.assertRaisesRegex(StoryLoopError, "Refactor.*characterization gate"):
                 run_change(root, change_id, services)
 
 

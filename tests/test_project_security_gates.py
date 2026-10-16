@@ -7,7 +7,8 @@ import unittest
 
 from storyloop.approvals import approve_change, materialize_approved_change
 from storyloop.baseline import bootstrap_project, verify_baseline
-from storyloop.changes import create_change, draft_directory
+from storyloop.changes import draft_directory
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, load_run_state, run_change
 from storyloop.smoke import install_smoke_suite

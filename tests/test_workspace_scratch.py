@@ -14,7 +14,7 @@ import os
 from storyloop.approvals import approve_change
 from storyloop.boundaries import capture_snapshot
 from storyloop.baseline import bootstrap_project
-from storyloop.changes import create_change
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, run_change
 from tests.support import product

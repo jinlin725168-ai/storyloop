@@ -103,7 +103,8 @@ class OpenSpecGateTests(unittest.TestCase):
 
 class SupersededTests(unittest.TestCase):
     def _run(self, root: Path, value: dict) -> str:
-        state = create_change(root, "booking", value, now=lambda: NOW)
+        from tests.routing_support import legacy_create_change
+        state = legacy_create_change(root, "booking", value, now=lambda: NOW)
         change_id = state["change_id"]
         approve_change(root, change_id, now=lambda: NOW)
 

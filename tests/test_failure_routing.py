@@ -16,6 +16,7 @@ from storyloop.project_loop import LoopServices, load_run_state, run_change
 from storyloop.project_loop_failures import record_boundary
 from storyloop.storage import write_json
 from tests.support import product
+from tests.boundary_diagnostics import diagnose_core_boundary
 from tests.test_baseline_behavior import git, repository
 from tests.test_project_loop import smoke_payload
 
@@ -240,9 +241,10 @@ class BoundaryAttributionTests(unittest.TestCase):
                 (project / "core.py").write_text("VALUE = 2\n", encoding="utf-8")
                 return {"summary": "changed base", "questions": []}
 
-            result = run_change(root, change_id, LoopServices(
-                generate_smoke=lambda p, s: smoke_payload(change_id), implement=implement,
-                review=failing_review()))
+            with diagnose_core_boundary(root):
+                result = run_change(root, change_id, LoopServices(
+                    generate_smoke=lambda p, s: smoke_payload(change_id), implement=implement,
+                    review=failing_review()))
             state = load_run_state(root, change_id)
             self.assertEqual(result["status"], "BASE_CHANGE_REQUIRED")
             self.assertEqual(len(state["failures"]), 1)

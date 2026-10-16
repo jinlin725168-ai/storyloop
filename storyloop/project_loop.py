@@ -281,6 +281,9 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
         return result
     uncharacterized = uncharacterized_paths(project, state, boundary, config)
     if uncharacterized:
+        require(services.characterize is not None and config['profile'].get('test_roots')
+                and layer_commands(config['profile'], 'unit'),
+                'Changed existing paths require a configured characterization gate')
         # Existing behaviour must be locked before it is changed: restore, lock, and try again.
         _git(project, "checkout", state["contract_commit"], "--", *uncharacterized)
         paused = characterize_paths(project, change, state, services, config, extend=uncharacterized)

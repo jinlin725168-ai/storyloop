@@ -9,7 +9,7 @@ import unittest
 
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project, load_project_config
-from storyloop.changes import create_change
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.oracle_counts import check_layers
 from storyloop.project_loop import LoopServices, load_run_state, run_change
 from storyloop.storage import write_json
