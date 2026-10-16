@@ -19,6 +19,7 @@ def control_digest(
     relative_paths = [
         ".git/HEAD", ".git/config", ".git/info/exclude", ".git/packed-refs",
         ".storyloop/config.json", ".storyloop/baseline.json", "openspec/principles.json",
+        ".storyloop/state/readiness.json",
         f"openspec/changes/{change_id}/routing-plan.json",
         f".storyloop/state/changes/{change_id}.json",
         f".storyloop/state/smoke/{change_id}.json",
@@ -79,7 +80,7 @@ def pause(project: Path, state: dict, status: str, **details) -> dict:
     state.update(persisted_details)
     state["stop"] = build_stop(project, state, status, details)
     save_run(project, state)
-    hint = (details.get("next") or next_step(status, state["change_id"], project, details)
+    hint = (details.get("next") or next_step(status, state["change_id"], project, {**state, **details})
             or state["stop"]["resume"])
     return {"status": status, "change_id": state["change_id"], **details,
             "stop": state["stop"], "next": hint}

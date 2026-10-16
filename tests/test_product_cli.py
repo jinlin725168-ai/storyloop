@@ -7,7 +7,9 @@ from unittest.mock import patch
 from storyloop.baseline import bootstrap_project
 from storyloop.cli import dispatch, parser
 from storyloop.changes import load_change
-from tests.support import product
+from tests.test_intake import assessed_product as product
+from tests.routing_support import readiness_repository
+from storyloop.readiness import inspect_readiness, approve_readiness
 from tests.test_baseline_behavior import repository
 
 
@@ -20,8 +22,9 @@ class ProductCliTests(unittest.TestCase):
     def test_change_uses_ai_product_result_and_approve_runs_automatically(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            repository(root)
-            bootstrap_project(root)
+            readiness_repository(root)
+            ready = inspect_readiness(root)
+            approve_readiness(root, ready["digest"], "Local tests")
             args = parser().parse_args(["change", str(root), "--idea", "增加预订"])
             with patch("storyloop.cli.invoke_project_agent", return_value=product()):
                 created = dispatch(args)
@@ -41,8 +44,9 @@ class ProductCliTests(unittest.TestCase):
         "satisfied? approve" while the checklist still had blocking items that make approve refuse."""
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            repository(root)
-            bootstrap_project(root)
+            readiness_repository(root)
+            ready = inspect_readiness(root)
+            approve_readiness(root, ready["digest"], "Local tests")
             asking = product()
             asking["questions"] = [{"id": "Q1", "text": "Can a booking be cancelled?",
                                     "options": ["Yes", "No"], "recommended": "Yes", "why": "Frees rooms."}]

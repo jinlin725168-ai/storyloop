@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 
 from .baseline import _git
+from .routing_report import report_routing, routing_markdown
 from .changes import load_change
 from .models import require
 from .smoke import RESULT_EVIDENCE, load_smoke_manifest, smoke_digests
@@ -43,6 +44,7 @@ def generate_change_report(
     )
     report = {
         "version": 1,
+        "routing": report_routing(project, change),
         "status": "PASSED",
         "change_id": change_id,
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -219,6 +221,7 @@ def _render_markdown(report: dict) -> str:
     lines.extend(_correction_markdown(report.get("correction") or {
         "failures": [], "overrules": [], "supersedes": None}))
     lines.extend(["", "## 独立审查", "", _markdown(report["review"]["summary"]), ""])
+    lines.extend(routing_markdown(report.get("routing")))
     lines.extend(_telemetry_markdown(report.get("telemetry") or {}))
     return "\n".join(lines)
 

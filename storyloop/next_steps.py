@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shlex
+from .routing_report import routing_options
 
 
 def next_step(status: str | None, change_id: str | None, project: Path | str = "<project>",
               details: dict | None = None) -> str | None:
     """A copy-pasteable next action for a run status or error code; None when nothing is pending."""
     details = details or {}
-    change = change_id or "<change-id>"
+    options = routing_options(project, change_id, status, details)
+    if options:
+        return options[0]["command"]
+    project = shlex.quote(str(project))
+    change = shlex.quote(change_id or "<change-id>")
     where = f"{project} --change {change}"
     log = f"storyloop log {where}"
     run = f"storyloop run {where}"
@@ -41,6 +47,10 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
         return (f"变更验收套件在实现之前就已通过，证明不了 RED：需求若其实已经实现，放弃这个变更；"
                 f"若是用例没有断言新行为，storyloop acceptance-repair {where} --reason <原因> "
                 f"让 acceptance 角色加强套件并重证 RED，再 {run}")
+    return _execution_next(status, where, log, run)
+
+
+def _execution_next(status, where, log, run):
     if status == "CHARACTERIZATION_FAILED":
         return (f"特征化测试在旧代码上不绿：就地修正 test_roots 里的这些测试（它们只锁定现有行为），"
                 f"不用提交；{run} 会重跑单元层，绿了再提交并继续")
@@ -66,7 +76,7 @@ def draft_next(project: Path | str, change: dict) -> str:
     """A draft's next step names its open questions and blocking checklist items before suggesting approve."""
     from .requirement_checklist import blocking_items, evaluate_checklist
     change_id = change["change_id"]
-    where = f"{project} --change {change_id}"
+    where = shlex.join([str(project), "--change", change_id])
     questions = len(change["product"].get("questions") or [])
     blocking = len(blocking_items(evaluate_checklist(change["product"], Path(project))))
     if not questions and not blocking:

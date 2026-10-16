@@ -87,9 +87,13 @@ class SemanticRepairIntegrationTests(unittest.TestCase):
     def test_change_repairs_one_semantically_invalid_product(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            repository(root)
-            bootstrap_project(root)
-            answers = [semantic_invalid_product(), product()]
+            from tests.routing_support import readiness_repository
+            from tests.test_intake import assessed_product
+            from storyloop.readiness import inspect_readiness, approve_readiness
+            readiness_repository(root)
+            ready = inspect_readiness(root)
+            approve_readiness(root, ready['digest'], 'Local tests')
+            answers = [semantic_invalid_product(), assessed_product()]
             with patch("storyloop.cli.invoke_project_agent", side_effect=lambda p, r, payload: answers.pop(0)) as call:
                 created = dispatch(parser().parse_args([
                     "change", str(root), "--idea", "增加预订", "--no-interactive",

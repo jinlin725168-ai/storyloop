@@ -13,7 +13,7 @@ from storyloop.stop_report import STOP_STATUSES, build_stop, failure_view, rende
 
 KEYS = {
     "status", "phase", "completed", "last_verdict", "attempts", "blocker",
-    "evidence", "facts", "questions", "options", "resume",
+    "evidence", "facts", "questions", "options", "resume", "routing",
 }
 
 

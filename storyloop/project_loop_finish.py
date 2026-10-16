@@ -97,6 +97,8 @@ def finish_merged(project: Path, change: dict, state: dict) -> dict:
 def finish_receipting(project: Path, change: dict, state: dict) -> dict:
     integration = ensure_merge_receipt(project, state)
     advance_repository_head(project, integration)
+    from .readiness_lineage import advance_readiness
+    advance_readiness(project, {**state, "integration_commit": integration})
     state.update({"status": "FINALIZING", "integration_commit": integration,
                   "report_sha256": hashlib.sha256(Path(state["report"]).read_bytes()).hexdigest()})
     save_run(project, state)

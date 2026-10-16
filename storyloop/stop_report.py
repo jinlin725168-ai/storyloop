@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 import shlex
+from .routing_report import STATUSES, routing_options, routing_view
 
 
 LAYER_NAMES = ("unit", "integration", "acceptance", "smoke", "checks")
 PHASES = frozenset({"contract", "prepare", "implement", "verify", "finish"})
-STOP_STATUSES = frozenset({
+STOP_STATUSES = STATUSES | frozenset({
     "NEEDS_INPUT", "ORACLE_DEFECT", "EXISTING_GREEN", "CHARACTERIZATION_FAILED",
     "BOUNDARY_VIOLATION", "BASE_CHANGE_REQUIRED", "WORKSPACE_TAINTED",
     "BUDGET_EXHAUSTED", "NO_PROGRESS", "MANUAL_ACCEPTANCE_REQUIRED", "NEEDS_SPEC_FIX",
@@ -124,6 +125,8 @@ def _completed(state: dict) -> list[str]:
 
 
 def _phase(state: dict, status: str, details: dict) -> str:
+    if (state.get("planning") or {}).get("phase"):
+        return state["planning"]["phase"]
     explicit = details.get("phase") or state.get("phase")
     if explicit in PHASES:
         return explicit
@@ -193,9 +196,11 @@ def build_stop(project: Path | str, state: dict, status: str, details: dict) -> 
     project_text = str(project)
     change_id = str(state["change_id"])
     failures = state.get("failures") or []
-    options = _options(status, project_text, change_id, bool(state.get("routed")))
+    routed_options = routing_options(project, change_id, status, {**state, **details})
+    options = routed_options or _options(status, project_text, change_id, bool(state.get("routed")))
     return {
         "status": status,
+        "routing": routing_view(state),
         "phase": _phase(state, status, details),
         "completed": _completed(state),
         "last_verdict": _last_verdict(state, details),
@@ -210,7 +215,7 @@ def build_stop(project: Path | str, state: dict, status: str, details: dict) -> 
         "facts": list(details.get("facts") or state.get("facts") or []),
         "questions": list(details.get("questions") or state.get("questions") or []),
         "options": options,
-        "resume": (options[0]["command"] if status == "NEEDS_SPEC_FIX" else
+        "resume": (options[0]["command"] if status == "NEEDS_SPEC_FIX" or routed_options else
                    _command("storyloop", "run", project_text, "--change", change_id)),
     }
 
@@ -248,3 +253,12 @@ def _render_item(item: object) -> str:
     if isinstance(item, dict):
         return str(item.get("statement") or item.get("question") or item.get("message") or item)
     return str(item)
+
+
+def build_entry_stop(project: Path, status: str, details: dict) -> dict:
+    """Report a blocked entry without fabricating a run or implementation attempts."""
+    options = routing_options(project, details.get('change_id'), status, details)
+    return {'status': status, 'phase': 'intake', 'blocker': details.get('error', status),
+            'evidence': details.get('evidence', details.get('layers', {})),
+            'details': details, 'options': options,
+            'resume': options[0]['command'] if options else _command('storyloop', 'readiness', project)}

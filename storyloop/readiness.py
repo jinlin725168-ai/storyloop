@@ -91,8 +91,11 @@ def _inspect_readiness_locked(project: Path, *, refresh: bool = False) -> dict:
 def _record_digest(record: dict) -> str:
     layers = {name: {key: value for key, value in layer.items() if key != 'evidence_path'}
               for name, layer in record['layers'].items()}
-    return _digest({'version': 1, 'binding': record['binding'], 'layers': layers,
-                    'gaps': record['gaps'], 'blockers': record['blockers']})
+    content = {'version': 1, 'binding': record['binding'], 'layers': layers,
+               'gaps': record['gaps'], 'blockers': record['blockers']}
+    if record.get('lineage'):
+        content['lineage'] = record['lineage']
+    return _digest(content)
 
 
 def _valid_cached(record: dict, binding: dict) -> bool:
@@ -107,7 +110,10 @@ def _valid_cached(record: dict, binding: dict) -> bool:
 
 def _approved(record: dict) -> list[str]:
     approval = record.get('approval') or {}
-    if (approval.get('digest') == record['digest'] and approval.get('gaps') == record['gaps']
+    lineage = record.get('lineage') or {}
+    inherited = (lineage.get('approval_digest') == approval.get('digest')
+                 and all(lineage.get(key) for key in ('previous_digest', 'receipt_commit', 'report_commit')))
+    if ((approval.get('digest') == record['digest'] or inherited) and approval.get('gaps') == record['gaps']
             and isinstance(approval.get('reason'), str) and approval['reason'].strip()):
         return record['gaps']
     return []
