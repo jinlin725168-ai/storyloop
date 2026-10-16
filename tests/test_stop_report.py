@@ -26,6 +26,16 @@ def state_for(status: str, **extra) -> dict:
 
 
 class StopReportTests(unittest.TestCase):
+    def test_post_l3_ready_does_not_override_current_execution_phase(self):
+        state = state_for('MANUAL_ACCEPTANCE_REQUIRED',
+                          planning={'origin': 'L3', 'phase': 'READY'}, phase='planning')
+        stop = build_stop('/p', state, 'MANUAL_ACCEPTANCE_REQUIRED', {'phase': 'verify'})
+        self.assertEqual(stop['phase'], 'verify')
+        state.pop('phase')  # prepare_execution clears this once L3 reaches READY.
+        self.assertEqual(build_stop('/p', state, 'MANUAL_ACCEPTANCE_REQUIRED', {})['phase'], 'verify')
+        state['phase'] = 'implement'
+        self.assertEqual(build_stop('/p', state, 'BOUNDARY_VIOLATION', {})['phase'], 'implement')
+
     def test_every_stop_has_the_same_shape_and_parseable_commands(self):
         cli = parser()
         for status in STOP_STATUSES:

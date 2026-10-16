@@ -8,7 +8,7 @@ from .routing_report import STATUSES, routing_options, routing_view
 
 
 LAYER_NAMES = ("unit", "integration", "acceptance", "smoke", "checks")
-PHASES = frozenset({"contract", "prepare", "implement", "verify", "finish"})
+PHASES = frozenset({"contract", "prepare", "planning", "implement", "verify", "finish"})
 STOP_STATUSES = STATUSES | frozenset({
     "NEEDS_INPUT", "ORACLE_DEFECT", "EXISTING_GREEN", "CHARACTERIZATION_FAILED",
     "BOUNDARY_VIOLATION", "BASE_CHANGE_REQUIRED", "WORKSPACE_TAINTED",
@@ -125,10 +125,11 @@ def _completed(state: dict) -> list[str]:
 
 
 def _phase(state: dict, status: str, details: dict) -> str:
-    if (state.get("planning") or {}).get("phase"):
-        return state["planning"]["phase"]
     explicit = details.get("phase") or state.get("phase")
+    if explicit == "planning":
+        return (state.get("planning") or {}).get("phase") or explicit
     if explicit in PHASES:
+        # Planning checkpoints remain as history after execution resumes.
         return explicit
     routed = state.get("routed") or {}
     if routed.get("source") == "review" or status in {"MANUAL_ACCEPTANCE_REQUIRED", "NEEDS_SPEC_FIX"}:

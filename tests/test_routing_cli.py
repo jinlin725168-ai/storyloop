@@ -85,7 +85,8 @@ class RoutingCliTests(unittest.TestCase):
             self.assertTrue(payload['source_commit'])
 
     def test_planning_stop_quotes_exact_design_id(self):
-        state = {'change_id': 'ID', 'planning': {'phase': 'APPROVAL', 'plan': {'id': 'P'}}, 'routing': {}}
+        state = {'change_id': 'ID', 'phase': 'planning',
+                 'planning': {'phase': 'APPROVAL', 'plan': {'id': 'P'}}, 'routing': {}}
         stop = build_stop('/tmp/a b', state, 'DESIGN_APPROVAL_REQUIRED', {})
         self.assertEqual(shlex.split(stop['resume']),
                          ['storyloop', 'approve', '/tmp/a b', '--change', 'ID', '--design', 'P'])
@@ -191,6 +192,9 @@ class ExplicitApprovalIntegrationTests(unittest.TestCase):
     def test_cli_run_never_approves_then_explicit_cli_approval_continues(self):
         from storyloop.project_loop import run_change, load_run_state
         self.start()
+        self.assertEqual(self.state['phase'], 'planning')
+        self.assertNotIn('phase', self.state['planning'])
+        self.assertEqual(self.state['stop']['phase'], 'planning')
         with patch('storyloop.cli.run_change', side_effect=lambda p, c: run_change(p, c, self.services)):
             result = dispatch(parser().parse_args(['run', str(self.root), '--change', self.identifier, '--no-interactive']))
         self.assertEqual(result['status'], 'DESIGN_APPROVAL_REQUIRED')
