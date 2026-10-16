@@ -89,6 +89,8 @@ class PolicyTests(unittest.TestCase):
 
     def test_reasons_identify_rule_fields_and_original_values(self):
         result = evaluate(signals(stories=7), validate_policy(None))
+        self.assertIn({"rule_id": "HEAVY-SIZE", "fields": ["stories"],
+                       "values": [7]}, result["reasons"])
         self.assertIn({"rule_id": "SPLIT-SIZE", "fields": ["stories"],
                        "values": [7]}, result["reasons"])
 
@@ -114,6 +116,8 @@ class PolicyTests(unittest.TestCase):
             {"sensitive_paths": ["../secret"]},
             {"sensitive_paths": ["/secret"]},
             {"sensitive_paths": ["."]},
+            {"sensitive_paths": ["C:foo"]},
+            {"guard_paths": ["safe:name"]},
             {"guard_paths": ["safe/../../secret"]},
         )
         for value in invalid:

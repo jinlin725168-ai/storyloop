@@ -80,12 +80,11 @@ def _validate_paths(value: object, field: str) -> None:
     if not isinstance(value, list):
         raise StoryLoopError(f"Invalid routing policy field: {field}")
     for item in value:
-        if not isinstance(item, str) or not item or "\\" in item or "\x00" in item:
+        if (not isinstance(item, str) or not item or "\\" in item or "\x00" in item
+                or ":" in item):
             raise StoryLoopError(f"Unsafe routing path in {field}")
         path = PurePosixPath(item)
         if not path.parts or path.is_absolute() or "." in path.parts or ".." in path.parts:
-            raise StoryLoopError(f"Unsafe routing path in {field}")
-        if path.parts and path.parts[0].endswith(":"):
             raise StoryLoopError(f"Unsafe routing path in {field}")
 
 
@@ -155,6 +154,13 @@ def _base_reason(signals: dict, tier: str, unresolved: list[str]) -> dict:
 
 
 def _apply_size_rules(signals: dict, policy: dict, tier: str, reasons: list) -> tuple[str, bool]:
+    heavy_fields = [field for field, threshold in (
+        ("stories", policy["heavy_stories"]), ("existing_files", policy["heavy_existing"]),
+        ("max_references", policy["heavy_references"]))
+        if signals[field] is not None and signals[field] >= threshold]
+    if heavy_fields:
+        reasons.append(_reason("HEAVY-SIZE", heavy_fields, signals))
+        tier = "heavy"
     split_fields = []
     if signals["stories"] is not None and signals["stories"] > policy["split_stories"]:
         split_fields.append("stories")
@@ -165,15 +171,8 @@ def _apply_size_rules(signals: dict, policy: dict, tier: str, reasons: list) -> 
         split_fields.append("interfaces")
     if split_fields:
         reasons.append(_reason("SPLIT-SIZE", split_fields, signals))
-        return "heavy", True
-    heavy_fields = [field for field, threshold in (
-        ("stories", policy["heavy_stories"]), ("existing_files", policy["heavy_existing"]),
-        ("max_references", policy["heavy_references"]))
-        if signals[field] is not None and signals[field] >= threshold]
-    if heavy_fields:
-        reasons.append(_reason("HEAVY-SIZE", heavy_fields, signals))
         tier = "heavy"
-    return tier, False
+    return tier, bool(split_fields)
 
 
 def _apply_risk_rules(signals: dict, tier: str, reasons: list) -> str:
