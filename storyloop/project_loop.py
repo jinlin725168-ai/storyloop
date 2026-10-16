@@ -28,11 +28,11 @@ from .project_contracts import validate_agent_summary, validate_review
 from .project_git import current_branch, start_feature
 from .project_loop_finish import (complete_change, finalize_change, finish_merged, finish_receipting,
                                   finish_verified, passed_result)
-from .design_approval import ensure_design_approval
-from .consistency import ensure_consistency
-from .planning import ensure_routing_plan, review_focus
-from .project_loop_gates import (characterize_paths, design_plan, ensure_characterization, ensure_design,
-                                 resume_characterization, uncharacterized_paths)
+from .planning import review_focus
+from .routing_execution import prepare_execution, candidate_l3
+from .routing_risks import merge_routing_risks
+from .routing_upgrade import enforce_forbidden_paths
+from .project_loop_gates import characterize_paths, design_plan, uncharacterized_paths
 from .project_loop_guards import (read_only_call, require_control_unchanged, require_git_visible,
                                   verify_read_only_snapshot, write_safely)
 from .project_loop_failures import (apply_overrule, epoch_of, record_boundary, record_failure,
@@ -141,25 +141,13 @@ def _resume_and_prepare(project: Path, change: dict, state: dict, services: Loop
         paused = _prepare_acceptance(project, change, services, state)
         if paused is not None:
             return paused
-    plan_gate = ensure_routing_plan if is_routed(change, state) else ensure_design
-    paused = plan_gate(project, change, state, services, config)
-    if paused is None:
-        paused = ensure_design_approval(project, change, state, config)
-    if paused is None:
-        paused = ensure_consistency(project, change, state, services)
-    if paused is None and state["status"] == "CHARACTERIZATION_FAILED":
-        paused = resume_characterization(project, change, state, config)
-    if paused is None:
-        paused = ensure_characterization(project, change, state, services, config)
-    if paused is not None:
-        return paused
-    return None
+    return prepare_execution(project, change, state, services, config)
 
 
 def _attempts(project: Path, change: dict, state: dict, services: LoopServices,
               config: dict, start_attempt: int) -> dict:
-    for attempt in range(start_attempt, config["max_attempts"] + 1):
-        state["attempt"] = attempt
+    while state["attempt"] < config["max_attempts"]:
+        state["attempt"] += 1
         state["status"] = "IMPLEMENTING"
         save_run(project, state)
         try:
@@ -260,7 +248,8 @@ def _run_attempt(
                "facts": list(state.get("facts") or []),
                "characterization": state.get("characterization"),
                "mode": state["mode"],
-               "design_plan": design_plan(state)}
+               "design_plan": design_plan(state),
+               **({"routing_tier": state["routing"]["effective_tier"]} if is_routed(change, state) else {})}
     response, touched = write_safely(project, change_id, lambda: _implement_answer(services, project, context))
     if "_contract_error" in response:
         # The work on disk stays; the malformed answer costs this attempt and is fed back as a failure.
@@ -281,8 +270,15 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
         return pause(project, state, "NEEDS_INPUT", questions=response["questions"])
     boundary = audit_project_changes(project, change_id)
     require_git_visible(touched, boundary)
+    enforce_forbidden_paths(state, boundary)
     if boundary["violations"]:
         return record_boundary(project, state, boundary)
+    risk_pause = _risk_updates(project, state, response, 'implement')
+    if risk_pause is not None:
+        return risk_pause
+    replanned, result = candidate_l3(project, change, state, services, config, boundary)
+    if replanned:
+        return result
     uncharacterized = uncharacterized_paths(project, state, boundary, config)
     if uncharacterized:
         # Existing behaviour must be locked before it is changed: restore, lock, and try again.
@@ -292,6 +288,11 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
             return paused
         return record_failure(project, state, {"attempt": state["attempt"], "characterization": {
             "status": "FAILED", "uncharacterized": uncharacterized}}, "implement")
+    return _verify_attempt(project, change, state, services, config, boundary)
+
+
+def _verify_attempt(project, change, state, services, config, boundary):
+    change_id = change['change_id']
     layers, boundary = _run_checks_safely(project, change_id, config, boundary)
     layers = check_layers(layers, state.get("oracle"))
     if boundary["violations"]:
@@ -302,6 +303,12 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
     review = _perform_review(project, change, state, services, boundary, layers)
     verdict = validate_review(review)
     merge_facts(project, state, review.get("facts"), "review")
+    risk_pause = _risk_updates(project, state, review, 'review')
+    if risk_pause is not None:
+        return risk_pause
+    replanned, result = candidate_l3(project, change, state, services, config, boundary)
+    if replanned:
+        return result
     if verdict == "needs_input" and layers_green(layers):
         return pause(project, state, "NEEDS_INPUT", questions=review["questions"])
     if verdict == "fail" or not layers_green(layers):
@@ -325,7 +332,8 @@ def _hand_back_attempt(project: Path, state: dict, error: StoryLoopError) -> Non
     state.setdefault("agent_failures", []).append({
         "attempt": state["attempt"], "role": error.details.get("role"), "code": error.code,
         "message": redact(str(error))[:600], "at": moment})
-    state["attempt"] = max(int(state["attempt"]) - 1, 0)
+    consumed = state.get('planning', {}).get('consumed_attempt', 0)
+    state["attempt"] = max(int(state["attempt"]) - 1, consumed)
     from .stop_report import build_stop
     state["stop"] = build_stop(project, state, "AGENT_UNAVAILABLE", {"error": redact(str(error))})
     save_run(project, state)
@@ -450,3 +458,11 @@ def _default_services() -> LoopServices:
         characterize=lambda project, context: invoke_project_agent(project, "characterize", context),
         design=lambda project, context: invoke_project_agent(project, "design", context),
     )
+
+
+def _risk_updates(project, state, response, role):
+    try:
+        merge_routing_risks(project, state, response.get('routing_risks'), role)
+    except StoryLoopError as exc:
+        return pause(project, state, 'NEEDS_INPUT', questions=[str(exc)])
+    return None

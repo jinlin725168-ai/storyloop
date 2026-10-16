@@ -237,3 +237,14 @@ INSTRUCTIONS = {
         "the build integration points; everything else is protected foundation."
     ),
 }
+
+ROUTING_RISKS_NOTE = (
+    " When payload.routing_tier is present, optional routing_risks:[{risk,statement,location}] "
+    "asserts a positive named routing risk at a safe real path:line; use migration, "
+    "external_contract, sensitive, new_interface, crosscut, principle_deviation, "
+    "hard_verify_high_cost, dependency_swap, persistent_state, human_choice or guard. "
+    "Statements must be nonempty and at most 500 characters. Do not encode risks only in prose; "
+    "do not negate previously established risks. Invalid locations stop execution."
+)
+for _role in ("implement", "review"):
+    INSTRUCTIONS[_role] += ROUTING_RISKS_NOTE

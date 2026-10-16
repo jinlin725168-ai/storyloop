@@ -60,7 +60,15 @@ def current_binding(project: Path, change: dict, state: dict) -> dict:
                'baseline_digest': digest(load_baseline(project))}
     if 'candidate_digest' in plan['binding']:
         from .smoke_runner import implementation_digest
-        binding['candidate_digest'] = implementation_digest(project)
+        actual = implementation_digest(project)
+        checkpoint = state.get('planning', {}).get('execution_digest')
+        if state['planning'].get('characterization_input') is not None:
+            from .routing_characterization import verify_characterization_candidate
+            verify_characterization_candidate(project, state, load_project_config(project))
+            checkpoint = actual
+        if checkpoint is not None:
+            require(actual == checkpoint, 'Candidate changed outside authorized implementation')
+        binding['candidate_digest'] = plan['binding']['candidate_digest'] if checkpoint else actual
     _assessment_plan(state)
     require(approval_matches({'binding': plan['binding']}, binding), 'Plan inputs changed; replan required')
     return binding
@@ -83,7 +91,9 @@ def _record(binding: dict, **fields) -> dict:
 def _clear_checks(state: dict) -> None:
     state['planning'].pop('consistency', None)
     state.pop('consistency', None)
-    state.pop('characterization', None)
+    if not (state['planning'].get('origin') == 'L3'
+            and state.get('characterization', {}).get('status') == 'GREEN'):
+        state.pop('characterization', None)
     state.pop('pending_characterization', None)
     # Only this stop depends on the pending locks being cleared here.
     if state.get('status') == 'CHARACTERIZATION_FAILED':
@@ -184,6 +194,10 @@ def _replan_locked(project: Path, change_id: str, reason: str) -> dict:
                                               'attempt': state.get('attempt', 0)})
     for key in ('plan', 'assessment', 'continue_heavy', 'split', 'pending_option'):
         planning.pop(key, None)
+    if planning.get('origin') == 'L3':
+        planning['phase'] = 'REPLAN'
+        planning.pop('execution_digest', None)
+        planning.pop('characterization_input', None)
     state.pop('questions', None)
     state.pop('stop', None)
     state.update(status='DESIGN_REVISION_REQUIRED', phase='planning')

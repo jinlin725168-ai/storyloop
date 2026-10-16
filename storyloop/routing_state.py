@@ -50,3 +50,23 @@ def run_config(config: dict, change: dict, state: dict) -> dict:
     if routed:
         resolved['routing'] = deepcopy(routing['policy'])
     return resolved
+
+
+def advance_tier(state: dict, decision: dict, stage: str, assessment_digest: str,
+                 config: dict) -> None:
+    """Apply an independently evaluated tier once, retaining authoritative budget provenance."""
+    from .routing_policy import max_tier
+    routing = state['routing']
+    old = routing['effective_tier']
+    tier = max_tier(routing['initial_tier'], old, decision['tier'])
+    routing.update(effective_tier=tier, reasons=deepcopy(decision['reasons']))
+    if not any(item['stage'] == stage and item['assessment_digest'] == assessment_digest
+               for item in routing['history']):
+        routing['history'].append({'stage': stage, 'attempt': state.get('attempt', 0),
+                                   'from_tier': old, 'to_tier': tier,
+                                   'assessment_digest': assessment_digest,
+                                   'reason': deepcopy(decision['reasons'])})
+    budget = resolve_budget(config if routing['budget_source'] == 'explicit' else {}, tier)
+    limit = budget['limit'] if budget['source'] == 'explicit' else max(routing['limit'], budget['limit'])
+    routing.update(limit=limit, budget_source=budget['source'])
+    config['max_attempts'] = limit

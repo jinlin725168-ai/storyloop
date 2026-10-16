@@ -10,8 +10,8 @@ from .planning_validation import option_scope, validate_plan
 from .project_loop_guards import read_only_call
 from .project_loop_support import pause, save_run
 from .routing_evidence import measure_scope
-from .routing_policy import evaluate, max_tier
-from .routing_state import resolve_budget
+from .routing_policy import evaluate
+from .routing_state import advance_tier
 from .semantic_repair import answer_with_repair
 
 
@@ -34,7 +34,8 @@ def ensure_routing_plan(project: Path, change: dict, state: dict, services,
         return None
     state['phase'] = 'planning'
     response = None
-    if state['routing']['effective_tier'] == 'light' and not load_principles(project)['principles']:
+    if (state['routing']['effective_tier'] == 'light' and planning.get('origin') != 'L3'
+            and not load_principles(project)['principles']):
         response = _compact_plan(change)
         plan = validate_plan(response, project, change, state)
         assessed = assess_plan(project, change, state, plan)
@@ -66,7 +67,8 @@ def _design(project: Path, change: dict, state: dict, services) -> dict:
     context = {'mode': 'routing-plan', 'change': change,
                'routing': deepcopy(state['routing']),
                'answers': load_answers(project, change['change_id']),
-               'facts': list(state.get('facts') or []), 'principles': load_principles(project)}
+               'facts': list(state.get('facts') or []), 'principles': load_principles(project),
+               'replanning': deepcopy(state.get('planning', {}))}
     return answer_with_repair(
         lambda request: read_only_call(project, change['change_id'],
                                        lambda: services.design(project, request)),
@@ -95,7 +97,7 @@ def assess_plan(project: Path, change: dict, state: dict, plan: dict) -> dict:
     measured = measure_scope(project, state['contract_commit'], option_scope(option),
                              state['routing']['policy'])
     product = deepcopy(change['product'])
-    previous = state.get('planning', {}).get('assessment', {}).get('signals', {}).get('risks', {})
+    previous = state['routing'].get('assessed_risks', {})
     for key, item in option['risks'].items():
         old = product['assessment']['risks'][key]['value']
         value = 'yes' if 'yes' in (old, previous.get(key), item['value']) else item['value']
@@ -117,23 +119,9 @@ def assess_plan(project: Path, change: dict, state: dict, plan: dict) -> dict:
 
 
 def _record_assessment(state: dict, config: dict, assessed: dict) -> None:
-    routing = state['routing']
-    old = routing['effective_tier']
-    tier = max_tier(routing['initial_tier'], old, assessed['decision']['tier'])
-    routing.update(effective_tier=tier, scope=deepcopy(assessed['scope']),
-                   reasons=deepcopy(assessed['decision']['reasons']))
-    if not any(item['assessment_digest'] == assessed['id'] and item['stage'] == 'L2'
-               for item in routing['history']):
-        routing['history'].append({'stage': 'L2', 'attempt': state.get('attempt', 0),
-                                   'from_tier': old, 'to_tier': tier,
-                                   'assessment_digest': assessed['id'],
-                                   'reason': deepcopy(assessed['decision']['reasons'])})
-    # Runtime max_attempts is always injected: provenance belongs to the saved routing snapshot.
-    budget_config = config if routing['budget_source'] == 'explicit' else {}
-    budget = resolve_budget(budget_config, tier)
-    limit = budget['limit'] if budget['source'] == 'explicit' else max(routing['limit'], budget['limit'])
-    routing.update(limit=limit, budget_source=budget['source'])
-    config['max_attempts'] = limit
+    advance_tier(state, assessed['decision'], 'L2', assessed['id'], config)
+    state['routing']['scope'] = deepcopy(assessed['scope'])
+    state['routing']['assessed_risks'] = deepcopy(assessed['signals']['risks'])
     state.setdefault('planning', {})['assessment'] = assessed
 
 

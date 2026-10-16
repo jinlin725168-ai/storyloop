@@ -162,6 +162,13 @@ def schema_for(role: str, payload: dict) -> dict:
         return ROUTING_PLAN
     if role == 'review' and payload.get('mode') == 'consistency':
         return CONSISTENCY
+    if role in {"implement", "review"} and payload.get("routing_tier"):
+        schema = copy.deepcopy(SCHEMAS[role])
+        schema["properties"]["routing_risks"] = _nullable({"type": "array", "items": _obj({
+            "risk": {"type": "string", "enum": list(RISK_FIELDS)},
+            "statement": STRING, "location": STRING})})
+        schema["required"].append("routing_risks")
+        return schema
     return SCHEMAS[role]
 
 

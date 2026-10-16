@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from .models import require
+from .routing_risks import validate_routing_risks
 
 
 def validate_agent_summary(value: object) -> None:
     require(isinstance(value, dict) and {"summary", "questions"} <= set(value)
-            and set(value) <= {"summary", "questions", "design", "facts"},
+            and set(value) <= {"summary", "questions", "design", "facts", "routing_risks"},
             "Implementation agent returned an invalid contract")
+    validate_routing_risks(value.get("routing_risks"))
     require(isinstance(value["summary"], str), "Implementation summary must be text")
     require(isinstance(value.get("design", ""), str), "Implementation design must be markdown text")
     require(isinstance(value["questions"], list)
@@ -19,7 +21,7 @@ def validate_agent_summary(value: object) -> None:
 def validate_review(value: object) -> str:
     require(isinstance(value, dict)
             and {"verdict", "summary", "findings", "questions"} <= set(value)
-            and set(value) <= {"verdict", "summary", "findings", "questions", "facts"},
+            and set(value) <= {"verdict", "summary", "findings", "questions", "facts", "routing_risks"},
             "Review agent returned an invalid contract")
     require(value["verdict"] in {"pass", "fail", "needs_input"},
             "Invalid review verdict")
@@ -28,4 +30,5 @@ def validate_review(value: object) -> str:
     if value["verdict"] == "pass":
         require(not value["findings"] and not value["questions"],
                 "Review cannot pass with findings or questions")
+    validate_routing_risks(value.get("routing_risks"))
     return value["verdict"]

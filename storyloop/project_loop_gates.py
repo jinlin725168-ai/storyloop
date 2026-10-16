@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .planning import plan_projection, required_locks
-from .characterization_locks import (capture_locks, routed_coverage, require_saved_coverage)
+from .characterization_locks import (capture_locks, routed_coverage, require_saved_coverage, verified_locks)
 from .answers import load_answers
 from .baseline import _git
 from .facts import merge_facts
@@ -125,7 +125,13 @@ def ensure_characterization(project: Path, change: dict, state: dict, services: 
     current = state.get("characterization") or {}
     if current.get("status") in {"GREEN", "SKIPPED"}:
         if state.get('routing', {}).get('version') == 1:
-            require_saved_coverage(project, state, config, _mandatory_locks(change, state, config))
+            required = _mandatory_locks(change, state, config)
+            missing = sorted(set(required) - set(verified_locks(project, state, config)))
+            if missing and state.get('planning', {}).get('origin') == 'L3':
+                require(services.characterize is not None,
+                        'L3 requires a characterization service for missing locks')
+                return characterize_paths(project, change, state, services, config, extend=missing)
+            require_saved_coverage(project, state, config, required)
         return None
     profile = config["profile"]
     reason = None
@@ -142,16 +148,20 @@ def ensure_characterization(project: Path, change: dict, state: dict, services: 
         state["characterization"] = {"status": "SKIPPED", "reason": reason, "touched": [], "tests": []}
         save_run(project, state)
         return None
-    return characterize_paths(project, change, state, services, config, extend=None)
+    extend = (_mandatory_locks(change, state, config)
+              if state.get('planning', {}).get('origin') == 'L3' else None)
+    return characterize_paths(project, change, state, services, config, extend=extend)
 
 
 def _mandatory_locks(change: dict, state: dict, config: dict) -> list[str]:
     plan = plan_projection(state)
     if not plan:
         return []
-    return required_locks(state['routing']['effective_tier'], nature_of(change['product']),
-                          [p for p in plan['touched'] if not matches_test_root(
-                              p, config['profile'].get('test_roots', []))])
+    required = required_locks(state['routing']['effective_tier'], nature_of(change['product']),
+                              [p for p in plan['touched'] if not matches_test_root(
+                                  p, config['profile'].get('test_roots', []))])
+    restored = state.get('planning', {}).get('restore', {}).get('paths', [])
+    return sorted(set(required) | {entry['path'] for entry in restored})
 
 
 def characterize_paths(project: Path, change: dict, state: dict, services: LoopServices, config: dict,
@@ -259,7 +269,7 @@ def resume_characterization(project: Path, change: dict, state: dict, config: di
     if paused is not None:
         return paused
     state["status"] = "IMPLEMENTING"
-    if pending.get("extend"):
+    if pending.get("extend") and state.get("planning", {}).get("origin") != "L3":
         state["failures"].append({"attempt": state["attempt"],
                                   "characterization": {"status": "FAILED", "uncharacterized": pending["extend"]}})
     save_run(project, state)
@@ -278,10 +288,12 @@ def _uncommitted(project: Path, paths: list[str]) -> list[str]:
 def uncharacterized_paths(project: Path, state: dict, boundary: dict, config: dict) -> list[str]:
     """Pre-existing non-test files the implementation modified without a characterization lock."""
     characterization = state.get("characterization") or {}
+    routed = state.get("routing", {}).get("version") == 1
     if characterization.get("status") != "GREEN":
         return []
     roots = config["profile"].get("test_roots") or []
-    touched = set(characterization.get("touched", []))
+    touched = (set(verified_locks(project, state, config)) if routed
+               else set(characterization.get("touched", [])))
     return sorted(item["path"] for item in boundary["allowed"]
                   if item["path"] not in touched and not matches_test_root(item["path"], roots)
                   and exists_at(project, state["contract_commit"], item["path"]))

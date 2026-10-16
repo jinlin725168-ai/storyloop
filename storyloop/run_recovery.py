@@ -58,6 +58,8 @@ def _reset_status(state: dict) -> str:
     """旧运行没有中断阶段时，尚未调用实现的运行必须重新经过准备门禁。"""
     if state["status"] == "MANUAL_ACCEPTANCE_REQUIRED":
         return "IMPLEMENTING"
+    if state.get("planning", {}).get("origin") == "L3" and state.get("phase") == "planning":
+        return "DESIGN_REVISION_REQUIRED"
     if state.get("interrupted_status"):
         return state["interrupted_status"]
     if int(state.get("attempt", 0)) == 0:

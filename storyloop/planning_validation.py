@@ -42,6 +42,9 @@ def validate_plan(answer: object, project: Path, change: dict, state: dict) -> d
                'policy_digest': state['routing']['policy_digest'],
                'principles_digest': load_principles(project)['digest'],
                'baseline_digest': digest(load_baseline(project))}
+    if state.get('planning', {}).get('origin') == 'L3':
+        from .smoke_runner import implementation_digest
+        binding['candidate_digest'] = implementation_digest(project)
     plan = {'version': 1, 'binding': binding, 'main_option': answer['main_option'],
             'options': options, 'questions': [], 'design': answer['design'].strip() + '\n'}
     return {**plan, 'id': digest(plan), 'status': 'DONE'}
@@ -54,6 +57,10 @@ def _option(item: dict, project: Path, change: dict, state: dict) -> dict:
     measured = measure_scope(project, state['contract_commit'], option_scope(option),
                              state['routing']['policy'])
     option.update(measured['scope'])
+    actual = state.get('planning', {}).get('actual')
+    if actual:
+        require(all(set(actual[key]) <= set(option[key]) for key in ('touched', 'creates')),
+                'L3 plan omits observed candidate scope')
     _paths_and_constraints(project, change, option)
     require(bool(option['regression']), 'Regression steps are required')
     for step in option['regression'] + option['migration']['steps']:
