@@ -58,3 +58,13 @@ def routing_repository(root: Path) -> None:
     )
     git(root, "add", ".")
     git(root, "commit", "-q", "-m", "initial")
+
+
+def readiness_repository(root: Path, **settings) -> None:
+    """Initialize a clean local repository with explicit readiness test layers."""
+    from storyloop.baseline import bootstrap_project
+    routing_repository(root)
+    bootstrap_project(root, {
+        "unit_commands": [["{python}", "-m", "unittest", "discover", "-s", "tests"]],
+        "integration_commands": [], "check_commands": [], **settings,
+    })
