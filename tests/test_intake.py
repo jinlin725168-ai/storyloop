@@ -155,6 +155,7 @@ class IntakeTests(unittest.TestCase):
     def test_manual_and_unavailable_methods(self):
         item = assessed_product()
         criterion = item['assessment']['criteria'][0]
+        item['stories'][0]['acceptance'][0]['kind'] = 'manual'
         criterion['feasibility'] = 'manual'
         criterion['method']['steps'] = ['Submit an overlapping reservation; inspect rejection']
         self.assertEqual(self.assess(item)['decision']['tier'], 'heavy')
@@ -199,3 +200,77 @@ class IntakeTests(unittest.TestCase):
         item['assessment']['criteria'][0]['existence'] = 'exists'
         self.assertEqual(self.assess(item)['status'], 'READY')
         self.assertNotIn('nature', item)
+
+    def test_manual_contract_cannot_be_downgraded_by_automated_assessment(self):
+        item = assessed_product()
+        item['stories'][0]['acceptance'][0]['kind'] = 'manual'
+        result = self.assess(item)
+        self.assertEqual(result['decision']['tier'], 'heavy')
+        self.assertEqual(item['stories'][0]['acceptance'][0]['kind'], 'manual')
+
+    def test_relative_command_uses_source_project_not_controller_cwd(self):
+        item = assessed_product()
+        script = self.root / 'scripts/check.sh'
+        script.parent.mkdir()
+        script.write_text('#!/bin/sh\nexit 0\n')
+        script.chmod(0o755)
+        git(self.root, 'add', 'scripts/check.sh')
+        git(self.root, 'commit', '-qm', 'add local oracle')
+        self.commit = git(self.root, 'rev-parse', 'HEAD').strip()
+        item['assessment']['criteria'][0]['method']['commands'] = [['./scripts/check.sh']]
+        self.assertNotEqual(Path.cwd(), self.root)
+        self.assertEqual(self.assess(item)['status'], 'READY')
+
+    def test_uncommitted_or_escaping_relative_command_is_unavailable(self):
+        item = assessed_product()
+        script = self.root / 'check.sh'
+        script.write_text('#!/bin/sh\nexit 0\n')
+        script.chmod(0o755)
+        for executable in ('./check.sh', '../check.sh'):
+            item['assessment']['criteria'][0]['method']['commands'] = [[executable]]
+            self.assertEqual(self.assess(item)['status'], 'ORACLE_INFEASIBLE')
+
+    def test_unknown_scope_can_approve_standard_for_l2(self):
+        item = assessed_product()
+        item['assessment']['scope']['symbols'] = []
+        result = self.assess(item)
+        self.assertEqual(result['status'], 'READY')
+        self.assertEqual(result['decision']['tier'], 'standard')
+        self.assertIn('max_references', result['decision']['unresolved'])
+        self.ready()
+        change = create_change(self.root, 'design will complete scope', item)
+        self.assertEqual(approve_change(self.root, change['change_id'])['approval']['tier'], 'standard')
+
+    def test_controller_cwd_command_cannot_supply_project_oracle(self):
+        import os
+        item = assessed_product()
+        item['assessment']['criteria'][0]['method']['commands'] = [['./check.sh']]
+        with tempfile.TemporaryDirectory() as controller:
+            command = Path(controller) / 'check.sh'
+            command.write_text('#!/bin/sh\nexit 0\n')
+            command.chmod(0o755)
+            before = Path.cwd()
+            try:
+                os.chdir(controller)
+                self.assertEqual(self.assess(item)['status'], 'ORACLE_INFEASIBLE')
+            finally:
+                os.chdir(before)
+
+    def test_symlink_and_non_executable_source_oracles_are_unavailable(self):
+        item = assessed_product()
+        script = self.root / 'check.sh'
+        script.write_text('#!/bin/sh\nexit 0\n')
+        (self.root / 'linked.sh').symlink_to('check.sh')
+        git(self.root, 'add', 'check.sh', 'linked.sh')
+        git(self.root, 'commit', '-qm', 'non executable and symlink')
+        self.commit = git(self.root, 'rev-parse', 'HEAD').strip()
+        for executable in ('./check.sh', './linked.sh'):
+            item['assessment']['criteria'][0]['method']['commands'] = [[executable]]
+            self.assertEqual(self.assess(item)['status'], 'ORACLE_INFEASIBLE')
+
+    def test_automated_contract_with_manual_only_method_needs_clarification(self):
+        item = assessed_product()
+        item['assessment']['criteria'][0]['feasibility'] = 'manual'
+        item['assessment']['criteria'][0]['method']['steps'] = ['Inspect rejected reservation']
+        self.assertEqual(self.assess(item)['status'], 'NEEDS_INPUT')
+        self.assertEqual(item['stories'][0]['acceptance'][0]['kind'], 'automated')

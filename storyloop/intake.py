@@ -2,13 +2,14 @@
 from __future__ import annotations
 import hashlib
 import json
+import os
 import re
 import shutil
 from pathlib import Path
 from .assessment import validate_assessment
 from .baseline import _git, load_project_config
 from .models import StoryLoopError, require, validate_product
-from .path_security import repository_relative
+from .path_security import repository_relative, safe_target
 from .readiness import _require_readiness_locked
 from .routing_evidence import measure_scope, _repository_and_commit
 from .routing_policy import evaluate, validate_policy
@@ -45,7 +46,7 @@ def assess_intake(project: Path, product: dict, source_commit: str, policy: dict
     if assessment['criteria']:
         signals = _signals(product, measured)
         result['decision'] = evaluate(signals, policy)
-    result['status'] = _status(product, result['decision'])
+    result['status'] = _status(project, source_commit, product, result['decision'])
     return result
 
 
@@ -57,19 +58,23 @@ def _signals(product: dict, measured: dict) -> dict:
         risks[key] = max(risks[key], value, key=rank.get)
     return {**measured['signals'], 'nature': product.get('nature', 'feature'),
             'stories': len(product['stories']), 'criteria': len(assessment['criteria']),
-            'manual': sum(item['feasibility'] == 'manual' for item in assessment['criteria']),
+            # Feasibility describes available supporting methods, never changes contract kind.
+            'manual': sum(c['kind'] == 'manual' for story in product['stories']
+                          for c in story['acceptance']),
             'risks': risks}
 
 
-def _status(product: dict, decision: dict | None) -> str:
+def _status(project: Path, commit: str, product: dict, decision: dict | None) -> str:
     assessment = product['assessment']
     if exploration_required(assessment['verifiable_goal'], len(product['questions']),
                             len(product['stories'])):
         return 'EXPLORATION_RECOMMENDED'
     criteria = assessment['criteria']
-    if any(item['feasibility'] == 'infeasible' or _unavailable(item) for item in criteria):
+    if any(item['feasibility'] == 'infeasible' or _unavailable(project, commit, item) for item in criteria):
         return 'ORACLE_INFEASIBLE'
-    if (product['questions'] or not decision or decision['unresolved']
+    if (product['questions'] or not decision
+            or any(field.startswith('risks.') for field in decision['unresolved'])
+            or _manual_only_automation(product)
             or any(item['feasibility'] == 'unknown' or item['existence'] == 'unknown'
                    for item in criteria)):
         return 'NEEDS_INPUT'
@@ -80,11 +85,42 @@ def _status(product: dict, decision: dict | None) -> str:
     return 'READY'
 
 
-def _unavailable(item: dict) -> bool:
+def _manual_only_automation(product: dict) -> bool:
+    kinds = {criterion['id']: criterion['kind'] for story in product['stories']
+             for criterion in story['acceptance']}
+    return any(kinds[item['criterion_id']] == 'automated' and item['feasibility'] == 'manual'
+               for item in product['assessment']['criteria'])
+
+
+def _unavailable(project: Path, commit: str, item: dict) -> bool:
     if item['feasibility'] != 'local_automated':
         return False
-    return any(command[0] != '{python}' and shutil.which(command[0]) is None
+    return any(not _executable_available(project, commit, command[0])
                for command in item['method']['commands'])
+
+
+def _executable_available(project: Path, commit: str, executable: str) -> bool:
+    if executable == '{python}':
+        return True
+    if '/' not in executable and "\\" not in executable:
+        # Relative PATH entries would accidentally bind availability to controller cwd.
+        search = os.pathsep.join(p for p in os.get_exec_path() if Path(p).is_absolute())
+        return shutil.which(executable, path=search) is not None
+    candidate = Path(executable)
+    if candidate.is_absolute():
+        if not candidate.is_relative_to(project):
+            return shutil.which(executable) is not None
+        executable = candidate.relative_to(project).as_posix()
+    try:
+        relative = executable[2:] if executable.startswith('./') else executable
+        relative = repository_relative(relative, 'method executable')
+        safe_target(project, relative, 'method executable')
+        entry = _git(project, 'ls-tree', '-z', commit, '--', relative)
+        records = [row for row in entry.split('\0') if row]
+        return len(records) == 1 and records[0].startswith('100755 blob ') and (
+            records[0].split('\t', 1)[1] == relative)
+    except (StoryLoopError, OSError):
+        return False
 
 
 def _role_evidence(assessment: dict, commit: str) -> list[dict]:
