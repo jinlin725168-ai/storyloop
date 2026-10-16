@@ -8,6 +8,7 @@ from .baseline import _git, load_baseline, load_project_config, verify_baseline
 from .project_git import current_branch
 from .changes import contract_digest, load_change
 from .intake import digest
+from .principles import load_principles
 from .models import StoryLoopError, require, text
 from .planning import assess_plan, _record_assessment
 from .planning_validation import option_scope
@@ -54,7 +55,9 @@ def current_binding(project: Path, change: dict, state: dict) -> dict:
     binding = {'product_digest': digest(change['product']), 'source_commit': state['contract_commit'],
                'scope_digest': digest([{'id': o['id'], **option_scope(o)} for o in plan['options']]),
                'suite_digest': digest(smoke_digests(project, change['change_id'])),
-               'policy_digest': digest(state['routing']['policy'])}
+               'policy_digest': digest(state['routing']['policy']),
+               'principles_digest': load_principles(project)['digest'],
+               'baseline_digest': digest(load_baseline(project))}
     if 'candidate_digest' in plan['binding']:
         from .smoke_runner import implementation_digest
         binding['candidate_digest'] = implementation_digest(project)
@@ -225,7 +228,8 @@ def ensure_design_approval(project: Path, change: dict, state: dict, config: dic
     if assessed['decision']['split'] and not _valid_continue(state, binding, assessed):
         return _pause_split(project, change, state, assessed)
     if state['routing']['effective_tier'] == 'heavy' and not _valid_design(plan, binding):
-        return pause(project, state, 'DESIGN_APPROVAL_REQUIRED', phase='planning', plan_id=plan['id'])
+        return pause(project, state, 'DESIGN_APPROVAL_REQUIRED', phase='planning', plan_id=plan['id'],
+                     principle_deviations=deepcopy(assessed['principles']['deviations']))
     state.pop('phase', None)
     save_run(project, state)
     return None

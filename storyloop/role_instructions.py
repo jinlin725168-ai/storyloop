@@ -146,6 +146,16 @@ INSTRUCTIONS = {
         + FACTS_NOTE
     ),
     "review": (
+        "When payload.mode is consistency, review the approved contract, protected acceptance suite "
+        "and routing-plan artifact BEFORE implementation. Use the separate consistency schema: "
+        "{verdict:coherent|blocked|needs_input,summary,questions,findings}. Each finding contains "
+        "target:contract|oracle|design, criterion_id, location, blocking:boolean, message. "
+        "Criterion IDs must exist. Oracle locations must reference real suite lines; design locations "
+        "use plan:OPTION_ID/summary|constraints|regression|migration|dependencies|principle_checks "
+        "with existing JSON keys/indices. Coherent has no blockers/questions; blocked has blockers "
+        "and no questions; needs_input has questions and no blockers. Preserve all findings. "
+        "Read only; never write the routing-plan artifact. In all other modes follow below. "
+
         "Use payload.review_focus when provided to organize the single review; it never waives any checks. "
         "Independently review the real implementation against the approved stories and acceptance evidence. "
         "payload.layers includes the actual verification evidence, including functional failures. "

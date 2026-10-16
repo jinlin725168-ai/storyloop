@@ -70,8 +70,15 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     paths = sorted(set(relative_files(project, [suite_root])) | set(previous))
     commit = commit_paths(project, paths, f"test({change_id}): repair acceptance suite")
     moment = (now or (lambda: datetime.now(timezone.utc)))().astimezone(timezone.utc).isoformat(timespec="seconds")
+    from .consistency import invalidate_consistency
+    invalidate_consistency(state, replan=True)
     state.setdefault("repairs", []).append({"at": moment, "reason": reason, "commit": commit["commit"],
                                             "voided_attempts": int(state.get("attempt", 0))})
+    return _prove_repaired_suite(project, change, state, commit)
+
+
+def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict) -> dict:
+    change_id = change["change_id"]
     try:
         red = read_only_call(
             project, change_id,

@@ -5,6 +5,7 @@ from pathlib import Path
 from .answers import load_answers
 from .facts import merge_facts
 from .intake import digest, _signals, _role_evidence
+from .principles import check_principles, load_principles
 from .planning_validation import option_scope, validate_plan
 from .project_loop_guards import read_only_call
 from .project_loop_support import pause, save_run
@@ -33,7 +34,7 @@ def ensure_routing_plan(project: Path, change: dict, state: dict, services,
         return None
     state['phase'] = 'planning'
     response = None
-    if state['routing']['effective_tier'] == 'light':
+    if state['routing']['effective_tier'] == 'light' and not load_principles(project)['principles']:
         response = _compact_plan(change)
         plan = validate_plan(response, project, change, state)
         assessed = assess_plan(project, change, state, plan)
@@ -65,7 +66,7 @@ def _design(project: Path, change: dict, state: dict, services) -> dict:
     context = {'mode': 'routing-plan', 'change': change,
                'routing': deepcopy(state['routing']),
                'answers': load_answers(project, change['change_id']),
-               'facts': list(state.get('facts') or [])}
+               'facts': list(state.get('facts') or []), 'principles': load_principles(project)}
     return answer_with_repair(
         lambda request: read_only_call(project, change['change_id'],
                                        lambda: services.design(project, request)),
@@ -99,11 +100,19 @@ def assess_plan(project: Path, change: dict, state: dict, plan: dict) -> dict:
         old = product['assessment']['risks'][key]['value']
         value = 'yes' if 'yes' in (old, previous.get(key), item['value']) else item['value']
         product['assessment']['risks'][key] = {**item, 'value': value}
+    principles = load_principles(project)
+    deviations = check_principles(option, principles)
     signals = _signals(product, measured)
+    if deviations:
+        signals['risks']['principle_deviation'] = 'yes'
+    elif any(item['verdict'] == 'unknown' for item in option['principle_checks']):
+        if signals['risks']['principle_deviation'] != 'yes':
+            signals['risks']['principle_deviation'] = 'unknown'
     decision = evaluate(signals, state['routing']['policy'])
     data = {'signals': signals, 'evidence': measured['evidence'] + _role_evidence(
                 {'risks': option['risks'], 'criteria': []}, state['contract_commit']),
-            'scope': measured['scope'], 'decision': decision}
+            'scope': measured['scope'], 'decision': decision,
+            'principles': {**principles, 'deviations': deviations}}
     return {**data, 'id': digest(data)}
 
 

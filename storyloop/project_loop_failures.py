@@ -99,6 +99,9 @@ def require_routed_choice(state: dict, overrule: str | None) -> None:
 def apply_overrule(project: Path, state: dict, reason: str) -> dict | None:
     """Rewrite the blamed findings, then route the whole mixed review again."""
     reason = text(reason, "overrule reason")
+    if state["routed"].get("source") == "consistency":
+        from .consistency import overrule_consistency
+        return overrule_consistency(project, state, reason)
     routed = state.pop("routed")
     keys = {finding_key(item) for item in routed["findings"]}
     _record_overrule(state, reason, keys)

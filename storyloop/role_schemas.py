@@ -110,6 +110,14 @@ ROUTING_PLAN = _obj({'main_option': STRING,
                     'options': {'type': 'array', 'items': PLAN_OPTION},
                     'questions': STRINGS, 'design': STRING, 'facts': FACTS})
 
+CONSISTENCY = _obj({
+    'verdict': {'type': 'string', 'enum': ['coherent', 'blocked', 'needs_input']},
+    'summary': STRING, 'questions': STRINGS,
+    'findings': {'type': 'array', 'items': _obj({
+        'target': {'type': 'string', 'enum': ['contract', 'oracle', 'design']},
+        'criterion_id': STRING, 'location': STRING, 'blocking': {'type': 'boolean'},
+        'message': STRING})}})
+
 SCHEMAS = {
     "product": _obj({
         "version": {"type": "integer", "enum": [1]}, "goal": STRING, "non_goals": STRINGS,
@@ -152,6 +160,8 @@ def schema_for(role: str, payload: dict) -> dict:
         return SCHEMAS["smoke-maintenance"]
     if role == "design" and payload.get("mode") == "routing-plan":
         return ROUTING_PLAN
+    if role == 'review' and payload.get('mode') == 'consistency':
+        return CONSISTENCY
     return SCHEMAS[role]
 
 

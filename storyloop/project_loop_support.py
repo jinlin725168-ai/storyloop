@@ -18,7 +18,8 @@ def control_digest(
     # Staged content is covered semantically by `git diff --cached` below.
     relative_paths = [
         ".git/HEAD", ".git/config", ".git/info/exclude", ".git/packed-refs",
-        ".storyloop/config.json", ".storyloop/baseline.json",
+        ".storyloop/config.json", ".storyloop/baseline.json", "openspec/principles.json",
+        f"openspec/changes/{change_id}/routing-plan.json",
         f".storyloop/state/changes/{change_id}.json",
         f".storyloop/state/smoke/{change_id}.json",
         f".storyloop/state/suites/{change_id}.json",

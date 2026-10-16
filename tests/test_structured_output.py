@@ -167,6 +167,8 @@ def contract_breaking_implement(attempts: list):
 
 
 def passing_review(project, context):
+    if context.get("mode") == "consistency":
+        return {"verdict": "coherent", "summary": "ok", "findings": [], "questions": []}
     return {"verdict": "pass", "summary": "ok", "findings": [], "questions": []}
 
 

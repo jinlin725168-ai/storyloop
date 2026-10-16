@@ -6,6 +6,7 @@ from .assessment import _evidence
 from .baseline import load_baseline, load_project_config
 from .intake import digest, _validate_locations
 from .models import require, text
+from .principles import check_principles, load_principles
 from .path_security import repository_relative, safe_target
 from .project_boundaries import _category, _inside
 from .role_schemas import schema_errors, schema_for
@@ -38,7 +39,9 @@ def validate_plan(answer: object, project: Path, change: dict, state: dict) -> d
                'source_commit': state['contract_commit'],
                'scope_digest': digest([{ 'id': o['id'], **option_scope(o)} for o in options]),
                'suite_digest': digest(smoke_digests(project, change['change_id'])),
-               'policy_digest': state['routing']['policy_digest']}
+               'policy_digest': state['routing']['policy_digest'],
+               'principles_digest': load_principles(project)['digest'],
+               'baseline_digest': digest(load_baseline(project))}
     plan = {'version': 1, 'binding': binding, 'main_option': answer['main_option'],
             'options': options, 'questions': [], 'design': answer['design'].strip() + '\n'}
     return {**plan, 'id': digest(plan), 'status': 'DONE'}
@@ -61,6 +64,7 @@ def _option(item: dict, project: Path, change: dict, state: dict) -> dict:
         _evidence(risk['evidence'], risk['value'] != 'unknown')
     _validate_locations(project, state['contract_commit'], {'risks': option['risks'], 'criteria': []})
     _structured_checks(option)
+    check_principles(option, load_principles(project))
     return option
 
 

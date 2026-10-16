@@ -29,6 +29,7 @@ from .project_git import current_branch, start_feature
 from .project_loop_finish import (complete_change, finalize_change, finish_merged, finish_receipting,
                                   finish_verified, passed_result)
 from .design_approval import ensure_design_approval
+from .consistency import ensure_consistency
 from .planning import ensure_routing_plan, review_focus
 from .project_loop_gates import (characterize_paths, design_plan, ensure_characterization, ensure_design,
                                  resume_characterization, uncharacterized_paths)
@@ -144,6 +145,8 @@ def _resume_and_prepare(project: Path, change: dict, state: dict, services: Loop
     paused = plan_gate(project, change, state, services, config)
     if paused is None:
         paused = ensure_design_approval(project, change, state, config)
+    if paused is None:
+        paused = ensure_consistency(project, change, state, services)
     if paused is None and state["status"] == "CHARACTERIZATION_FAILED":
         paused = resume_characterization(project, change, state, config)
     if paused is None:
