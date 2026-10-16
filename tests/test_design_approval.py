@@ -312,3 +312,48 @@ class DesignApprovalTests(unittest.TestCase):
         self.assertEqual(run_change(self.root, self.identifier, services)['status'], 'NEEDS_INPUT')
         self.assertEqual(seen, ['main'])
         self.assertEqual(load_run_state(self.root, self.identifier)['characterization']['status'], 'GREEN')
+
+    def test_design_decisions_cannot_replace_routed_defect_repair(self):
+        response = answer()
+        option = deepcopy(response['options'][0])
+        option['id'] = 'alternate'
+        response['options'].append(option)
+        self.start(response)
+        self.approve()
+        baseline = load_run_state(self.root, self.identifier)
+        for status in ('NEEDS_SPEC_FIX', 'ORACLE_DEFECT'):
+            for stale in (False, True):
+                state = deepcopy(baseline)
+                state.update(status=status, routed={'source': 'review', 'target': 'contract'},
+                             stop={'status': status, 'blocker': 'repair required'})
+                if stale:
+                    state['planning']['plan']['approval']['binding']['suite_digest'] = 'stale'
+                actions = [lambda: self.approve('main' if stale else 'alternate'),
+                           lambda: approvals.approve_continue_heavy(
+                               self.root, self.identifier, 'assessment', 'continue'),
+                           lambda: approvals.replan(self.root, self.identifier, 'replan')]
+                for action in actions:
+                    save_run(self.root, state)
+                    with self.subTest(status=status, stale=stale, action=action):
+                        with self.assertRaisesRegex(StoryLoopError, 'repair'):
+                            action()
+                        self.assertEqual(load_run_state(self.root, self.identifier), state)
+                        with self.assertRaisesRegex(StoryLoopError, 'overrule'):
+                            run_change(self.root, self.identifier, self.services)
+        self.assertEqual(self.calls, [])
+
+    def test_option_change_preserves_other_stop_state(self):
+        response = answer()
+        option = deepcopy(response['options'][0])
+        option['id'] = 'alternate'
+        response['options'].append(option)
+        self.start(response)
+        self.approve()
+        state = load_run_state(self.root, self.identifier)
+        state.update(status='BUDGET_EXHAUSTED', stop={'status': 'BUDGET_EXHAUSTED'},
+                     attempt=4, error='budget stop')
+        save_run(self.root, state)
+        self.approve('alternate')
+        actual = load_run_state(self.root, self.identifier)
+        for key in ('status', 'stop', 'attempt', 'error'):
+            self.assertEqual(actual.get(key), state[key])

@@ -66,6 +66,8 @@ def current_binding(project: Path, change: dict, state: dict) -> dict:
 def _load(project: Path, change_id: str) -> tuple[dict, dict, dict]:
     change = load_change(project, change_id)
     state = load_json(run_path(project, change['change_id']))
+    require(state.get('status') not in {'NEEDS_SPEC_FIX', 'ORACLE_DEFECT'},
+            'Design decisions cannot replace contract/oracle repair; use the existing repair entry')
     config = run_config(load_project_config(project), change, state)
     return change, state, config
 
@@ -80,10 +82,11 @@ def _clear_checks(state: dict) -> None:
     state.pop('consistency', None)
     state.pop('characterization', None)
     state.pop('pending_characterization', None)
-    # Pending locks are gone: resume must rebuild them, not retry the old failed gate.
-    for key in ('stop', 'unit', 'error', 'next', 'questions'):
-        state.pop(key, None)
-    state.update(status='DESIGN_APPROVAL_REQUIRED', phase='planning')
+    # Only this stop depends on the pending locks being cleared here.
+    if state.get('status') == 'CHARACTERIZATION_FAILED':
+        for key in ('stop', 'unit', 'error', 'next', 'questions'):
+            state.pop(key, None)
+        state.update(status='DESIGN_APPROVAL_REQUIRED', phase='planning')
 
 
 def _valid_design(plan: dict, binding: dict) -> bool:
