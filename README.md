@@ -14,6 +14,8 @@ Linux / WSL2：
 python3 -m venv .venv && .venv/bin/pip install .
 
 .venv/bin/storyloop init ~/work/my-project --settings ~/work/storyloop-settings.json
+.venv/bin/storyloop readiness ~/work/my-project --json
+# 若有缺口，先补基础或按报告用 --readiness DIGEST --reason 明确确认
 .venv/bin/storyloop change ~/work/my-project --idea "增加订单取消功能，已发货订单不能取消"
 # 终端里会逐条提出澄清问题（回车选推荐项）；满意后批准，闭环自动跑到底或停在明确的人工停点
 .venv/bin/storyloop approve ~/work/my-project --change FEAT-20260916-001
@@ -26,6 +28,8 @@ PowerShell：
 python -m pip install .
 
 storyloop init C:\work\my-project
+storyloop readiness C:\work\my-project --json
+# READY 后再共创需求；缺口按报告补齐或明确确认
 storyloop change C:\work\my-project --idea "增加订单取消功能，已发货订单不能取消"
 
 # 审核 .storyloop/drafts/<change-id>/ 中的故事和验收条件；需要时继续修订
@@ -41,6 +45,8 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 ```
 
 新人从 [定位与概念手册](docs/concepts.md) 和 [入门教程](docs/tutorial.md) 开始；完整说明见 [使用指南](docs/product-iteration-guide.md)，接入自己的仓库见 [接入手册](docs/onboarding-a-repository.md)。`docs/` 是本项目的知识库，入口是 [docs/README.md](docs/README.md)：使用文档之外，按模块、架构、扩展、接口、能力、积木、测试组织了给贡献者和代理读的工程文档。
+
+新协议按 light / standard / heavy 分流，重档先审核方案再实现；完整命令、预算与恢复见 [分流指南](docs/routing-guide.md)。子项目 2b 真实代理验收（Task 12）仍待完成。
 
 ## 核心保证
 
@@ -61,10 +67,11 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 ```mermaid
 flowchart TD
     A[干净的单一 Git 仓库] --> B[锁定底座]
-    B --> C[产品故事与验收条件共创]
+    B --> R[readiness 与缺口处理]
+    R --> C[产品故事与验收条件共创]
     C --> D{用户批准}
     D --> E[变更验收套件盲写并证明 RED]
-    E --> E1[design 出方案并圈定要改的既有文件<br/>故事数 ≥ design_min_stories 时]
+    E --> E1[L2 方案量测<br/>heavy 须明确方案批准]
     E1 --> E2[特征化测试锁定将改动的现有行为]
     E2 --> F[AI 实现：TDD 先红后绿]
     F --> G[单元 + 集成 + 变更验收 + 系统冒烟 + 静态检查 + 独立审查]
@@ -168,7 +175,7 @@ Windows 上自动探测到的 `.cmd`、`.bat`、`.ps1` 包装器不会被直接�
 {"unit_commands":[["{python}","-m","unittest","discover","-s","tests/unit"]],"integration_commands":[["{python}","-m","unittest","discover","-s","tests/integration"]],"check_commands":[["ruff","check","."]],"test_roots":["tests"],"module_roots":["modules","features"],"integration_paths":["pyproject.toml"]}
 ```
 
-settings 只接受这些键，未知键会报错：`unit_commands`（旧名 `test_commands`）、`integration_commands`、`check_commands`、`test_roots`、`module_roots`、`integration_paths`、`candidate_allow`、`scratch_paths`。含义与默认值见 [接口与配置](docs/api.md#三配置)。`max_attempts`、`design_min_stories`、适配器等运行参数不在 settings 里，直接改 `.storyloop/config.json`。
+settings 只接受这些键，未知键会报错：`unit_commands`（旧名 `test_commands`）、`integration_commands`、`check_commands`、`test_roots`、`module_roots`、`integration_paths`、`candidate_allow`、`scratch_paths`，以及可选正整数 `max_attempts`。含义与默认值见 [接口与配置](docs/api.md#三配置)。`max_attempts` 也可在 `.storyloop/config.json` 显式设置；`design_min_stories`、适配器等运行参数直接改该文件。
 
 ```powershell
 storyloop init C:\work\my-project --settings C:\work\settings.json

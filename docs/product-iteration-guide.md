@@ -8,6 +8,8 @@ StoryLoop 不会推送远端、不部署，也不会创建或覆盖 GitHub Actio
 
 下文命令以 PowerShell 路径为例；Linux / WSL2 把路径换成本地路径即可（例如 `storyloop init ~/work/my-project`），入口是虚拟环境里的 `storyloop` 或 `python -m storyloop`。
 
+新协议完整顺序是 init → readiness → 补基础或确认缺口 → change → 产品批准 → 重档方案批准 → run。命令和安全停点见 [分流、审批与恢复](routing-guide.md)。
+
 ## 2. 一次初始化
 
 ```powershell
@@ -36,7 +38,7 @@ Windows 上 `.cmd`、`.bat`、`.ps1` 包装器不会被自动执行；对应回�
 
 `candidate_allow` 列出名字看起来敏感（`.env*`、`*.key`、`*.pem`、`credentials.json`、`secrets.yaml`）但确实是已跟踪配置的文件；未列出的这类文件出现在冒烟和回归的隔离候选副本里会直接阻断。
 
-settings 只接受上面这些键（`unit_commands` 或旧名 `test_commands`、`integration_commands`、`check_commands`、`test_roots`、`module_roots`、`integration_paths`、`candidate_allow`、`scratch_paths`），未知键报错。`max_attempts`（默认 3）、`agent_timeout_seconds`（默认 14400）、`check_timeout_seconds`（默认 300）、`design_min_stories`（默认 2）、`adapter`、`agent_command` 是运行参数，init 写进 `.storyloop/config.json` 后直接编辑。完整表见 [api.md 的配置一节](api.md#三配置)。
+settings 只接受上面这些键（`unit_commands` 或旧名 `test_commands`、`integration_commands`、`check_commands`、`test_roots`、`module_roots`、`integration_paths`、`candidate_allow`、`scratch_paths`，以及可选正整数 `max_attempts`），未知键报错。`max_attempts`（显式值优先；省略时新协议 light/standard/heavy 为 2/3/4，legacy 为 3）、`agent_timeout_seconds`（默认 14400）、`check_timeout_seconds`（默认 300）、`design_min_stories`（默认 2）、`adapter`、`agent_command` 是运行参数，init 写进 `.storyloop/config.json` 后直接编辑。完整表见 [api.md 的配置一节](api.md#三配置)。
 
 然后一次初始化：
 
@@ -145,7 +147,7 @@ storyloop approve C:\work\my-project --change FEAT-20260916-001
 3. 将批准合同物化到 `openspec/changes/<change-id>/`（含增量规格），装了 `openspec` CLI 时校验结构。
 4. acceptance 角色只看合同盲写 `acceptance/changes/<change-id>/` 变更验收套件（接口优先，浏览器用例只覆盖核心链路），与合同一起提交。
 5. 在隔离候选副本里证明验收套件因功能缺失而失败（验收级 RED）。
-6. 方案：design 角色（架构师）只读地对照知识库的扩展机制和积木写出方案（Files、Data And Interfaces、Decisions、Risks），并列出将修改的既有文件 `touched`；方案里留有真实决策时停在 `NEEDS_INPUT`。方案喂给后面每个角色，完成时归档为 design.md 的前半部分。小改动自动跳过：故事数少于 `.storyloop/config.json` 的 `design_min_stories`（默认 2，即单故事变更不出方案）时记为 SKIPPED，characterize 与 implement 直接从合同工作；把它设成 1 则每个变更都出方案。
+6. 方案：design 角色（架构师）只读地对照知识库的扩展机制和积木写出方案（Files、Data And Interfaces、Decisions、Risks），并列出将修改的既有文件 `touched`；方案里留有真实决策时停在 `NEEDS_INPUT`。方案喂给后面每个角色，完成时归档为 design.md 的前半部分。新协议 light 由引擎精简方案（证据不完整时仍调用 design），standard/heavy 调用 design，heavy 经明确方案批准和一致性审查再实现。旧协议仍按 design_min_stories 决定是否跳过 design。
 7. 特征化门：characterize 角色以方案的 `touched` 为必锁清单，为这些既有文件写只断言"必须不变"行为的测试（扩展的列表用 contains），引擎要求整个单元层（`unit_commands`）在旧代码加新测试上跑绿、只改了 `test_roots` 内的文件，然后提交。项目没配 `test_roots` 或单元命令时跳过。
 8. 调用实现代理（TDD 先红后绿）。代理提出真实产品歧义时停在 `NEEDS_INPUT`；回答不符合角色结构计一轮失败。
 9. 边界审计：底座、模块、集成点、测试、系统冒烟和 CI 边界；集成点变化转为底座提案，越界停在 `BOUNDARY_VIOLATION`。实现改了未被特征化锁定的既有文件时，引擎把它们还原到合同提交、补做特征化，这一轮计为失败。

@@ -60,7 +60,7 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 
 **七个角色**：`survey`、`product`、`acceptance`、`design`、`characterize`、`implement`、`review`，按权限边界划分，见 [角色目录](roles.md)。都是无状态进程调用：stdin 一个请求、stdout 一个 JSON。适配器可以是 Codex CLI（默认）、Claude Code（`examples/claude-code/`）或人工桥接（manual）。
 
-**方案（design）**：RED 之后、特征化之前，design 角色只读产出 Markdown 方案和 `touched`（将修改的既有非测试文件）。实现照方案做、审查对照方案查。故事数少于 `design_min_stories`（默认 2）的小改动跳过这一步。
+**方案（design）**：RED 之后、特征化之前，design 角色只读产出 Markdown 方案和 `touched`（将修改的既有非测试文件）。实现照方案做、审查对照方案查。新协议 light 可由引擎生成精简方案，standard/heavy 调用 design；heavy 还需用户明确批准。`design_min_stories`（默认 2）仅用于 legacy。
 
 **尝试（attempt）与预算**：一轮尝试 = 实现 → 边界审计 → 分层验证（单元、集成、变更验收、系统冒烟、静态检查）→ 独立审查；功能红层也会进入只读审查以判断实现、判据或合同归属，纯环境错误则直接记录。review 的 pass 不能覆盖任何红层。实现代理的回答结构不合法也计一轮失败。`max_attempts` 是唯一的质量预算；`agent_timeout_seconds` 只是挂死保护；适配器的圈数上限只是检查点，到上限续同一会话。
 
@@ -130,7 +130,7 @@ sequenceDiagram
     E->>S: 盲写变更验收套件
     S-->>E: files + manifest
     E->>E: 提交合同与套件，候选副本里跑 RED
-    E->>D: 方案（故事数 ≥ design_min_stories 时）
+    E->>D: L2 方案（heavy 需用户批准）
     D-->>E: design + touched
     E->>C: 锁定将改动的现有行为
     C-->>E: 特征化测试（引擎在旧代码上跑绿）
@@ -169,3 +169,7 @@ sequenceDiagram
 - 不替代产品判断：机器检查证明"做了合同里的事"，不证明合同本身正确。`manual` 条件和独立审查保留给人。
 
 角色回答通过格式校验但未满足产品、验收套件或方案的语义约束时，引擎将原回答与具体校验错误交回同一角色，另发一次调用修复；仍失败才停止。它不替代适配器的 JSON 修复，也不重试超时、限流或安全边界错误。
+
+## 分流与批准的区别
+
+L0 检查项目是否具备真实可执行的测试，L1 在产品批准时定初档，L2 量测具体方案，L3 在执行中发现新风险或范围扩大时重规划。light、standard、heavy 都有完整质量门；heavy 增加明确方案批准与一致性审查。拆分是人工停点，缺口确认、产品批准、方案批准和人工验收分别绑定不同证据，不能互相替代。详见 [分流指南](routing-guide.md)。
