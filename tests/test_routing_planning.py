@@ -77,7 +77,7 @@ class PlanningTests(unittest.TestCase):
         result = self.ensure()
         self.assertEqual(result['status'], 'NEEDS_INPUT')
         self.assertEqual(self.state['phase'], 'planning')
-        self.assertNotIn('plan', self.state)
+        self.assertNotIn('plan', self.state.get('planning', {}))
 
     def test_unknown_l1_completes_references_but_cannot_downgrade(self):
         self.change['product']['assessment']['scope']['symbols'] = []
@@ -152,7 +152,7 @@ class PlanningTests(unittest.TestCase):
         with self.assertRaises(StoryLoopError) as caught:
             self.ensure(design)
         self.assertEqual(caught.exception.code, 'WORKSPACE_TAINTED')
-        self.assertNotIn('plan', self.state)
+        self.assertNotIn('plan', self.state.get('planning', {}))
         self.assertNotIn('facts', self.state)
 
     def test_light_missing_symbols_escalates_and_calls_design(self):

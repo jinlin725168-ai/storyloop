@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .planning import plan_projection, required_locks
+from .characterization_locks import (capture_locks, routed_coverage, require_saved_coverage)
 from .answers import load_answers
 from .baseline import _git
 from .facts import merge_facts
@@ -123,6 +124,8 @@ def ensure_characterization(project: Path, change: dict, state: dict, services: 
     """Layer 3 gate, once per change: lock the current behaviour of the paths about to change."""
     current = state.get("characterization") or {}
     if current.get("status") in {"GREEN", "SKIPPED"}:
+        if state.get('routing', {}).get('version') == 1:
+            require_saved_coverage(project, state, config, _mandatory_locks(change, state, config))
         return None
     profile = config["profile"]
     reason = None
@@ -180,13 +183,20 @@ def characterize_paths(project: Path, change: dict, state: dict, services: LoopS
         violations = [{"path": p, "category": "NOT_A_TEST_PATH"} for p in outside]
         return pause(project, state, "BOUNDARY_VIOLATION", violations=violations, base_proposal=None,
                      error="Characterization may only write test files", phase="prepare")
-    touched = sorted(set(previous.get("touched", [])) | set(response["touched"]) | set(extend or [])
-                     | set(plan["touched"] if plan else []))
+    coverage = None
+    if state.get('routing', {}).get('version') == 1:
+        coverage = routed_coverage(project, state, config, response, changed,
+                                   list(extend or []) + (plan['touched'] if plan else []))
+    touched = (sorted(coverage) if coverage is not None else sorted(
+        set(previous.get("touched", [])) | set(response["touched"]) | set(extend or [])
+        | set(plan["touched"] if plan else [])))
     for path in touched:
         require(exists_at(project, state["contract_commit"], path) and not matches_test_root(path, profile["test_roots"]),
                 f"Characterized path must be an existing non-test file: {path}")
     pending = {"touched": touched, "tests": sorted(set(response["tests"]) | set(changed)), "changed": changed,
                "extend": list(extend or [])}
+    if coverage is not None:
+        pending['coverage'] = coverage
     return _verify_characterization(project, change_id, state, config, pending)
 
 
@@ -198,10 +208,14 @@ def _verify_characterization(project: Path, change_id: str, state: dict, config:
     in place and `run` re-verifies them without asking the agent again.
     """
     profile = config["profile"]
+    locks = (capture_locks(project, config, pending)
+             if state.get('routing', {}).get('version') == 1 else None)
     unit = run_commands_isolated(project, layer_commands(profile, "unit"), config["check_timeout_seconds"])
     if unit["status"] != "PASSED":
         return pause(project, state, "CHARACTERIZATION_FAILED", unit=unit, pending_characterization=pending,
                      error="Characterization tests must be green on the current code before implementation")
+    if locks is not None:
+        require(locks == capture_locks(project, config, pending), 'Characterization artifacts changed during checks')
     previous = state.get("characterization") or {"touched": [], "tests": []}
     present = _uncommitted(project, pending["changed"])  # a test the human deleted is simply not locked
     commits = list(previous.get("commits", []))
@@ -211,6 +225,10 @@ def _verify_characterization(project: Path, change_id: str, state: dict, config:
                                  "touched": sorted(set(previous.get("touched", [])) | set(pending["touched"])),
                                  "tests": sorted(set(previous.get("tests", [])) | set(pending["tests"])),
                                  "commits": commits}
+    if locks is not None:
+        state['characterization'].update(
+            locks=locks, touched=sorted(locks),
+            tests=sorted({test for artifacts in locks.values() for test in artifacts}))
     # The locks are committed on top of the contract commit and the implementation is not: HEAD is the
     # old code plus every lock, so its unit count is the floor. The workspace would not do: in extend
     # mode it already carries the implementation's edits, deleted tests included.
