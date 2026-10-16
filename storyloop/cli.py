@@ -19,11 +19,14 @@ from .changes import create_change, load_change, revise_change
 from .manual_acceptance import record_manual_acceptance
 from .next_steps import draft_next, next_step
 from .openspec_docs import document_change
-from .models import StoryLoopError, require
+from .models import StoryLoopError, require, validate_product
 from .processutil import redact
 from .project_agents import invoke_project_agent
 from .acceptance_repair import repair_smoke
 from .project_loop import load_run_state, run_change
+from .semantic_repair import answer_with_repair
+from .stop_report import build_stop, render_stop, stop_of
+from .requirement_checklist import blocking_items, evaluate_checklist
 from .run_recovery import reset_run
 from .smoke_runner import run_ci
 from .storage import load_json
@@ -69,6 +72,10 @@ def parser() -> argparse.ArgumentParser:
             child.add_argument("--idea")
             child.add_argument("--change", dest="change_id")
             child.add_argument("--message")
+            child.add_argument("--supersede",
+                               help="作废这个变更的运行，按 --message 修订合同后作为新变更重开")
+            child.add_argument("--reason",
+                               help="在 NEEDS_SPEC_FIX 以外的停点作废时，说明为什么是合同的问题")
             child.add_argument("--no-interactive", action="store_true",
                                help="有待决问题时不在终端逐条澄清")
         elif command == "log":
@@ -105,6 +112,7 @@ def parser() -> argparse.ArgumentParser:
                                help="由人新增或修改 CI 配置（.github/workflows 等）；代理永远不能")
         elif command == "run":
             child.add_argument("--change", dest="change_id", required=True)
+            child.add_argument("--overrule", help="不同意审查对 ORACLE_DEFECT / NEEDS_SPEC_FIX 的判定：写明理由")
             child.add_argument("--no-interactive", action="store_true",
                                help="停在 NEEDS_INPUT 时不在终端提问")
         elif command == "accept":
@@ -149,10 +157,28 @@ def dispatch(args) -> dict:
 def _change(project: Path, args) -> dict:
     require(_is_product_project(project), "Run storyloop init on this Git project first")
     interactive = not getattr(args, "no_interactive", False)
+    if args.supersede:
+        require(args.message and not args.idea and not args.change_id,
+                "--supersede needs --message (and no --idea / --change)")
+        from .supersede import supersede_change
+        from .project_loop_guards import read_only_call
+        reviser = lambda payload: _product_answer(  # noqa: E731
+            project, payload,
+            call=lambda request: read_only_call(
+                project, args.supersede,
+                lambda: invoke_project_agent(project, "product", request)))
+        created = supersede_change(project, args.supersede, args.message, reviser,
+                                   reason=args.reason)
+        adopt_pending(project, created["change_id"])
+        state = clarify_interactively(project, created["change_id"], _revise_with_agent, interactive)
+        pending = state["product"]["questions"] or blocking_items(
+            evaluate_checklist(state["product"], project))
+        return {**state, "next": draft_next(project, state) if pending else created["next"]}
+    require(not args.reason, "--reason is only valid with --supersede")
     if args.idea:
         require(not args.change_id and not args.message,
                 "Use --idea for a new change, or --change with --message for a revision")
-        product = invoke_project_agent(project, "product", {"idea": args.idea})
+        product = _product_answer(project, {"idea": args.idea})
         created = create_change(project, args.idea, product)
         adopt_pending(project, created["change_id"])
         state = clarify_interactively(project, created["change_id"], _revise_with_agent, interactive)
@@ -167,7 +193,7 @@ def _change(project: Path, args) -> dict:
 def _revise_with_agent(project: Path, change_id: str, message: str, answers: list[dict]) -> dict:
     """One product revision: the agent rewrites the contract, the engine records the answers."""
     current = load_change(project, change_id)
-    product = invoke_project_agent(project, "product", {
+    product = _product_answer(project, {
         "change_id": change_id, "message": message,
         "answers": [{"question_id": a["question_id"], "question": a["question"], "answer": a["answer"]}
                     for a in answers],
@@ -175,6 +201,15 @@ def _revise_with_agent(project: Path, change_id: str, message: str, answers: lis
     })
     return revise_change(project, change_id, product, message,
                          clarifications=[{"question": a["question"], "answer": a["answer"]} for a in answers])
+
+
+def _product_answer(project: Path, payload: dict, call=None) -> dict:
+    """Get one semantically valid product answer, allowing one corrective call."""
+    return answer_with_repair(
+        call or (lambda request: invoke_project_agent(project, "product", request)),
+        payload,
+        validate_product,
+    )
 
 
 def clarify_interactively(project: Path, change_id: str, reviser, interactive: bool,
@@ -242,7 +277,8 @@ def _product_dispatch(project: Path, args) -> dict:
         return run_with_answers(project, change_id, interactive=not args.no_interactive)
     if args.command == "run":
         require(change_id, "Product execution needs --change")
-        return run_with_answers(project, change_id, interactive=not args.no_interactive)
+        return run_with_answers(project, change_id, interactive=not args.no_interactive,
+                                overrule=getattr(args, "overrule", None))
     if args.command == "answer":
         return record_answers(project, change_id, args.answers)
     if args.command == "status":
@@ -252,9 +288,11 @@ def _product_dispatch(project: Path, args) -> dict:
         run = load_run_state(project, change_id) if run_path.exists() else None
         return {"status": change["status"], "change_id": change_id,
                 "revision": change["revision"], "run": run,
+                "stop": stop_of(project, run),
                 "telemetry": summarize(project, change_id),
                 "next": (draft_next(project, change) if run is None and change["status"] == "DRAFT"
-                         else next_step((run or {}).get("status") or change["status"], change_id, project, run))}
+                         else (next_step((run or {}).get("status") or change["status"], change_id, project, run)
+                               or ((run or {}).get("stop") or {}).get("resume")))}
     if args.command == "log":
         return change_log(project, change_id)
     if args.command == "reset":
@@ -276,14 +314,14 @@ def _product_dispatch(project: Path, args) -> dict:
 
 
 def run_with_answers(project: Path, change_id: str, interactive: bool,
-                     runner=None) -> dict:
+                     runner=None, overrule: str | None = None) -> dict:
     """Run the change; when it pauses for input and a terminal is present, ask right here.
 
     Answers are recorded exactly as `storyloop answer` would record them, then the run
     continues. Without a terminal (CI, pipes) the NEEDS_INPUT result is returned unchanged.
     """
     runner = runner or run_change  # resolved at call time so tests can patch cli.run_change
-    result = runner(project, change_id)
+    result = runner(project, change_id, **({"overrule": overrule} if overrule is not None else {}))
     while result.get("status") == "NEEDS_INPUT" and interactive and _terminal():
         questions = pending_questions(project, change_id)
         if not questions:
@@ -320,8 +358,36 @@ def display(result: dict, complete_json: bool) -> None:
     for key in ("change_id", "project", "next", "report", "pending", "accepted", "paths", "written"):
         if key in result and result[key] is not None:
             print(f"{key}: {result[key]}")
+    if isinstance(result.get("stop"), dict):
+        for line in render_stop(result["stop"]):
+            print(line)
     for warning in result.get("warnings", []):
         print(f"warning: {warning}")
+
+
+def _error_stop(args, exc: StoryLoopError) -> dict | None:
+    """Best-effort stop context; a damaged run must not mask the original error."""
+    change_id = getattr(args, "change_id", None)
+    if not change_id or getattr(args, "command", None) not in {"run", "approve"}:
+        return None
+    project = args.project.resolve()
+    path = project / ".storyloop/state/runs" / f"{change_id}.json"
+    if not path.exists():
+        return None
+    try:
+        run = load_run_state(project, change_id)
+        return stop_of(project, run) or build_stop(
+            project, run, exc.code, {"error": redact(str(exc))})
+    except (OSError, ValueError, TypeError, KeyError, StoryLoopError):
+        return None
+
+
+def _redact_value(value: object) -> object:
+    if isinstance(value, dict):
+        return {key: _redact_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    return redact(value) if isinstance(value, str) else value
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -337,16 +403,19 @@ def main(argv: list[str] | None = None) -> int:
             "UNSAFE_CONTAINMENT", "WORKSPACE_TAINTED",
             "BUDGET_EXHAUSTED", "BASE_CHANGE_REQUIRED",
             "BOUNDARY_VIOLATION", "ERROR", "CHARACTERIZATION_FAILED",
-            "SMOKE_UPDATE_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT",
+            "SMOKE_UPDATE_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_SPEC_FIX", "NO_PROGRESS",
         }
         return 2 if result.get("status") in failures else 0
     except StoryLoopError as exc:
         error = {"status": exc.code, "message": redact(str(exc))}
         change_id = getattr(args, "change_id", None)
+        stop = _error_stop(args, exc)
+        if stop is not None:
+            error["stop"] = stop
         hint = next_step(exc.code, change_id, args.project.resolve()) if change_id else None
         if hint:
             error["next"] = hint
-        print(json.dumps(error, ensure_ascii=False), file=sys.stderr)
+        print(json.dumps(_redact_value(error), ensure_ascii=False), file=sys.stderr)
         return 2
     except (OSError, ValueError, TypeError) as exc:
         print(json.dumps({"status": "BLOCKED", "message": "Operation could not complete: " + type(exc).__name__}), file=sys.stderr)

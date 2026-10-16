@@ -71,7 +71,10 @@ STORY = _obj({
     "acceptance": {"type": "array", "items": CRITERION},
 })
 FINDING = _obj({"message": STRING, "perspective": _nullable(STRING),
-                "criterion_id": _nullable(STRING), "evidence": _nullable(STRING)}, open_=True)
+                "criterion_id": _nullable(STRING), "evidence": _nullable(STRING),
+                "target": _nullable({"type": "string", "enum": ["implementation", "oracle", "contract"]}),
+                "location": _nullable(STRING)}, open_=True)
+FACTS = _nullable({"type": "array", "items": _obj({"statement": STRING, "location": STRING})})
 
 SCHEMAS = {
     "product": _obj({
@@ -96,12 +99,14 @@ SCHEMAS = {
         "version": {"type": "integer", "enum": [1]},
         "tests": {"type": "array", "items": SYSTEM_SMOKE_TEST}}),
         "rationale": _nullable(STRING)}),
-    "design": _obj({"summary": STRING, "touched": STRINGS, "design": STRING, "questions": STRINGS}),
+    "design": _obj({"summary": STRING, "touched": STRINGS, "design": STRING, "questions": STRINGS,
+                    "facts": FACTS}),
     "characterize": _obj({"summary": STRING, "touched": STRINGS, "tests": STRINGS, "questions": STRINGS}),
-    "implement": _obj({"summary": STRING, "questions": STRINGS, "design": _nullable(STRING)}),
+    "implement": _obj({"summary": STRING, "questions": STRINGS, "design": _nullable(STRING),
+                       "facts": FACTS}),
     "review": _obj({"verdict": {"type": "string", "enum": ["pass", "fail", "needs_input"]},
                     "summary": STRING, "findings": {"type": "array", "items": FINDING},
-                    "questions": STRINGS}),
+                    "questions": STRINGS, "facts": FACTS}),
     "survey": _obj({"documents": FILES}),
 }
 

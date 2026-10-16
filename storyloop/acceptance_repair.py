@@ -26,7 +26,8 @@ if TYPE_CHECKING:  # the loop imports this module; the services type is only an 
     from .project_loop import LoopServices
 
 
-REPAIRABLE = {"IMPLEMENTING", "BUDGET_EXHAUSTED", "NEEDS_INPUT", "EXISTING_GREEN", "ORACLE_DEFECT"}
+REPAIRABLE = {"IMPLEMENTING", "BUDGET_EXHAUSTED", "NEEDS_INPUT", "EXISTING_GREEN", "ORACLE_DEFECT",
+              "NO_PROGRESS"}
 
 
 def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServices | None = None,
@@ -81,7 +82,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
         if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
             raise
         return _unproven_suite(project, state, exc)
-    for key in ("questions", "error", "pending", "acceptance", "next"):
+    for key in ("questions", "error", "pending", "acceptance", "next", "routed", "stop", "mode"):
         state.pop(key, None)
     ensure_baseline(project, state, change["product"])  # a stop before RED never sampled one
     state.update({"status": "IMPLEMENTING", "attempt": 0, "red_evidence_sha256": red["evidence_sha256"]})
@@ -103,7 +104,7 @@ def _unproven_suite(project: Path, state: dict, error: StoryLoopError) -> dict:
     """
     state.pop("red_evidence_sha256", None)
     state["attempt"] = 0
-    for key in ("questions", "pending", "next"):
+    for key in ("questions", "pending", "next", "routed", "stop", "mode"):
         state.pop(key, None)
     return pause(project, state, error.code, error=str(error),
                  acceptance={"status": error.code, **error.details})

@@ -39,7 +39,8 @@ def open_call(project: Path, role: str, ledger: str | None, adapter: object, req
 def close_call(project: Path, call_id: str, *, status: str, wall_ms: int, response: object = None,
                raw: str | None = None, stderr: str = "", error: str | None = None,
                code: str | None = None, sessions: list[str] | None = None,
-               schema_errors: list[str] | None = None, repairs: int = 0) -> None:
+               schema_errors: list[str] | None = None, repairs: int = 0,
+               semantic_repair: bool = False) -> None:
     """Finish the record; failures to write it never mask the call's own outcome."""
     folder = Path(project) / CALLS_ROOT / call_id
     try:
@@ -52,6 +53,8 @@ def close_call(project: Path, call_id: str, *, status: str, wall_ms: int, respon
         meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
         meta.update({"status": status, "wall_ms": int(wall_ms), "sessions": list(sessions or []),
                      "repairs": repairs})
+        if semantic_repair:
+            meta["semantic_repair"] = True
         if error:
             meta["error"] = redact(error)[:4000]
         if code:

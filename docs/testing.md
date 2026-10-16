@@ -1,11 +1,11 @@
 # 测试与验收基础设施
 
-对应引擎版本：0.1.0，核对日期 2026-10-11。这一页讲引擎**自己的**测试；目标仓库的测试分层见 [概念手册](concepts.md) 与 [接入手册](onboarding-a-repository.md)。
+对应引擎版本：0.1.0，核对日期 2026-10-16（子项目 2a 工作分支）。这一页讲引擎**自己的**测试；目标仓库的测试分层见 [概念手册](concepts.md) 与 [接入手册](onboarding-a-repository.md)。
 
 ## 一、单元与端到端测试
 
 - 框架：标准库 `unittest`，不依赖第三方包、模型账号或网络。
-- 位置：`tests/`，63 个文件、275 个测试用例；本机（WSL2）全量约 10 分钟。
+- 位置：`tests/`；文件与用例数量随开发变化，以全量运行输出为准。本机（WSL2）全量通常超过 10 分钟。
 - 原理：每个测试在临时目录建一个真实 Git 仓库，`init` 锁底座，用脚本化的 `LoopServices`（Python 函数代替代理）或假的 `codex` / `claude` 可执行文件驱动闭环，断言状态、文件和 Git 历史。
 
 运行：
@@ -38,6 +38,7 @@
 | 安全与边界 | `test_boundaries`、`test_project_boundaries`、`test_project_security_gates`、`test_project_loop_tampering`、`test_workspace_scratch`、`test_ci_path_safety`、`test_windows_path_guards`、`test_process_containment` |
 | 判据与性质 | `test_change_nature`、`test_oracle_counts`、`test_oracle_tiers`、`test_oracle_baseline`、`test_oracle_protection`、`test_nature_e2e` |
 | 代理与适配器 | `test_project_agents`、`test_codex_adapter`、`test_claude_adapter`、`test_role_schemas`、`test_structured_output` |
+| 纠偏 | `test_failure_attribution`、`test_failure_routing`、`test_no_progress`、`test_facts`、`test_stop_report`、`test_supersede`、`test_semantic_repair` |
 | 可观测性 | `test_telemetry`、`test_call_diagnostics`、`test_change_report` |
 | 命令面与技能 | `test_cli`、`test_product_cli`、`test_core`、`test_skills`、`test_foundation_survey` |
 
@@ -53,6 +54,8 @@
 ## 三、真实模型验证
 
 单元测试不调用模型。真实闭环在目标仓库上跑，记录在 [案例与成本参考](case-studies.md)；入门教程（[tutorial.md](tutorial.md)）用 `examples/todo-demo/` 可在本机复现一次。
+
+子项目 2a 的 [Q8 验收](superpowers/specs/2026-10-14-子项目2a-纠偏-design.md#2-需要确认的设计取舍) 尚未执行：需在 todo-demo 上验证合同矛盾 → `NEEDS_SPEC_FIX` → 修订重开 → PASSED，以及 A33 型判据缺陷 → 首轮 `ORACLE_DEFECT` → 修判据 → PASSED。真实模型调用产生费用，须获授权后再跑；自动化假代理测试不能替代这两项验收。2026-10-16 本次工作分支执行 `.venv/bin/python -m unittest discover -s tests -t .`：405 项、890.334 秒，`OK (skipped=1)`；审查修复后的 92 项定点回归通过，独立整分支审查发现已修复并复审通过。
 
 ## 四、会被跳过的测试
 

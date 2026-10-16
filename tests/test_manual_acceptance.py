@@ -14,6 +14,7 @@ from storyloop.changes import create_change
 from storyloop.manual_acceptance import load_manual_acceptance, record_manual_acceptance
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, load_run_state, run_change
+from storyloop.run_recovery import reset_run
 from tests.support import product
 from tests.test_baseline_behavior import repository
 from tests.test_project_loop import smoke_payload
@@ -50,6 +51,23 @@ class ManualAcceptanceTests(unittest.TestCase):
         state = create_change(root, "orders", mixed_product(), now=lambda: NOW)
         approve_change(root, state["change_id"], now=lambda: NOW)
         return state["change_id"]
+
+    def test_reset_after_manual_pause_retries_the_same_implementation_attempt(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = self._approved(root)
+            self.assertEqual(run_change(root, change_id, services(change_id))["status"],
+                             "MANUAL_ACCEPTANCE_REQUIRED")
+            (root / "modules/orders/service.py").write_text("VALUE = 2\n", encoding="utf-8")
+            result = reset_run(root, change_id, "实现内容变化，需要重新验证")
+            self.assertEqual(result["status"], "IMPLEMENTING")
+            state = load_run_state(root, change_id)
+            self.assertEqual(state["attempt"], 0)
+            self.assertNotIn("verified", state)
+            self.assertNotIn("candidate_sha256", state)
+            self.assertEqual(run_change(root, change_id, services(change_id))["status"],
+                             "MANUAL_ACCEPTANCE_REQUIRED")
+            self.assertEqual(load_run_state(root, change_id)["attempt"], 1)
 
     def test_verified_run_pauses_until_manual_criteria_are_accepted(self):
         with tempfile.TemporaryDirectory() as folder:

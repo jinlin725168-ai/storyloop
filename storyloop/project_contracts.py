@@ -7,7 +7,7 @@ from .models import require
 
 def validate_agent_summary(value: object) -> None:
     require(isinstance(value, dict) and {"summary", "questions"} <= set(value)
-            and set(value) <= {"summary", "questions", "design"},
+            and set(value) <= {"summary", "questions", "design", "facts"},
             "Implementation agent returned an invalid contract")
     require(isinstance(value["summary"], str), "Implementation summary must be text")
     require(isinstance(value.get("design", ""), str), "Implementation design must be markdown text")
@@ -18,7 +18,8 @@ def validate_agent_summary(value: object) -> None:
 
 def validate_review(value: object) -> str:
     require(isinstance(value, dict)
-            and set(value) == {"verdict", "summary", "findings", "questions"},
+            and {"verdict", "summary", "findings", "questions"} <= set(value)
+            and set(value) <= {"verdict", "summary", "findings", "questions", "facts"},
             "Review agent returned an invalid contract")
     require(value["verdict"] in {"pass", "fail", "needs_input"},
             "Invalid review verdict")

@@ -20,6 +20,7 @@ Clock = Callable[[], datetime]
 
 def create_change(
     project: Path, idea: str, product: dict, now: Clock | None = None,
+    supersedes: dict | None = None,
 ) -> dict:
     """Create a local ignored draft from one short product idea."""
     project = Path(project).resolve()
@@ -41,6 +42,8 @@ def create_change(
         "history": [],
         "approval": None,
     }
+    if supersedes is not None:
+        state["supersedes"] = _supersedes(supersedes)
     _save(project, state)
     return deepcopy(state)
 
@@ -54,15 +57,37 @@ def load_change(project: Path, change_id: str) -> dict:
         "created_at", "updated_at", "history", "approval",
     }
     from .models import require
-    require(set(value) == required and value["version"] == 1, "Invalid change state")
+    optional = {"supersedes", "superseded_by"}
+    require(required <= set(value) <= required | optional and value["version"] == 1,
+            "Invalid change state")
     require(value["change_id"] == change_id, "Change state identity mismatch")
-    require(value["status"] in {"DRAFT", "APPROVED", "RUNNING", "PASSED", "PAUSED", "FAILED"},
+    require(value["status"] in {
+        "DRAFT", "APPROVED", "RUNNING", "PASSED", "PAUSED", "FAILED", "SUPERSEDED",
+    },
             "Invalid change status")
     require(type(value["revision"]) is int and value["revision"] > 0, "Invalid change revision")
     text(value["idea"], "product idea")
     validate_product(value["product"])
     require(isinstance(value["history"], list), "Invalid change history")
+    if "supersedes" in value:
+        _supersedes(value["supersedes"])
+    if "superseded_by" in value:
+        identifier(value["superseded_by"], "superseding change id")
     return value
+
+
+def _supersedes(value: object) -> dict:
+    """Validate and copy the immutable link to the run whose contract was replaced."""
+    require(isinstance(value, dict), "Invalid supersedes link")
+    keys = {"change_id", "message", "reason", "blocker", "source_branch", "design_summary"}
+    require(set(value) == keys, "Invalid supersedes link")
+    result = deepcopy(value)
+    identifier(result["change_id"], "superseded change id")
+    text(result["message"], "revision message")
+    text(result["source_branch"], "source branch")
+    for key in ("reason", "blocker", "design_summary"):
+        require(result[key] is None or isinstance(result[key], str), "Invalid supersedes link")
+    return result
 
 
 def revise_change(

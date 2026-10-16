@@ -1,0 +1,254 @@
+"""Failed attempts go to whoever has to fix them (subproject 2a §3)."""
+
+from datetime import datetime, timezone
+from pathlib import Path
+import tempfile
+import unittest
+
+from storyloop.acceptance_repair import repair_smoke
+from storyloop.approvals import approve_change
+from storyloop.baseline import bootstrap_project, load_project_config
+from storyloop.changes import create_change
+from storyloop.cli import parser, run_with_answers
+from storyloop.evidence_locations import evidence_location_exists
+from storyloop.models import StoryLoopError
+from storyloop.project_loop import LoopServices, load_run_state, run_change
+from storyloop.project_loop_failures import record_boundary
+from storyloop.storage import write_json
+from tests.support import product
+from tests.test_baseline_behavior import git, repository
+from tests.test_project_loop import smoke_payload
+
+NOW = datetime(2026, 10, 14, tzinfo=timezone.utc)
+
+
+def approved(root: Path, max_attempts: int = 3, add_core: bool = False) -> str:
+    repository(root)
+    if add_core:
+        (root / "core.py").write_text("VALUE = 1\n", encoding="utf-8")
+        git(root, "add", "core.py")
+        git(root, "commit", "-m", "core")
+    bootstrap_project(root, {"test_commands": []})
+    config = load_project_config(root)
+    config["max_attempts"] = max_attempts
+    write_json(root / ".storyloop/config.json", config)
+    change_id = create_change(root, "orders", product(), now=lambda: NOW)["change_id"]
+    approve_change(root, change_id, now=lambda: NOW)
+    return change_id
+
+
+def implementer(calls: list):
+    def implement(project, context):
+        calls.append(context)
+        target = project / "modules/orders/service.py"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("VALUE = 1\n", encoding="utf-8")
+        return {"summary": "done", "questions": []}
+    return implement
+
+
+def failing_review(*findings):
+    return lambda project, context: {
+        "verdict": "fail", "summary": "no", "findings": list(findings), "questions": []}
+
+
+def oracle_finding(change_id):
+    return {"message": "the test reads .git", "target": "oracle", "criterion_id": "AC-1",
+            "location": f"acceptance/changes/{change_id}/flow.py:3"}
+
+
+class EvidenceLocationTests(unittest.TestCase):
+    def test_candidate_location_requires_a_real_line_and_rejects_escaping_symlink(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            outside = root.parent / f"{root.name}-outside.py"
+            outside.write_text("one\ntwo\n", encoding="utf-8")
+            try:
+                (root / "linked.py").symlink_to(outside)
+                self.assertFalse(evidence_location_exists(root, "linked.py:1", None))
+                (root / "plain.py").write_text("one\n", encoding="utf-8")
+                self.assertTrue(evidence_location_exists(root, "plain.py:1", None))
+                self.assertFalse(evidence_location_exists(root, "plain.py:2", None))
+            finally:
+                outside.unlink(missing_ok=True)
+
+    def test_contract_commit_location_rejects_a_symlink_object(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            (root / "target.py").write_text("one\n", encoding="utf-8")
+            (root / "folder").mkdir()
+            (root / "folder/inside.py").write_text("one\n", encoding="utf-8")
+            (root / "linked.py").symlink_to("target.py")
+            git(root, "add", "target.py", "linked.py", "folder/inside.py")
+            git(root, "commit", "-m", "evidence")
+            commit = git(root, "rev-parse", "HEAD")
+            (root / "linked.py").unlink()
+            self.assertTrue(evidence_location_exists(root, "target.py:1", commit))
+            self.assertFalse(evidence_location_exists(root, "linked.py:1", commit))
+            self.assertFalse(evidence_location_exists(root, "folder:1", commit))
+
+
+class ReviewRoutingTests(unittest.TestCase):
+    def test_cli_forwards_overrule_only_on_the_first_run(self):
+        args = parser().parse_args(["run", ".", "--change", "FEAT-1", "--overrule", "human reason"])
+        seen = []
+
+        def runner(project, change_id, **kwargs):
+            seen.append(kwargs)
+            return {"status": "IMPLEMENTING"}
+
+        run_with_answers(Path("."), args.change_id, False, runner=runner, overrule=args.overrule)
+        self.assertEqual(seen, [{"overrule": "human reason"}])
+
+    def test_an_oracle_finding_stops_on_the_first_attempt(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = approved(root)
+            calls = []
+            result = run_change(root, change_id, LoopServices(
+                generate_smoke=lambda p, s: smoke_payload(change_id), implement=implementer(calls),
+                review=failing_review(oracle_finding(change_id))))
+            self.assertEqual(result["status"], "ORACLE_DEFECT")
+            state = load_run_state(root, change_id)
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(state["routed"]["target"], "oracle")
+            self.assertEqual(state["failures"][-1]["attribution"], "oracle")
+
+    def test_contract_beats_oracle(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = approved(root)
+            contract = {"message": "contradiction", "target": "contract", "criterion_id": "AC-1",
+                        "location": "modules/orders/service.py:1"}
+            result = run_change(root, change_id, LoopServices(
+                generate_smoke=lambda p, s: smoke_payload(change_id), implement=implementer([]),
+                review=failing_review(oracle_finding(change_id), contract)))
+            self.assertEqual(result["status"], "NEEDS_SPEC_FIX")
+
+    def test_plain_run_on_a_review_routed_stop_is_refused(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = approved(root)
+            services = LoopServices(generate_smoke=lambda p, s: smoke_payload(change_id),
+                                    implement=implementer([]), review=failing_review(oracle_finding(change_id)))
+            run_change(root, change_id, services)
+            with self.assertRaises(StoryLoopError) as caught:
+                run_change(root, change_id, services)
+            self.assertIn("--overrule", str(caught.exception))
+            self.assertIn("acceptance-repair", str(caught.exception))
+
+    def test_an_overrule_rewrites_the_finding_target_and_signature(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = approved(root, max_attempts=2)
+            calls = []
+            services = LoopServices(generate_smoke=lambda p, s: smoke_payload(change_id),
+                                    implement=implementer(calls), review=failing_review(oracle_finding(change_id)))
+            run_change(root, change_id, services)
+            before = load_run_state(root, change_id)["failures"][0]["signature"]
+            result = run_change(root, change_id, services, overrule="判据没错，应当在实现里解决")
+            state = load_run_state(root, change_id)
+            self.assertEqual(result["status"], "BUDGET_EXHAUSTED")
+            self.assertEqual(state["failures"][0]["attribution"], "implement")
+            self.assertEqual(state["failures"][0]["review"]["findings"][0]["target"], "implementation")
+            self.assertNotEqual(state["failures"][0]["signature"], before)
+            self.assertIn("已被人驳回", state["failures"][-1]["review"]["findings"][0]["attribution_note"])
+
+    def test_overruling_contract_in_a_mixed_stop_still_routes_the_oracle_finding(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = approved(root)
+            contract = {"message": "contradiction", "target": "contract", "criterion_id": "AC-1",
+                        "location": "modules/orders/service.py:1"}
+            services = LoopServices(generate_smoke=lambda p, s: smoke_payload(change_id),
+                                    implement=implementer([]),
+                                    review=failing_review(oracle_finding(change_id), contract))
+            self.assertEqual(run_change(root, change_id, services)["status"], "NEEDS_SPEC_FIX")
+            result = run_change(root, change_id, services, overrule="合同并不矛盾")
+            self.assertEqual(result["status"], "ORACLE_DEFECT")
+            state = load_run_state(root, change_id)
+            targets = [item["target"] for item in state["failures"][0]["review"]["findings"]]
+            self.assertEqual(targets, ["oracle", "implementation"])
+
+    def test_invalid_overrule_does_not_create_a_feature_branch(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = approved(root)
+            before = git(root, "branch", "--list")
+            with self.assertRaises(StoryLoopError):
+                run_change(root, change_id, LoopServices(
+                    generate_smoke=lambda p, s: smoke_payload(change_id), implement=implementer([]),
+                    review=failing_review()), overrule="not applicable")
+            self.assertEqual(git(root, "branch", "--list"), before)
+            self.assertFalse((root / ".storyloop/state/runs" / f"{change_id}.json").exists())
+
+    def test_acceptance_repair_clears_routing_and_starts_a_new_epoch(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = approved(root)
+            run_change(root, change_id, LoopServices(
+                generate_smoke=lambda p, s: smoke_payload(change_id), implement=implementer([]),
+                review=failing_review(oracle_finding(change_id))))
+
+            def regenerate(project, request):
+                repaired = smoke_payload(change_id)
+                repaired["files"][0]["content"] += "# repaired\n"
+                return repaired
+
+            repair_smoke(root, change_id, "reviewer is right", LoopServices(
+                generate_smoke=regenerate, implement=implementer([]), review=failing_review()))
+            state = load_run_state(root, change_id)
+            self.assertNotIn("routed", state)
+            self.assertNotIn("mode", state)
+            self.assertEqual(len(state["repairs"]), 1)
+
+
+class BoundaryAttributionTests(unittest.TestCase):
+    def test_repeated_boundary_failure_stops_at_no_progress(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = approved(root, max_attempts=6, add_core=True)
+            def implement(project, context):
+                (project / "core.py").write_text("VALUE = 2\n", encoding="utf-8")
+                return {"summary": "changed base", "questions": []}
+
+            services = LoopServices(generate_smoke=lambda p, s: smoke_payload(change_id),
+                                    implement=implement, review=failing_review())
+            first = run_change(root, change_id, services)
+            self.assertEqual(first["status"], "BASE_CHANGE_REQUIRED")
+            state = load_run_state(root, change_id)
+            boundary = {"status": first["status"], "violations": first["violations"],
+                        "base_proposal": first["base_proposal"]}
+            state["attempt"] = 2
+            state["mode"] = None
+            self.assertEqual(record_boundary(root, state, boundary)["status"], "BASE_CHANGE_REQUIRED")
+            state["attempt"] = 3
+            state["mode"] = "root_cause"
+            result = record_boundary(root, state, boundary)
+            self.assertEqual(result["status"], "NO_PROGRESS")
+            self.assertEqual([item["mode"] for item in state["failures"]],
+                             [None, None, "root_cause"])
+
+    def test_boundary_stop_records_base_attribution_and_signature_once(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = approved(root, add_core=True)
+
+            def implement(project, context):
+                (project / "core.py").write_text("VALUE = 2\n", encoding="utf-8")
+                return {"summary": "changed base", "questions": []}
+
+            result = run_change(root, change_id, LoopServices(
+                generate_smoke=lambda p, s: smoke_payload(change_id), implement=implement,
+                review=failing_review()))
+            state = load_run_state(root, change_id)
+            self.assertEqual(result["status"], "BASE_CHANGE_REQUIRED")
+            self.assertEqual(len(state["failures"]), 1)
+            self.assertEqual(state["failures"][0]["attribution"], "base")
+            self.assertTrue(state["failures"][0]["signature"])
+
+
+if __name__ == "__main__":
+    unittest.main()

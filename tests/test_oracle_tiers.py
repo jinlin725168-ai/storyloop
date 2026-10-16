@@ -215,7 +215,7 @@ class FailedRepairTests(unittest.TestCase):
                 {"message": "keep going"}], "questions": []}
             run_change(root, change_id, LoopServices(generate_smoke=lambda p, s: suite(change_id, 1, 0),
                                                      implement=implement, review=review))
-            self.assertEqual(load_run_state(root, change_id)["status"], "BUDGET_EXHAUSTED")
+            self.assertEqual(load_run_state(root, change_id)["status"], "NO_PROGRESS")
             # New suite: AC-1 passes once the implementation exists; AC-2 ("must hold") checks a file that only
             # the implementation creates, so it fails on the contract commit: the suite itself is defective.
             exists = ("from pathlib import Path\nimport sys\n"

@@ -21,7 +21,9 @@ from .baseline import _git, load_baseline, load_project_config, verify_baseline
 from .boundaries import capture_snapshot
 from .changes import load_change
 from .manual_acceptance import load_manual_acceptance, pending_manual_criteria
-from .models import StoryLoopError, require
+from .failure_attribution import layer_attribution, next_mode
+from .facts import merge_facts
+from .models import StoryLoopError, require, text
 from .openspec_docs import validate_with_cli
 from .project_boundaries import audit_project_changes
 from .project_contracts import validate_agent_summary, validate_review
@@ -32,19 +34,21 @@ from .project_loop_gates import (characterize_paths, design_plan, ensure_charact
                                  resume_characterization, uncharacterized_paths)
 from .project_loop_guards import (read_only_call, require_control_unchanged, require_git_visible,
                                   verify_read_only_snapshot, write_safely)
-from .project_loop_support import (control_digest, pause, pause_for_boundary, relative_files, run_path,
-                                   save_run)
+from .project_loop_failures import (apply_overrule, epoch_of, record_boundary, record_failure,
+                                    require_routed_choice, route_review)
+from .project_loop_support import control_digest, pause, relative_files, run_path, save_run
 from .oracle_counts import check_layers, ensure_baseline
 from .project_profile import layer_commands
+from .processutil import redact
 from .project_receipt import recover_completed_merge
 from .system_smoke import run_system_smoke_isolated
 from .smoke import (RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, load_smoke_manifest, protection_path,
-                    without_manifest_echo)
+                    validate_suite, without_manifest_echo)
+from .semantic_repair import REPAIR_KEYS, answer_with_repair
 from .smoke import suite_relative, suite_root as acceptance_suite_root
 from .skills import ROLE_SKILLS, used_skills
 from .smoke_runner import implementation_digest, run_commands_isolated, run_smoke_isolated
 from .storage import load_json, locked
-
 
 
 @dataclass(frozen=True)
@@ -58,19 +62,35 @@ class LoopServices:
     design: Callable[[Path, dict], dict] | None = None
 
 
-def run_change(project: Path, change_id: str, services: LoopServices | None = None) -> dict:
+def run_change(project: Path, change_id: str, services: LoopServices | None = None,
+               overrule: str | None = None) -> dict:
     """Run or resume an approved change until pass or an explicit pause state."""
-    with locked(Path(project).resolve()):
-        return _run_change_locked(Path(project).resolve(), change_id, services)
+    if overrule is not None:
+        overrule = text(overrule, "overrule reason")
+    project = Path(project).resolve()
+    with locked(project):
+        try:
+            return _run_change_locked(project, change_id, services, overrule)
+        except StoryLoopError as exc:
+            if exc.code == "WORKSPACE_TAINTED":
+                path = run_path(project, change_id)
+                if path.exists():
+                    state = load_json(path)
+                    state["interrupted_status"] = state["status"]
+                    pause(project, state, "WORKSPACE_TAINTED", error=redact(str(exc)))
+            raise
 
 
 def _run_change_locked(
-    project: Path, change_id: str, services: LoopServices | None,
+    project: Path, change_id: str, services: LoopServices | None, overrule: str | None = None,
 ) -> dict:
     project = Path(project).resolve()
     change = load_change(project, change_id)
     saved_path = run_path(project, change_id)
     saved = load_json(saved_path) if saved_path.exists() else None
+    if overrule:
+        require(saved and saved.get("routed") and saved.get("status") in {"ORACLE_DEFECT", "NEEDS_SPEC_FIX"},
+                "--overrule 只能用于审查判定的 ORACLE_DEFECT 或 NEEDS_SPEC_FIX")
     if saved and saved.get("status") == "PASSED":
         require(change["status"] == "PASSED", "Completed run has inconsistent change state")
         return passed_result(saved)
@@ -81,6 +101,12 @@ def _run_change_locked(
     services = services or _default_services()
     config = load_project_config(project)
     state, start_attempt, fresh = _open_run(project, change)
+    state.pop("stop", None)
+    require_routed_choice(state, overrule)
+    if overrule:
+        routed = apply_overrule(project, state, overrule)
+        if routed is not None:
+            return routed
     if state["status"] == "NEEDS_INPUT":
         require(not _unanswered(state, load_answers(project, change_id)),
                 "Answer the pending questions first: storyloop answer <project> --change "
@@ -114,10 +140,7 @@ def _run_change_locked(
         try:
             outcome = _run_attempt(project, change, state, services, config)
         except StoryLoopError as exc:
-            if exc.code == "WORKSPACE_TAINTED":
-                state.update({"status": "WORKSPACE_TAINTED", "error": str(exc)})
-                save_run(project, state)
-            elif exc.code == "AGENT_UNAVAILABLE":
+            if exc.code == "AGENT_UNAVAILABLE":
                 _hand_back_attempt(project, state, exc)
             raise
         if outcome is not None:
@@ -137,7 +160,8 @@ def _open_run(project: Path, change: dict) -> tuple[dict, int, bool]:
         resumable = {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED",
                      "IMPLEMENTING", "BASE_CHANGE_REQUIRED",
                      "BOUNDARY_VIOLATION", "NEEDS_INPUT", "BUDGET_EXHAUSTED",
-                     "CHARACTERIZATION_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT",
+                     "CHARACTERIZATION_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_SPEC_FIX",
+                     "NO_PROGRESS",
                      "VERIFIED", "MANUAL_ACCEPTANCE_REQUIRED", "MERGED", "RECEIPTING",
                      "FINALIZING"}
         require(state.get("change_id") == change_id and state.get("status") in resumable,
@@ -159,6 +183,12 @@ def _open_run(project: Path, change: dict) -> tuple[dict, int, bool]:
             )
             _follow_base_upgrade(project, state)
         return state, int(state.get("attempt", 0)) + 1, False
+    link = change.get("supersedes")
+    if link:
+        branch = current_branch(project)
+        require(branch == link["source_branch"],
+                f"{change_id} 修订自 {link['change_id']}：新运行要从源分支开始，"
+                f"git checkout {link['source_branch']}（当前在 {branch}）")
     verify_baseline(project)
     state = _new_run_state(change_id, start_feature(project, change_id),
                            change["approval"]["contract_digest"])
@@ -189,19 +219,30 @@ def _run_attempt(
     state.pop("questions", None)  # answered by reaching a new attempt; never carry stale ones
     answers = load_answers(project, change_id)
     state["answers"] = answers
+    failures = state["failures"]
+    adjacent = failures and failures[-1].get("attempt") == state["attempt"] - 1
+    state["mode"] = next_mode(failures if adjacent else [], epoch_of(state))
     context = {"change": change, "attempt": state["attempt"],
                "max_attempts": config["max_attempts"],
                "failures": list(state["failures"]), "answers": answers,
+               "facts": list(state.get("facts") or []),
                "characterization": state.get("characterization"),
+               "mode": state["mode"],
                "design_plan": design_plan(state)}
     response, touched = write_safely(project, change_id, lambda: _implement_answer(services, project, context))
     if "_contract_error" in response:
         # The work on disk stays; the malformed answer costs this attempt and is fed back as a failure.
-        state["failures"].append({"attempt": state["attempt"],
-                                  "contract": {"status": "INVALID", "message": response["_contract_error"]}})
-        save_run(project, state)
-        return None
+        return record_failure(project, state, {"attempt": state["attempt"], "contract": {
+            "status": "INVALID", "message": response["_contract_error"]}}, "implement")
+    return _judge_attempt(project, change, state, services, config, response, touched)
+
+
+def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServices, config: dict,
+                   response: dict, touched: set[str]) -> dict | None:
+    """Apply deterministic gates to one valid implement response."""
+    change_id = change["change_id"]
     validate_agent_summary(response)
+    merge_facts(project, state, response.get("facts"), "implement")
     if response.get("design"):
         state["design"] = response["design"]
     if response["questions"]:
@@ -209,7 +250,7 @@ def _run_attempt(
     boundary = audit_project_changes(project, change_id)
     require_git_visible(touched, boundary)
     if boundary["violations"]:
-        return pause_for_boundary(project, state, boundary)
+        return record_boundary(project, state, boundary)
     uncharacterized = uncharacterized_paths(project, state, boundary, config)
     if uncharacterized:
         # Existing behaviour must be locked before it is changed: restore, lock, and try again.
@@ -217,26 +258,22 @@ def _run_attempt(
         paused = characterize_paths(project, change, state, services, config, extend=uncharacterized)
         if paused is not None:
             return paused
-        state["failures"].append({"attempt": state["attempt"],
-                                  "characterization": {"status": "FAILED", "uncharacterized": uncharacterized}})
-        save_run(project, state)
-        return None
+        return record_failure(project, state, {"attempt": state["attempt"], "characterization": {
+            "status": "FAILED", "uncharacterized": uncharacterized}}, "implement")
     layers, boundary = _run_checks_safely(project, change_id, config, boundary)
     layers = check_layers(layers, state.get("oracle"))
     if boundary["violations"]:
-        return pause_for_boundary(project, state, boundary)
+        return record_boundary(project, state, boundary)
     if not layers_green(layers):
-        state["failures"].append({"attempt": state["attempt"], **layers})
-        save_run(project, state)
-        return None
+        return record_failure(project, state, {"attempt": state["attempt"], **layers},
+                              layer_attribution(layers))
     review = _perform_review(project, change, state, services, boundary, layers)
     verdict = validate_review(review)
+    merge_facts(project, state, review.get("facts"), "review")
     if verdict == "needs_input":
         return pause(project, state, "NEEDS_INPUT", questions=review["questions"])
     if verdict == "fail":
-        state["failures"].append({"attempt": state["attempt"], "review": review})
-        save_run(project, state)
-        return None
+        return route_review(project, change, state, review)
     verified = {"boundary": boundary, "layers": layers, "review": review}
     paused = _manual_acceptance_gate(project, change, state, verified)
     if paused is not None:
@@ -255,8 +292,10 @@ def _hand_back_attempt(project: Path, state: dict, error: StoryLoopError) -> Non
     moment = datetime.now(timezone.utc).isoformat(timespec="seconds")
     state.setdefault("agent_failures", []).append({
         "attempt": state["attempt"], "role": error.details.get("role"), "code": error.code,
-        "message": str(error)[:600], "at": moment})
+        "message": redact(str(error))[:600], "at": moment})
     state["attempt"] = max(int(state["attempt"]) - 1, 0)
+    from .stop_report import build_stop
+    state["stop"] = build_stop(project, state, "AGENT_UNAVAILABLE", {"error": redact(str(error))})
     save_run(project, state)
 
 
@@ -309,11 +348,15 @@ def _prepare_acceptance(
     if smoke_state.exists():
         load_smoke_manifest(project, change_id)
     else:
-        generated = read_only_call(
-            project, change_id, lambda: services.generate_smoke(project, change)
-        )
-        require(isinstance(generated, dict) and set(generated) == {"files", "manifest"},
-                "Smoke agent returned an invalid contract")
+        def validate(answer: object) -> None:
+            require(isinstance(answer, dict) and set(answer) == {"files", "manifest"},
+                    "Smoke agent returned an invalid contract")
+            validate_suite(change, answer["files"], answer["manifest"])
+
+        generated = answer_with_repair(
+            lambda request: read_only_call(
+                project, change_id, lambda: services.generate_smoke(project, request)),
+            change, validate)
         install_smoke_suite(project, change_id, without_manifest_echo(generated["files"]), generated["manifest"])
     smoke_root = acceptance_suite_root(project, change_id)
     paths = relative_files(project, [contract_root, smoke_root])
@@ -420,6 +463,7 @@ def _perform_review(
     boundary: dict, layers: dict,
 ) -> dict:
     context = {"change": change, "attempt": state["attempt"],
+               "facts": list(state.get("facts") or []),
                "layers": layers, "boundary": boundary, "design_plan": design_plan(state),
                "answers": load_answers(project, change["change_id"]),
                "design": state.get("design") or ""}
@@ -446,7 +490,9 @@ def _default_services() -> LoopServices:
     return LoopServices(
         generate_smoke=lambda project, state: invoke_project_agent(
             project, "acceptance",
-            {"change": state, "suite_root": suite_relative(project, state["change_id"])}),
+            {"change": {key: value for key, value in state.items() if key not in REPAIR_KEYS},
+             "suite_root": suite_relative(project, state["change_id"]),
+             **{key: state[key] for key in REPAIR_KEYS if key in state}}),
         implement=lambda project, context: invoke_project_agent(project, "implement", context),
         review=lambda project, context: invoke_project_agent(project, "review", context),
         characterize=lambda project, context: invoke_project_agent(project, "characterize", context),

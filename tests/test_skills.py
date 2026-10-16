@@ -127,6 +127,22 @@ class OracleCraftTests(unittest.TestCase):
                                             encoding="utf-8")
             self.assertEqual(used_skills(root, ["oracle-craft"]), {"oracle-craft": "9.9.9"})
 
+    def test_roles_learn_attribution_and_root_cause(self):
+        with tempfile.TemporaryDirectory() as folder:
+            review = instructions_for(Path(folder), "review")
+            implement = instructions_for(Path(folder), "implement")
+            acceptance = instructions_for(Path(folder), "acceptance")
+        for phrase in ("target", "oracle", "contract", "location"):
+            self.assertIn(phrase, review)
+        self.assertIn("判据与合同的归属", review)
+        self.assertIn("payload.failures", implement)
+        self.assertIn("root_cause", implement)
+        self.assertIn('failure_evidence.source is "review"', acceptance)
+
+    def test_oracle_craft_is_version_1_1_0(self):
+        from storyloop.skills import packaged_skills
+        self.assertEqual(packaged_skills()["oracle-craft"]["version"], "1.1.0")
+
 
 if __name__ == "__main__":
     unittest.main()

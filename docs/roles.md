@@ -31,6 +31,14 @@ flowchart LR
     A2 --> H3{人 smoke-apply}
 ```
 
+## 纠偏时各角色的职责
+
+- **review**：每条发现标注 `target: implementation/oracle/contract`，非实现归属给出合同条件 ID 与 `path:line`，可用 `evidence` 补充解释。引擎核验条件、位置和范围后分流，合同问题优先；`evidence` 非空不是分流的强制条件。
+- **implement**：读取历轮 `failures` 与 `facts`。`mode: root_cause` 时先解释相同失败为何反复出现，再依据定位修改；不得放宽合同或改验收套件来制造通过。
+- **design、implement、review**：可返回 `{statement, location}` 事实，供同轮后续角色与下一轮使用。引用位置必须存在，陈述仍属于代理判断，不能冒充已通过的测试。
+- **product**：`change --supersede` 时只读参考旧合同、停止报告、事实与修订意见，生成新草案。旧合同仍锁定，新合同重新由人批准；旧方案与事实带旧变更来源，仅供新设计参考。
+- **product、acceptance、design**：回答符合结构但未满足合同语义时，读取 `previous_response` 与 `validation_errors`，最多一次补正；基础设施或安全错误由引擎停下处理。
+
 ## 角色内部的子代理（适配器侧，可选）
 
 - `review`：正确性、安全、架构合规（对照 design_plan、extension.md 与 building-blocks.md）、测试质量（Tests First 是否真实）四个视角并行，主评审汇总 verdict。Claude 适配器已实现（默认开启，`--review-perspectives` 可调）。

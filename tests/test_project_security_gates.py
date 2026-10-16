@@ -136,7 +136,7 @@ class ProjectSecurityGateTests(unittest.TestCase):
                     "verdict": "pass", "summary": "ok", "findings": [], "questions": [],
                 },
             ))
-            self.assertEqual(result["status"], "BUDGET_EXHAUSTED")
+            self.assertEqual(result["status"], "NO_PROGRESS")
             self.assertEqual((root / ".github/workflows/ci.yml").read_bytes(), ci_before)
             self.assertNotIn("tamper", git(root, "log", "--format=%s"))
 

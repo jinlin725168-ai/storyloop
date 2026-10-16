@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .answers import load_answers
 from .baseline import _git, advance_repository_head
-from .change_report import generate_change_report
+from .change_report import correction_view, generate_change_report
 from .manual_acceptance import load_manual_acceptance, pending_manual_criteria
 from .models import require
 from .openspec_docs import capability_of, merge_into_main_spec, render_decisions, validate_with_cli
@@ -58,6 +58,7 @@ def complete_change(
         project, change_id, implementation["commit"], layers, review,
         manual_acceptance=manual, telemetry=telemetry,
         oracle=state.get("oracle"), skills_used=state.get("skills_used"),
+        correction=correction_view(state, change),
     )
     state["manual_acceptance"] = manual
     state["telemetry"] = telemetry
@@ -177,7 +178,7 @@ def _write_openspec_artifacts(project: Path, change: dict, state: dict, manual: 
         (base / "design.md").write_text("\n\n".join(parts) + "\n", encoding="utf-8")
         written.append(f"openspec/changes/{change_id}/design.md")
     decisions = render_decisions(change, load_answers(project, change_id), manual, state.get("resets") or [],
-                                 state.get("repairs") or [])
+                                 state.get("repairs") or [], overrules=state.get("overrules") or [])
     (base / "decisions.md").write_text(decisions, encoding="utf-8")
     written.append(f"openspec/changes/{change_id}/decisions.md")
     capability = capability_of(change["product"], change_id)
