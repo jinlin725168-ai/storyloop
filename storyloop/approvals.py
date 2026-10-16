@@ -12,17 +12,22 @@ from .changes import (contract_digest, draft_directory, load_change,
 from .models import require, text
 from .path_security import safe_target
 from .requirement_checklist import blocking_items, evaluate_checklist
-from .storage import write_bytes_atomic, write_json
+from .storage import locked, write_bytes_atomic, write_json
 
 Clock = Callable[[], datetime]
 
 
 def approve_change(
     project: Path, change_id: str, approved_by: str = "user",
-    now: Clock | None = None,
+    now: Clock | None = None, *, tier: str | None = None,
 ) -> dict:
     """Lock the current product-only revision after explicit user approval."""
     project = Path(project).resolve()
+    with locked(project):
+        return _approve_locked(project, change_id, approved_by, now, tier)
+
+
+def _approve_locked(project, change_id, approved_by, now, tier) -> dict:
     state = load_change(project, change_id)
     product = state["product"]
     require(not product["questions"], "Resolve all product questions before approval")
@@ -32,6 +37,7 @@ def approve_change(
             + "; ".join(item["text"] for item in blocking[:3]))
     approved_by = text(approved_by, "approver")
     digest = contract_digest(product)
+    binding = _intake_approval(project, state, tier)
     if state["status"] == "APPROVED":
         require(state["approval"]["contract_digest"] == digest,
                 "Approved product contract is stale")
@@ -40,6 +46,7 @@ def approve_change(
     moment = (now or _utc_now)()
     state["status"] = "APPROVED"
     state["approval"] = {
+        **binding,
         "revision": state["revision"],
         "contract_digest": digest,
         "approved_by": approved_by,
@@ -48,6 +55,24 @@ def approve_change(
     state["updated_at"] = _timestamp(moment)
     _write_state(project, state)
     return deepcopy(state)
+
+
+def _intake_approval(project: Path, state: dict, tier: str | None) -> dict:
+    if state.get('routing_version') != 1:
+        require(tier is None, 'Tier override requires routing version 1')
+        return {}
+    from .intake import digest, require_intake
+    from .routing_policy import TIERS
+    intake = require_intake(project, state)
+    selected = intake['decision']['tier']
+    if tier is not None:
+        require(tier in ('standard', 'heavy'), 'Tier override must be standard or heavy')
+        require(TIERS.index(tier) >= TIERS.index(selected), 'Tier cannot lower the rule result')
+        selected = tier
+    if state.get('approval'):
+        require(tier is None or selected == state['approval']['tier'],
+                'Existing approval tier differs; revise before changing approval')
+    return {'intake_digest': digest(intake), 'tier': selected}
 
 
 def materialize_approved_change(project: Path, change_id: str) -> Path:

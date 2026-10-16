@@ -76,9 +76,27 @@ FINDING = _obj({"message": STRING, "perspective": _nullable(STRING),
                 "location": _nullable(STRING)}, open_=True)
 FACTS = _nullable({"type": "array", "items": _obj({"statement": STRING, "location": STRING})})
 
+EVIDENCE = _obj({'locations': STRINGS, 'search_scope': STRINGS})
+METHOD = _obj({'commands': {'type': 'array', 'items': STRINGS},
+               'steps': STRINGS, 'expected': STRING})
+ASSESSMENT_CRITERION = _obj({
+    'story_id': STRING, 'criterion_id': STRING,
+    'feasibility': {'type': 'string', 'enum': ['local_automated', 'manual', 'infeasible', 'unknown']},
+    'existence': {'type': 'string', 'enum': ['exists', 'partial', 'absent', 'unknown']},
+    'method': METHOD, 'evidence': EVIDENCE})
+from .routing_policy import RISK_FIELDS
+ASSESSMENT = _obj({
+    'verifiable_goal': {'type': 'boolean'},
+    'scope': _obj({'touched': STRINGS, 'creates': STRINGS, 'interfaces': STRINGS,
+                   'symbols': {'type': 'array', 'items': _obj({'path': STRING, 'symbol': STRING})}}),
+    'risks': _obj({key: _obj({'value': {'type': 'string', 'enum': ['yes', 'no', 'unknown']},
+                              'evidence': EVIDENCE}) for key in RISK_FIELDS}),
+    'criteria': {'type': 'array', 'items': ASSESSMENT_CRITERION}})
+
 SCHEMAS = {
     "product": _obj({
         "version": {"type": "integer", "enum": [1]}, "goal": STRING, "non_goals": STRINGS,
+        "assessment": _nullable(ASSESSMENT),
         "capability": _nullable(STRING),
         "clarifications": _nullable({"type": "array", "items": _obj(
             {"session": STRING, "question": STRING, "answer": STRING})}),

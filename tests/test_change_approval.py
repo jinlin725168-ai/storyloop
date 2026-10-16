@@ -6,7 +6,8 @@ import unittest
 
 from storyloop.approvals import approve_change, materialize_approved_change
 from storyloop.baseline import bootstrap_project
-from storyloop.changes import create_change, load_change, revise_change
+from storyloop.changes import load_change, revise_change
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from tests.support import product
 from tests.test_baseline_behavior import repository

@@ -32,6 +32,7 @@ def create_change(
     timestamp = _timestamp(moment)
     state = {
         "version": 1,
+        "routing_version": 1,
         "change_id": change_id,
         "status": "DRAFT",
         "revision": 1,
@@ -57,7 +58,7 @@ def load_change(project: Path, change_id: str) -> dict:
         "created_at", "updated_at", "history", "approval",
     }
     from .models import require
-    optional = {"supersedes", "superseded_by"}
+    optional = {"supersedes", "superseded_by", "routing_version", "intake"}
     require(required <= set(value) <= required | optional and value["version"] == 1,
             "Invalid change state")
     require(value["change_id"] == change_id, "Change state identity mismatch")
@@ -66,6 +67,11 @@ def load_change(project: Path, change_id: str) -> dict:
     },
             "Invalid change status")
     require(type(value["revision"]) is int and value["revision"] > 0, "Invalid change revision")
+    if "routing_version" in value:
+        require(type(value["routing_version"]) is int and value["routing_version"] == 1,
+                "Invalid routing version")
+        from .intake import validate_intake_record
+        validate_intake_record(value.get("intake"))
     text(value["idea"], "product idea")
     validate_product(value["product"])
     require(isinstance(value["history"], list), "Invalid change history")
@@ -118,6 +124,7 @@ def revise_change(
     }
     updated = {
         **current,
+        "routing_version": 1,
         "status": "DRAFT",
         "revision": current["revision"] + 1,
         "product": canonical,
@@ -158,6 +165,8 @@ def draft_directory(project: Path, change_id: str) -> Path:
 
 
 def _save(project: Path, state: dict) -> None:
+    from .intake import project_intake
+    state["intake"] = project_intake(project, state["product"])
     write_json(_state_path(project, state["change_id"]), state, max_bytes=2_000_000)
     write_change_preview(project, state)
 

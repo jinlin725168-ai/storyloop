@@ -16,6 +16,16 @@ FACTS_NOTE = (
 
 INSTRUCTIONS = {
     "product": (
+        "For routing_version=1 supply assessment: verifiable_goal, complete scope "
+        "(touched, creates, interfaces, symbols with path and symbol), every risk judgment, and "
+        "exactly one criterion judgment per story_id/criterion_id. Inspect sources read-only; "
+        "never write files. Bind locations path:line to source_commit and declare bounded "
+        "repository-relative search_scope. Unknown remains unknown; do not invent evidence. "
+        "Each risk has value yes/no/unknown and evidence {locations,search_scope}; each criterion "
+        "has feasibility local_automated/manual/infeasible/unknown, existence exists/partial/absent/unknown, "
+        "evidence, and method {commands: argv arrays, steps: concrete manual steps, expected: outcome "
+        "or infeasibility reason}. Unavailable external services/production credentials without a "
+        "local substitute are infeasible. Explain fix/refactor nature when behavior already exists. "
         "Co-create only product-level intent and return the complete StoryLoop product v1 JSON. "
         "Decide the change's nature first: a defect report is a fix, a structural goal with unchanged behaviour "
         "is a refactor, anything else is a feature; one change has one nature, so split mixed requests. "

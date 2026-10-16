@@ -68,3 +68,14 @@ def readiness_repository(root: Path, **settings) -> None:
         "unit_commands": [["{python}", "-m", "unittest", "discover", "-s", "tests"]],
         "integration_commands": [], "check_commands": [], **settings,
     })
+
+
+def legacy_create_change(project, *args, **kwargs):
+    """Explicit historical fixture: preserve pre-routing scenarios, never a production bypass."""
+    from storyloop.changes import create_change
+    from storyloop.storage import write_json
+    state = create_change(project, *args, **kwargs)
+    state.pop('routing_version')
+    state.pop('intake')
+    write_json(Path(project) / '.storyloop/state/changes' / f"{state['change_id']}.json", state)
+    return state
