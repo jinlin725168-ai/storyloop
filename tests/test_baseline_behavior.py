@@ -82,5 +82,22 @@ class BaselineBehaviorTests(unittest.TestCase):
             with self.assertRaisesRegex(StoryLoopError, "outside feature modules"):
                 verify_baseline(root)
 
+    def test_existing_test_root_can_change_on_a_feature_branch(self):
+        """A configured test root is mutable even when its files existed at bootstrap."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            (root / "tests").mkdir()
+            (root / "tests/test_existing.py").write_text("VALUE = 1\n", encoding="utf-8")
+            git(root, "add", ".")
+            git(root, "commit", "-q", "-m", "existing tests")
+            bootstrap_project(root, {
+                "test_commands": [], "module_roots": ["app"], "test_roots": ["tests"],
+            })
+            git(root, "switch", "-q", "-c", "feature/FIX-test-root")
+            (root / "tests/test_existing.py").write_text("VALUE = 2\n", encoding="utf-8")
+
+            self.assertEqual(verify_baseline(root, resume=True)["status"], "BASELINE_VERIFIED")
+
 if __name__ == "__main__":
     unittest.main()

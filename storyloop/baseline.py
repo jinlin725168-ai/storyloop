@@ -170,8 +170,11 @@ def _inside(path: str, root: str) -> bool:
 
 def _foundation_paths(tracked: list[str], profile: dict) -> list[str]:
     mutable_roots = [*profile["module_roots"], *GENERATED_PATHS]
+    test_roots = profile.get("test_roots") or []
+    protected = set(profile["integration_paths"]) | set(profile["protected_paths"])
     return sorted(path for path in tracked
-                  if not any(_inside(path, root) for root in mutable_roots))
+                  if not any(_inside(path, root) for root in mutable_roots)
+                  and (path in protected or not matches_test_root(path, test_roots)))
 
 
 def _tracked_files(project: Path) -> list[str]:
