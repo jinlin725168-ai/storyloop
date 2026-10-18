@@ -59,8 +59,13 @@ def _option(item: dict, project: Path, change: dict, state: dict) -> dict:
     option.update(measured['scope'])
     actual = state.get('planning', {}).get('actual')
     if actual:
-        require(all(set(actual[key]) <= set(option[key]) for key in ('touched', 'creates')),
-                'L3 plan omits observed candidate scope')
+        missing = {key: sorted(set(actual.get(key, [])) - set(option[key]))
+                   for key in ('touched', 'creates')}
+        omissions = [f"missing {key}: {', '.join(paths)}"
+                     for key, paths in missing.items() if paths]
+        require(not omissions,
+                f"L3 option {option['id']!r} omits observed candidate scope; every option must "
+                f"include all observed paths; {'; '.join(omissions)}")
     _paths_and_constraints(project, change, option)
     require(bool(option['regression']), 'Regression steps are required')
     for step in option['regression'] + option['migration']['steps']:

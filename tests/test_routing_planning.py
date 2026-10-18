@@ -1,5 +1,6 @@
 """Commit-bound L2 planning, native protocol, and execution floor regressions."""
 from copy import deepcopy
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -143,6 +144,50 @@ class PlanningTests(unittest.TestCase):
         self.assertEqual(calls[0]['mode'], 'routing-plan')
         self.assertIn('validation_errors', calls[1])
         self.assertEqual(self.state['routing']['effective_tier'], 'heavy')
+
+    def test_native_l3_request_explains_every_option_scope_and_names_repair_gap(self):
+        from storyloop.project_agents import invoke_project_agent
+        from tests.test_codex_adapter import FakeCodex
+        self.state['routing'].update(initial_tier='heavy', effective_tier='heavy')
+        self.state['planning'] = {
+            'origin': 'L3', 'phase': 'REPLAN',
+            'actual': {'touched': ['app/service.py'], 'creates': []},
+        }
+        incomplete = answer()
+        incomplete['options'][0].update(touched=[], symbols=[], constraints=[])
+        fake = FakeCodex([json.dumps(incomplete), json.dumps(answer())])
+
+        with patch('storyloop.project_agents.run_process', fake), \
+                patch('storyloop.project_agents._codex_executable', return_value=['codex']):
+            self.ensure(lambda project, request: invoke_project_agent(project, 'design', request))
+
+        initial_prompt = fake.calls[0][1]
+        initial_request = json.loads(initial_prompt.split('\nRequest:\n', 1)[1])
+        self.assertEqual(initial_request['payload']['replanning']['actual']['touched'],
+                         ['app/service.py'])
+        self.assertIn('every returned option', initial_prompt.lower())
+        self.assertIn('payload.replanning.actual.touched', initial_prompt)
+        repair_request = json.loads(fake.calls[1][1].split('\nRequest:\n', 1)[1])
+        self.assertEqual(repair_request['payload']['validation_errors'], [
+            "L3 option 'main' omits observed candidate scope; every option must include "
+            'all observed paths; missing touched: app/service.py',
+        ])
+
+    def test_l3_rejects_an_incomplete_main_even_with_a_complete_alternative(self):
+        self.state['planning'] = {
+            'origin': 'L3',
+            'actual': {'touched': ['app/service.py'], 'creates': []},
+        }
+        response = answer()
+        complete = deepcopy(response['options'][0])
+        complete['id'] = 'complete-alternative'
+        response['options'][0].update(touched=[], symbols=[], constraints=[])
+        response['options'].append(complete)
+
+        with self.assertRaisesRegex(
+                StoryLoopError,
+                "L3 option 'main'.*missing touched: app/service.py"):
+            self.plan(response)
 
     def test_readonly_design_cannot_save_plan_or_facts(self):
         self.state['routing'].update(initial_tier='standard', effective_tier='standard')
