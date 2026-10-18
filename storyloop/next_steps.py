@@ -75,6 +75,9 @@ def _execution_next(status, where, log, run):
 def draft_next(project: Path | str, change: dict) -> str:
     """A draft's next step names its open questions and blocking checklist items before suggesting approve."""
     from .requirement_checklist import blocking_items, evaluate_checklist
+    source_next = supersede_revision_next(project, change)
+    if source_next:
+        return source_next
     change_id = change["change_id"]
     where = shlex.join([str(project), "--change", change_id])
     questions = len(change["product"].get("questions") or [])
@@ -89,3 +92,26 @@ def draft_next(project: Path | str, change: dict) -> str:
         found.append(f"{blocking} 个阻断项（见 {drafts}/checklist.md）")
     return (f"草案还有{'、'.join(found)}，approve 会被拒绝：storyloop change {where} "
             f"--message \"Q1 选推荐项；Q2 …\" 回答或修订，清零后再 storyloop approve {where}")
+
+
+def supersede_revision_next(project: Path | str, change: dict) -> str | None:
+    """Require fresh product evidence on the source branch before replacement approval."""
+    link = change.get('supersedes')
+    if not link or change['status'] != 'DRAFT':
+        return None
+    from .baseline import _git
+    root = Path(project).resolve()
+    source = link['source_branch']
+    source_head = _git(root, 'rev-parse', f'refs/heads/{source}').strip()
+    stale = (change.get('intake') or {}).get('source_commit') != source_head
+    if not stale and _git(root, 'branch', '--show-current').strip() == source:
+        return None
+    where = [str(root), '--change', change['change_id']]
+    lines = [f"旧分支 feature/{link['change_id']} 保留；先提交或暂存其中未提交的改动，再执行：",
+             shlex.join(['git', '-C', str(root), 'checkout', source])]
+    if stale:
+        message = '在当前源分支重新核对范围、风险和验收证据，修订替代合同'
+        lines.append(shlex.join(['storyloop', 'change', *where, '--message', message]))
+    lines += ['核对修订后的合同，解决入口阻塞和待决问题后，明确批准：',
+              shlex.join(['storyloop', 'approve', *where])]
+    return '\n'.join(lines)

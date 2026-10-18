@@ -45,6 +45,8 @@ def create_change(
     }
     if supersedes is not None:
         state["supersedes"] = _supersedes(supersedes)
+    from .intake import project_intake
+    state["intake"] = project_intake(project, canonical)
     _save(project, state)
     return deepcopy(state)
 
@@ -132,6 +134,8 @@ def revise_change(
         "history": [*current["history"], prior],
         "approval": None,
     }
+    from .intake import project_intake
+    updated["intake"] = project_intake(project, canonical)
     _save(project, updated)
     return deepcopy(updated)
 
@@ -165,8 +169,7 @@ def draft_directory(project: Path, change_id: str) -> Path:
 
 
 def _save(project: Path, state: dict) -> None:
-    from .intake import project_intake
-    state["intake"] = project_intake(project, state["product"])
+    """Persist state without replacing the evidence of an existing contract."""
     write_json(_state_path(project, state["change_id"]), state, max_bytes=2_000_000)
     write_change_preview(project, state)
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
-import shlex
 from typing import Callable
 
 from .changes import _save, contract_digest, create_change, load_change
@@ -137,10 +136,8 @@ def _linked_child(project: Path, old: dict, message: str, reason: str | None) ->
 
 
 def _result(project: Path, new: dict, old_run: dict) -> dict:
+    from .next_steps import draft_next, next_step
     result = deepcopy(new)
-    old_id = new["supersedes"]["change_id"]
-    source = shlex.quote(old_run["source_branch"])
-    project_arg = shlex.quote(str(project))
-    result["next"] = (f"旧分支 feature/{old_id} 保留：先提交或暂存其中未提交的改动，"
-                      f"git checkout {source}，再 storyloop approve {project_arg} --change {new['change_id']}")
+    result["next"] = (draft_next(project, new) if new['status'] == 'DRAFT'
+                      else next_step(new['status'], new['change_id'], project))
     return result

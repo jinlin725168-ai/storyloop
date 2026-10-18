@@ -17,7 +17,7 @@ from .system_smoke import apply_smoke_update, propose_smoke_update
 from .change_log import change_log, render_log
 from .changes import create_change, load_change, revise_change
 from .manual_acceptance import record_manual_acceptance
-from .next_steps import draft_next, next_step
+from .next_steps import draft_next, next_step, supersede_revision_next
 from .openspec_docs import document_change
 from .models import StoryLoopError, require, validate_product
 from .processutil import redact
@@ -84,7 +84,8 @@ def _product_arguments(child, command):
         child.add_argument("--change", dest="change_id")
         child.add_argument("--message")
         child.add_argument("--supersede",
-                           help="作废这个变更的运行，按 --message 修订合同后作为新变更重开")
+                           help="作废旧运行并重开草案；切回源分支后用 --change 新ID --message 意见"
+                                "重新评估，再明确批准")
         child.add_argument("--reason",
                            help="在 NEEDS_SPEC_FIX 以外的停点作废时，说明为什么是合同的问题")
         child.add_argument("--no-interactive", action="store_true",
@@ -216,7 +217,8 @@ def _draft_result(project, state, next_action=None):
     stop = draft_stop(project, state)
     pending = state["product"].get("questions") or blocking_items(evaluate_checklist(state["product"], project))
     hint = draft_next(project, state) if pending else (stop["resume"] if stop else next_action)
-    return {**state, "stop": stop, "next": hint or draft_next(project, state)}
+    return {**state, "stop": stop,
+            "next": supersede_revision_next(project, state) or hint or draft_next(project, state)}
 
 
 def _revise_with_agent(project: Path, change_id: str, message: str, answers: list[dict]) -> dict:

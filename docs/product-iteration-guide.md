@@ -264,7 +264,14 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 storyloop change /path/to/project --supersede FEAT-20261016-001 --message "按已核实的接口行为修订 A2"
 ```
 
-新草案沿用正常澄清与批准流程。先提交或暂存旧功能分支里尚未提交的改动，切回原运行的源分支，再按输出中的新 ID 执行 `approve`。新运行从当前源分支重跑，旧证据不会转成新证据，旧分支保留作对照。在其他允许停点重开还需 `--reason "为什么是合同的问题"`。
+新草案沿用正常澄清与批准流程。创建替代草案时仍在旧功能分支，入口证据绑定的是该分支的提交。先提交或暂存旧功能分支里尚未提交的改动，切回原运行的源分支，再按输出中的新 ID 显式修订，让 product 重新核对该源码上的范围、风险与验收证据：
+
+```bash
+git -C /path/to/project checkout <原运行源分支>
+storyloop change /path/to/project --change <新ID> --message "在当前源分支重新核对范围、风险和验收证据，修订替代合同"
+```
+
+核对修订结果，解决入口阻塞和待决问题后，再执行 `storyloop approve /path/to/project --change <新ID>`。只切分支后直接批准会因入口证据陈旧而被拒绝。新运行从源分支重跑，旧合同的 intake、批准和旧功能分支保留作对照；重复 supersede 只恢复已有链接，不刷新旧合同或已有子合同的证据。在其他允许停点重开还需 `--reason "为什么是合同的问题"`。
 
 如果核对证据后认为审查归属不成立：
 
