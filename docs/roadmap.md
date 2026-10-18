@@ -32,7 +32,7 @@ Q8 两条路径现已补验通过：首轮 `NEEDS_SPEC_FIX` → `supersede` → 
 
 [2b 设计](superpowers/specs/2026-10-16-子项目2b-分流-design.md)已落实到工作分支，Task 12 真实验收尚未完成。采用规则引擎定档、代理提供证据，覆盖入口检查、L1/L2 定档、重档审批、拆分建议与 L3 升档。已回看 8 个完成的 RuoYi 变更，保留总体规模阈值；缺少轻档及统一风险标签，人工占比初值不声称已获样本验证。
 
-工作分支已实现三档预算、显式重档/拆分审批、原则与狭窄离线 wheel 证据、恢复和 CLI。Task 11 汇总兼容性回归和文档；Task 12 真实代理样例与受控 L3 验收仍待执行，不能标为整个 2b 完成。操作见 [分流指南](routing-guide.md)，接口见 [实施契约](routing-contract.md)。
+工作分支已实现三档预算、显式重档/拆分审批、原则与狭窄离线 wheel 证据、恢复和 CLI。Task 11 已完成兼容性回归和文档；Task 12 的 standard 真实样例已通过，light、fresh heavy 与受控 L3 已分别到达具体方案审批停点，仍须各自批准并闭环，不能标为整个 2b 完成。操作见 [分流指南](routing-guide.md)，接口见 [实施契约](routing-contract.md)。
 
 ## 已知问题
 
