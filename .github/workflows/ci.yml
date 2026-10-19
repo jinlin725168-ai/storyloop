@@ -11,9 +11,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# PR 上新推送会取消旧运行；main 上每次合并都要跑完，留下完整记录。
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -88,12 +89,31 @@ jobs:
     name: 密钥扫描
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
     steps:
       - uses: actions/checkout@v7
-      - name: gitleaks
+        with:
+          fetch-depth: 0
+      - name: 安装 gitleaks（固定版本，校验摘要）
         run: |
-          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
-            detect --no-git --source /repo --redact --exit-code 1
+          curl -sSfL -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+      - name: gitleaks
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        # 扫描本次引入的每个提交，中途加入又删掉的密钥也会被发现（公开仓库的历史删不掉）。
+        # 手动触发或取不到对比基点时扫描全部历史。
+        run: |
+          if [ "$EVENT" != "workflow_dispatch" ] && [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            set -- --log-opts="$BASE..$HEAD"
+          fi
+          "$RUNNER_TEMP/gitleaks" git . --redact --no-banner --exit-code 1 "$@"
 
   # 分支规则只要求这一项：跳过的作业算通过，失败或取消算不通过。
   result:
