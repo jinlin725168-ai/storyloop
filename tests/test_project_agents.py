@@ -13,6 +13,24 @@ from tests.test_baseline_behavior import git, repository
 
 
 class ProjectAgentTests(unittest.TestCase):
+    def test_legacy_request_and_ledger_have_no_profile_fields(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            config = load_project_config(root)
+            config["adapter"] = "manual"
+            write_json(root / ".storyloop/config.json", config)
+
+            with self.assertRaisesRegex(StoryLoopError, "Manual input"):
+                invoke_project_agent(root, "product", {"idea": "orders"})
+
+            request = json.loads((root / ".storyloop/requests/project-product.json").read_text(encoding="utf-8"))
+            self.assertEqual(set(request) - {"request_id", "instructions"},
+                             {"protocol", "role", "project", "payload", "response_schema"})
+            self.assertNotIn("role_profile", request)
+            entry = ledger_entries(root, "pending")[0]
+            self.assertEqual(set(entry) - {"at", "call", "wall_ms"}, {"role", "skills"})
     def test_role_adapter_request_contains_profile_and_engine_ledger_fields(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

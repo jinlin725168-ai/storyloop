@@ -11,7 +11,7 @@ from .baseline import load_project_config
 from .models import StoryLoopError, require
 from .processutil import run_process
 from .role_profiles import enabled, resolve_adapters, role_settings
-from .storage import write_json
+from .storage import load_json, write_json
 
 PROTOCOL = "storyloop.adapter-capabilities.v1"
 ROLES = ("product", "acceptance", "implement", "review", "survey", "characterize", "design")
@@ -56,9 +56,14 @@ def check(project: Path) -> dict:
 
 
 def ensure_checked(project: Path) -> dict | None:
-    config = load_project_config(project)
+    project, config = Path(project).resolve(), load_project_config(project)
     if not enabled(config):
         return None
+    adapters = resolve_adapters(config)
+    cached = _load_cache(project)
+    if cached and cached["config_sha256"] == _digest(config) and cached["argv_sha256"] == _argv_digest(project, adapters):
+        _require_mappings(config, adapters, cached["adapters"])
+        return {"status": "ADAPTERS_CACHED", **cached}
     return check(project)
 
 
@@ -79,19 +84,42 @@ def _response(raw: object) -> dict:
         value = json.loads(raw) if isinstance(raw, str) else None
     except ValueError:
         value = None
-    if not isinstance(value, dict) or not isinstance(value.get("vendor"), str):
+    if not isinstance(value, dict) or not isinstance(value.get("vendor"), str) or not value["vendor"]:
         return {"known": False, "tiers": []}
     tiers = value.get("tiers")
-    if not isinstance(tiers, list) or not all(item in {"strong", "standard"} for item in tiers):
+    required_flags = ("subagents", "path_guard", "fast_checks")
+    valid_flags = all(isinstance(value.get(key), bool) for key in required_flags)
+    modes = value.get("modes")
+    if (not isinstance(tiers, list) or not all(item in {"strong", "standard"} for item in tiers)
+            or not valid_flags or not isinstance(modes, list) or not all(isinstance(item, str) and item for item in modes)):
         return {"known": False, "tiers": []}
     return {"known": True, "tiers": sorted(set(tiers)), "vendor": value["vendor"],
-            **{key: value[key] for key in ("subagents", "path_guard", "fast_checks", "modes") if key in value}}
+            **{key: value[key] for key in (*required_flags, "modes")}}
 
 
 def _codex_capabilities(adapter: dict) -> dict:
     models = adapter.get("models") or {}
     tiers = [tier for tier in ("strong", "standard") if isinstance(models.get(tier), str) and models[tier]]
-    return {"known": True, "tiers": tiers, "vendor": "openai"}
+    return {"known": True, "tiers": tiers, "vendor": "openai", "subagents": False,
+            "path_guard": False, "fast_checks": False, "modes": ["*"]}
+
+
+def _load_cache(project: Path) -> dict | None:
+    try:
+        value = load_json(project / ".storyloop/state/adapters.json")
+    except StoryLoopError:
+        return None
+    required = {"version", "config_sha256", "argv_sha256", "adapters"}
+    if set(value) != required or value.get("version") != 1 or not isinstance(value.get("adapters"), dict):
+        return None
+    if not all(isinstance(value.get(key), str) and len(value[key]) == 64 for key in ("config_sha256", "argv_sha256")):
+        return None
+    return value if all(_valid_cached_capability(item) for item in value["adapters"].values()) else None
+
+
+def _valid_cached_capability(value: object) -> bool:
+    return isinstance(value, dict) and isinstance(value.get("known"), bool) and isinstance(value.get("tiers"), list) and all(
+        item in {"strong", "standard"} for item in value["tiers"])
 
 
 def _argv(project: Path, command: list[str]) -> list[str] | None:
