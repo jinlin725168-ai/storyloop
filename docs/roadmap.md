@@ -34,11 +34,11 @@ Q8 两条路径现已补验通过：首轮 `NEEDS_SPEC_FIX` → `supersede` → 
 
 工作分支已实现三档预算、显式重档/拆分审批、原则与狭窄离线 wheel 证据、恢复和 CLI。Task 12 的 standard、light、heavy 和受控 L3 四个独立真实样例均已正式 `PASSED`；heavy 原运行的越界与预算历史保留，正式 supersede 新运行独立闭环。生产 source `385e99c` 的最终全量 648 项通过（跳过 1 项 Windows-only 测试），`acace5e` 后增的旧 persisted forbidden-path 回归另有 1/1 专项通过。操作见 [分流指南](routing-guide.md)，接口见 [实施契约](routing-contract.md)，证据见 [真实验证记录](validation/2026-10-17-子项目2b-真实验证.md)。
 
-## 子项目 3 报告：已完成，待最终整分支验证
+## 子项目 3 报告：已实现并完成审查，待集成
 
 [报告设计](superpowers/specs/2026-10-18-子项目3-报告-design.md)已实现同源 JSON/Markdown 的 0–6 节快照、light/standard/heavy 展示、机器生成审查重点、调用级技能来源、部分 telemetry 覆盖与 ledger/meta 双向对账。来源图例为 🔧 机器事实、👤 人工记录、🤖 代理陈述（代码推断与样本仍保留细分类）；`NOT_AVAILABLE` 和 `PENDING` 明示未知状态。失败调用计入调用数和成本覆盖；只有部分调用回报费用时，报告展示已知小计，完整总额保持未知。
 
-闭环验收使用真实临时 Git 仓库和生产 command adapter 路径，并由确定性模拟 adapter 提供回答；这验证了子进程协议、调用账本/metadata、报告生成、本地合并和回执，不是一次真实模型效果评估。对账覆盖已持久化的实际调用，不能证明未落盘的理论调度次数；外部 CI、完整事件历史、语义覆盖和尚未实现的记忆仍明确标为未知。旧报告继续走 legacy renderer，已有回执字节兼容；合并回执只追加 `merge_commit`，冻结 sections 不变。验收证据见 [子项目 3 验收记录](superpowers/reports/2026-10-18-子项目3-验收.md)，全量测试结果由最终 controller 验证后补录。
+闭环验收使用真实临时 Git 仓库和生产 command adapter 路径，并由确定性模拟 adapter 提供回答；这验证了子进程协议、调用账本/metadata、报告生成、本地合并和回执，不是一次真实模型效果评估。对账覆盖已持久化的实际调用，不能证明未落盘的理论调度次数；外部 CI、完整事件历史、语义覆盖和尚未实现的记忆仍明确标为未知。旧报告继续走 legacy renderer，已有回执字节兼容；合并回执只追加 `merge_commit`，冻结 sections 不变。验收证据见 [子项目 3 验收记录](superpowers/reports/2026-10-18-子项目3-验收.md)。首次全量 706 项：704 通过、1 项 Windows 专属测试跳过、1 项标题兼容断言失败；该失败已修复，随后 38 项定向回归通过，独立复审通过。修复后未重复运行全量，功能分支待集成。
 
 ## 已知问题
 
