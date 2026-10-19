@@ -98,5 +98,3 @@ def _ensure_red_evidence(project: Path, change_id: str, contract_commit: str) ->
         lambda: run_smoke_isolated(project, change_id, expect_red=True, at_commit=contract_commit),
         allowed_evidence=RED_EVIDENCE,
     )
-
-

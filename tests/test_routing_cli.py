@@ -222,4 +222,3 @@ class ExplicitApprovalIntegrationTests(unittest.TestCase):
         state = load_run_state(self.root, self.identifier)
         self.assertNotIn('approval', state['planning']['plan'])
         self.assertEqual(state['attempt'], 0)
-
