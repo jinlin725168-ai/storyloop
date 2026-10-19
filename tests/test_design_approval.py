@@ -48,6 +48,24 @@ class DesignApprovalTests(unittest.TestCase):
     def approve(self, option=None):
         return approvals.approve_design(self.root, self.identifier, self.plan['id'], option_id=option)
 
+    def test_explicit_replan_invalidates_candidate_and_review_evidence(self):
+        self.start()
+        state = load_run_state(self.root, self.identifier)
+        state['cost_candidate'] = {'digest': 'previous-candidate'}
+        state['pending_review'] = {'digest': 'previous-candidate', 'review': {'findings': []}}
+        state['review_disposition'] = {'attempt': state['attempt'], 'fix': [{'id': 'old'}]}
+        save_run(self.root, state)
+        with patch.object(approvals, '_validate_context', side_effect=StoryLoopError('binding rejected')):
+            with self.assertRaisesRegex(StoryLoopError, 'binding rejected'):
+                approvals.replan(self.root, self.identifier, 'Reconsider candidate and plan')
+        self.assertEqual(load_run_state(self.root, self.identifier), state)
+        replanned = approvals.replan(self.root, self.identifier, 'Reconsider candidate and plan')
+        self.assertEqual(replanned['attempt'], state['attempt'])
+        for key in ('cost_candidate', 'pending_review', 'review_disposition'):
+            self.assertNotIn(key, replanned)
+            self.assertNotIn(key, load_run_state(self.root, self.identifier))
+        self.assertEqual(replanned['planning']['history'][-1]['plan'], self.plan)
+
     def test_run_and_resume_do_not_approve_or_spend_attempt(self):
         self.start()
         self.assertEqual(run_change(self.root, self.identifier, self.services)['status'],

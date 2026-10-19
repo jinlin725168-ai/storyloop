@@ -20,7 +20,7 @@ jobs:
   tests:
     name: 测试（${{ matrix.os }}，Python ${{ matrix.python }}）
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:

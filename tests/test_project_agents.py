@@ -40,7 +40,7 @@ class ProjectAgentTests(unittest.TestCase):
             script.write_text(
                 "import json, sys\nrequest=json.load(sys.stdin)\n"
                 "json.dump(request, open(sys.argv[1], 'w'))\n"
-                "print(json.dumps({'verdict':'pass','summary':'ok','questions':[],'findings':[], '_telemetry': {'tier_requested':'bad','adapter':'bad'}}))\n",
+                "print(json.dumps({'verdict':'pass','summary':'ok','questions':[],'findings':[],'coverage':[], '_telemetry': {'tier_requested':'bad','adapter':'bad'}}))\n",
                 encoding="utf-8")
             seen = root / "seen.json"
             config = load_project_config(root)

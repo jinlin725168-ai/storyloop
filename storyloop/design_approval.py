@@ -203,6 +203,10 @@ def _replan_locked(project: Path, change_id: str, reason: str) -> dict:
         planning['phase'] = 'REPLAN'
         planning.pop('execution_digest', None)
         planning.pop('characterization_input', None)
+    # Explicit replan retires the old candidate's execution/review evidence.
+    # Ordinary cost-stop resume still requires the original candidate digest.
+    for key in ('cost_candidate', 'pending_review', 'review_disposition'):
+        state.pop(key, None)
     state.pop('questions', None)
     state.pop('stop', None)
     state.update(status='DESIGN_REVISION_REQUIRED', phase='planning')
