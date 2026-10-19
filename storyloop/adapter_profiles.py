@@ -17,11 +17,10 @@ def model_for(request: dict, models: dict | None) -> str | None:
 
 def sequential_profile(request: dict, vendor: str, model: str | None) -> dict:
     """Describe the selected model and the single-session fallback, without inventing cost."""
-    result = {'vendor': vendor}
     profile = request.get('role_profile')
     if not profile:
-        return result
-    result['path_guard'] = 'unsupported'
+        return {}
+    result = {'vendor': vendor, 'path_guard': 'unsupported'}
     if model:
         result.update(model=model, tier_applied=profile['tier'])
     requested = profile.get('subagents') or {}

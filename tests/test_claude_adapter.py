@@ -7,6 +7,14 @@ import io
 import json
 from pathlib import Path
 import unittest
+import tempfile
+import sys
+
+from storyloop.baseline import bootstrap_project
+from storyloop.project_agents import invoke_project_agent
+from storyloop.storage import load_json, write_json
+from storyloop.telemetry import ledger_entries
+from tests.test_baseline_behavior import repository
 from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location(
@@ -299,6 +307,26 @@ class ImplementLaneTests(unittest.TestCase):
 
 
 class ClaudeProfileTests(unittest.TestCase):
+    def test_legacy_command_config_preserves_telemetry_field_set(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            config = load_json(root / '.storyloop/config.json')
+            driver = Path(__file__).parent / 'fixtures/fake_cli/claude_driver.py'
+            config.update(adapter='command', agent_command=[sys.executable, str(driver.resolve())])
+            self.assertNotIn('adapters', config)
+            self.assertNotIn('roles', config)
+            write_json(root / '.storyloop/config.json', config)
+            write_json(root / 'scenario.json', {'result': {'summary': 'done', 'questions': []}})
+            result = invoke_project_agent(root, 'implement', {'change_id': 'FEAT-1'})
+            self.assertEqual(result, {'summary': 'done', 'questions': []})
+            self.assertEqual(set(ledger_entries(root, 'FEAT-1')[0]),
+                             {'role', 'wall_ms', 'at', 'call', 'skills', 'model', 'cost_usd',
+                              'turns', 'duration_ms', 'input_tokens', 'output_tokens', 'segments'})
+            prompt = load_json(root / 'cli-request.json')['prompt']
+            self.assertNotIn('role_profile', json.loads(prompt.split('Request:\n')[-1]))
+
     def test_handshake_never_starts_model_and_rejects_invalid_mapping(self):
         request = {'protocol': 'storyloop.adapter-capabilities.v1'}
         with patch.object(adapter.subprocess, 'run') as run, \

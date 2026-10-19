@@ -65,6 +65,13 @@ class CodexAdapterTests(unittest.TestCase):
             self.assertEqual(summary["calls"], 1)
             self.assertEqual(summary["by_role"]["implement"]["turns"], 1)
             self.assertIsNone(summary["cost_usd"])
+            config = load_json(root / '.storyloop/config.json')
+            self.assertNotIn('adapters', config)
+            self.assertNotIn('roles', config)
+            self.assertEqual(set(ledger_entries(root, 'FEAT-1')[0]),
+                             {'role', 'wall_ms', 'at', 'call', 'session', 'skills',
+                              'turns', 'input_tokens', 'output_tokens', 'segments'})
+
 
     def test_non_json_final_message_is_repaired_by_resuming_the_thread(self):
         with tempfile.TemporaryDirectory() as folder:
