@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import html
 
+from .report_markdown_sections import legend, render_reader_section
+
 
 SOURCE_LABELS = {
-    "machine": "🤖 机器",
+    "machine": "🔧 机器",
     "human": "👤 人工",
-    "agent_code": "🔧 代理代码分析",
+    "agent_code": "🤖 代理代码分析",
     "agent_sample": "🤖 代理样例",
 }
 LIGHT_SECTIONS = frozenset({"0", "1", "3"})
@@ -20,12 +22,16 @@ def render_presentation(report: dict) -> str:
     tier = presentation.get("tier")
     identity = _identity(presentation)
     change_id = identity.get("change_id") or report.get("change_id") or "-"
-    lines = [f"# StoryLoop 验收报告：{_text(change_id)}", ""]
+    lines = [f"# StoryLoop 验收报告：{_text(change_id)}", "", *legend()]
     for key in sorted(presentation["sections"]):
         if tier == "light" and key not in LIGHT_SECTIONS:
             continue
         section = presentation["sections"][key]
         lines.extend([f"## {key}. {_text(section.get('title'))}", ""])
+        reader_lines = render_reader_section(key, section)
+        if reader_lines is not None:
+            lines.extend(reader_lines)
+            continue
         if key == "3":
             lines.extend(_oracle_compat(section))
         for entry in section.get("items") or []:
@@ -128,7 +134,7 @@ def _oracle_compat(section: dict) -> list[str]:
             lines.append(f"| {_cell(layer)} | {_cell(record.get('id'))} | {_cell(count)} | "
                          f"{_cell(prior)} | {_cell(record.get('parser') or '-')} |")
     legacy = items.get("skills_legacy") or {}
-    skills = ", ".join(f"{name} {version}" for name, version in sorted(legacy.items()))
+    skills = ", ".join(f"{_cell(name)} {_cell(version)}" for name, version in sorted(legacy.items()))
     return lines + ["", f"使用的技能包：{skills or '-'}", ""]
 
 
@@ -144,4 +150,8 @@ def _text(value: object) -> str:
 
 
 def _cell(value: object) -> str:
-    return html.escape(str(value if value is not None else "-"), quote=False).replace("|", "\\|")
+    raw = str(value if value is not None else "-").replace("\r", " ").replace("\n", " ")
+    escaped = html.escape(raw, quote=False)
+    for char in ("\\", "`", "*", "[", "]", "#", "|"):
+        escaped = escaped.replace(char, "\\" + char)
+    return escaped
