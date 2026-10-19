@@ -151,6 +151,13 @@ class ReportRenderingTests(unittest.TestCase):
         self.assertNotIn("- provenance：", markdown)
         self.assertNotIn("- verification：", markdown)
 
+    def test_criteria_statement_section_keeps_unknown_author_and_verification_warning(self):
+        markdown = render_presentation(_report())
+        criteria = markdown.split("### 验收条件原文", 1)[1].split("### 完成情况", 1)[0]
+        self.assertIn("作者：未知（未持久化可靠作者来源）", criteria)
+        self.assertIn("内容验证：未经过机器事实验证", criteria)
+        self.assertIn("CONTENT_NOT_MACHINE_VERIFIED", criteria)
+
     def test_oracle_cells_and_legacy_skills_cannot_escape_markdown(self):
         report = _report()
         proof = {item["id"]: item for item in report["presentation"]["sections"]["3"]["items"]}

@@ -56,7 +56,7 @@ def _conclusion(items: dict) -> list[str]:
 def _criteria(entry: dict | None) -> list[str]:
     data = _data(entry)
     rows = data.get("value") if isinstance(data, dict) else None
-    lines = ["### 验收条件原文", "", *_meta(entry),
+    lines = ["### 验收条件原文", "", *_meta(entry), *_statement_warning(data),
              "| ID | Given | When | Then | 类型 |", "|---|---|---|---|---|"]
     for row in rows if isinstance(rows, list) else []:
         lines.append(f"| {cell(row.get('id'))} | {cell(row.get('given'))} | {cell(row.get('when'))} | "
@@ -182,10 +182,7 @@ def _statement(title: str, entry: dict | None) -> list[str]:
     data = _data(entry)
     wrapped = isinstance(data, dict) and "value" in data
     value = data.get("value") if wrapped else data
-    lines = [f"### {title}", "", *_meta(entry)]
-    if isinstance(data, dict) and data.get("verification") == "CONTENT_NOT_MACHINE_VERIFIED":
-        lines += ["作者：未知（未持久化可靠作者来源）  ",
-                  "内容验证：未经过机器事实验证（`CONTENT_NOT_MACHINE_VERIFIED`）", ""]
+    lines = [f"### {title}", "", *_meta(entry), *_statement_warning(data)]
     if title == "事实声明" and isinstance(value, dict):
         details = [f"- 声明：{inline(value.get('statement'))}"]
         for key, label in (("location", "位置"), ("role", "角色"), ("attempt", "轮次")):
@@ -193,6 +190,13 @@ def _statement(title: str, entry: dict | None) -> list[str]:
                 details.append(f"- {label}：{inline(value[key])}")
         return lines + details + [""]
     return lines + _readable(value) + [""]
+
+
+def _statement_warning(data: object) -> list[str]:
+    if not isinstance(data, dict) or data.get("verification") != "CONTENT_NOT_MACHINE_VERIFIED":
+        return []
+    return ["作者：未知（未持久化可靠作者来源）  ",
+            "内容验证：未经过机器事实验证（`CONTENT_NOT_MACHINE_VERIFIED`）", ""]
 
 
 def _summary(title: str, entry: dict | None) -> list[str]:
