@@ -171,6 +171,13 @@ def _validate_landings(metadata: dict, filename: str) -> None:
         _validate_landing(landing, filename)
 
 
+def _body_size(body: str, filename: str) -> int:
+    try:
+        return len(body.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise _invalid(filename, "body", "必须可编码为 UTF-8") from exc
+
+
 def parse_lesson(text: str, filename: str) -> dict:
     """Parse and validate one lesson without accessing repository state."""
     if not isinstance(text, str):
@@ -187,7 +194,7 @@ def parse_lesson(text: str, filename: str) -> dict:
     metadata = _metadata(normalized[4:closing].split("\n"), filename)
     _validate_metadata(metadata, filename)
     body = remainder[1:]
-    size = len(body.encode("utf-8"))
+    size = _body_size(body, filename)
     if size > MAX_BODY:
         raise _invalid(filename, "body", f"正文不能超过 {MAX_BODY} 字节")
     return {**metadata, "body": body}

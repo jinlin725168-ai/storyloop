@@ -67,6 +67,9 @@ class LessonFormatTests(unittest.TestCase):
     def test_body_limit_is_measured_in_utf8_bytes(self):
         self.assert_invalid(sample(body="界" * 1366), "4096")
 
+    def test_body_must_be_utf8_encodable(self):
+        self.assert_invalid(sample(body="\ud800"), "body")
+
     def test_scope_rejects_inner_wildcards(self):
         self.assert_invalid(sample(scope=["src/*.py"]), "scope")
 
