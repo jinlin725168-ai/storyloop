@@ -27,3 +27,11 @@ def selected_plan(evidence):
         return None
     selected = approval.get('option_id', plan.get('main_option'))
     return next((option for option in plan.get('options', []) if option.get('id') == selected), None)
+
+
+def recorded_statement(identifier, value, author='NOT_AVAILABLE'):
+    """Project a stored statement, without claiming authorship or factual verification."""
+    data = None if value is None else {'value': value, 'author': author,
+                                     'provenance': 'NOT_AVAILABLE',
+                                     'verification': 'CONTENT_NOT_MACHINE_VERIFIED'}
+    return item(identifier, data, reason='STATEMENT_PROVENANCE_NOT_PERSISTED')

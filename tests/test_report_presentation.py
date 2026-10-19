@@ -36,7 +36,7 @@ class PresentationTests(unittest.TestCase):
         self.assertIsNone(items['cost']['data']['cost_usd'])
         self.assertEqual(items['cost']['data']['known_cost_usd'], .2)
         self.assertEqual(items['facts:0']['source'], 'agent_code')
-        self.assertEqual(items['review']['source'], 'agent_sample')
+        self.assertEqual(items['review']['source'], 'agent_code')
         self.assertEqual(items['answers']['source'], 'human')
         self.assertEqual(items['manual_confirmations']['source'], 'human')
         self.assertEqual(items['skills_legacy']['reason'], 'STALE_POSSIBLE')
@@ -98,3 +98,42 @@ class PresentationTests(unittest.TestCase):
             path.parent.symlink_to(outside, target_is_directory=True)
             (Path(outside) / 'C1.json').write_text(json.dumps(value))
             self.assertIsNone(collect_evidence(root, {'change_id': 'C1'}, {})['answers'])
+
+    def test_approval_does_not_change_contract_authorship(self):
+        change, report, evidence = self.fixture()
+        change['approval'] = {'approved_at': 'now', 'contract_digest': 'abc'}
+        with patch('storyloop.report_presentation.collect_evidence', return_value=evidence):
+            result = build_presentation(Path('/tmp'), change, report)
+        items = {i['id']: i for s in result['sections'].values() for i in s['items']}
+        for key in ('goal', 'non_goals', 'criteria'):
+            self.assertEqual(items[key]['source'], 'machine')
+            self.assertEqual(items[key]['data']['author'], 'NOT_AVAILABLE')
+            self.assertEqual(items[key]['data']['provenance'], 'NOT_AVAILABLE')
+        self.assertEqual(items['goal']['data']['value'], 'Goal')
+        self.assertEqual(items['product_approval']['source'], 'human')
+
+    def test_code_inference_design_and_unlocated_claims_keep_distinct_provenance(self):
+        change, report, evidence = self.fixture()
+        evidence['run']['planning'] = {'plan': {'design': 'Design inference'}}
+        evidence['run']['facts'].append({'statement': 'Unlocated inference', 'role': 'design'})
+        with patch('storyloop.report_presentation.collect_evidence', return_value=evidence):
+            result = build_presentation(Path('/tmp'), change, report)
+        items = {i['id']: i for s in result['sections'].values() for i in s['items']}
+        self.assertEqual(items['review']['source'], 'agent_code')
+        self.assertEqual(items['facts:0']['source'], 'agent_code')
+        for key in ('design', 'facts:1'):
+            self.assertEqual(items[key]['source'], 'machine')
+            self.assertEqual(items[key]['data']['provenance'], 'NOT_AVAILABLE')
+        self.assertEqual(items['facts:1']['data']['author'], 'agent')
+        self.assertEqual(items['design']['data']['author'], 'NOT_AVAILABLE')
+
+    def test_explicit_sample_text_without_persisted_provenance_is_not_classified(self):
+        change, report, evidence = self.fixture()
+        evidence['run']['facts'] = [{'statement': 'AI constructed sample: Alice buys a book',
+                                    'role': 'design'}]
+        with patch('storyloop.report_presentation.collect_evidence', return_value=evidence):
+            result = build_presentation(Path('/tmp'), change, report)
+        items = {i['id']: i for s in result['sections'].values() for i in s['items']}
+        self.assertEqual(items['facts:0']['source'], 'machine')
+        self.assertEqual(items['facts:0']['data']['provenance'], 'NOT_AVAILABLE')
+        self.assertIn('AI constructed sample', items['facts:0']['data']['value']['statement'])

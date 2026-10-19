@@ -1,5 +1,5 @@
 """Reader sections with explicit human, agent and engine provenance."""
-from .report_items import item
+from .report_items import item, recorded_statement
 
 
 def header(change, report, evidence):
@@ -27,10 +27,9 @@ def conclusion(change, report, reconciliation):
                 all(t.get('result', {}).get('status') in {'PASS', 'PASSED', 'ACCEPTED'} for t in row['tests'])}
     manual = [dict(test, criterion_id=row.get('criterion', {}).get('id')) for row in trace or []
               for test in row.get('tests', []) if test.get('id') == 'human']
-    result = [item('goal', product.get('goal'), 'human' if change.get('approval') else 'agent_sample',
-                   'APPROVED_CONTRACT' if change.get('approval') else 'PRODUCT_DECLARATION'),
-              item('non_goals', product.get('non_goals'), 'human' if change.get('approval') else 'agent_sample'),
-              item('criteria', criteria if 'stories' in product else None, 'agent_sample'),
+    result = [recorded_statement('goal', product.get('goal')),
+              recorded_statement('non_goals', product.get('non_goals')),
+              recorded_statement('criteria', criteria if 'stories' in product else None),
               item('ac_matrix', _ac_matrix(trace)), item('consumer_matrix', _consumers(product, trace)),
               item('gates', _gates(report)), item('completion',
                   {'completed': len(complete & {c['id'] for c in criteria}), 'total': len(criteria)}
@@ -93,7 +92,7 @@ def process(change, report, evidence):
     result.extend([item('answers', evidence.get('answers'), 'human',
                         'SNAPSHOT_TRUNCATED' if (evidence.get('availability') or {}).get('answers_truncated') else None),
                    item('product_approval', change.get('approval'), 'human'),
-                   item('review', report.get('review'), 'agent_sample'),
+                   item('review', report.get('review'), 'agent_code', 'AGENT_CODE_REVIEW_NOT_MACHINE_VERIFIED'),
                    item('escalations', (run.get('routing') or {}).get('history')),
                    item('chronology', reason='ONLY_PERSISTED_RECORDS_NO_COMPLETE_EVENT_HISTORY'),
                    item('fact_history', reason='FACT_EVOLUTION_NOT_PERSISTED')])
@@ -103,11 +102,15 @@ def process(change, report, evidence):
     elif not facts:
         result.append(item('facts', [], 'agent_code'))
     else:
-        result.extend(item(f'facts:{index}', fact, 'agent_code' if fact.get('location') else 'agent_sample',
-                           'AGENT_CLAIM_LOCATION_ONLY_VALIDATED' if fact.get('location') else 'AGENT_CLAIM')
-                      for index, fact in enumerate(facts))
+        result.extend(_fact_item(index, fact) for index, fact in enumerate(facts))
     planning = run.get('planning') or {}
     result.extend(item(key, planning.get(key), 'human') for key in ('continue_heavy',))
-    result.append(item('design', (planning.get('plan') or {}).get('design'), 'agent_sample'))
+    result.append(recorded_statement('design', (planning.get('plan') or {}).get('design')))
     result.append(item('design_approval', (planning.get('plan') or {}).get('approval'), 'human'))
     return result
+
+
+def _fact_item(index, fact):
+    if fact.get('location'):
+        return item(f'facts:{index}', fact, 'agent_code', 'AGENT_CLAIM_LOCATION_ONLY_VALIDATED')
+    return recorded_statement(f'facts:{index}', fact, 'agent')
