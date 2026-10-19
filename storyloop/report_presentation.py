@@ -3,6 +3,7 @@ from pathlib import Path
 
 from .report_evidence import collect_evidence
 from .report_focus import build_focus
+from .report_roles import conclusion_items, cost_items
 from .report_items import effective_tier, item
 from .report_reconciliation import reconcile
 from .report_sections import conclusion, header, process, proof
@@ -17,8 +18,9 @@ def build_presentation(project: Path, change: dict, report: dict) -> dict:
     reconciliation = reconcile(project, change, report, evidence)
     groups = [header(change, report, evidence), conclusion(change, report, reconciliation),
               build_focus(change, report, evidence), proof(report, evidence),
-              process(change, report, evidence), [item('cost', evidence.get('telemetry'))],
+              process(change, report, evidence), [item('cost', evidence.get('telemetry')), *cost_items(evidence)],
               [item('memory', reason='MEMORY_MODULE_NOT_IMPLEMENTED')]]
+    groups[1].extend(conclusion_items(evidence))
     sections = {str(index): {'title': title, 'items': items}
                 for index, (title, items) in enumerate(zip(TITLES, groups))}
     reconciliation['checks'].append({'id': 'sections', 'status': 'MATCH',

@@ -17,6 +17,7 @@ PROCESS_LABELS = {
     "approvals": "人工批准", "overrules": "人工驳回", "resets": "重置记录", "reset": "当前重置",
     "answers": "人工回答", "product_approval": "产品批准", "review": "独立审查",
     "escalations": "升档记录", "chronology": "完整时间线", "fact_history": "事实演变历史",
+    "review_disposition": "审查发现分流（含老问题、移出范围、丢弃条数）",
     "continue_heavy": "继续重档确认", "design": "设计说明", "design_approval": "设计批准",
 }
 
@@ -49,6 +50,9 @@ def _conclusion(items: dict) -> list[str]:
                               ("discovered", "发现测试数"),
                               ("added", "新增测试数")):
         lines += _summary(title, items.get(identifier))
+    for identifier, title in (("review_human", "还需要人确认的事项"), ("cross_vendor", "跨厂商审查（适配器回报）")):
+        if identifier in items:
+            lines += _summary(title, items[identifier])
     return lines
 
 
@@ -116,6 +120,8 @@ def _focus(items: dict) -> list[str]:
     lines += _reader(items.get("layer_gaps"), _gaps)
     lines += _reader(items.get("verification"), _commands)
     lines += _summary("人工验证引用", items.get("human_verification"))
+    if "review_findings" in items:
+        lines += _summary("中置信发现引用", items["review_findings"])
     for identifier in ("runtime_concurrency", "expiring_constants", "semantic_decisions",
                        "refactor_behavior_differences", "historical_review_issues", "performance"):
         if identifier in items:

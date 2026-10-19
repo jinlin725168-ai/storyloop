@@ -137,13 +137,14 @@ my-project/
 | `ci PATH --change ID` | CI 入口：隔离运行该变更的验收套件和项目级系统冒烟 |
 | `report PATH --change ID` | 定位最终验收报告 |
 | `base-propose PATH --path P [--path P2] --reason TEXT [--allow-mutable] [--allow-ci]` | 为计划中的底座改动开 BASE 提案（无需先触发功能变更）；`--allow-ci` 是 CI 配置进入或修改底座的唯一通道，由人决定，代理永远不能 |
-| `base-update PATH --proposal BASE-ID` | 校验独立底座提交、完整回归并提升底座版本 |
+| `base-update PATH --proposal BASE-ID [--confirm-oracle-skills]` | 校验独立底座提交、完整回归并提升底座版本 |
 | `accept PATH --change ID --criterion A1 --note TEXT` | 记录人工验收条件已由人确认（仅在 `MANUAL_ACCEPTANCE_REQUIRED` 停点可用） |
 | `answer PATH --change ID --answer TEXT [--answer TEXT]` | 回答 `NEEDS_INPUT` 停点的问题（按顺序；只给一个答案则适用于全部）。在终端里 `run`/`approve` 会直接提问，无需此命令 |
 | `reset PATH --change ID --reason TEXT` | 人工复位卡住的运行（`WORKSPACE_TAINTED`，或人工验收等待期间工作区已变）；不动文件，被中断的一轮不计预算，理由留痕 |
 | `acceptance-repair PATH --change ID --reason TEXT` | 变更验收用例本身有缺陷时，让 acceptance 角色修自己的套件并从合同提交重新证明 RED；之前的尝试作废，理由写入 decisions.md（旧名 `smoke-repair`） |
 | `smoke-propose PATH --change ID` | 变更合并后，acceptance 角色提议把哪些核心链路并入或更新项目级系统冒烟，草案写到 `.storyloop/drafts/smoke/<id>/` |
 | `smoke-apply PATH --change ID` | 人审核草案后安装到 `acceptance/smoke/`，隔离跑绿才提交；红的草案不留任何改动 |
+| `adapters check PATH [--json]` | 检查角色适配器能力与档次映射 |
 | `skills PATH` | 把引擎自带的技能包（`foundation-survey`）安装或刷新到项目的 `.claude/skills/` 与 `.codex/skills/`，Claude Code 与 Codex 都能直接用；已初始化的项目自动开 BASE 提案 |
 | `survey PATH [--reason TEXT] [--from FILE]` | 底座摸底：survey 角色只读探索仓库，写出 `openspec/foundation/` 知识库（模块、架构、扩展机制、接口、能力、积木、测试）并开 BASE 提案；提交后 `base-update` 即受保护，之后每个角色起手先读它。产物校验失败时原始回答保存在 `.storyloop/state/foundation/last-survey.json`，人工修正后用 `--from` 安装，不再调用代理 |
 | `document PATH --change ID [--design FILE] [--capability NAME]` | 为已 PASSED 的变更补生成 design.md、decisions.md 和活规格（配合 `base-propose`/`base-update` 提交） |
@@ -195,3 +196,25 @@ storyloop init C:\work\my-project --settings C:\work\settings.json
 ## 许可证
 
 当前作为本地工程交付，尚未指定对外分发许可证。
+
+## 角色画像与跨厂商审查
+
+配置 `adapters` 和 `roles` 后，引擎给每次调用附加 `role_profile`：请求档次只有 `strong`/`standard`，与变更的 light/standard/heavy 档位分开。标准档 implement 默认 strong；review 默认 strong。适配器选择模型并回报实际 model/vendor/tier，报告第 5 节逐调用展示请求 → 实际与“已生效 / 未生效 / 未配置”。这些是适配器回报，并非模型质量或工具权限的机器证明。
+
+```json
+{
+  "adapters": {
+    "claude": {"kind": "command", "agent_command": ["{python}", "/abs/claude_agent.py", "--tier-model", "strong=opus", "--tier-model", "standard=sonnet"]},
+    "codex": {"kind": "codex", "models": {"strong": "<本机已核实可用模型>", "standard": "<本机已核实可用模型>"}}
+  },
+  "roles": {"default_adapter": "claude", "review": {"adapter": "codex"}},
+  "cross_vendor_review": {"enabled": true, "on_unavailable": "fail_closed"},
+  "limits": {"max_calls": 80, "max_agent_wall_seconds": 28800, "max_tokens": null, "max_cost_usd": null}
+}
+```
+
+先在干净项目执行 `init`，再 `skills`。若 skills 返回 BASE 提案，按提案把列出的文件独立提交，再执行 `base-update PROJECT --proposal BASE-ID --confirm-oracle-skills`；确认覆盖判据角色技能是有意变更。将上述配置合入 `.storyloop/config.json`，运行 `storyloop adapters check PROJECT --json`，然后 `change → approve → run`（approve 默认会开始运行）。准备度、重档和设计批准仍遵循原有门禁。具体协议见 [API](docs/api.md)，证据与重放步骤见 [角色画像验收](docs/superpowers/reports/2026-10-19-子项目4-验收.md)。
+
+从源码工作树验收时，CLI 和 command 适配器必须使用同一份引擎。共享 venv 若 editable 安装指向另一工作树，直接执行示例 `.py` 会导入那份代码；请在专用环境安装当前工作树，或显式设置适配器 Python 的模块搜索路径。真实验收使用显式 `sys.path.insert(0, WORKTREE)` 的 `python -c` 包装，并记录 `storyloop.__file__` 与 HEAD；没有把旧安装的结果当成新实现证据。
+
+`COST_LIMIT_REACHED` 在下一次调用前停止；提高 limits 后 `run` 恢复。失败调用也计成本；没有费用回报时只展示已知费用覆盖，不估价、不把未知当作零。无画像的旧配置继续工作，已有报告与回执保持原字节；缺少旧诊断的历史报告不会凭空补齐新状态。

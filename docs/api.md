@@ -9,6 +9,7 @@
 | 命令 | 参数 | 返回状态 |
 |---|---|---|
 | `init` | `[--settings FILE]` | `BASELINE_LOCKED` |
+| `adapters check` | `[--json]` | 能力握手结果 |
 | `skills` | — | `SKILLS_INSTALLED` |
 | `survey` | `[--reason TEXT] [--from FILE]` | `SURVEYED` |
 | `change` | `--idea TEXT`、`--change ID --message TEXT` 或 `--supersede ID --message TEXT [--reason TEXT]`；`[--no-interactive]` | 变更状态（`DRAFT`） |
@@ -24,7 +25,7 @@
 | `smoke-propose` | `--change ID` | `SMOKE_PROPOSED` |
 | `smoke-apply` | `--change ID` | `SMOKE_APPLIED` 或 `SMOKE_UPDATE_FAILED` |
 | `base-propose` | `--path P [--path P …] --reason TEXT [--allow-mutable] [--allow-ci]` | `PROPOSED` |
-| `base-update` | `--proposal BASE-ID` | `BASELINE_UPGRADED` |
+| `base-update` | `--proposal BASE-ID [--confirm-oracle-skills]` | `BASELINE_UPGRADED` |
 | `ci` | `--change ID` | `PASSED` 或 `FAILED` |
 | `report` | `--change ID` | `REPORT`（报告路径） |
 
@@ -47,6 +48,7 @@
 | `NEEDS_INPUT` | design、implement 或 review 提了问题 | 回答后能 |
 | `BASE_CHANGE_REQUIRED` | 功能触碰底座，已开 BASE 提案 | `base-update` 并合回功能分支后能 |
 | `BOUNDARY_VIOLATION` | 代理写了不允许的路径 | 还原后能 |
+| `COST_LIMIT_REACHED` | 按变更调用/墙钟/token/已知费用达到上限 | 提高 limits 后能，复用已完成候选 |
 | `BUDGET_EXHAUSTED` | `max_attempts` 用尽 | 提高预算后能；或 `acceptance-repair` |
 | `CHARACTERIZATION_FAILED` | 特征化测试在旧代码上不绿 | 就地修正测试后能（重新验证，不再调用代理） |
 | `WORKSPACE_TAINTED` | 工作区出现不该有的改动 | `reset` 后能 |
@@ -210,7 +212,7 @@ design、implement、review 可选返回 `facts: [{statement, location}]`（缺�
 
 ### `_telemetry`（可选）
 
-任何角色的返回对象里可以附带 `_telemetry`：数值键 `cost_usd`、`turns`、`duration_ms`、`input_tokens`、`output_tokens`、`segments`、`lanes`、`perspectives`，以及 `model`、`sessions`（会话 ID 列表）。引擎剥离后记入账本：变更调用记在 `.storyloop/state/telemetry/<change-id>.json`，变更创建前的 product 调用先记在 `pending.json` 再收编，survey 记在 `foundation.json`。没有它时只记墙钟时间。
+任何角色的返回对象里可以附带 `_telemetry`：数值键 `cost_usd`、`turns`、`duration_ms`、`input_tokens`、`output_tokens`、`segments`、`lanes`、`perspectives`，以及 `model`、`vendor`、`tier_applied`、`sessions`（会话 ID 列表）；画像能力回报见第六节。引擎剥离后记入账本：变更调用记在 `.storyloop/state/telemetry/<change-id>.json`，变更创建前的 product 调用先记在 `pending.json` 再收编，survey 记在 `foundation.json`。没有它时只记墙钟时间。
 
 ### 诊断记录
 
@@ -246,3 +248,29 @@ design、implement、review 可选返回 `facts: [{statement, location}]`（缺�
 - 退出码 0 通过、1 行为失败、其他为环境错误；RED 阶段只有 1 算有效红灯，且执行数为 0 的失败不算。
 - 每个测试结果带 `counts`（`executed`、`failed`、`skipped`、`parser`），由输出统计；统计不出来为 `null`。
 - 证据写在 `.storyloop/evidence/<change-id>/acceptance-red.json` 与 `acceptance-result.json`。
+
+## 六、角色画像（子项目 4）
+
+`storyloop adapters check PROJECT [--json]` 发出 `{"protocol":"storyloop.adapter-capabilities.v1"}`，期望返回 `vendor`、`tiers: ["strong", "standard"]`、布尔 `subagents/path_guard/fast_checks`、`modes: ["*"]`。结果写 `.storyloop/state/adapters.json`，绑定配置及 argv 摘要；init/change 自动检查，run 在只读边界外刷新未知能力。已知映射缺档报 `ADAPTER_PROFILE_UNSUPPORTED`；未知旧适配器与 manual 能力缺失允许兼容执行，不能声称生效。跨厂商模式要求已知、不同 vendor，否则 fail_closed。
+
+请求仍是 `storyloop.project-agent.v1`，只新增可选 `role_profile`：
+
+```json
+{"version":1,"tier":"strong","routing_tier":"standard","skills":[],
+ "subagents":{"perspectives":["correctness","security","architecture","tests"],"explore":[],"lanes":false},
+ "writable_paths":["app/**","tests/**"],"forbidden_paths":[],"fast_checks":[]}
+```
+
+`skills` 每项含 name/path/version/sha256，正文仍在 instructions。路径来自引擎边界规则；只读角色（包括 acceptance）无可写路径。`roles.<role>` 可覆盖 adapter/tier/fast_checks；判定角色降到 standard 必须提供 reason。tier 可按 light/standard/heavy 映射。`settings.stacks` 用于技能选择。
+
+适配器 `_telemetry` 回报 model/vendor/tier_applied，可回报 `path_guard: enforced|unsupported` 与 `subagents_applied: {mode: parallel|sequential, perspectives, explore, lanes}`。engine 独立写 tier_requested/adapter/degraded，拒绝适配器覆盖。模型档次回报缺失或不匹配是“未生效”，不进入匹配档次统计；费用与失败调用仍保留在总账。第 3、5 节明确为适配器回报。profile 不存在时保留旧协议。
+
+review 的新画像协议要求 findings 的 severity（P0/P1/P2/question）、confidence（0–100 整数）、introduced、trigger/impact/fix，以及 coverage。去向依次为老问题、out_of_scope、≥80 修复/归属停点、50–79 引用重点、低置信 P0/P1 人工确认、其余丢弃。可配置 `review_thresholds.fix/focus`。引擎生成独立 `F-ordinal-hash`，代理原 ID 留在 agent_id。第 2 节仅列 id/location/severity/confidence；正文与复核理由在第 4 节标 🤖。
+
+只有已画像且请求 standard 的 review 高置信发现会触发 `mode: verify` strong 调用：请求 findings，返回 `results: [{id, confirmed, reason}]`，每个引擎 ID 恰好一次。strong 原审查不再复核；无画像的新发现记录 PROFILE_NOT_CONFIGURED。checklist 只核对已批准方案 selected option 的结构化 constraints（criterion_id/path/rule）按 canonical JSON 编码的 decision，恰好一行，status 为 pass/issue/unconfirmed；不从 Markdown 推断完整设计覆盖。语义不完整有一次补正机会。
+
+调用 metadata 的 context 保存实际**提供**的底座、活规格、技能与方案文件路径/hash 和截断项，不代表代理实际读取。子代理视角由 profile 唯一决定；不支持并行时单会话依次处理。
+
+`COST_LIMIT_REACHED` 是可恢复停点：limits 默认 max_calls=80、max_agent_wall_seconds=28800，max_tokens/max_cost_usd 默认为 null；旧配置同样获得默认挂死保护。每次调用前检查累计已用值，失败调用也计算；费用未知不估算，并展示 x/y 覆盖。提高 limits 再 run；已完成实现候选绑定指纹，在审查/复核停点恢复时复用，不重复实现。原始审查在复核费用停止时持久化。
+
+`cross_vendor_review.on_unavailable` 默认 fail_closed：review 不可用停 AGENT_UNAVAILABLE、交还质量轮次；degrade 改用 implement 适配器审查并标记 degraded=cross_vendor。事后比较实际回报 vendor，不同仅代表回报匹配；同厂或缺失标“跨厂商未生效”，不改变证据型门。

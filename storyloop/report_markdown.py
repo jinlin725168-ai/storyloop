@@ -52,7 +52,9 @@ def _render_item(entry: dict, report: dict) -> list[str]:
     merged = identifier == "merge_commit" and report.get("merge_commit")
     data = report.get("merge_commit") if merged else entry.get("data")
     availability = "AVAILABLE" if merged else availability
-    title = "layers（分层验证）" if identifier == "layers" else identifier
+    title = {"layers": "layers（分层验证）", "role_calls": "角色档次（适配器回报）",
+             "role_protection": "中间防线与子代理（适配器回报，非机器验证）",
+             "role_downgrades": "判定角色降档理由"}.get(identifier, identifier)
     lines = [f"### {_text(title)}", "", f"- 来源：{source}", f"- 可用性：`{_text(availability)}`"]
     if entry.get("reason") and not merged:
         lines.append(f"- 说明：`{_text(entry['reason'])}`")
@@ -60,7 +62,9 @@ def _render_item(entry: dict, report: dict) -> list[str]:
         lines.append("- 作者：未知（未持久化可靠作者来源）")
         lines.append("- 内容验证：未经过机器事实验证（`CONTENT_NOT_MACHINE_VERIFIED`）")
     lines.append("")
-    if identifier == "cost" and isinstance(data, dict):
+    if identifier == "role_calls" and isinstance(data, list):
+        lines.extend(_role_calls(data))
+    elif identifier == "cost" and isinstance(data, dict):
         lines.extend(_cost(data))
     elif identifier in {"baseline", "executed", "uncounted"}:
         lines.extend(_oracle(identifier, data))
@@ -156,3 +160,14 @@ def _cell(value: object) -> str:
     for char in ("\\", "`", "*", "[", "]", "#", "|"):
         escaped = escaped.replace(char, "\\" + char)
     return escaped
+
+
+def _role_calls(rows):
+    lines = ["| 角色 / 调用 | 适配器 | 模型 / 厂商 | 请求档次 → 实际档次 | 状态 | 可进档次统计 |",
+             "|---|---|---|---|---|---|"]
+    for row in rows:
+        lines.append(f"| {_cell(row.get('role'))} / {_cell(row.get('call'))} | "
+                     f"{_cell(row.get('adapter'))} | {_cell(row.get('model'))} / {_cell(row.get('vendor'))} | "
+                     f"{_cell(row.get('tier_requested'))} → {_cell(row.get('tier_applied'))} | "
+                     f"{_cell(row.get('status'))} | {_cell(row.get('statistics_eligible'))} |")
+    return lines

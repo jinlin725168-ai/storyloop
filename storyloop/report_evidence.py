@@ -29,13 +29,14 @@ RUN_FIELDS = frozenset({
     "source_head", "contract_digest", "started_at", "phase", "planning", "routing",
     "facts", "failures", "agent_failures", "approvals", "overrules", "repairs", "resets",
     "reset", "review", "design", "boundary", "verified", "mode", "candidate_sha256",
-    "interrupted_status",
+    "interrupted_status", "review_disposition",
     "implementation_commit", "integration_commit", "contract_commit", "report_commit",
 })
 ENTRY_FIELDS = frozenset({
     "role", "wall_ms", "at", "failed", "call", "session", "cost_usd", "turns",
     "duration_ms", "input_tokens", "output_tokens", "segments", "lanes", "perspectives",
-    "model", "vendor", "tier_applied", "skills",
+    "model", "vendor", "tier_applied", "skills", "tier_requested", "adapter",
+    "degraded", "path_guard", "subagents_applied",
 })
 META_FIELDS = frozenset({
     "version", "call", "role", "ledger", "adapter", "started_at", "status", "wall_ms",
@@ -56,6 +57,7 @@ def collect_evidence(project: Path, change: dict, report: dict) -> dict:
     answers, answers_status, answers_truncated = _load_answers(root, change_id)
     return {
         "run": run,
+        "role_downgrades": _role_downgrades(root),
         "answers": answers,
         "entries": {"ledger": entries, "calls": calls,
                     "truncated": {"ledger": truncated, "calls": calls_truncated}},
@@ -238,3 +240,20 @@ def _load_answers(root: Path, change_id: str | None) -> tuple[list | None, str, 
                  for record in entries[:MAX_LIST] if isinstance(record, dict)]
     bounded, truncated = _bounded(projected)
     return bounded, "AVAILABLE", truncated or len(entries) > MAX_LIST or len(projected) != len(entries)
+
+
+def _role_downgrades(root):
+    config = _read_object(root, root / ".storyloop/config.json", MAX_RUN_BYTES) or {}
+    roles = config.get("roles") or {}
+    if not isinstance(roles, dict):
+        return []
+    rows = []
+    for role in ("product", "acceptance", "design", "review"):
+        setting = roles.get(role) or {}
+        if not isinstance(setting, dict):
+            continue
+        tier = setting.get("tier")
+        lowered = tier == "standard" or isinstance(tier, dict) and "standard" in tier.values()
+        if lowered and isinstance(setting.get("reason"), str):
+            rows.append({"role": role, "tier": tier, "reason": setting["reason"]})
+    return _bounded(rows)[0]

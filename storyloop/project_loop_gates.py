@@ -24,7 +24,7 @@ from .project_loop_support import pause, pause_for_boundary, run_path, save_run
 from .changes import load_change
 from .oracle_counts import removal_paths, sample_layer
 from .project_profile import layer_commands, matches_test_root
-from .smoke_runner import run_commands_isolated
+from .characterization_baseline import run_characterization_baseline
 from .storage import load_json
 
 if TYPE_CHECKING:  # the loop imports this module; the services type is only an annotation
@@ -228,7 +228,8 @@ def _verify_characterization(project: Path, change_id: str, state: dict, config:
     profile = config["profile"]
     locks = (capture_locks(project, config, pending)
              if state.get('routing', {}).get('version') == 1 else None)
-    unit = run_commands_isolated(project, layer_commands(profile, "unit"), config["check_timeout_seconds"])
+    unit = run_characterization_baseline(project, layer_commands(profile, "unit"),
+                                         config["check_timeout_seconds"], pending)
     if unit["status"] != "PASSED":
         return pause(project, state, "CHARACTERIZATION_FAILED", unit=unit, pending_characterization=pending,
                      error="Characterization tests must be green on the current code before implementation")

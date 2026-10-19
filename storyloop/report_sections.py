@@ -1,4 +1,5 @@
 """Reader sections with explicit human, agent and engine provenance."""
+from .report_roles import protection_items
 from .report_items import item, recorded_statement
 
 
@@ -80,6 +81,7 @@ def proof(report, evidence):
               item('skills', skills if ledger is not None and ledger_available else None),
               item('skills_legacy', oracle.get('skills_used'), reason='STALE_POSSIBLE'),
               item('ci', reason='NO_AUTHORITATIVE_EXTERNAL_CI_RECORD')]
+    result.extend(protection_items(evidence))
     result.extend(item(key, oracle.get(key)) for key in ('baseline', 'executed', 'uncounted'))
     return result
 
@@ -96,6 +98,9 @@ def process(change, report, evidence):
                    item('escalations', (run.get('routing') or {}).get('history')),
                    item('chronology', reason='ONLY_PERSISTED_RECORDS_NO_COMPLETE_EVENT_HISTORY'),
                    item('fact_history', reason='FACT_EVOLUTION_NOT_PERSISTED')])
+    if 'review_disposition' in run:
+        result.append(item('review_disposition', run['review_disposition'], 'agent_code',
+                           'AGENT_CODE_REVIEW_NOT_MACHINE_VERIFIED'))
     facts = run.get('facts')
     if facts is None:
         result.append(item('facts'))

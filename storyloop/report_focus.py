@@ -1,6 +1,8 @@
 """Deterministic machine review references; never consume agent narrative text."""
 import shlex
 
+from .report_roles import finding_refs
+
 from .report_items import effective_tier, item, selected_plan
 
 
@@ -19,6 +21,9 @@ def build_focus(change: dict, report: dict, evidence: dict) -> list[dict]:
               item('verification', commands, reason='EXECUTED_ARGV_ONLY' if commands is not None
                    else 'EXECUTED_ARGV_NOT_AVAILABLE'), item('human_verification', _human_paths(report)),
               item('layer_gaps', _layer_gaps(report))]
+    disposition = (evidence.get('run') or {}).get('review_disposition')
+    if disposition is not None:
+        result.append(item('review_findings', finding_refs(disposition.get('focus') or [])))
     if effective_tier(change, report, evidence) == 'heavy':
         result.append(item('risks', _risks(change, report, evidence)))
     result.extend(item(key, reason='NO_AUTHORITATIVE_RECORD') for key in UNKNOWN_FOCUS)
