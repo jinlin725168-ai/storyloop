@@ -82,6 +82,20 @@ class AdapterCapabilityTests(unittest.TestCase):
             ensure_checked(root)
             self.assertEqual(counter.read_text(encoding="utf-8"), "xxx")
 
+    def test_partial_known_cache_is_invalidated_and_reprobed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._project(root, _capabilities(["strong", "standard"]))
+            ensure_checked(root)
+            cache_path = root / ".storyloop/state/adapters.json"
+            cache = json.loads(cache_path.read_text(encoding="utf-8"))
+            cache["adapters"]["test"] = {"known": True, "tiers": ["strong", "standard"]}
+            write_json(cache_path, cache)
+
+            ensure_checked(root)
+
+            self.assertEqual((root / "probes.txt").read_text(encoding="utf-8"), "xx")
+
 
 if __name__ == "__main__":
     unittest.main()
