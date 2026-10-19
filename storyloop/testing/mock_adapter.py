@@ -14,6 +14,8 @@ import sys
 import time
 
 from storyloop.processutil import redact
+from storyloop.path_security import safe_target
+from storyloop.models import StoryLoopError
 
 
 def _safe(value):
@@ -59,11 +61,9 @@ def _record(script: Path, request: dict) -> int:
 def _create_files(request: dict, entries: list) -> None:
     root = Path(request.get('project') or Path.cwd()).resolve()
     for entry in entries:
-        relative = Path(entry['path'])
-        target = (root / relative).resolve()
-        if relative.is_absolute() or '..' in relative.parts or not target.is_relative_to(root):
-            raise ValueError('creates path must stay inside the project')
-        if relative.parts and relative.parts[0] in {'.git', '.storyloop'}:
+        target = safe_target(root, entry['path'], 'creates path')
+        relative = target.relative_to(root)
+        if relative.parts[0].casefold() in {'.git', '.storyloop'}:
             raise ValueError('creates cannot modify control files')
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(entry['content'], encoding='utf-8')
@@ -99,7 +99,7 @@ def main() -> int:
     try:
         return _replay(args.script.resolve(), json.load(sys.stdin),
                        json.loads(args.script.read_text(encoding='utf-8')))
-    except (OSError, ValueError, TypeError, KeyError) as error:
+    except (OSError, ValueError, TypeError, KeyError, StoryLoopError) as error:
         print(redact(f'mock adapter: {error}'), file=sys.stderr)
         return 2
 

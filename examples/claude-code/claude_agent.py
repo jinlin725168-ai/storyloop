@@ -148,7 +148,7 @@ def _dispatch(request, base, prompt, args, model):
     requested = (request.get('role_profile') or {}).get('subagents') or {}
     if 'role_profile' in request:
         perspectives = requested.get('perspectives', [])
-    if role == "review" and perspectives:
+    if role == "review" and perspectives and request.get("payload", {}).get("mode") != "verify":
         return _review_with_perspectives(request, base, args, perspectives)
     lanes = _parse_lanes(args.implement_lanes)
     if 'role_profile' in request and not requested.get('lanes'):
@@ -406,7 +406,8 @@ def _prompt(request: dict, role: str, guides: list[str], extra: str = "", schema
     if extra:
         parts.append(extra)
     if schema:
-        parts.append(SCHEMA_HINTS.get(role) or SCHEMA_HINTS["acceptance"])
+        verifying = role == "review" and request.get("payload", {}).get("mode") == "verify"
+        parts.append(VERIFY_HINT if verifying else SCHEMA_HINTS.get(role) or SCHEMA_HINTS["acceptance"])
     parts.append(RULES)
     for guide in guides:
         path = Path(guide)

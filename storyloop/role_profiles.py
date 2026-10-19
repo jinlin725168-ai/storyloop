@@ -15,13 +15,17 @@ WRITERS = {"implement", "characterize"}
 
 
 def enabled(config: dict) -> bool:
+    if "adapters" in config:
+        require(isinstance(config["adapters"], dict) and config["adapters"], "adapters must be a nonempty object")
+    if "roles" in config:
+        require(isinstance(config["roles"], dict), "roles must be an object")
     return bool(config.get("adapters") or config.get("roles"))
 
 
 def resolve_adapters(config: dict) -> dict[str, dict]:
     """Return named adapters, representing the old pair as ``default``."""
     configured = config.get("adapters")
-    if configured is None:
+    if "adapters" not in config:
         kind = config.get("adapter")
         return {"default": {"kind": kind, "agent_command": list(config.get("agent_command") or [])}}
     require(isinstance(configured, dict) and configured, "adapters must be a nonempty object")
@@ -29,7 +33,7 @@ def resolve_adapters(config: dict) -> dict[str, dict]:
     for name, adapter in configured.items():
         require(isinstance(name, str) and name and isinstance(adapter, dict), "Invalid adapter")
         kind = adapter.get("kind")
-        require(kind in {"manual", "command", "codex"}, "Invalid adapter kind")
+        require(isinstance(kind, str) and kind in {"manual", "command", "codex"}, "Invalid adapter kind")
         result[name] = dict(adapter)
     return result
 
@@ -38,19 +42,23 @@ def role_settings(config: dict, role: str, routing_tier: str | None) -> dict:
     """Resolve the adapter and requested tier for one engine role."""
     routing = routing_tier or "standard"
     require(isinstance(routing, str) and routing in ROUTING, "Invalid routing tier")
-    roles = config.get("roles") or {}
+    roles = config.get("roles", {})
     require(isinstance(roles, dict), "roles must be an object")
-    override = roles.get(role) or {}
+    override = roles.get(role, {})
     require(isinstance(override, dict), "Invalid role profile")
     adapters = resolve_adapters(config)
     adapter = override.get("adapter", roles.get("default_adapter", "default"))
     require(isinstance(adapter, str) and adapter in adapters, "Role references an unknown adapter")
     tier = _tier(role, routing, override.get("tier"))
-    if role in DECISION_ROLES and tier == "standard" and not override.get("reason"):
+    reason = override.get("reason")
+    if "reason" in override:
+        require(isinstance(reason, str) and bool(reason.strip()), "Role reason must be nonempty text")
+        reason = reason.strip()
+    if role in DECISION_ROLES and tier == "standard" and reason is None:
         require(False, f"roles.{role} lowering requires a reason")
     result = {"adapter": adapter, "tier": tier}
-    if isinstance(override.get("reason"), str) and override["reason"].strip():
-        result["reason"] = override["reason"].strip()
+    if reason is not None:
+        result["reason"] = reason
     if "fast_checks" in override:
         result["fast_checks"] = _commands(override["fast_checks"])
     return result

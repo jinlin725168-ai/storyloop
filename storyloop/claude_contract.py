@@ -25,6 +25,11 @@ SCHEMA_HINTS = {
     "survey": ("Exact shape: {documents:[{path,content}]}; path relative to payload.foundation_root, Markdown only, "
                "every name in payload.required_documents present. No extra fields."),
 }
+VERIFY_HINT = (
+    "Verify only the supplied findings in this single session using the engine-selected strong model. "
+    "Answer each finding id exactly once. Return ONLY {results:[{id:string,confirmed:boolean,reason:string}]}. "
+    "Do not produce a new review verdict or fan out to perspective reviewers."
+)
 RULES = (
     "Final answer must be ONLY one JSON object, no markdown fences, no prose.\n"
     "Only read-only git (status/diff/log/show); never add, commit, stash or switch branches. "
@@ -101,4 +106,3 @@ LANE_INTEGRATE_RULES = (
     "return the final implement result exactly as {summary:string, questions:[string], design:string}; "
     "the design's ## Tests First must cover the tests of every lane."
 )
-

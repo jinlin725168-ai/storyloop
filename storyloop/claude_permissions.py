@@ -3,6 +3,7 @@ from pathlib import Path
 import re
 import os
 import sys
+import shlex
 
 from .models import require
 from .path_security import safe_target, safe_absolute_target, forbidden_path_root
@@ -77,5 +78,23 @@ def _bash_rule(project: Path, value: str) -> str:
 
 def _check_rule(project: Path, row: list[str]) -> str:
     require(isinstance(row, list) and row, 'Invalid fast check')
-    tokens = [str(Path(sys.executable).resolve()) if item == '{python}' else item for item in row]
-    return ' '.join(_safe_token(project, token) for token in tokens) + ':*'
+    tokens = [_python_token() if item == '{python}' else _safe_token(project, item) for item in row]
+    return ' '.join(tokens) + ':*'
+
+
+def _python_token() -> str:
+    # Only the engine-owned interpreter may be resolved/quoted. User prefixes still
+    # pass _safe_token, including its lexical traversal and link-chain checks.
+    executable = Path(sys.executable).resolve()
+    safe_absolute_target(executable, 'Python interpreter')
+    return _executable_token(executable)
+
+
+def _executable_token(executable) -> str:
+    # Claude's Bash tool uses POSIX syntax, including Git Bash on native Windows.
+    # Do not use cmd.exe/list2cmdline quoting for Bash permissions. Reject rule
+    # metacharacters before shell quoting; spaces are safe inside a quoted token.
+    value = executable.as_posix()
+    require(executable.is_absolute() and '..' not in executable.parts and
+            re.fullmatch(r'[A-Za-z0-9_./: +@%-]+', value), 'Unsafe Python interpreter path')
+    return shlex.quote(value)

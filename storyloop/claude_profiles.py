@@ -32,8 +32,11 @@ def _rebuild(base: list[str], request: dict) -> list[str]:
     turns = int(base[base.index('--max-turns') + 1])
     # Preserve already validated explicit Bash rules, while narrowing filesystem permissions.
     start, end = base.index('--allowedTools') + 1, base.index('--disallowedTools')
-    bash = [rule[5:-1] for rule in base[start:end] if rule.startswith('Bash(')]
-    return profile_command(base[0], request, turns, bash, model)
+    bash = [rule for rule in base[start:end] if rule.startswith('Bash(')]
+    command = profile_command(base[0], request, turns, [], model)
+    boundary = command.index('--disallowedTools')
+    command[boundary:boundary] = [rule for rule in bash if rule not in command]
+    return command
 
 
 def readonly_command(base: list[str], request: dict) -> list[str]:

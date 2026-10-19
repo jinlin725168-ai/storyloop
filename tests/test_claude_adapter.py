@@ -51,10 +51,13 @@ class ClaudeAdapterTests(unittest.TestCase):
         with patch.object(adapter.subprocess, "run", fake_run), \
                 patch.object(adapter.shutil, "which", return_value="/usr/bin/claude"), \
                 patch("sys.stdin", io.StringIO(json.dumps(request))), \
-                patch("sys.stdout", new_callable=io.StringIO) as out:
+                patch("sys.stdout", new_callable=io.StringIO) as out, \
+                patch("sys.stderr", new_callable=io.StringIO) as err:
             code = adapter.main_with_args(["--segment-turns", "60", "--max-segments", "5"])
         self.assertEqual(code, 0)
         self.assertEqual(len(calls), 3)
+        self.assertIn("segment 1 hit the turn cap", err.getvalue())
+        self.assertIn("cost=$1.0000", err.getvalue())
         self.assertNotIn("--resume", calls[0][0])
         self.assertIn("--resume", calls[1][0])
         self.assertEqual(calls[1][0][calls[1][0].index("--resume") + 1], "sid-1")

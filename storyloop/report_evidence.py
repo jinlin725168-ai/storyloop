@@ -254,6 +254,6 @@ def _role_downgrades(root):
             continue
         tier = setting.get("tier")
         lowered = tier == "standard" or isinstance(tier, dict) and "standard" in tier.values()
-        if lowered and isinstance(setting.get("reason"), str):
-            rows.append({"role": role, "tier": tier, "reason": setting["reason"]})
+        if lowered and isinstance(setting.get("reason"), str) and setting["reason"].strip():
+            rows.append({"role": role, "tier": tier, "reason": setting["reason"].strip()})
     return _bounded(rows)[0]
