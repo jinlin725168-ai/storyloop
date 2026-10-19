@@ -83,13 +83,42 @@ def _require_mappings(config: dict, adapters: dict, results: dict) -> None:
     for role in ROLES:
         for routing in ROUTING:
             setting = role_settings(config, role, routing)
-            adapter, capability = adapters[setting["adapter"]], results[setting["adapter"]]
-            if adapter.get("kind") == "manual" or not capability["known"]:
-                continue
-            if setting["tier"] not in capability["tiers"]:
-                raise StoryLoopError("ADAPTER_PROFILE_UNSUPPORTED", code="ADAPTER_PROFILE_UNSUPPORTED",
-                                     details={"role": role, "tier": setting["tier"], "adapter": setting["adapter"]})
+            name = setting["adapter"]
+            _require_tier(role, setting, adapters[name], results[name])
     require_distinct(config, results)
+
+
+def _require_tier(role: str, setting: dict, adapter: dict, capability: dict) -> None:
+    if adapter.get("kind") == "manual" or not capability["known"]:
+        return
+    if setting["tier"] not in capability["tiers"]:
+        raise StoryLoopError("ADAPTER_PROFILE_UNSUPPORTED", code="ADAPTER_PROFILE_UNSUPPORTED",
+                             details={"role": role, "tier": setting["tier"], "adapter": setting["adapter"]})
+
+
+def require_role_target(project: Path, config: dict, role: str, setting: dict) -> None:
+    """Check the actual fallback target using validated cached observations, without writing."""
+    adapters = resolve_adapters(config)
+    cached = _load_cache(project, adapters)
+    require(cached is not None and cached["config_sha256"] == _digest(config)
+            and cached["argv_sha256"] == _argv_digest(project, adapters),
+            "Adapter capabilities changed; run adapters check")
+    name = setting["adapter"]
+    _require_tier(role, setting, adapters[name], cached["adapters"][name])
+
+
+def ensure_for_run(project: Path) -> dict | None:
+    """Retry cached cross-vendor unknowns once at run entry, outside agent guards."""
+    from .cross_vendor import policy
+    config = load_project_config(project)
+    adapters = resolve_adapters(config)
+    cached = _load_cache(project, adapters)
+    if (cached and cached["config_sha256"] == _digest(config)
+            and cached["argv_sha256"] == _argv_digest(project, adapters) and policy(config)['enabled']):
+        names = [role_settings(config, role, None)['adapter'] for role in ('implement', 'review')]
+        if any(not cached['adapters'][name].get('vendor') for name in names):
+            return check(project)
+    return ensure_checked(project)
 
 
 def _response(raw: object) -> dict:

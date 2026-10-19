@@ -63,6 +63,8 @@ def _fallback(project, role, payload, config, settings, call, error):
         raise error
     fallback = role_settings(config, 'implement', payload.get('routing_tier') or payload.get('tier'))
     settings = {**settings, 'adapter': fallback['adapter']}
+    from .adapter_capabilities import require_role_target
+    require_role_target(project, config, role, settings)
     try:
         return call(settings, 'cross_vendor')
     except StoryLoopError as fallback_error:
@@ -73,12 +75,12 @@ def _fallback(project, role, payload, config, settings, call, error):
 
 def prepare_run(project, config):
     """Warm the engine capability cache before entering agent read-only boundaries."""
-    from .adapter_capabilities import ensure_checked
+    from .adapter_capabilities import ensure_for_run
     from .role_profiles import enabled
     if not enabled(config):
         return
     try:
-        ensure_checked(project)
+        ensure_for_run(project)
     except StoryLoopError as error:
         # An unavailable review vendor is handled at the review call under its explicit policy.
         # Configuration/profile errors still block before any work starts.

@@ -173,3 +173,61 @@ class CrossVendorTests(unittest.TestCase):
             call.assert_called_once()
         finally:
             temporary.cleanup()
+
+    def test_fallback_rejects_known_unsupported_review_tier(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            config = configured(root, 'degrade')
+            config['roles'] = {'default_adapter': 'b', 'implement': {'adapter': 'a', 'tier': 'standard'}}
+            write_json(root / '.storyloop/config.json', config)
+            standard_only = {**capabilities('a'), 'tiers': ['standard']}
+            answer = {'verdict': 'pass', 'summary': 'ok', 'findings': [], 'questions': []}
+            with patch('storyloop.adapter_capabilities.probe', side_effect=[standard_only, capabilities('b')]), \
+                 patch('storyloop.project_agents._command', side_effect=[StoryLoopError('offline', code='AGENT_UNAVAILABLE'), answer]) as call:
+                with self.assertRaises(StoryLoopError) as caught:
+                    invoke_project_agent(root, 'review', {'change_id': 'FEAT-1'})
+            self.assertEqual(caught.exception.code, 'ADAPTER_PROFILE_UNSUPPORTED')
+            self.assertEqual(caught.exception.details['adapter'], 'a')
+            self.assertEqual(caught.exception.details['tier'], 'strong')
+            self.assertEqual(call.call_count, 1)
+            self.assertEqual(len(ledger_entries(root, 'FEAT-1')), 1)
+
+    def test_same_config_run_reprobes_recovered_review_vendor(self):
+        for availability in ('fail_closed', 'degrade'):
+            with self.subTest(policy=availability):
+                self._recover_unknown_vendor(availability)
+
+    def _recover_unknown_vendor(self, availability):
+        from storyloop.project_loop import LoopServices, run_change, load_run_state
+        from tests.test_structured_output import approved_change, passing_review
+        from tests.test_project_loop import smoke_payload
+        from tests.test_agent_unavailable import implement_after
+        temporary, root, change_id = approved_change()
+        try:
+            config = load_project_config(root)
+            config.update(adapters={'a': {'kind': 'manual'}, 'b': {'kind': 'manual'}},
+                          roles={'default_adapter': 'a', 'review': {'adapter': 'b'}},
+                          cross_vendor_review={'enabled': True, 'on_unavailable': availability})
+            write_json(root / '.storyloop/config.json', config)
+            services = LoopServices(lambda p, c: smoke_payload(change_id), implement_after(0, []),
+                                    lambda p, c: invoke_project_agent(p, 'review', c))
+            # Degrade also pauses after its fallback, so the next run can retry the recovered vendor.
+            pause_answer = {'verdict': 'needs_input', 'summary': 'waiting', 'findings': [], 'questions': ['confirm']}
+            with patch('storyloop.adapter_capabilities.probe', side_effect=[capabilities('a'), {'known': False, 'tiers': []}, capabilities('a'), capabilities('b')]) as probe, \
+                 patch('storyloop.project_agents._manual', side_effect=[pause_answer, passing_review(root, {})] if availability == 'degrade' else [passing_review(root, {})]), \
+                 patch('storyloop.project_loop._unanswered', return_value=[]):
+                if availability == 'fail_closed':
+                    with self.assertRaises(StoryLoopError) as caught:
+                        run_change(root, change_id, services)
+                    self.assertEqual(caught.exception.code, 'AGENT_UNAVAILABLE')
+                    self.assertEqual(load_run_state(root, change_id)['attempt'], 0)
+                else:
+                    self.assertEqual(run_change(root, change_id, services)['status'], 'NEEDS_INPUT')
+                self.assertEqual(probe.call_count, 2)
+                self.assertEqual(run_change(root, change_id, services)['status'], 'PASSED')
+                self.assertEqual(probe.call_count, 4)
+            last = ledger_entries(root, change_id)[-1]
+            self.assertEqual(last['adapter'], 'b')
+            self.assertNotIn('degraded', last)
+        finally:
+            temporary.cleanup()
