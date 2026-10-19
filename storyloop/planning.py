@@ -142,9 +142,5 @@ def review_focus(state: dict) -> dict:
     tier = state.get('routing', {}).get('effective_tier')
     if tier is None:
         return {}
-    perspectives = ['engineering', 'product', 'security', 'quality']
-    if tier == 'light':
-        perspectives = ['contract, regression, boundaries, security and oracle correctness']
-    elif tier == 'heavy':
-        perspectives.append('oracle')
-    return {'review_focus': perspectives, 'routing_tier': tier}
+    from .role_subagents import subagents_for
+    return {'subagents': subagents_for('review', tier, {}, {}), 'routing_tier': tier}

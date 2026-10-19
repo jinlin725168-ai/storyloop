@@ -109,6 +109,7 @@ def _product_arguments(child, command):
         child.add_argument("--answer", dest="answers", action="append", default=[], required=True)
     elif command == "base-update":
         child.add_argument("--proposal", required=True)
+        child.add_argument("--confirm-oracle-skills", action="store_true")
 
 
 def _maintenance_arguments(child, command):
@@ -165,7 +166,8 @@ def dispatch(args) -> dict:
                                    allow_ci=args.allow_ci)
     if args.command == "base-update":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
-        return upgrade_baseline(project, args.proposal)
+        from .oracle_skill_approval import confirmed_upgrade
+        return confirmed_upgrade(project, args.proposal, args.confirm_oracle_skills)
     if args.command == "skills":
         return install_skills(project)
     if args.command == "smoke-propose":

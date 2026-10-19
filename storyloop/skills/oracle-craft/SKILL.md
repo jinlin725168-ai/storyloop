@@ -1,6 +1,7 @@
 ---
 name: oracle-craft
-version: 1.1.0
+version: 1.1.1
+roles: [product, acceptance, characterize, review]
 description: 如何写 StoryLoop 的判据：验收矩阵的行类型、特征化测试、结构断言、执行器退出码。product、acceptance、characterize、review 角色使用。
 ---
 

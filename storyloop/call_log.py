@@ -85,3 +85,11 @@ def _redacted(value: object) -> object:
     if isinstance(value, list):
         return [_redacted(item) for item in value]
     return redact(value) if isinstance(value, str) else value
+
+
+def record_context(project: Path, call_id: str, context: dict) -> None:
+    """Attach a provenance-only context manifest captured before adapter invocation."""
+    path = call_folder(project, call_id) / 'meta.json'
+    meta = json.loads(path.read_text(encoding='utf-8'))
+    meta['context'] = _redacted(context)
+    write_json(path, meta)

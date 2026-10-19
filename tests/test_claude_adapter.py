@@ -146,14 +146,14 @@ class ReviewPerspectiveTests(unittest.TestCase):
                 patch("sys.stderr", new_callable=io.StringIO):
             code = adapter.main_with_args([])
         self.assertEqual(code, 0)
-        self.assertEqual(len(calls), len(adapter.REVIEW_PERSPECTIVES) + 1)
+        self.assertEqual(len(calls), 4 + 1)
         result = json.loads(out.getvalue())
         self.assertEqual(result["verdict"], "fail")
         self.assertEqual(result["findings"][0]["perspective"], "security")
         telemetry = result["_telemetry"]
-        self.assertEqual(telemetry["perspectives"], len(adapter.REVIEW_PERSPECTIVES))
-        self.assertAlmostEqual(telemetry["cost_usd"], 0.1 * len(adapter.REVIEW_PERSPECTIVES) + 0.2)
-        self.assertEqual(telemetry["turns"], 2 * len(adapter.REVIEW_PERSPECTIVES) + 3)
+        self.assertEqual(telemetry["perspectives"], 4)
+        self.assertAlmostEqual(telemetry["cost_usd"], 0.1 * 4 + 0.2)
+        self.assertEqual(telemetry["turns"], 2 * 4 + 3)
 
     def test_perspectives_can_be_disabled_for_a_single_review_session(self):
         calls = []

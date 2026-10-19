@@ -130,7 +130,8 @@ def _response(raw: object) -> dict:
         return {"known": False, "tiers": []}
     tiers = value["tiers"]
     required_flags = ("subagents", "path_guard", "fast_checks")
-    return {"known": True, "tiers": sorted(set(tiers)), "vendor": value["vendor"],
+    from .role_subagents import lane_metadata
+    return {"known": True, **lane_metadata(value), "tiers": sorted(set(tiers)), "vendor": value["vendor"],
             **{key: value[key] for key in (*required_flags, "modes")}}
 
 
@@ -171,12 +172,15 @@ def _complete_capability(value: object) -> bool:
     if not isinstance(value.get("vendor"), str) or not value["vendor"]:
         return False
     tiers, modes = value.get("tiers"), value.get("modes")
-    return (isinstance(tiers, list) and all(item in {"strong", "standard"} for item in tiers)
+    from .role_subagents import lane_metadata
+    return (lane_metadata(value) is not None and isinstance(tiers, list) and all(isinstance(item, str) and item in {"strong", "standard"} for item in tiers)
             and all(isinstance(value.get(key), bool) for key in ("subagents", "path_guard", "fast_checks"))
             and isinstance(modes, list) and all(isinstance(item, str) and item for item in modes))
 
 
 def _argv(project: Path, command: list[str]) -> list[str] | None:
+    if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
+        return None
     argv = [item.replace("{python}", shutil.which("python") or "python").replace("{project}", str(project))
             for item in command]
     executable = argv[0] if Path(argv[0]).is_absolute() else shutil.which(argv[0])

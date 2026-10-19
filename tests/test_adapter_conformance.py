@@ -82,10 +82,10 @@ class Conformance:
         if self.kind == 'manual':
             self.assertEqual(capability['tiers'], [])
             return
-        self.assertEqual(set(capability), {'known', 'vendor', 'tiers', 'subagents', 'path_guard', 'fast_checks', 'modes'})
+        self.assertTrue(set(capability) >= {'known', 'vendor', 'tiers', 'subagents', 'path_guard', 'fast_checks', 'modes'})
         self.assertEqual(set(capability['tiers']), {'strong', 'standard'})
-        self.assertFalse(capability['subagents'])
-        self.assertFalse(capability['path_guard'])
+        self.assertEqual(capability['subagents'], self.kind == 'claude')
+        self.assertEqual(capability['path_guard'], self.kind == 'claude')
 
     def test_profile_transmitted(self):
         self.invoke()
@@ -125,13 +125,14 @@ class Conformance:
         self.assertEqual(caught.exception.code, 'AGENT_UNAVAILABLE')
         self.assertEqual(self.captured_request()['role_profile'], PROFILE)
 
-    def test_unsupported_subagents_are_sequential(self):
+    def test_subagent_mode_matches_advertised_capability(self):
         if self.kind == 'manual':
             self.assertNotIn('_telemetry', self.invoke())
             return
         result = self.invoke()
         self.assertEqual(result['_telemetry']['subagents_applied'],
-                         {'mode': 'sequential', 'perspectives': 1, 'explore': 0, 'lanes': 0})
+                         {'mode': 'parallel' if self.kind == 'claude' else 'sequential',
+                          'perspectives': 1, 'explore': 0, 'lanes': 0})
         if self.kind == 'codex':
             self.assertIn('sequential', load_json(self.root / 'cli-request.json')['prompt'])
 

@@ -21,14 +21,48 @@ from .models import require
 
 SKILLS_ROOT = Path(__file__).resolve().parent / "skills"
 SKILL_TARGETS = (".claude/skills", ".codex/skills")
-# Packaged skills each engine role reads; the text is embedded in that role's instructions.
-ROLE_SKILLS: dict[str, tuple[str, ...]] = {
-    "survey": ("foundation-survey",),
-    "product": ("oracle-craft",),
-    "acceptance": ("oracle-craft",),
-    "characterize": ("oracle-craft",),
-    "review": ("oracle-craft",),
-}
+MAX_SKILLS = 6
+MAX_SKILL_BYTES = 200_000
+
+
+def select_skills(project: Path, role: str, stacks: list[str]) -> list[str]:
+    """Select bounded role/stack-compatible skills, with project copies taking precedence."""
+    return [snapshot['name'] for _, snapshot in selected_snapshots(project, role, stacks)]
+
+
+def selected_snapshots(project: Path, role: str, stacks: list[str]) -> list[tuple[str, dict]]:
+    """Capture selection metadata, delivered bodies and fingerprints in a single read."""
+    require(isinstance(stacks, list) and all(isinstance(s, str) for s in stacks), 'Invalid stacks')
+    project = Path(project).resolve()
+    names = set()
+    for base in [*(project / target for target in SKILL_TARGETS), SKILLS_ROOT]:
+        if base.exists():
+            _safe_skill_path(base, base.parent)
+        names.update(path.parent.name for path in base.glob('*/SKILL.md'))
+    selected, total = [], 0
+    for name in sorted(names):
+        root = _skill_root(project, name)
+        header = _read_skill_file(root / 'SKILL.md', root)
+        meta = _frontmatter(header)
+        roles = meta.get('roles')
+        packaged = SKILLS_ROOT / name / 'SKILL.md'
+        if roles is None and root != SKILLS_ROOT / name and packaged.is_file():
+            roles = _frontmatter(_read_skill_file(packaged, SKILLS_ROOT / name)).get('roles')
+        if role not in _list_field(roles) or (_list_field(meta.get('stacks'))
+                and not set(stacks).intersection(_list_field(meta.get('stacks')))):
+            continue
+        body = _skill_text(root, header)
+        total += len(body.encode('utf-8'))
+        require(len(selected) < MAX_SKILLS and total <= MAX_SKILL_BYTES, 'Selected skills exceed limits')
+        selected.append((body, _snapshot(project, root, body)))
+    return selected
+
+
+def _list_field(value: str | None) -> list[str]:
+    if value is None:
+        return []
+    require(value.startswith('[') and value.endswith(']'), 'Skill roles/stacks must be lists')
+    return [part.strip().strip('"\'') for part in value[1:-1].split(',') if part.strip()]
 
 
 def used_skills(project: Path, names: list[str]) -> dict[str, str]:
@@ -36,8 +70,7 @@ def used_skills(project: Path, names: list[str]) -> dict[str, str]:
     project = Path(project).resolve()
     versions = {}
     for name in names:
-        roots = [project / target / name for target in SKILL_TARGETS] + [SKILLS_ROOT / name]
-        root = next(r for r in roots if (r / "SKILL.md").is_file())
+        root = _skill_root(project, name)
         versions[name] = _frontmatter((root / "SKILL.md").read_text(encoding="utf-8")).get("version", "0")
     return versions
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
@@ -107,13 +140,17 @@ def instruction_skill_snapshot(project: Path, name: str) -> tuple[str, dict]:
     project = Path(project).resolve()
     root = _skill_root(project, name)
     text = _skill_text(root)
+    return text, _snapshot(project, root, text)
+
+
+def _snapshot(project: Path, root: Path, text: str) -> dict:
     skill_file = root / "SKILL.md"
     try:
         path = skill_file.relative_to(project).as_posix()
     except ValueError:
         path = skill_file.relative_to(SKILLS_ROOT.parent.parent).as_posix()
-    return text, {
-        "name": name,
+    return {
+        "name": root.name,
         "path": path,
         "version": _frontmatter(text).get("version", "0"),
         "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
@@ -122,16 +159,33 @@ def instruction_skill_snapshot(project: Path, name: str) -> tuple[str, dict]:
 
 def _skill_root(project: Path, name: str) -> Path:
     project = Path(project).resolve()
-    require(name in packaged_skills(), f"Unknown skill {name}")
+    require(isinstance(name, str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', name), 'Invalid skill name')
     roots = [project / target / name for target in SKILL_TARGETS] + [SKILLS_ROOT / name]
-    return next(root for root in roots if (root / "SKILL.md").is_file())
+    for root in roots:
+        if (root / 'SKILL.md').exists() or (root / 'SKILL.md').is_symlink():
+            _safe_skill_path(root / 'SKILL.md', project if root != SKILLS_ROOT / name else SKILLS_ROOT)
+            return root
+    require(False, f'Unknown skill {name}')
 
 
-def _skill_text(root: Path) -> str:
-    parts = [(root / "SKILL.md").read_text(encoding="utf-8")]
-    for reference in sorted((root / "references").glob("*.md")) if (root / "references").is_dir() else []:
-        parts.append(f"\n\n<!-- references/{reference.name} -->\n" + reference.read_text(encoding="utf-8"))
-    return "".join(parts)
+def _safe_skill_path(path: Path, base: Path) -> None:
+    from .path_security import safe_target
+    safe_target(base, path.relative_to(base).as_posix(), 'skill path', target_directory=path.is_dir())
+
+
+def _read_skill_file(path: Path, root: Path) -> str:
+    _safe_skill_path(path, root)
+    require(path.stat().st_size <= MAX_SKILL_BYTES, 'Selected skills exceed size limit')
+    return path.read_text(encoding='utf-8')
+
+
+def _skill_text(root: Path, header: str | None = None) -> str:
+    parts = [header if header is not None else _read_skill_file(root / 'SKILL.md', root)]
+    for reference in sorted((root / 'references').glob('*.md')) if (root / 'references').is_dir() else []:
+        parts.append(f'\n\n<!-- references/{reference.name} -->\n' + _read_skill_file(reference, root))
+        require(sum(len(part.encode('utf-8')) for part in parts) <= MAX_SKILL_BYTES,
+                'Selected skills exceed size limit')
+    return ''.join(parts)
 
 
 def _frontmatter(text: str) -> dict[str, str]:
@@ -139,8 +193,21 @@ def _frontmatter(text: str) -> dict[str, str]:
     if not match:
         return {}
     meta: dict[str, str] = {}
+    block = None
     for line in match.group(1).splitlines():
+        if block and line.lstrip().startswith('- '):
+            value = line.lstrip()[2:].strip()
+            meta[block] = meta[block][:-1] + (', ' if meta[block] != '[]' else '') + value + ']'
+            continue
         key, separator, value = line.partition(":")
         if separator and not line.startswith((" ", "-")):
-            meta[key.strip()] = value.strip()
+            block = key.strip() if key.strip() in {'roles', 'stacks'} and not value.strip() else None
+            meta[key.strip()] = '[]' if block else value.strip()
     return meta
+
+
+def role_skill_versions(project: Path, stacks: list[str]) -> dict[str, str]:
+    """Summarize configured role skill versions; per-call snapshots remain authoritative."""
+    return {snapshot['name']: snapshot['version']
+            for role in ('product', 'acceptance', 'review', 'implement', 'characterize', 'design', 'survey')
+            for _, snapshot in selected_snapshots(project, role, stacks)}

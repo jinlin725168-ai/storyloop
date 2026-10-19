@@ -14,7 +14,7 @@ from storyloop.baseline import bootstrap_project, load_project_config
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import invoke_project_agent
 from storyloop.project_loop import run_change
-from storyloop.skills import ROLE_SKILLS, instruction_skill_snapshot
+from storyloop.skills import select_skills, instruction_skill_snapshot
 from storyloop.storage import load_json, write_json
 from storyloop.telemetry import ledger_entries
 from tests.routing_support import legacy_create_change as create_change
@@ -101,7 +101,7 @@ class ReportsEndToEndTests(unittest.TestCase):
         skills = self._presentation_item(report, "3", "skills")["data"]
         roles = {entry["role"] for entry in entries}
         expected = {role: [instruction_skill_snapshot(root, name)[1]
-                           for name in ROLE_SKILLS.get(role, ())] for role in roles}
+                           for name in select_skills(root, role, [])] for role in roles}
         self.assertEqual(expected["implement"], [])
         self.assertTrue(expected["acceptance"])
         self.assertTrue(expected["review"])

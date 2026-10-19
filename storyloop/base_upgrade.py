@@ -85,6 +85,8 @@ def _upgrade_locked(project: Path, proposal_id: str) -> dict:
     _require_candidate(project, baseline, proposal)
     head = _git(project, "rev-parse", "HEAD").strip()
     receipt = _new_receipt(project, proposal, baseline, head)
+    from .oracle_skill_approval import require_confirmation
+    require_confirmation(project, proposal, receipt)
     write_json(receipt_path, receipt, max_bytes=4_000_000)
     proposal.update({"status": "ACCEPTING", "old_baseline_version": baseline["baseline_version"],
                      "new_baseline_version": receipt["new_baseline_version"], "source_head": head,
@@ -155,6 +157,8 @@ def _recover_upgrade(
     config = load_project_config(project)
     receipt = _load_receipt(receipt_path, proposal)
     _require_baseline_state(project, baseline, config, receipt)
+    from .oracle_skill_approval import require_confirmation
+    require_confirmation(project, proposal, receipt)
     if receipt["status"] == "ACCEPTED":
         require(baseline["source_head"] == receipt["source_head"]
                 and baseline["baseline_version"] == receipt["new_baseline_version"],

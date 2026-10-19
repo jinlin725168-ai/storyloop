@@ -43,107 +43,10 @@ ROLE_TOOLS = {
 # that stages, commits or switches branches is detected and fails the run.
 DEFAULT_BASH = ["python3:*", "python:*", "ls:*", "cat:*", "head:*", "tail:*", "find:*",
                 "grep:*", "wc:*", "diff:*", "git status:*", "git diff:*", "git log:*", "git show:*"]
-SCHEMA_HINTS = {
-    "product": (
-        "Exact shape: {version:1, goal:string, non_goals:[string], capability?:slug, "
-        "clarifications?:[{session,question,answer}], questions:[{id,text,options:[string],"
-        "recommended?:string,why?:string}], stories:[{id,title,priority:'P1'|'P2'|'P3',"
-        "independent_test:string,as_a,want,so_that,rules:[string],out_of_scope:[string],"
-        "depends_on:[string],acceptance:[{id,given,when,then,kind:'automated'|'manual'}]}]}. "
-        "IDs like S1/A1/Q1 must be unique across the whole product. No extra fields anywhere."
-    ),
-    "acceptance": (
-        "Exact shape: {files:[{path,content}], manifest:{version:1, tests:[{id, criteria:[string], "
-        "command:[string], timeout_seconds:int}]}}. The suite root is payload.suite_root; `path` is "
-        "relative to it. `command` runs from the repository root with a minimal environment, so "
-        "reference files as <suite_root>/<file> and use \"{python}\" for the interpreter. "
-        "Every automated criterion id must appear in some test's criteria. No extra fields."
-    ),
-    "implement": ("Exact shape: {summary:string, questions:[string], design:string}; design is Markdown with "
-                  "## Context, ## Goals, ## Tests First (each test: observed failure, then green), "
-                  "## Decisions (Choice/Rationale/Alternatives), ## Risks And Trade-Offs, ## Files."),
-    "characterize": "Exact shape: {summary:string, touched:[string], tests:[string], questions:[]}; no extra fields.",
-    "design": ("Exact shape: {summary:string, touched:[string], design:string, questions:[string]}; design is Markdown with "
-               "## Context, ## Goals, ## Decisions, ## Files, ## Data And Interfaces, ## Risks And Trade-Offs. No extra fields."),
-    "review": "Exact shape: {verdict:'pass'|'fail'|'needs_input', summary:string, findings:[object], questions:[string]}.",
-    "survey": ("Exact shape: {documents:[{path,content}]}; path relative to payload.foundation_root, Markdown only, "
-               "every name in payload.required_documents present. No extra fields."),
-}
-RULES = (
-    "Final answer must be ONLY one JSON object, no markdown fences, no prose.\n"
-    "Only read-only git (status/diff/log/show); never add, commit, stash or switch branches. "
-    "Do not create Git-ignored files (build output, caches, logs) except under the project's "
-    "declared scratch paths: StoryLoop snapshots the whole tree and fails the run otherwise.\n"
-    "Shell commands are pre-approved only as plain single commands: no `export`, `&&`, `;` or "
-    "pipes. Nobody can answer permission prompts, so never ask for approval; if a command is "
-    "denied, rerun it as one plain command.\n"
-    "Questions are only for genuine product ambiguities. Never ask about tooling, permissions or "
-    "the environment: skip the affected check, say so in the summary, and let the external "
-    "acceptance run verify the result.\n"
-    "payload.answers lists human decisions on questions raised in earlier attempts "
-    "({attempt, question, answer}); follow them and never ask an answered question again.\n"
-)
-RESUME_PROMPT = (
-    "继续完成上一条请求中尚未完成的工作。已经写入磁盘的文件都还在，不要重做已完成的部分。"
-    "完成后仍然只输出一个 JSON 对象。"
-)
-REPAIR_PROMPT = (
-    "上一条回复不是一个 JSON 对象。工作已经完成的话不要重做，现在只输出那个 JSON 对象："
-    "不要 markdown 围栏，不要任何解释文字。"
-)
-REPAIR_LIMIT = 2  # a finished session that ended in prose is asked for its JSON, like the Codex adapter
-
-# Review fans out to focused perspectives (parallel sessions, same evidence) and a lead merges them.
-# The engine protocol is untouched: it still receives one {verdict, summary, findings, questions}.
-REVIEW_PERSPECTIVES = {
-    "correctness": (
-        "Focus only on correctness: walk every automated and manual acceptance criterion of the contract "
-        "against the code and the layer evidence; check edge cases, error handling, data consistency between "
-        "list/detail/export paths, and that nothing outside the stories was changed."
-    ),
-    "security": (
-        "Focus only on security: injection (SQL built from strings, unbound parameters), authorization "
-        "(permission strings on every endpoint, ownership checks), sensitive data in logs or responses, "
-        "input validation, secrets or credentials in code or config. Cite file and line for every finding."
-    ),
-    "architecture": (
-        "Focus only on conformance to the base and the plan: payload.design_plan (if present), the foundation "
-        "documents extension.md, building-blocks.md and modules.md. Re-implemented building blocks, files in "
-        "the wrong layer, forbidden dependency directions, or deviations from the plan without a stated reason "
-        "are findings."
-    ),
-    "tests": (
-        "Focus only on test quality: the implementer's design record ## Tests First must match real test "
-        "files that exercise the claimed behaviours; characterization tests must cover every touched path; "
-        "assertions must be meaningful (no tautologies, no tests that pass without the change)."
-    ),
-}
-# Implement can split a full-stack change into per-layer lanes: a lead session plans the lanes from the
-# architect's design_plan, lane sessions work in parallel on disjoint path prefixes, and the same lead
-# session (resumed, so it keeps the plan in context) integrates, runs the checks and writes the record.
-LANE_PLAN_MARK = "[implement lead: plan lanes]"
-LANE_MARK = "[implement lane: {name}]"
-LANE_INTEGRATE_MARK = "[implement lead: integrate]"
-LANE_PLAN_RULES = (
-    "You are the lead implementer. Do NOT write any file in this step. Read payload.design_plan and decide "
-    "which of the configured lanes have work in this change; each lane is one layer owned by one "
-    "parallel implementer. Return ONLY {lanes:[{name:string, task:string}]} using only configured lane "
-    "names; `task` is a precise brief for that lane (files to create or modify, interfaces to expose or "
-    "consume, tests to write first). Lanes that have nothing to do are omitted."
-)
-LANE_RULES = (
-    "You are one lane of a parallel implementation. Only create or modify files under the lane's path "
-    "prefixes listed below; other lanes are editing other paths right now, so never touch them and never "
-    "run project-wide formatters, git commands that stage or the full regression. Work test-first within "
-    "your layer. Return ONLY {summary:string, files:[string], questions:[]}: `files` lists every path you "
-    "created or modified."
-)
-LANE_INTEGRATE_RULES = (
-    "Every lane has finished; their reports follow. Integrate: reconcile interfaces between layers, run the "
-    "project's build and unit/integration commands, fix whatever breaks (in any lane's files), and then "
-    "return the final implement result exactly as {summary:string, questions:[string], design:string}; "
-    "the design's ## Tests First must cover the tests of every lane."
-)
+from storyloop.claude_contract import *
+from storyloop.claude_permissions import profile_command
+from storyloop.claude_profiles import (capabilities, profile_telemetry, explore_design,
+                                      lane_command, readonly_command)
 
 
 def _strict(properties: dict) -> dict:
@@ -196,7 +99,7 @@ def _arguments(argv: list[str] | None):
     parser.add_argument("--guide", action="append", default=[],
                         help="project guidance file appended to every prompt (repeatable)")
     parser.add_argument("--dry-run", action="store_true", help="print the claude argv and exit")
-    parser.add_argument("--review-perspectives", default=",".join(REVIEW_PERSPECTIVES),
+    parser.add_argument("--review-perspectives", default="correctness,security,architecture,tests",
                         help="comma-separated review perspectives run as parallel sub-agents, or 'none'")
     parser.add_argument("--review-parallel", type=int, default=4, help="max concurrent perspective sessions")
     parser.add_argument("--implement-lanes", default="",
@@ -217,7 +120,7 @@ def main_with_args(argv: list[str] | None) -> int:
         print(str(error), file=sys.stderr)
         return 2
     if request.get("protocol") == "storyloop.adapter-capabilities.v1":
-        print(json.dumps(cli_capabilities(models, "anthropic")))
+        print(json.dumps(capabilities(models, _parse_lanes(args.implement_lanes))))
         return 0
     role = request.get("role")
     if role not in ROLE_TOOLS:
@@ -228,24 +131,43 @@ def main_with_args(argv: list[str] | None) -> int:
         print("claude executable not found on PATH", file=sys.stderr)
         return 2
 
+    args.profile_model = model
     prompt = _prompt(request, role, args.guide)
-    base = _base_command(claude, role, segment_turns, args.bash, model or args.model)
+    base = (profile_command(claude, request, segment_turns, args.bash, model or args.model)
+            if 'role_profile' in request else _base_command(claude, role, segment_turns, args.bash, model or args.model))
     if args.dry_run:
         print(json.dumps({"command": base, "prompt_chars": len(prompt)}))
         return 0
 
-    perspectives = [p for p in args.review_perspectives.split(",") if p and p != "none"]
-    if role == "review" and perspectives and "role_profile" not in request:
+    return _dispatch(request, base, prompt, args, model)
+
+
+def _dispatch(request, base, prompt, args, model):
+    role = request['role']
+    perspectives = [p for p in args.review_perspectives.split(',') if p and p != 'none']
+    requested = (request.get('role_profile') or {}).get('subagents') or {}
+    if 'role_profile' in request:
+        perspectives = requested.get('perspectives', [])
+    if role == "review" and perspectives:
         return _review_with_perspectives(request, base, args, perspectives)
     lanes = _parse_lanes(args.implement_lanes)
-    if role == "implement" and lanes and "role_profile" not in request and (request.get("payload") or {}).get("design_plan"):
+    if 'role_profile' in request and not requested.get('lanes'):
+        lanes = {}
+    if role == "implement" and lanes and (request.get("payload") or {}).get("design_plan"):
         return _implement_with_lanes(request, base, prompt, args, lanes)
 
+    exploration = _new_telemetry()
+    if role == 'design' and requested.get('explore'):
+        request, exploration = explore_design(request, base, args, _run_session, _prompt, _new_telemetry, _merge_telemetry)
+        if request is None:
+            return 1
+        prompt = _prompt(request, role, args.guide)
     result, telemetry, _ = _run_session(base, prompt, role, args, request.get("project"),
                                         schema=request.get("response_schema"))
     if result is None:
         return 1
-    telemetry.update(sequential_profile(request, "anthropic", model))
+    _merge_telemetry(telemetry, exploration)
+    telemetry.update(profile_telemetry(request, model, explore=len(requested.get('explore', []))))
     return _emit(result, telemetry, role)
 
 
@@ -343,12 +265,13 @@ def _review_with_perspectives(request: dict, base: list[str], args, perspectives
     _merge_telemetry(total, telemetry)
     if result is None:
         return 1
-    if not ({"verdict", "summary", "findings", "questions"} <= set(result)):
+    if "role_profile" not in request and not ({"verdict", "summary", "findings", "questions"} <= set(result)):
         print("claude review: lead result lacks verdict/summary/findings/questions", file=sys.stderr)
         return 1
     result = {key: result[key] for key in ("verdict", "summary", "findings", "questions", "coverage", "checklist")
               if key in result}
     total["perspectives"] = len(perspectives)
+    total.update(profile_telemetry(request, args.profile_model, perspectives=len(perspectives)))
     return _emit(result, total, "review")
 
 
@@ -359,6 +282,9 @@ def _parse_lanes(value: str) -> dict[str, str]:
         if not separator or not name.strip() or not prefix.strip():
             raise SystemExit(f"invalid --implement-lanes entry: {item!r} (expected name=path-prefix)")
         lanes[name.strip()] = prefix.strip()
+    from storyloop.role_subagents import lane_metadata
+    if lane_metadata({'lanes': list(lanes), 'lane_prefixes': lanes}) is None:
+        raise ValueError('invalid lane path prefix')
     return lanes
 
 
@@ -371,7 +297,7 @@ def _implement_with_lanes(request: dict, base: list[str], single_prompt: str, ar
     plan_prompt = _prompt(request, "implement", args.guide,
                           extra=f"{LANE_PLAN_MARK}\n{LANE_PLAN_RULES}\nConfigured lanes:\n{configured}",
                           schema=False)
-    plan, telemetry, lead = _run_session(base, plan_prompt, "implement/lead", args, cwd,
+    plan, telemetry, lead = _run_session(readonly_command(base, request), plan_prompt, "implement/lead", args, cwd,
                                          schema=LANE_PLAN_OUTPUT)
     _merge_telemetry(total, telemetry)
     if plan is None:
@@ -383,16 +309,10 @@ def _implement_with_lanes(request: dict, base: list[str], single_prompt: str, ar
         result, telemetry, _ = _run_session(base, single_prompt, "implement", args, cwd,
                                             schema=request.get("response_schema"))
         _merge_telemetry(total, telemetry)
+        total.update(profile_telemetry(request, args.profile_model))
         return 1 if result is None else _emit(result, total, "implement")
 
-    def run_lane(item: dict) -> tuple[str, dict | None, dict]:
-        name = item["name"]
-        extra = (f"{LANE_MARK.format(name=name)}\n{LANE_RULES}\nOnly create or modify files under: "
-                 f"{lanes[name]}\nYour task:\n{item['task']}")
-        prompt = _prompt(request, "implement", args.guide, extra=extra, schema=False)
-        result, telemetry, _ = _run_session(base, prompt, f"implement/{name}", args, cwd,
-                                            schema=LANE_OUTPUT)
-        return name, result, telemetry
+    run_lane = _lane_runner(request, base, args, lanes)
 
     with ThreadPoolExecutor(max_workers=max(1, args.implement_parallel)) as pool:
         reports = list(pool.map(run_lane, chosen))
@@ -415,7 +335,21 @@ def _implement_with_lanes(request: dict, base: list[str], single_prompt: str, ar
         return 1
     result = {key: result[key] for key in ("summary", "questions", "design")}
     total["lanes"] = len(chosen)
+    total.update(profile_telemetry(request, args.profile_model, lanes=len(chosen)))
     return _emit(result, total, "implement")
+
+
+def _lane_runner(request, base, args, lanes):
+    def run_lane(item: dict) -> tuple[str, dict | None, dict]:
+        name = item["name"]
+        extra = (f"{LANE_MARK.format(name=name)}\n{LANE_RULES}\nOnly create or modify files under: "
+                 f"{lanes[name]}\nYour task:\n{item['task']}")
+        prompt = _prompt(request, "implement", args.guide, extra=extra, schema=False)
+        result, telemetry, _ = _run_session(lane_command(base, request, lanes[name]), prompt, f"implement/{name}", args, request.get("project"),
+                                            schema=LANE_OUTPUT)
+        return name, result, telemetry
+
+    return run_lane
 
 
 def _merge_telemetry(total: dict, part: dict) -> None:
@@ -468,7 +402,7 @@ def _finish(telemetry: dict) -> dict:
 
 
 def _prompt(request: dict, role: str, guides: list[str], extra: str = "", schema: bool = True) -> str:
-    parts = [request.get("instructions", "") + sequential_instructions(request)]
+    parts = [request.get("instructions", "")]
     if extra:
         parts.append(extra)
     if schema:

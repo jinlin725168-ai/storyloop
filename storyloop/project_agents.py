@@ -14,7 +14,7 @@ from .adapter_profiles import model_for, sequential_profile, sequential_instruct
 from .baseline import load_project_config
 from .models import StoryLoopError, require
 from .foundation_survey import foundation_payload
-from .skills import ROLE_SKILLS, instruction_skill_snapshot
+from .skills import selected_snapshots
 from .call_log import close_call, open_call
 from .processutil import redact, run_process
 from .role_schemas import normalize, schema_errors, schema_for, wire_schema
@@ -41,11 +41,13 @@ def instructions_for(project: Path, role: str) -> str:
     return _instruction_bundle(project, role)[0]
 
 
-def _instruction_bundle(project: Path, role: str) -> tuple[str, list[dict]]:
+def _instruction_bundle(project: Path, role: str, stacks: list[str] | None = None) -> tuple[str, list[dict]]:
+    if stacks is None and (project / '.storyloop/config.json').is_file():
+        stacks = load_project_config(project).get('profile', {}).get('stacks', [])
     text_ = INSTRUCTIONS[role] + REPAIR_NOTE
     snapshots = []
-    for name in ROLE_SKILLS.get(role, ()):
-        skill, snapshot = instruction_skill_snapshot(project, name)
+    for skill, snapshot in selected_snapshots(project, role, stacks or []):
+        name = snapshot["name"]
         text_ += f"\n\nSkill {name}:\n" + skill
         snapshots.append(snapshot)
     return text_, snapshots
@@ -65,6 +67,10 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
     config = load_project_config(project)
     from .cost_limits import check_before_call
     from .cross_vendor import invoke
+    from .role_profiles import enabled
+    if enabled(config):
+        from .role_subagents import routing_tier
+        payload = {**payload, 'routing_tier': routing_tier(project, payload)}
     ledger = FOUNDATION_LEDGER if role == "survey" else _change_id(payload)
     check_before_call(project, ledger, config)
     return invoke(project, role, payload, config, ledger,
@@ -89,14 +95,22 @@ def _invoke_once(project, role, payload, config, settings, degraded):
         "payload": payload,
         "response_schema": wire_schema(schema),
     }
-    profile = build_profile(project, config, role, payload, {})
+    instructions, skill_snapshots = _instruction_bundle(project, role, (config.get('profile') or {}).get('stacks', []))
+    from .call_context import capability_for
+    capability = capability_for(project, adapter_name)
+    profile = build_profile(project, config, role, payload,
+                            {'skill_snapshots': skill_snapshots, 'capability': capability})
     if profile is not None:
         profile["tier"] = settings["tier"]
         request["role_profile"] = profile
     _bounded_json(request)
     ledger = FOUNDATION_LEDGER if role == "survey" else _change_id(payload)
     call = open_call(project, role, ledger, adapter_name, request)
-    instructions, skill_snapshots = _instruction_bundle(project, role)
+    from .call_context import context_manifest
+    from .call_log import record_context
+    record_context(project, call, context_manifest(project, payload, skill_snapshots))
+    if profile is not None and capability.get('subagents') is not True:
+        instructions += sequential_instructions(request)
     trace: dict = {"stderr": "", "sessions": [], "raw": None, "repairs": 0, "schema_errors": [],
                    "instructions": instructions, "skills": skill_snapshots, "telemetry": None}
     return _execute_call(project, role, payload, schema, request, adapter_config, settings,

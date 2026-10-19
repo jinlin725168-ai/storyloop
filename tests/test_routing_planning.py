@@ -320,14 +320,14 @@ class PlanningTests(unittest.TestCase):
     def test_review_presentation_keeps_full_selected_plan(self):
         from storyloop.planning import review_focus, plan_projection
         self.ensure()
-        self.assertEqual(len(review_focus(self.state)['review_focus']), 1)
+        self.assertEqual(len(review_focus(self.state)['subagents']['perspectives']), 0)
         projection = plan_projection(self.state)
         self.assertTrue(projection['constraints'])
         self.assertIn('migration', projection)
         self.assertEqual(projection['symbols'], answer()['options'][0]['symbols'])
         self.state['routing']['effective_tier'] = 'heavy'
-        self.assertEqual(len(review_focus(self.state)['review_focus']), 5)
-        self.assertIn('oracle', review_focus(self.state)['review_focus'])
+        self.assertEqual(len(review_focus(self.state)['subagents']['perspectives']), 5)
+        self.assertIn('oracle-strength', review_focus(self.state)['subagents']['perspectives'])
 
     def test_heavy_cannot_skip_required_characterization(self):
         from storyloop.project_loop_gates import ensure_characterization

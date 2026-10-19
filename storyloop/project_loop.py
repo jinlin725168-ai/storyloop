@@ -50,7 +50,7 @@ from .system_smoke import run_system_smoke_isolated
 from .smoke import RESULT_EVIDENCE
 from .semantic_repair import REPAIR_KEYS
 from .smoke import suite_relative
-from .skills import ROLE_SKILLS, used_skills
+from .skills import role_skill_versions
 from .smoke_runner import implementation_digest, run_commands_isolated, run_smoke_isolated
 from .storage import load_json, locked
 
@@ -230,7 +230,7 @@ def _start_run(project: Path, change: dict, routing: dict | None) -> tuple[dict,
                            change["approval"]["contract_digest"])
     if routing is not None:
         state["routing"] = routing
-    state["skills_used"] = used_skills(project, sorted({n for names in ROLE_SKILLS.values() for n in names}))
+    state["skills_used"] = role_skill_versions(project, load_project_config(project).get("profile", {}).get("stacks", []))
     save_run(project, state)
     return state, 1, True
 
