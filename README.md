@@ -193,10 +193,6 @@ storyloop init C:\work\my-project --settings C:\work\settings.json
 
 新增功能或修复必须先添加可复现失败的测试。模块地图、扩展步骤和必须守住的不变量见 [modules.md](docs/modules.md)、[extension.md](docs/extension.md)、[testing.md](docs/testing.md) 与 [贡献指南](docs/contributing.md)。
 
-## 许可证
-
-当前作为本地工程交付，尚未指定对外分发许可证。
-
 ## 角色画像与跨厂商审查
 
 配置 `adapters` 和 `roles` 后，引擎给每次调用附加 `role_profile`：请求档次只有 `strong`/`standard`，与变更的 light/standard/heavy 档位分开。标准档 implement 默认 strong；review 默认 strong。适配器选择模型并回报实际 model/vendor/tier，报告第 5 节逐调用展示请求 → 实际与“已生效 / 未生效 / 未配置”。这些是适配器回报，并非模型质量或工具权限的机器证明。
@@ -218,3 +214,11 @@ storyloop init C:\work\my-project --settings C:\work\settings.json
 从源码工作树验收时，CLI 和 command 适配器必须使用同一份引擎。共享 venv 若 editable 安装指向另一工作树，直接执行示例 `.py` 会导入那份代码；请在专用环境安装当前工作树，或显式设置适配器 Python 的模块搜索路径。真实验收使用显式 `sys.path.insert(0, WORKTREE)` 的 `python -c` 包装，并记录 `storyloop.__file__` 与 HEAD；没有把旧安装的结果当成新实现证据。
 
 `COST_LIMIT_REACHED` 在下一次调用前停止；提高 limits 后 `run` 恢复。失败调用也计成本；没有费用回报时只展示已知费用覆盖，不估价、不把未知当作零。无画像的旧配置继续工作，已有报告与回执保持原字节；缺少旧诊断的历史报告不会凭空补齐新状态。
+
+## 许可证
+
+[Apache License 2.0](LICENSE) 附加 [Commons Clause](https://commonsclause.com/) 条件，全文见 [LICENSE](LICENSE)。
+
+- 可以自由使用、修改、分发，包括在公司内部使用。
+- 不得出售本软件，也不得出售主要价值来自本软件的产品或服务（含托管、咨询与支持服务）。
+- 超出以上范围的商业使用，请先通过 [GitHub](https://github.com/jinlin725168-ai) 联系作者取得授权。
