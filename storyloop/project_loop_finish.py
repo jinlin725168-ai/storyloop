@@ -54,6 +54,8 @@ def complete_change(
         implementation = commit_paths(project, changed_paths, subject)
     telemetry = {**summarize(project, change_id), "attempts": state["attempt"],
                  "loop_ms": _loop_ms(state)}
+    state["review"] = review
+    save_run(project, state)
     report_path = generate_change_report(
         project, change_id, implementation["commit"], layers, review,
         manual_acceptance=manual, telemetry=telemetry,

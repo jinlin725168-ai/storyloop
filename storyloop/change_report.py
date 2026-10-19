@@ -12,6 +12,8 @@ from .baseline import _git
 from .routing_report import report_routing, routing_markdown
 from .changes import load_change
 from .models import require
+from .report_markdown import render_presentation
+from .report_presentation import build_presentation
 from .smoke import RESULT_EVIDENCE, load_smoke_manifest, smoke_digests
 from .smoke_runner import candidate_digest
 from .storage import load_json, write_bytes_atomic, write_json, write_text_atomic
@@ -61,6 +63,7 @@ def generate_change_report(
         "oracle": _oracle_view(layers, oracle, skills_used),
         "correction": correction or {"failures": [], "overrules": [], "supersedes": None},
     }
+    report["presentation"] = build_presentation(project, change, report)
     root = project / "reports" / "storyloop" / change_id
     path = root / "report.json"
     write_json(path, report, max_bytes=8_000_000)
@@ -188,6 +191,8 @@ def _write_markdown(path: Path, report: dict) -> None:
 
 
 def _render_markdown(report: dict) -> str:
+    if report.get("presentation"):
+        return render_presentation(report)
     lines = [
         f"# StoryLoop 验收报告：{report['change_id']}", "",
         f"- 状态：{report['status']}",
@@ -280,7 +285,9 @@ def _oracle_markdown(view: dict) -> list[str]:
 
 def _telemetry_view(value: dict | None) -> dict:
     base = {"calls": 0, "failed": 0, "agent_ms": 0, "cost_usd": None, "by_role": {}, "attempts": None,
-            "loop_ms": 0}
+            "loop_ms": 0, "known_cost_usd": None, "input_tokens": None, "output_tokens": None,
+            "turns": None, "models": None, "vendors": None, "tiers": None, "skills": None,
+            "coverage": {}}
     if isinstance(value, dict):
         base.update({key: value[key] for key in base if key in value})
     return base

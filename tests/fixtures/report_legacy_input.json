@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "change_id": "LEGACY-REPORT",
+  "status": "PASSED",
+  "requirement": {
+    "goal": "旧报告 | 保持字节",
+    "approval": {
+      "contract_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  },
+  "implementation_commit": "cccccccccccccccccccccccccccccccccccccccc",
+  "traceability": [],
+  "layers": {
+    "unit": {"status": "SKIPPED", "results": []},
+    "integration": {"status": "SKIPPED", "results": []},
+    "acceptance": {"status": "PASSED", "results": []},
+    "smoke": {"status": "SKIPPED", "results": []},
+    "checks": {"status": "SKIPPED", "results": []}
+  },
+  "review": {"summary": "旧审查"},
+  "telemetry": {"calls": 1, "failed": 0, "agent_ms": 1234, "cost_usd": null, "by_role": {}}
+}
