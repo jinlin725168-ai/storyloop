@@ -14,6 +14,7 @@ from storyloop.baseline import bootstrap_project, load_project_config
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import invoke_project_agent
 from storyloop.project_loop import run_change
+from storyloop.skills import ROLE_SKILLS, instruction_skill_snapshot
 from storyloop.storage import load_json, write_json
 from storyloop.telemetry import ledger_entries
 from tests.routing_support import legacy_create_change as create_change
@@ -49,6 +50,25 @@ class ReportsEndToEndTests(unittest.TestCase):
             self._assert_presentation_and_calls(root, report, markdown, entries)
             self._assert_receipt_and_repository(root, change_id, result, report)
 
+    def test_skill_snapshot_check_rejects_empty_or_incomplete_provenance(self):
+        expected = [{"name": "oracle-craft", "path": "storyloop/skills/oracle-craft/SKILL.md",
+                     "version": "1", "sha256": "a" * 64}]
+        section = [{"call": "call-1", "role": "review", "skills": expected,
+                    "availability": "AVAILABLE"}]
+
+        empty = [{"call": "call-1", "role": "review", "skills": []}]
+        missing_hash = [{"call": "call-1", "role": "review",
+                         "skills": [{key: value for key, value in expected[0].items()
+                                     if key != "sha256"}]}]
+        empty_section = [{"call": "call-1", "role": "review", "skills": [],
+                          "availability": "AVAILABLE"}]
+
+        self.assertTrue(self._skill_snapshot_errors(empty, section, {"review": expected}))
+        self.assertTrue(self._skill_snapshot_errors(missing_hash, section, {"review": expected}))
+        self.assertTrue(self._skill_snapshot_errors(
+            [{"call": "call-1", "role": "review", "skills": expected}],
+            empty_section, {"review": expected}))
+
     def _assert_presentation_and_calls(self, root, report, markdown, entries):
         self.assertEqual(set(report["presentation"]["sections"]), set("0123456"))
         reconciliation = report["presentation"]["reconciliation"]
@@ -69,10 +89,35 @@ class ReportsEndToEndTests(unittest.TestCase):
         self.assertEqual(telemetry["known_cost_usd"], 0.25)
         self.assertEqual(telemetry["coverage"]["cost_usd"], {"known": 1, "total": 4})
         self.assertTrue(any(entry.get("failed") for entry in entries))
-        self.assertTrue(all(entry.get("skills") is not None for entry in entries))
         skills = self._presentation_item(report, "3", "skills")["data"]
-        self.assertEqual({item["call"] for item in skills}, {entry["call"] for entry in entries})
-        self.assertTrue(all(item["availability"] == "AVAILABLE" for item in skills))
+        roles = {entry["role"] for entry in entries}
+        expected = {role: [instruction_skill_snapshot(root, name)[1]
+                           for name in ROLE_SKILLS.get(role, ())] for role in roles}
+        self.assertEqual(expected["implement"], [])
+        self.assertTrue(expected["acceptance"])
+        self.assertTrue(expected["review"])
+        for snapshot in expected["acceptance"] + expected["review"]:
+            self.assertEqual(set(snapshot), {"name", "path", "version", "sha256"})
+            self.assertTrue(snapshot["path"] and snapshot["version"])
+            self.assertEqual(len(snapshot["sha256"]), 64)
+        self.assertEqual(self._skill_snapshot_errors(entries, skills, expected), [])
+
+    @staticmethod
+    def _skill_snapshot_errors(entries, section, expected_by_role):
+        errors = []
+        section_by_call = {item.get("call"): item for item in section}
+        if len(section_by_call) != len(section) or len(section) != len(entries):
+            errors.append("call set differs")
+        for entry in entries:
+            expected = expected_by_role[entry["role"]]
+            if entry.get("skills") != expected:
+                errors.append(f"{entry['call']}: ledger snapshot differs")
+            item = section_by_call.get(entry["call"])
+            if item is None or item.get("role") != entry["role"]:
+                errors.append(f"{entry['call']}: report call is missing")
+            elif item.get("availability") != "AVAILABLE" or item.get("skills") != entry.get("skills"):
+                errors.append(f"{entry['call']}: report snapshot differs")
+        return errors
 
     def _assert_receipt_and_repository(self, root, change_id, result, report):
         receipt_parent = git(root, "show", f"{result['integration_commit']}^:"
