@@ -39,15 +39,37 @@ def render_reader_section(key: str, section: dict) -> list[str] | None:
 
 def _conclusion(items: dict) -> list[str]:
     lines = _statement("目标", items.get("goal"))
+    lines += _statement("非目标", items.get("non_goals"))
+    lines += _criteria(items.get("criteria"))
     completion = _data(items.get("completion")) or {}
     lines += ["### 完成情况", "", f"完成进度：{inline(completion.get('completed'))}/{inline(completion.get('total'))}", ""]
     lines += _gates(_data(items.get("gates")))
     lines += _traceability(_data(items.get("ac_matrix")))
-    for identifier, title in (("non_goals", "非目标"), ("manual_confirmations", "人工确认"),
-                              ("reconciliation", "运行对账"), ("discovered", "发现测试数"),
+    lines += _consumers(_data(items.get("consumer_matrix")))
+    for identifier, title in (("manual_confirmations", "人工确认"), ("reconciliation", "运行对账"),
+                              ("discovered", "发现测试数"),
                               ("added", "新增测试数")):
         lines += _summary(title, items.get(identifier))
     return lines
+
+
+def _criteria(entry: dict | None) -> list[str]:
+    data = _data(entry)
+    rows = data.get("value") if isinstance(data, dict) else None
+    lines = ["### 验收条件原文", "", *_meta(entry),
+             "| ID | Given | When | Then | 类型 |", "|---|---|---|---|---|"]
+    for row in rows if isinstance(rows, list) else []:
+        lines.append(f"| {cell(row.get('id'))} | {cell(row.get('given'))} | {cell(row.get('when'))} | "
+                     f"{cell(row.get('then'))} | {cell(row.get('kind'))} |")
+    return lines + [""]
+
+
+def _consumers(rows: object) -> list[str]:
+    lines = ["### 消费者范围", "", "| 消费者 | 路径 | 范围内 | 验收条件 |", "|---|---|---|---|"]
+    for row in rows if isinstance(rows, list) else []:
+        lines.append(f"| {cell(row.get('consumer_id'))} | {cell(row.get('path'))} | "
+                     f"{cell(row.get('in_scope'))} | {cell(', '.join(row.get('criteria') or []))} |")
+    return lines + [""]
 
 
 def _gates(data: object) -> list[str]:
@@ -158,7 +180,8 @@ def _review(entry: dict) -> list[str]:
 
 def _statement(title: str, entry: dict | None) -> list[str]:
     data = _data(entry)
-    value = data.get("value") if isinstance(data, dict) else None
+    wrapped = isinstance(data, dict) and "value" in data
+    value = data.get("value") if wrapped else data
     lines = [f"### {title}", "", *_meta(entry)]
     if isinstance(data, dict) and data.get("verification") == "CONTENT_NOT_MACHINE_VERIFIED":
         lines += ["作者：未知（未持久化可靠作者来源）  ",
@@ -190,9 +213,27 @@ def _readable(value: object) -> list[str]:
     if value is None:
         return ["未提供"]
     if isinstance(value, list):
-        return [f"- {inline(item)}" for item in value] if value else ["（空）"]
+        if not value:
+            return ["（空）"]
+        lines = []
+        for index, item in enumerate(value, 1):
+            if isinstance(item, (dict, list)):
+                lines.append(f"- 记录 {index}")
+                lines.extend("  " + line for line in _readable(item))
+            else:
+                lines.append(f"- {inline(item)}")
+        return lines
     if isinstance(value, dict):
-        return [f"- {inline(key)}：{inline(item)}" for key, item in value.items()] if value else ["（空）"]
+        if not value:
+            return ["（空）"]
+        lines = []
+        for key, item in value.items():
+            if isinstance(item, (dict, list)):
+                lines.append(f"- {inline(key)}：")
+                lines.extend("  " + line for line in _readable(item))
+            else:
+                lines.append(f"- {inline(key)}：{inline(item)}")
+        return lines
     return [inline(value)]
 
 

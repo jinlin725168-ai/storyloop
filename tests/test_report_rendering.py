@@ -28,11 +28,23 @@ def _report(tier="standard"):
         _item("goal", {"value": "<script>alert(1)</script> **claim**", "author": "NOT_AVAILABLE",
                        "provenance": "NOT_AVAILABLE", "verification": "CONTENT_NOT_MACHINE_VERIFIED"},
               reason="STATEMENT_PROVENANCE_NOT_PERSISTED"),
+        _item("criteria", {"value": [{"id": "AC-1", "given": "account exists", "when": "user books",
+                                      "then": "reservation is saved", "kind": "automated"}],
+                           "author": "NOT_AVAILABLE", "provenance": "NOT_AVAILABLE",
+                           "verification": "CONTENT_NOT_MACHINE_VERIFIED"},
+              reason="STATEMENT_PROVENANCE_NOT_PERSISTED"),
+        _item("consumer_matrix", [{"consumer_id": "web", "path": "ui/book.py", "in_scope": True,
+                                   "criteria": ["AC-1"]}]),
         _item("completion", {"completed": 1, "total": 2}),
         _item("gates", {"layers": {"unit": "PASSED", "smoke": "SKIPPED"},
                         "passed": 1, "skipped": 1, "total": 2, "review_verdict": "pass"}),
         _item("ac_matrix", [{"criterion_id": "AC-1", "tests": [{"id": "T-1", "status": "PASS"}],
                               "evidence_sha256": "abc"}]),
+        _item("manual_confirmations", [{"criterion_id": "AC-2", "note": "checked",
+                                         "result": {"status": "ACCEPTED", "timed_out": False}}], "human"),
+        _item("reconciliation", {"status": "MATCH", "checks": [
+            {"id": "layers", "status": "MATCH", "reason": "all five"}],
+            "limitations": ["schedule unavailable"]}),
     ]
     sections["2"]["items"] = [
         _item("paths", [{"path": "src/a.py", "status": "M", "priority": "CORE_DECLARED_PATH",
@@ -53,7 +65,12 @@ def _report(tier="standard"):
     sections["4"]["items"] = [
         _item("answers", [{"question": "x|y", "answer": "<b>no</b>"}], "human"),
         _item("review", {"summary": "reviewed"}, "agent_code"),
-        _item("facts:0", {"value": {"statement": "sample", "role": "design", "attempt": 1},
+        _item("failures", [{"attempt": 1, "gate": "checks", "detail": {"status": "FAILED"}}]),
+        _item("repairs", [{"attempt": 2, "actions": ["fixed parser", "reran tests"]}]),
+        _item("approvals", [{"approved_by": "user", "scope": {"kind": "product"}}], "human"),
+        _item("facts:0", {"statement": "located claim", "location": "src/a.py:7",
+                          "role": "review", "attempt": 1}, "agent_code"),
+        _item("facts:1", {"value": {"statement": "wrapped claim", "role": "design", "attempt": 1},
                           "verification": "CONTENT_NOT_MACHINE_VERIFIED", "author": "agent",
                           "provenance": "NOT_AVAILABLE"}, "agent_sample"),
     ]
@@ -106,6 +123,10 @@ class ReportRenderingTests(unittest.TestCase):
         self.assertIn("完成进度：1/2", markdown)
         self.assertIn("| 门禁层 | 状态 |", markdown)
         self.assertIn("| 验收条件 | 测试 | 结果 | 证据 SHA-256 |", markdown)
+        self.assertIn("account exists", markdown)
+        self.assertIn("reservation is saved", markdown)
+        self.assertIn("web", markdown)
+        self.assertIn("ui/book.py", markdown)
         self.assertIn("| 路径 | 状态 | 优先级 | 仅空白变更 |", markdown)
         self.assertIn("未计划变更：extra.py", markdown)
         self.assertIn("未覆盖风险：race", markdown)
@@ -114,8 +135,18 @@ class ReportRenderingTests(unittest.TestCase):
         self.assertIn("### 人工回答", markdown)
         self.assertIn("### 独立审查", markdown)
         self.assertIn("问题：x\\|y；回答：&lt;b&gt;no&lt;/b&gt;", markdown)
-        self.assertIn("声明：sample", markdown)
+        self.assertIn("声明：located claim", markdown)
+        self.assertIn("位置：src/a.py:7", markdown)
+        self.assertIn("声明：wrapped claim", markdown)
+        self.assertIn("AC-2", markdown)
+        self.assertIn("all five", markdown)
+        self.assertIn("schedule unavailable", markdown)
+        self.assertIn("FAILED", markdown)
+        self.assertIn("fixed parser", markdown)
+        self.assertIn("approved_by", markdown)
         self.assertNotIn("{'question':", markdown)
+        self.assertNotIn("{'status':", markdown)
+        self.assertNotIn("['fixed parser'", markdown)
         self.assertNotIn("- author：", markdown)
         self.assertNotIn("- provenance：", markdown)
         self.assertNotIn("- verification：", markdown)
