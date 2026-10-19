@@ -14,9 +14,16 @@ from storyloop.cli import run_with_answers
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, load_run_state, run_change
 from tests.test_project_loop import smoke_payload
-from tests.test_workspace_scratch import _approved
+from tests.test_workspace_scratch import _approved as _historical_approved
+from tests.routing_support import legacy_create_change
 
 NOW = datetime(2026, 9, 19, tzinfo=timezone.utc)
+
+
+def _approved(root, settings):
+    """These answer-flow scenarios predate routing; keep their historical contracts explicit."""
+    with patch('tests.test_workspace_scratch.create_change', legacy_create_change):
+        return _historical_approved(root, settings)
 
 
 def asking_services(change_id: str, seen: list) -> LoopServices:

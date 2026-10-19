@@ -10,7 +10,7 @@
 | 架构师（方案） | `design` | 无 | 合同、知识库的 extension / building-blocks / modules、既有代码 | 方案：Files、Data And Interfaces、Decisions、Risks，以及将修改的既有文件 `touched` | 否，但 `touched` 喂特征化门，方案是审查的对照物；故事数少于 `design_min_stories`（默认 2）时跳过 |
 | 开发（开工前） | `characterize` | `test_roots` | 合同、完整方案（含 `touched`）、`test_roots`、已锁定清单、需补锁的路径 | 锁定现有行为的特征化测试，在旧代码上跑绿 | 是（机器验证）；没配置 `test_roots` 或 `unit_commands` 时跳过 |
 | 开发 | `implement` | 可变区 + `test_roots`；特征化门生效时，未锁定的既有文件改动会被还原、补锁并计一轮失败 | 合同、方案、失败证据、答案、特征化结果 | 代码；`design` 记录（Tests First、Decisions） | 由各层验证判定 |
-| 代码评审 | `review` | 无（只读 + 受限命令） | 合同、各层证据、方案、实现记录、知识库 | verdict + findings | 是 |
+| 代码评审 | `review` | 无（只读 + 受限命令） | 合同、各层证据（含功能红层）、方案、实现记录、知识库 | verdict + findings | 是；判断失败属于实现、判据还是合同，但不能用 pass 覆盖红层 |
 | 产品负责人 | 人 | 批准、回答、人工验收、应用冒烟、批准底座 | 一切 | 决定 | 是 |
 
 ## 每个变更里角色出场的顺序
@@ -30,6 +30,14 @@ flowchart LR
     M -.提议.-> A2[acceptance<br/>smoke-propose]
     A2 --> H3{人 smoke-apply}
 ```
+
+## 纠偏时各角色的职责
+
+- **review**：功能测试失败时仍读取原始分层证据，判断根因属于实现、判据还是合同；纯环境错误由引擎直接记录，不调用 review。每条发现标注 `target: implementation/oracle/contract`，非实现归属给出合同条件 ID 与 `path:line`，可用 `evidence` 补充解释。引擎核验条件、位置和范围后分流，合同问题优先；`evidence` 非空不是分流的强制条件。任何红层都不会因 review 返回 pass 而通过。
+- **implement**：读取历轮 `failures` 与 `facts`。`mode: root_cause` 时先解释相同失败为何反复出现，再依据定位修改；不得放宽合同或改验收套件来制造通过。
+- **design、implement、review**：可返回 `{statement, location}` 事实，供同轮后续角色与下一轮使用。引用位置必须存在，陈述仍属于代理判断，不能冒充已通过的测试。
+- **product**：`change --supersede` 时只读参考旧合同、停止报告、事实与修订意见，生成新草案。旧合同仍锁定，新合同重新由人批准；旧方案与事实带旧变更来源，仅供新设计参考。
+- **product、acceptance、design**：回答符合结构但未满足合同语义时，读取 `previous_response` 与 `validation_errors`，最多一次补正；基础设施或安全错误由引擎停下处理。
 
 ## 角色内部的子代理（适配器侧，可选）
 

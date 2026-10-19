@@ -12,11 +12,9 @@ from pathlib import Path
 from .call_log import call_folder, load_meta
 from .changes import load_change
 from .next_steps import next_step
+from .stop_report import failure_view, render_stop, stop_of
 from .storage import load_json
 from .telemetry import ledger_entries, summarize
-
-LAYER_NAMES = ("unit", "integration", "acceptance", "smoke", "checks")
-
 
 def change_log(project: Path, change_id: str) -> dict:
     project = Path(project).resolve()
@@ -29,7 +27,11 @@ def change_log(project: Path, change_id: str) -> dict:
         "run_status": run.get("status") if run else None,
         "attempt": run.get("attempt") if run else None,
         "calls": [_call_view(project, entry) for entry in ledger_entries(project, change_id)],
-        "failures": [_failure_view(item) for item in (run or {}).get("failures", [])],
+        "failures": [{**failure_view(item), "attribution": item.get("attribution", "implement"),
+                      "signature": (item.get("signature") or "")[:8]}
+                     for item in (run or {}).get("failures", [])],
+        "agent_failures": list((run or {}).get("agent_failures") or []),
+        "stop": stop_of(project, run),
         "error": (run or {}).get("error"),
         "telemetry": summarize(project, change_id),
         "next": next_step(status, change_id, project, run or {}),
@@ -44,33 +46,10 @@ def _call_view(project: Path, entry: dict) -> dict:
         meta = load_meta(project, call) or {}
         view["call"] = call
         view["folder"] = str(call_folder(project, call))
-        for key in ("status", "code", "error", "schema_errors", "repairs"):
+        for key in ("status", "code", "error", "schema_errors", "repairs", "semantic_repair"):
             if meta.get(key):
                 view[key] = meta[key]
     return view
-
-
-def _failure_view(failure: dict) -> dict:
-    """One line per failed attempt: which gate said no and the gist of why."""
-    attempt = failure.get("attempt")
-    if "contract" in failure:
-        return {"attempt": attempt, "gate": "contract", "reason": failure["contract"].get("message", "")}
-    if "review" in failure:
-        review = failure["review"] or {}
-        findings = review.get("findings") or []
-        first = findings[0].get("message", "") if findings and isinstance(findings[0], dict) else ""
-        return {"attempt": attempt, "gate": "review",
-                "reason": f"{len(findings)} finding(s): {first or review.get('summary', '')}"[:300]}
-    if "characterization" in failure:
-        paths = failure["characterization"].get("uncharacterized") or []
-        return {"attempt": attempt, "gate": "characterization",
-                "reason": "modified without a lock, restored and locked: " + ", ".join(paths[:5])}
-    red = [name for name in LAYER_NAMES
-           if isinstance(failure.get(name), dict) and failure[name].get("status") not in {"PASSED", "SKIPPED"}]
-    if red:
-        return {"attempt": attempt, "gate": "layers",
-                "reason": ", ".join(f"{name}={failure[name].get('status')}" for name in red)}
-    return {"attempt": attempt, "gate": "unknown", "reason": ""}
 
 
 def render_log(result: dict) -> str:
@@ -90,6 +69,8 @@ def render_log(result: dict) -> str:
                      + (f"  会话 {call['session']}" if call.get("session") else ""))
         if call.get("repairs"):
             lines.append(f"      修复重试 {call['repairs']} 次")
+        if call.get("semantic_repair"):
+            lines.append("      语义校验修复：带着上一次的校验错误重答")
         for problem in call.get("schema_errors") or []:
             lines.append(f"      结构问题: {problem}")
         if call.get("error"):
@@ -102,7 +83,17 @@ def render_log(result: dict) -> str:
         lines.append("")
         lines.append("失败的尝试：")
         for failure in result["failures"]:
-            lines.append(f"  第 {failure['attempt']} 轮  {failure['gate']}: {failure['reason']}")
+            tag = f"[{failure.get('attribution', 'implement')} {failure.get('signature') or '-'}]"
+            lines.append(f"  第 {failure['attempt']} 轮  {failure['gate']}: {tag} {failure['reason']}")
+    if result.get("agent_failures"):
+        lines.append("")
+        lines.append("代理未回答（不计入 max_attempts）：")
+        for item in result["agent_failures"]:
+            lines.append(f"  第 {item.get('attempt')} 轮  {item.get('role')} {item.get('code')}: "
+                         f"{str(item.get('message', ''))[:200]}")
+    if result.get("stop"):
+        lines.append("")
+        lines += render_stop(result["stop"])
     total = result.get("telemetry") or {}
     cost = f"，费用 ${total['cost_usd']:.2f}" if isinstance(total.get("cost_usd"), (int, float)) else ""
     lines.append("")

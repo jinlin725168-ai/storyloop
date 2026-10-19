@@ -1,0 +1,410 @@
+{
+  "change_id": "C1",
+  "status": "PASSED",
+  "merge_commit": null,
+  "presentation": {
+    "version": 1,
+    "tier": "standard",
+    "sections": {
+      "0": {
+        "title": "头部",
+        "items": [
+          {
+            "id": "identity",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": {
+              "change_id": "C|<1>",
+              "status": "PASSED"
+            }
+          },
+          {
+            "id": "implementation_commit",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "id": "merge_commit",
+            "source": "machine",
+            "availability": "PENDING",
+            "data": null,
+            "reason": "SOURCE_NOT_PERSISTED"
+          }
+        ]
+      },
+      "1": {
+        "title": "结论",
+        "items": [
+          {
+            "id": "goal",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": {
+              "value": "<script>alert(1)</script> **claim**",
+              "author": "NOT_AVAILABLE",
+              "provenance": "NOT_AVAILABLE",
+              "verification": "CONTENT_NOT_MACHINE_VERIFIED"
+            },
+            "reason": "STATEMENT_PROVENANCE_NOT_PERSISTED"
+          },
+          {
+            "id": "criteria",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": {
+              "value": [
+                {
+                  "id": "AC-1",
+                  "given": "account exists",
+                  "when": "user books",
+                  "then": "reservation is saved",
+                  "kind": "automated"
+                }
+              ],
+              "author": "NOT_AVAILABLE",
+              "provenance": "NOT_AVAILABLE",
+              "verification": "CONTENT_NOT_MACHINE_VERIFIED"
+            },
+            "reason": "STATEMENT_PROVENANCE_NOT_PERSISTED"
+          },
+          {
+            "id": "consumer_matrix",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": [
+              {
+                "consumer_id": "web",
+                "path": "ui/book.py",
+                "in_scope": true,
+                "criteria": [
+                  "AC-1"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "completion",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": {
+              "completed": 1,
+              "total": 2
+            }
+          },
+          {
+            "id": "gates",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": {
+              "layers": {
+                "unit": "PASSED",
+                "smoke": "SKIPPED"
+              },
+              "passed": 1,
+              "skipped": 1,
+              "total": 2,
+              "review_verdict": "pass"
+            }
+          },
+          {
+            "id": "ac_matrix",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": [
+              {
+                "criterion_id": "AC-1",
+                "tests": [
+                  {
+                    "id": "T-1",
+                    "status": "PASS"
+                  }
+                ],
+                "evidence_sha256": "abc"
+              }
+            ]
+          },
+          {
+            "id": "manual_confirmations",
+            "source": "human",
+            "availability": "AVAILABLE",
+            "data": [
+              {
+                "criterion_id": "AC-2",
+                "note": "checked",
+                "result": {
+                  "status": "ACCEPTED",
+                  "timed_out": false
+                }
+              }
+            ]
+          },
+          {
+            "id": "reconciliation",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": {
+              "status": "MATCH",
+              "checks": [
+                {
+                  "id": "layers",
+                  "status": "MATCH",
+                  "reason": "all five"
+                }
+              ],
+              "limitations": [
+                "schedule unavailable"
+              ]
+            }
+          }
+        ]
+      },
+      "2": {
+        "title": "审查重点",
+        "items": [
+          {
+            "id": "paths",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": [
+              {
+                "path": "src/a.py",
+                "status": "M",
+                "priority": "CORE_DECLARED_PATH",
+                "whitespace_only": false
+              }
+            ]
+          },
+          {
+            "id": "plan_paths",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": {
+              "unplanned": [
+                "extra.py"
+              ],
+              "not_changed": [
+                "miss.py"
+              ]
+            }
+          },
+          {
+            "id": "layer_gaps",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": [
+              {
+                "layer": "smoke",
+                "kind": "ENVIRONMENT_GAP",
+                "reason_code": "NO_SYSTEM_SMOKE_SUITE",
+                "record": "layers/smoke"
+              }
+            ]
+          },
+          {
+            "id": "risks",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": [
+              {
+                "risk": "race",
+                "coverage": "UNCOVERED",
+                "criteria": [],
+                "tests": []
+              }
+            ]
+          },
+          {
+            "id": "verification",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": [
+              {
+                "criterion_id": "AC-1",
+                "test_id": "T-1",
+                "command": "python 'a b.py'"
+              }
+            ]
+          }
+        ]
+      },
+      "3": {
+        "title": "证据",
+        "items": [
+          {
+            "id": "layers",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": {
+              "unit": {
+                "status": "PASSED",
+                "results": []
+              }
+            }
+          },
+          {
+            "id": "baseline",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": {
+              "unit": [
+                1
+              ]
+            }
+          },
+          {
+            "id": "executed",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": {
+              "unit": [
+                {
+                  "id": "T-1",
+                  "executed": 1,
+                  "parser": "unittest"
+                }
+              ]
+            }
+          },
+          {
+            "id": "ci",
+            "source": "machine",
+            "availability": "NOT_AVAILABLE",
+            "data": null,
+            "reason": "NO_AUTHORITATIVE_EXTERNAL_CI_RECORD"
+          }
+        ]
+      },
+      "4": {
+        "title": "过程",
+        "items": [
+          {
+            "id": "answers",
+            "source": "human",
+            "availability": "AVAILABLE",
+            "data": [
+              {
+                "question": "x|y",
+                "answer": "<b>no</b>"
+              }
+            ]
+          },
+          {
+            "id": "review",
+            "source": "agent_code",
+            "availability": "AVAILABLE",
+            "data": {
+              "summary": "reviewed"
+            }
+          },
+          {
+            "id": "failures",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": [
+              {
+                "attempt": 1,
+                "gate": "checks",
+                "detail": {
+                  "status": "FAILED"
+                }
+              }
+            ]
+          },
+          {
+            "id": "repairs",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": [
+              {
+                "attempt": 2,
+                "actions": [
+                  "fixed parser",
+                  "reran tests"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "approvals",
+            "source": "human",
+            "availability": "AVAILABLE",
+            "data": [
+              {
+                "approved_by": "user",
+                "scope": {
+                  "kind": "product"
+                }
+              }
+            ]
+          },
+          {
+            "id": "facts:0",
+            "source": "agent_code",
+            "availability": "AVAILABLE",
+            "data": {
+              "statement": "located claim",
+              "location": "src/a.py:7",
+              "role": "review",
+              "attempt": 1
+            }
+          },
+          {
+            "id": "facts:1",
+            "source": "agent_sample",
+            "availability": "AVAILABLE",
+            "data": {
+              "value": {
+                "statement": "wrapped claim",
+                "role": "design",
+                "attempt": 1
+              },
+              "verification": "CONTENT_NOT_MACHINE_VERIFIED",
+              "author": "agent",
+              "provenance": "NOT_AVAILABLE"
+            }
+          }
+        ]
+      },
+      "5": {
+        "title": "成本",
+        "items": [
+          {
+            "id": "cost",
+            "source": "machine",
+            "availability": "AVAILABLE",
+            "data": {
+              "calls": 2,
+              "failed": 1,
+              "cost_usd": null,
+              "known_cost_usd": 0.25,
+              "coverage": {
+                "cost_usd": {
+                  "known": 1,
+                  "total": 2
+                }
+              }
+            }
+          }
+        ]
+      },
+      "6": {
+        "title": "记忆",
+        "items": [
+          {
+            "id": "memory",
+            "source": "machine",
+            "availability": "NOT_AVAILABLE",
+            "data": null,
+            "reason": "MEMORY_MODULE_NOT_IMPLEMENTED"
+          }
+        ]
+      }
+    },
+    "reconciliation": {
+      "status": "MATCH",
+      "checks": [],
+      "limitations": []
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # 接口与配置
 
-对应引擎版本：0.1.0，核对日期 2026-10-11。本页是对外接口的权威清单：命令、状态与退出码、配置、代理协议、目标仓库里的文件约定。原 `docs/protocols.md` 并入本页。
+对应引擎版本：0.1.0，核对日期 2026-10-16（子项目 2a 工作分支）。本页是对外接口的权威清单：命令、状态与退出码、配置、代理协议、目标仓库里的文件约定。原 `docs/protocols.md` 并入本页。
 
 ## 一、命令
 
@@ -9,22 +9,23 @@
 | 命令 | 参数 | 返回状态 |
 |---|---|---|
 | `init` | `[--settings FILE]` | `BASELINE_LOCKED` |
+| `adapters check` | `[--json]` | 能力握手结果 |
 | `skills` | — | `SKILLS_INSTALLED` |
 | `survey` | `[--reason TEXT] [--from FILE]` | `SURVEYED` |
-| `change` | `--idea TEXT` 或 `--change ID --message TEXT`；`[--no-interactive]` | 变更状态（`DRAFT`） |
+| `change` | `--idea TEXT`、`--change ID --message TEXT` 或 `--supersede ID --message TEXT [--reason TEXT]`；`[--no-interactive]` | 变更状态（`DRAFT`） |
 | `approve` | `--change ID [--no-interactive]` | 运行状态（见第二节） |
-| `run` | `--change ID [--no-interactive]` | 运行状态 |
-| `status` | `--change ID` | 变更状态，附 `run`、`telemetry`、`next` |
+| `run` | `--change ID [--overrule TEXT] [--no-interactive]` | 运行状态 |
+| `status` | `--change ID` | 变更状态，附 `run`、`telemetry`、`next`、`stop` |
 | `log` | `--change ID` | `LOG` |
 | `answer` | `--change ID --answer TEXT [--answer TEXT …]` | `ANSWERED` |
 | `accept` | `--change ID --criterion ID [--criterion ID …] --note TEXT` | `ACCEPTED`，或仍有未确认条件时 `MANUAL_ACCEPTANCE_REQUIRED` |
-| `reset` | `--change ID --reason TEXT` | `IMPLEMENTING` |
+| `reset` | `--change ID --reason TEXT` | 污染前的中断阶段；人工验收复位为 `IMPLEMENTING` |
 | `acceptance-repair`（旧名 `smoke-repair`） | `--change ID --reason TEXT` | `ACCEPTANCE_REPAIRED` |
 | `document` | `--change ID [--design FILE] [--capability NAME]` | `DOCUMENTED` |
 | `smoke-propose` | `--change ID` | `SMOKE_PROPOSED` |
 | `smoke-apply` | `--change ID` | `SMOKE_APPLIED` 或 `SMOKE_UPDATE_FAILED` |
 | `base-propose` | `--path P [--path P …] --reason TEXT [--allow-mutable] [--allow-ci]` | `PROPOSED` |
-| `base-update` | `--proposal BASE-ID` | `BASELINE_UPGRADED` |
+| `base-update` | `--proposal BASE-ID [--confirm-oracle-skills]` | `BASELINE_UPGRADED` |
 | `ci` | `--change ID` | `PASSED` 或 `FAILED` |
 | `report` | `--change ID` | `REPORT`（报告路径） |
 
@@ -36,25 +37,51 @@
 
 | 状态 | 含义 | 能否 `run` 续跑 |
 |---|---|---|
-| `PREPARING` / `CONTRACT_READY` / `CONTRACT_COMMITTED` | 建分支、物化合同、生成并提交验收套件、证明 RED | 能 |
-| `ORACLE_DEFECT` | 应当保持成立的验收条件在旧代码上就失败（用例写错了） | `acceptance-repair` 修正后能 |
+| `PREPARING` / `CONTRACT_READY` | 建分支、物化合同、生成验收套件 | 能 |
+| `CONTRACT_COMMITTED` | 合同与套件已提交，待证明 RED | 能；套件副作用阻断 RED 时可先 `acceptance-repair` |
+| `ORACLE_DEFECT` | RED 检查或审查发现判据缺陷 | `acceptance-repair`；仅审查归属可用 `run --overrule TEXT` |
+| `NEEDS_SPEC_FIX` | 审查发现合同缺陷 | `change --supersede ID --message TEXT`，或 `run --overrule TEXT` |
+| `NO_PROGRESS` | 根因调查后失败特征未变且无原失败用例转绿 | 处理后 `run`；或修判据、修合同重开 |
+| `SUPERSEDED` | 已作废，`superseded_by` 指向新草案 | 不能续跑；批准新变更 |
 | `EXISTING_GREEN` | 验收套件在实现之前就已通过（全部或部分条件），证明不了 RED | `acceptance-repair` 加强套件后能；不修复直接 `run` 只会再停在这里 |
 | `IMPLEMENTING` | 方案、特征化、实现—验证—审查循环 | 能 |
 | `NEEDS_INPUT` | design、implement 或 review 提了问题 | 回答后能 |
 | `BASE_CHANGE_REQUIRED` | 功能触碰底座，已开 BASE 提案 | `base-update` 并合回功能分支后能 |
 | `BOUNDARY_VIOLATION` | 代理写了不允许的路径 | 还原后能 |
+| `COST_LIMIT_REACHED` | 按变更调用/墙钟/token/已知费用达到上限 | 提高 limits 后能，复用已完成候选 |
 | `BUDGET_EXHAUSTED` | `max_attempts` 用尽 | 提高预算后能；或 `acceptance-repair` |
 | `CHARACTERIZATION_FAILED` | 特征化测试在旧代码上不绿 | 就地修正测试后能（重新验证，不再调用代理） |
-| `WORKSPACE_TAINTED` | 实现尝试中出现不该有的改动 | `reset` 后能 |
+| `WORKSPACE_TAINTED` | 工作区出现不该有的改动 | `reset` 后能 |
 | `MANUAL_ACCEPTANCE_REQUIRED` | 自动验证与审查全过，等人工条件 | `accept` 全部条件后能；工作区变了要 `reset` |
 | `VERIFIED` / `MERGED` / `RECEIPTING` / `FINALIZING` | 完成阶段各步（幂等） | 能 |
 | `PASSED` | 已合并、回执已写 | 终态 |
 
-变更状态（`status --json` 顶层 `status`）：`DRAFT`、`APPROVED`、`PASSED`。
+变更状态（`status --json` 顶层 `status`）：`DRAFT`、`APPROVED`、`PASSED`、`SUPERSEDED`。
+
+### 纠偏状态字段与命令约束
+
+新增字段均按需写入，旧状态文件缺省兼容，不需要迁移。
+
+| 字段 | 含义 |
+|---|---|
+| `run.stop`（`status` 也返回顶层 `stop`） | `{status, phase, completed, last_verdict, attempts, blocker, evidence, facts, questions, options, resume}`；`phase` 为 `contract/prepare/implement/verify/finish`；options 为 `{action, command}` 列表 |
+| `run.facts` | 最多 50 条 `{statement, location, role, attempt}`，校验位置后按陈述与文件去重；不是机器核实的结论 |
+| `run.routed` | 审查分流来源 `{source:"review", target, findings}`；决定是否允许驳回 |
+| `run.overrules` / `run.overruled` | 人的驳回记录（时间、状态、轮次、理由、发现标识）/ 已驳回发现的稳定标识集合 |
+| `run.mode` | 普通轮为 null，根因调查轮为 `root_cause` |
+| `run.failures[]` 新字段 | `attribution`（`implement/oracle/contract/base/environment`）、`epoch`（判据修复次数）、`mode`、`signature`；功能红层记录同时含各层结果与校验后的 `review`。连续性要求同一 epoch 的实际 `attempt` 相邻，且紧邻将调用的轮次；红层 review 的 `NEEDS_INPUT` 保留该轮证据但打断连续性，交还的轮次不打断，不另存 `progress` 计数 |
+| 变更 `supersedes` | `{change_id, message, reason, blocker, source_branch, design_summary}`，指向旧变更 |
+| 变更与旧运行 `superseded_by` | 新变更 ID；旧变更和运行状态均为 `SUPERSEDED` |
+
+`run --overrule` 必须给非空理由，只允许审查判定的 `ORACLE_DEFECT` 或 `NEEDS_SPEC_FIX`。对应发现改为 `implementation` 并重算归属；混合发现中剩余的判据问题仍会停下。实现前 RED 检查的判据错误不可驳回。
+
+`change --supersede` 与 `--idea`、`--change` 互斥，必须有非空 `--message`。除 `NEEDS_SPEC_FIX` 外必须有 `--reason`；`--reason` 只用于 supersede。允许的旧运行状态为 `NEEDS_SPEC_FIX`、`BUDGET_EXHAUSTED`、`NO_PROGRESS`、`ORACLE_DEFECT`、`EXISTING_GREEN`、`NEEDS_INPUT`、`IMPLEMENTING`、`BOUNDARY_VIOLATION`、`CHARACTERIZATION_FAILED`。已合并的变更不允许作废。重复同一修订请求返回已有新草案，不重复创建；新运行必须从旧运行的当前源分支启动，不能从旧功能分支继续。
+
+`acceptance-repair` 要求已有合同提交，允许的运行状态为 `CONTRACT_COMMITTED`、`IMPLEMENTING`、`BUDGET_EXHAUSTED`、`NEEDS_INPUT`、`EXISTING_GREEN`、`ORACLE_DEFECT`、`NO_PROGRESS`。其中 `CONTRACT_COMMITTED` 用于套件已提交、证明 RED 时因套件写入候选副本等副作用报 `BLOCKED` 的恢复；`PREPARING` 与 `PASSED` 仍禁止修复。修复套件提交后，引擎仍从合同提交重建候选副本并重新证明 RED，不跳过判据门。
 
 ### 错误码
 
-命令失败时 stderr 输出一行 JSON：`{"status": <错误码>, "message": …, "next": …}`。
+命令失败时 stderr 输出一行 JSON：`{"status": <错误码>, "message": …, "next": …}`；可取得运行状态的 `run` / `approve` 错误还附 `stop`。`AGENT_UNAVAILABLE` 的停止报告不改变原运行状态及预算语义。
 
 | 错误码 | 含义 |
 |---|---|
@@ -62,7 +89,7 @@
 | `NEEDS_INPUT` | manual 适配器在等人工回答 |
 | `AGENT_UNAVAILABLE` | 代理进程没有给出回答（超时、限流、崩溃、CLI 不可用、进程树没能回收）。实现循环里出现时这一轮交还、不计入 `max_attempts`，记在 `run.agent_failures`；`run` 重试同一轮 |
 | `AGENT_CONTRACT_INVALID` | 代理回答修复后仍不符合角色 schema（implement 计一轮失败，不会冒到这里） |
-| `WORKSPACE_TAINTED` | 控制面、暂存区或工作区被意外改动（RED、方案、特征化阶段只报错，不落盘为运行状态） |
+| `WORKSPACE_TAINTED` | 控制面、暂存区或工作区被意外改动；Git 不可见改动的消息最多列 20 条相对路径，Python `StoryLoopError.details.invisible[]` 保留全部 `{path, kind}`（CLI 错误 JSON 不新增该字段）；已有运行状态时保存停止报告，清理后 `reset` 再 `run` |
 | `GIT_BLOCKED` / `GIT_CONFLICT` | Git 命令失败 / no-ff 合并失败（功能分支保留） |
 | `UNSAFE_CONTAINMENT` | 子进程树没能在受控方式下回收 |
 
@@ -71,7 +98,7 @@
 | 退出码 | 情形 |
 |---|---|
 | `0` | 正常结束，包括停在 `MANUAL_ACCEPTANCE_REQUIRED`（自动验收已全过，只是等人） |
-| `2` | 返回状态属于 `FAILED`、`BLOCKED`、`NEEDS_INPUT`、`INTERRUPTED`、`UNSAFE_CONTAINMENT`、`WORKSPACE_TAINTED`、`BUDGET_EXHAUSTED`、`BASE_CHANGE_REQUIRED`、`BOUNDARY_VIOLATION`、`ERROR`、`CHARACTERIZATION_FAILED`、`EXISTING_GREEN`、`ORACLE_DEFECT`、`SMOKE_UPDATE_FAILED`，或任何错误码 |
+| `2` | 返回状态属于 `FAILED`、`BLOCKED`、`NEEDS_INPUT`、`INTERRUPTED`、`UNSAFE_CONTAINMENT`、`WORKSPACE_TAINTED`、`BUDGET_EXHAUSTED`、`BASE_CHANGE_REQUIRED`、`BOUNDARY_VIOLATION`、`ERROR`、`CHARACTERIZATION_FAILED`、`EXISTING_GREEN`、`ORACLE_DEFECT`、`NEEDS_SPEC_FIX`、`NO_PROGRESS`、`SMOKE_UPDATE_FAILED`，或任何错误码 |
 | `130` | Ctrl-C 中断，状态已保存 |
 
 脚本请判断 `status` 与 `next`，不要只看退出码（例如 `MANUAL_ACCEPTANCE_REQUIRED` 是 0）。
@@ -139,13 +166,23 @@
 | `acceptance`（生成） | `{change, suite_root}` | `{files:[{path,content}], manifest}`。files 非空、路径相对且不是 CI、不能叫 `manifest.json`、单个 ≤2 MB；测试 ID 唯一；`criteria` 只能引用并必须覆盖全部 `automated` 条件；`timeout_seconds` 1–3600；`tier` 为 `fast`（缺省）或 `heavy`，须与条件的 `oracle_class` 对应；一个测试只能覆盖同一种实现前状态（应红或应绿）的条件 |
 | `acceptance`（修复） | `{change: {…, repair:{reason, existing_files, manifest, failure_evidence}}, suite_root}`；`EXISTING_GREEN` 时 `failure_evidence` 为 `{status:"EXISTING_GREEN", criteria_green, results}` | 同上；返回里的 `manifest.json` 文件被忽略 |
 | `acceptance`（冒烟维护） | `{mode:"smoke-maintenance", change, acceptance_suite, system_smoke, smoke_root}` | `{files, manifest:{version:1, tests:[{id,description,command,timeout_seconds}]}, rationale}`；测试非空、文件 ≤200 个 |
-| `design` | `{change, answers}` | `{summary, touched:[path], design, questions:[string]}`。questions 非空停 `NEEDS_INPUT`；`design` 不能为空；`touched` 必须是合同提交里存在的文件 |
+| `design` | `{change, answers, facts}` | `{summary, touched:[path], design, questions:[string], facts?}`。questions 非空停 `NEEDS_INPUT`；`design` 不能为空；`touched` 必须是合同提交里存在的文件 |
 | `characterize` | `{change, test_roots, extend:[path], characterization, design}`（`characterization` 只在之前为 GREEN 时给，`design` 为方案或 null） | `{summary, touched, tests, questions:[]}`。只能写 `test_roots`（否则 `BOUNDARY_VIOLATION`，类别 `NOT_A_TEST_PATH`）；`touched` 必须是既有非测试文件；单元层必须全绿（否则 `CHARACTERIZATION_FAILED`） |
-| `implement` | `{change, attempt, max_attempts, failures, answers, characterization, design_plan}`（后两者可为 null） | `{summary, questions:[string], design}`。通过直接改工作区实现；questions 非空停 `NEEDS_INPUT`；结构不符计一轮失败 |
-| `review` | `{change, attempt, layers, boundary, design_plan, answers, design}` | `{verdict:"pass"|"fail"|"needs_input", summary, findings:[{message, perspective?, criterion_id?, evidence?, …}], questions}`；`pass` 不能带 findings 或 questions |
+| `implement` | `{change, attempt, max_attempts, failures, answers, characterization, design_plan, facts, mode}`（`characterization`、`design_plan` 可为 null；`facts` 为列表，`mode` 为 null 或 `root_cause`） | `{summary, questions:[string], design, facts?}`。通过直接改工作区实现；questions 非空停 `NEEDS_INPUT`；结构不符计一轮失败 |
+| `review` | `{change, attempt, layers, boundary, design_plan, answers, design, facts}` | `{verdict:"pass"|"fail"|"needs_input", summary, findings:[{message, perspective?, criterion_id?, evidence?, target?, location?, …}], questions, facts?}`；功能红层也会调用，纯环境错误不会调用；`pass` 不能带 findings 或 questions，也不能覆盖任何红层 |
 | `survey` | `{baseline_version, foundation_root, required_documents, module_roots, integration_paths, reason}` | `{documents:[{path,content}]}`：1–40 份 `.md`、每份 ≤512 KB、八份必需文档齐全、不含配置里的密钥值或带口令的 URL |
 
 survey 的说明由 `foundation-survey` 技能包生成：引擎把 SKILL.md 与 references 原文附在角色说明后（优先用项目 `.claude/skills/` 或 `.codex/skills/` 里的副本）。
+
+### 归属、事实与语义修复
+
+review finding 可选 `target: implementation|oracle|contract`（缺省 implementation）及 `location: "path:line[:col]"`。非实现归属还须有合同内 `criterion_id` 和存在的安全源码行；oracle 只能指向当前验收套件或已锁定的特征化测试。`evidence` 可提供解释性说明，引擎不要求该字段非空。无效归属降回 implementation 并附 `attribution_note`，不会凭文字直接停到合同或判据修复。
+
+分层验证存在功能失败时，引擎仍调用受只读保护的 review，并把原始层结果与校验后的 review 一并写入失败记录。review 返回 `needs_input` 时先保留该轮证据再暂停；没有有效 finding 或提问时，停止摘要显示实际失败层。
+
+design、implement、review 可选返回 `facts: [{statement, location}]`（缺省空）；statement 最长 500 字符，location 必须定位真实安全源码行。引擎附角色与轮次后传给后续调用。supersede 的 product 请求包含 `{idea, message, current_product, supersede}`，其中 supersede 含旧变更 ID、理由、阻塞点、源分支、方案摘要、facts 与 evidence。新设计可收到 `prior_design` 与 `prior_facts`，明确标注旧变更来源，仅供参考。
+
+产品、验收套件和设计方案通过 schema 却违反语义约束时，引擎最多另调同一角色一次，payload 增加 `previous_response`（原回答）和 `validation_errors`（错误文本列表）。第二次仍失败就停止；进程故障、安全错误不走此通道。诊断 `meta.json` 的 `semantic_repair` 标识该调用，和适配器的 JSON/schema 修复次数分开记录。
 
 ### 产品对象
 
@@ -175,7 +212,7 @@ survey 的说明由 `foundation-survey` 技能包生成：引擎把 SKILL.md 与
 
 ### `_telemetry`（可选）
 
-任何角色的返回对象里可以附带 `_telemetry`：数值键 `cost_usd`、`turns`、`duration_ms`、`input_tokens`、`output_tokens`、`segments`、`lanes`、`perspectives`，以及 `model`、`sessions`（会话 ID 列表）。引擎剥离后记入账本：变更调用记在 `.storyloop/state/telemetry/<change-id>.json`，变更创建前的 product 调用先记在 `pending.json` 再收编，survey 记在 `foundation.json`。没有它时只记墙钟时间。
+任何角色的返回对象里可以附带 `_telemetry`：数值键 `cost_usd`、`turns`、`duration_ms`、`input_tokens`、`output_tokens`、`segments`、`lanes`、`perspectives`，以及 `model`、`vendor`、`tier_applied`、`sessions`（会话 ID 列表）；画像能力回报见第六节。引擎剥离后记入账本：变更调用记在 `.storyloop/state/telemetry/<change-id>.json`，变更创建前的 product 调用先记在 `pending.json` 再收编，survey 记在 `foundation.json`。没有它时只记墙钟时间。
 
 ### 诊断记录
 
@@ -211,3 +248,29 @@ survey 的说明由 `foundation-survey` 技能包生成：引擎把 SKILL.md 与
 - 退出码 0 通过、1 行为失败、其他为环境错误；RED 阶段只有 1 算有效红灯，且执行数为 0 的失败不算。
 - 每个测试结果带 `counts`（`executed`、`failed`、`skipped`、`parser`），由输出统计；统计不出来为 `null`。
 - 证据写在 `.storyloop/evidence/<change-id>/acceptance-red.json` 与 `acceptance-result.json`。
+
+## 六、角色画像（子项目 4）
+
+`storyloop adapters check PROJECT [--json]` 发出 `{"protocol":"storyloop.adapter-capabilities.v1"}`，期望返回 `vendor`、`tiers: ["strong", "standard"]`、布尔 `subagents/path_guard/fast_checks`、`modes: ["*"]`。结果写 `.storyloop/state/adapters.json`，绑定配置及 argv 摘要；init/change 自动检查，run 在只读边界外刷新未知能力。已知映射缺档报 `ADAPTER_PROFILE_UNSUPPORTED`；未知旧适配器与 manual 能力缺失允许兼容执行，不能声称生效。跨厂商模式要求已知、不同 vendor，否则 fail_closed。
+
+请求仍是 `storyloop.project-agent.v1`，只新增可选 `role_profile`：
+
+```json
+{"version":1,"tier":"strong","routing_tier":"standard","skills":[],
+ "subagents":{"perspectives":["correctness","security","architecture","tests"],"explore":[],"lanes":false},
+ "writable_paths":["app/**","tests/**"],"forbidden_paths":[],"fast_checks":[]}
+```
+
+`skills` 每项含 name/path/version/sha256，正文仍在 instructions。路径来自引擎边界规则；只读角色（包括 acceptance）无可写路径。`roles.<role>` 可覆盖 adapter/tier/fast_checks；判定角色降到 standard 必须提供 reason。tier 可按 light/standard/heavy 映射。`settings.stacks` 用于技能选择。
+
+适配器 `_telemetry` 回报 model/vendor/tier_applied，可回报 `path_guard: enforced|unsupported` 与 `subagents_applied: {mode: parallel|sequential, perspectives, explore, lanes}`。engine 独立写 tier_requested/adapter/degraded，拒绝适配器覆盖。模型档次回报缺失或不匹配是“未生效”，不进入匹配档次统计；费用与失败调用仍保留在总账。第 3、5 节明确为适配器回报。profile 不存在时保留旧协议。
+
+review 的新画像协议要求 findings 的 severity（P0/P1/P2/question）、confidence（0–100 整数）、introduced、trigger/impact/fix，以及 coverage。去向依次为老问题、out_of_scope、≥80 修复/归属停点、50–79 引用重点、低置信 P0/P1 人工确认、其余丢弃。可配置 `review_thresholds.fix/focus`。引擎生成独立 `F-ordinal-hash`，代理原 ID 留在 agent_id。第 2 节仅列 id/location/severity/confidence；正文与复核理由在第 4 节标 🤖。
+
+只有已画像且请求 standard 的 review 高置信发现会触发 `mode: verify` strong 调用：请求 findings，返回 `results: [{id, confirmed, reason}]`，每个引擎 ID 恰好一次。strong 原审查不再复核；无画像的新发现记录 PROFILE_NOT_CONFIGURED。checklist 只核对已批准方案 selected option 的结构化 constraints（criterion_id/path/rule）按 canonical JSON 编码的 decision，恰好一行，status 为 pass/issue/unconfirmed；不从 Markdown 推断完整设计覆盖。语义不完整有一次补正机会。
+
+调用 metadata 的 context 保存实际**提供**的底座、活规格、技能与方案文件路径/hash 和截断项，不代表代理实际读取。子代理视角由 profile 唯一决定；不支持并行时单会话依次处理。
+
+`COST_LIMIT_REACHED` 是可恢复停点：limits 默认 max_calls=80、max_agent_wall_seconds=28800，max_tokens/max_cost_usd 默认为 null；旧配置同样获得默认挂死保护。每次调用前检查累计已用值，失败调用也计算；费用未知不估算，并展示 x/y 覆盖。提高 limits 再 run；已完成实现候选绑定指纹，在审查/复核停点恢复时复用，不重复实现。原始审查在复核费用停止时持久化。
+
+`cross_vendor_review.on_unavailable` 默认 fail_closed：review 不可用停 AGENT_UNAVAILABLE、交还质量轮次；degrade 改用 implement 适配器审查并标记 degraded=cross_vendor。事后比较实际回报 vendor，不同仅代表回报匹配；同厂或缺失标“跨厂商未生效”，不改变证据型门。

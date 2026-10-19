@@ -98,30 +98,32 @@ class LogAndNextStepTests(unittest.TestCase):
             review=passing_review)
         try:
             result = run_change(root, change_id, services)
-            self.assertEqual(result["status"], "BUDGET_EXHAUSTED")
+            self.assertEqual(result["status"], "NO_PROGRESS")
             # The engine names the resolved project path (on Windows the temp dir may be an 8.3 short name).
-            self.assertIn(f"storyloop acceptance-repair {root.resolve()} --change {change_id}", result["next"])
+            self.assertIn(f"storyloop run {root.resolve()} --change {change_id}", result["next"])
             # A started run's contract cannot be revised, so the hint must not suggest it.
             self.assertNotIn("修订合同", result["next"])
-            self.assertIn("max_attempts", result["next"])
+            self.assertTrue(result["next"])
             with patch("sys.stdout", new_callable=io.StringIO) as out:
                 code = cli.main(["status", str(root), "--change", change_id, "--json"])
-            self.assertEqual(code, 0)
-            self.assertIn("acceptance-repair", json.loads(out.getvalue())["next"])
+            self.assertEqual(code, 2)
+            self.assertEqual(json.loads(out.getvalue())["status"], "NO_PROGRESS")
+            self.assertIn("storyloop run", json.loads(out.getvalue())["next"])
             with patch("sys.stdout", new_callable=io.StringIO) as out:
                 code = cli.main(["log", str(root), "--change", change_id])
             self.assertEqual(code, 0)
             text = out.getvalue()
             self.assertIn("失败的尝试：", text)
-            self.assertIn("layers: acceptance=FAILED", text)
-            self.assertIn("下一步:", text)
+            self.assertIn("acceptance=FAILED", text)
+            self.assertIn("恢复：", text)
         finally:
             temporary.cleanup()
 
 
 class ExitCodeTests(unittest.TestCase):
     def test_stops_that_need_a_human_fix_exit_2_and_manual_acceptance_exits_0(self):
-        expected = {"CHARACTERIZATION_FAILED": 2, "BUDGET_EXHAUSTED": 2, "NEEDS_INPUT": 2,
+        expected = {"CHARACTERIZATION_FAILED": 2, "BUDGET_EXHAUSTED": 2, "NO_PROGRESS": 2,
+                    "NEEDS_SPEC_FIX": 2, "NEEDS_INPUT": 2,
                     "SMOKE_UPDATE_FAILED": 2, "EXISTING_GREEN": 2, "MANUAL_ACCEPTANCE_REQUIRED": 0, "PASSED": 0,
                     "SMOKE_APPLIED": 0}
         for status, code in expected.items():

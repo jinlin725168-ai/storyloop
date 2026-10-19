@@ -8,6 +8,8 @@ StoryLoop 不会推送远端、不部署，也不会创建或覆盖 GitHub Actio
 
 下文命令以 PowerShell 路径为例；Linux / WSL2 把路径换成本地路径即可（例如 `storyloop init ~/work/my-project`），入口是虚拟环境里的 `storyloop` 或 `python -m storyloop`。
 
+新协议完整顺序是 init → readiness → 补基础或确认缺口 → change → 产品批准 → 重档方案批准 → run。命令和安全停点见 [分流、审批与恢复](routing-guide.md)。
+
 ## 2. 一次初始化
 
 ```powershell
@@ -36,7 +38,7 @@ Windows 上 `.cmd`、`.bat`、`.ps1` 包装器不会被自动执行；对应回�
 
 `candidate_allow` 列出名字看起来敏感（`.env*`、`*.key`、`*.pem`、`credentials.json`、`secrets.yaml`）但确实是已跟踪配置的文件；未列出的这类文件出现在冒烟和回归的隔离候选副本里会直接阻断。
 
-settings 只接受上面这些键（`unit_commands` 或旧名 `test_commands`、`integration_commands`、`check_commands`、`test_roots`、`module_roots`、`integration_paths`、`candidate_allow`、`scratch_paths`），未知键报错。`max_attempts`（默认 3）、`agent_timeout_seconds`（默认 14400）、`check_timeout_seconds`（默认 300）、`design_min_stories`（默认 2）、`adapter`、`agent_command` 是运行参数，init 写进 `.storyloop/config.json` 后直接编辑。完整表见 [api.md 的配置一节](api.md#三配置)。
+settings 只接受上面这些键（`unit_commands` 或旧名 `test_commands`、`integration_commands`、`check_commands`、`test_roots`、`module_roots`、`integration_paths`、`candidate_allow`、`scratch_paths`，以及可选正整数 `max_attempts`），未知键报错。`max_attempts`（显式值优先；省略时新协议 light/standard/heavy 为 2/3/4，legacy 为 3）、`agent_timeout_seconds`（默认 14400）、`check_timeout_seconds`（默认 300）、`design_min_stories`（默认 2）、`adapter`、`agent_command` 是运行参数，init 写进 `.storyloop/config.json` 后直接编辑。完整表见 [api.md 的配置一节](api.md#三配置)。
 
 然后一次初始化：
 
@@ -145,12 +147,12 @@ storyloop approve C:\work\my-project --change FEAT-20260916-001
 3. 将批准合同物化到 `openspec/changes/<change-id>/`（含增量规格），装了 `openspec` CLI 时校验结构。
 4. acceptance 角色只看合同盲写 `acceptance/changes/<change-id>/` 变更验收套件（接口优先，浏览器用例只覆盖核心链路），与合同一起提交。
 5. 在隔离候选副本里证明验收套件因功能缺失而失败（验收级 RED）。
-6. 方案：design 角色（架构师）只读地对照知识库的扩展机制和积木写出方案（Files、Data And Interfaces、Decisions、Risks），并列出将修改的既有文件 `touched`；方案里留有真实决策时停在 `NEEDS_INPUT`。方案喂给后面每个角色，完成时归档为 design.md 的前半部分。小改动自动跳过：故事数少于 `.storyloop/config.json` 的 `design_min_stories`（默认 2，即单故事变更不出方案）时记为 SKIPPED，characterize 与 implement 直接从合同工作；把它设成 1 则每个变更都出方案。
+6. 方案：design 角色（架构师）只读地对照知识库的扩展机制和积木写出方案（Files、Data And Interfaces、Decisions、Risks），并列出将修改的既有文件 `touched`；方案里留有真实决策时停在 `NEEDS_INPUT`。方案喂给后面每个角色，完成时归档为 design.md 的前半部分。新协议 light 由引擎精简方案（证据不完整时仍调用 design），standard/heavy 调用 design，heavy 经明确方案批准和一致性审查再实现。旧协议仍按 design_min_stories 决定是否跳过 design。
 7. 特征化门：characterize 角色以方案的 `touched` 为必锁清单，为这些既有文件写只断言"必须不变"行为的测试（扩展的列表用 contains），引擎要求整个单元层（`unit_commands`）在旧代码加新测试上跑绿、只改了 `test_roots` 内的文件，然后提交。项目没配 `test_roots` 或单元命令时跳过。
 8. 调用实现代理（TDD 先红后绿）。代理提出真实产品歧义时停在 `NEEDS_INPUT`；回答不符合角色结构计一轮失败。
 9. 边界审计：底座、模块、集成点、测试、系统冒烟和 CI 边界；集成点变化转为底座提案，越界停在 `BOUNDARY_VIOLATION`。实现改了未被特征化锁定的既有文件时，引擎把它们还原到合同提交、补做特征化，这一轮计为失败。
-10. 依次跑：单元测试 → 集成测试 → 变更验收 → 系统冒烟 → 静态检查，每层各自出结论；任何一层红就带着证据进入下一轮尝试。验证结束后再审计一次，确认验证没有改动实现。
-11. 进行独立审查（对照方案、design 记录的 Tests First、知识库的积木与扩展机制）；`fail` 的 findings 回喂下一轮，`needs_input` 停点。
+10. 依次跑：单元测试 → 集成测试 → 变更验收 → 系统冒烟 → 静态检查，每层各自出结论。验证结束后再审计一次，确认验证没有改动实现。
+11. 进行独立只读审查（对照方案、design 记录的 Tests First、知识库的积木与扩展机制）；功能红层也交给 review 判断是实现、判据还是合同问题，纯环境错误则直接记录。原始分层证据与校验后的 review 一起保留，review 的 pass 不能覆盖红层。实现问题回喂下一轮，判据问题停 `ORACLE_DEFECT`、合同问题停 `NEEDS_SPEC_FIX`，`needs_input` 保存红层证据后停点并打断连续失败计数。连续两轮失败特征相同，下一轮先调查根因；仍无进展停 `NO_PROGRESS`。
 12. 有 `manual` 验收条件时停在 `MANUAL_ACCEPTANCE_REQUIRED`，等人 `accept` 后 `run` 继续。
 13. 提交实现；生成 `reports/storyloop/<change-id>/report.json` 和 `report.md`（含追溯、分层验证、成本）；写 design.md、decisions.md，把增量并入活规格并校验；报告与文档一起提交。
 14. 切回原分支执行本地 `--no-ff` 合并，将合并提交写回验收报告，提交合并回执并推进基线血缘。
@@ -245,6 +247,40 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 
 指纹的口径：验收证据和人工验收记录绑定的都是**实现指纹**，即 Git 可见文件减去引擎拥有的区域（`openspec/changes/`、`openspec/specs/`、`acceptance/changes/`、`acceptance/smoke/`、`acceptance/ui/`、`reports/storyloop/`，它们各有独立的保护摘要）。因此完成阶段生成文档不会让证据失效；改动任何业务代码或单元、集成测试都会。
 
+### 读停止报告
+
+`run`、`status` 和 `log` 使用同一份停止报告；JSON 的 `stop` 字段保留结构化内容，终端按以下顺序展示：
+
+1. **阻塞点**：先判断问题属于合同、判据、实现、底座还是环境。
+2. **证据**：核对条件、文件位置和命令结果；“代理陈述事实”只校验引用位置，不代表引擎已证明陈述。
+3. **可选操作**：选修判据、修合同重开或驳回审查归属；替换命令里的占位符并写清理由。
+4. **恢复**：先完成所选处理，再执行报告里的恢复命令。`next` 仍保留供旧脚本使用。
+
+`stop.attempts` 含每轮归属、失败特征短摘要；完整签名和失败载荷在 `run.failures`。组合记录没有有效 finding 或 `needs_input` 时，摘要显示实际失败层，不会用 review pass 的摘要遮住红层。`log` 同时显示代理进程失败，便于区分“改了但没通过”和“代理没有回答”。
+
+例如，审查认为合同错误时：
+
+```bash
+storyloop change /path/to/project --supersede FEAT-20261016-001 --message "按已核实的接口行为修订 A2"
+```
+
+新草案沿用正常澄清与批准流程。创建替代草案时仍在旧功能分支，入口证据绑定的是该分支的提交。先提交或暂存旧功能分支里尚未提交的改动，切回原运行的源分支，再按输出中的新 ID 显式修订，让 product 重新核对该源码上的范围、风险与验收证据：
+
+```bash
+git -C /path/to/project checkout <原运行源分支>
+storyloop change /path/to/project --change <新ID> --message "在当前源分支重新核对范围、风险和验收证据，修订替代合同"
+```
+
+核对修订结果，解决入口阻塞和待决问题后，再执行 `storyloop approve /path/to/project --change <新ID>`。只切分支后直接批准会因入口证据陈旧而被拒绝。新运行从源分支重跑，旧合同的 intake、批准和旧功能分支保留作对照；重复 supersede 只恢复已有链接，不刷新旧合同或已有子合同的证据。在其他允许停点重开还需 `--reason "为什么是合同的问题"`。
+
+如果核对证据后认为审查归属不成立：
+
+```bash
+storyloop run /path/to/project --change FEAT-20261016-001 --overrule "已核实 A2 与代码一致，失败应由实现修复"
+```
+
+理由进入运行状态和 decisions.md；对应发现改回实现问题。该操作只适用于审查分流，不能驳回实现前 RED 检查的确定性错误。若同轮还有其他判据问题，处理合同归属后仍会停在 `ORACLE_DEFECT`。
+
 ## 7. 底座变更如何处理
 
 普通功能迭代修改初始化时的底座文件会暂停为 `BASE_CHANGE_REQUIRED`，并在 `.storyloop/base-proposals/` 生成独立 `BASE-*` 提案。它不会自动把底座路径放宽成业务路径。
@@ -302,12 +338,12 @@ storyloop run C:\work\my-project --change FEAT-20260916-001
 
 - `BASE_CHANGE_REQUIRED`：功能依赖底座修改。
 - `NEEDS_INPUT`：已批准合同仍出现真实产品歧义。在终端里执行 `run` 或 `approve` 时会直接逐条提问并继续（回车表示让代理按现有约定自行决定）；非交互环境用 `storyloop answer PATH --change ID --answer "…"`。回答按尝试号记录在 `.storyloop/state/answers/`，随后的实现和审查都能看到问答配对；问题未回答前 `run` 拒绝续跑，`--no-interactive` 可关闭终端提问。
-- `WORKSPACE_TAINTED`：代理或其他进程在工作区里产生了不该有的改动（未声明的被忽略文件、暂存、控制面文件）。常见原因：残留的 dev server、未声明的构建目录、代理超时或出错时已改动工作区。只有在实现尝试循环里出现时它才是落盘的运行状态：人先判断原因，处理后执行 `storyloop reset PATH --change ID --reason "…"` 再 `storyloop run`。复位不动任何文件，被中断的那一轮不计入尝试预算，理由写入运行状态。在 RED、方案或特征化阶段出现时它只是一个错误码（`run.status` 仍是之前的状态），清理后直接 `run`，`reset` 会被拒绝。
+- `WORKSPACE_TAINTED`：代理或其他进程在工作区里产生了不该有的改动（未声明的被忽略文件、Git 不可见改动、暂存、控制面文件）。Git 不可见错误的消息最多列 20 条仓库相对路径，Python `StoryLoopError.details` 的 `invisible` 列出每项 `path` 与 `kind`（CLI 错误 JSON 不新增该字段）；这些字段用于捕获偶发问题，不表示其根因已经修复。常见原因：残留的 dev server、未声明的构建目录、代理超时或出错时已改动工作区。已有运行状态时会保存停止报告：人先判断原因，处理后执行 `storyloop reset PATH --change ID --reason "…"` 再 `storyloop run`。复位不动任何文件，被中断的实现轮次不计入尝试预算，理由写入运行状态。复位会恢复污染前的阶段；验收生成或 RED 阶段被中断时，下一次运行仍先证明 RED 并采样实现前基线，再进入实现。方案或特征化阶段也按同样流程复位。
 - `CHARACTERIZATION_FAILED`：特征化测试在旧代码上不绿，说明锁定现有行为的测试写错了。就地修正 `test_roots` 里的这些测试（不用提交）后 `run`：引擎不再调用代理，重跑整个单元层，绿了才提交这些测试并继续；仍然红就再停在这里。修正只能改测试文件，碰到其他路径会停在 `BOUNDARY_VIOLATION`。
-- 变更验收用例本身有缺陷（定位器、时序、数据准备）而实现无法通过时：由人判断并执行 `storyloop acceptance-repair PATH --change ID --reason "…"`（旧名 `smoke-repair`）。只在 `IMPLEMENTING`、`BUDGET_EXHAUSTED`、`NEEDS_INPUT`、`EXISTING_GREEN`、`ORACLE_DEFECT` 状态可用。acceptance 角色拿到现有套件文件和最近的失败证据修复自己的套件（不得放宽行为断言；`manifest.json` 由引擎重建，代理不用返回），新套件以 `test(<id>): repair acceptance suite` 提交到功能分支后，引擎从合同提交重建候选副本（`git archive` + 当前套件）重新证明 RED，之前的尝试作废、预算归零，修复记录写入运行状态和 decisions.md。实现代理永远不能改验收用例。
+- 变更验收用例本身有缺陷（定位器、时序、数据准备）而实现无法通过时：由人判断并执行 `storyloop acceptance-repair PATH --change ID --reason "…"`（旧名 `smoke-repair`）。只在 `CONTRACT_COMMITTED`、`IMPLEMENTING`、`BUDGET_EXHAUSTED`、`NEEDS_INPUT`、`EXISTING_GREEN`、`ORACLE_DEFECT`、`NO_PROGRESS` 状态且已有合同提交时可用。`CONTRACT_COMMITTED` 支持套件已提交、但证明 RED 时因套件写入候选副本等副作用报 `BLOCKED` 的恢复；`PREPARING` 和已完成的 `PASSED` 不允许修复。acceptance 角色拿到现有套件文件和最近的失败证据修复自己的套件（不得放宽行为断言；`manifest.json` 由引擎重建，代理不用返回），新套件以 `test(<id>): repair acceptance suite` 提交到功能分支后，引擎从合同提交重建候选副本（`git archive` + 当前套件）重新证明 RED，之前的尝试作废、预算归零，修复记录写入运行状态和 decisions.md。实现代理永远不能改验收用例。
 - `MANUAL_ACCEPTANCE_REQUIRED`：自动验收、回归和独立审查都已通过，但合同里有 `manual` 验收条件。此时功能分支上的代码就是待验收版本；逐条执行 `storyloop accept PATH --change ID --criterion A2 --note "看到了什么"`，再 `storyloop run PATH --change ID` 生成报告并合并。验收记录与当时的代码指纹绑定，代码一变就失效。
 - `BOUNDARY_VIOLATION`：代理写到了未授权路径。`storyloop log` 找到是哪次调用写的，还原后 `run`。
-- `BUDGET_EXHAUSTED`：达到自动尝试上限。用例缺陷走 `acceptance-repair`；否则提高 `max_attempts` 后 `run`，或另开新变更（运行开始后合同不能修订）。
+- `BUDGET_EXHAUSTED`：达到自动尝试上限。用例缺陷走 `acceptance-repair`；否则提高 `max_attempts` 后 `run`，或 `change --supersede ID --message "修订意见" --reason "合同问题"` 重开（运行开始后合同不能原地修订）。
 - 存在 `manual` 验收条件：必须提供真实人工证据，不能由 AI 代签。
 
 失败时功能分支和本地状态保留，StoryLoop 不删除分支、不重写历史、不丢弃用户文件。
@@ -318,8 +354,12 @@ storyloop run C:\work\my-project --change FEAT-20260916-001
 
 | 状态 | 含义 | 下一步 |
 |---|---|---|
-| `PREPARING` / `CONTRACT_READY` / `CONTRACT_COMMITTED` | 建分支、物化合同、生成并提交验收套件 | 自动 |
-| `ORACLE_DEFECT` | 应当保持成立的条件（回归、状态保持、非目标）在旧代码上就失败，用例写错了 | `acceptance-repair` |
+| `PREPARING` / `CONTRACT_READY` | 建分支、物化合同、生成验收套件 | 自动 |
+| `CONTRACT_COMMITTED` | 合同与套件已提交，待证明 RED | 自动；套件副作用阻断 RED 时可 `acceptance-repair`，修复后重新证明 RED |
+| `ORACLE_DEFECT` | RED 检查或实现后审查发现判据缺陷 | `acceptance-repair`；仅审查归属可 `run --overrule "理由"` |
+| `NEEDS_SPEC_FIX` | 审查发现合同与事实或判据矛盾 | `change --supersede ID --message "修订意见"`，或 `run --overrule "理由"` |
+| `NO_PROGRESS` | 根因调查后仍是相同失败、无原失败用例转绿 | 看停止报告，处理后 `run`；或修判据、修合同重开 |
+| `SUPERSEDED` | 已作废并链接到新草案 | 处理旧分支未提交内容，切回源分支，批准新变更 |
 | `EXISTING_GREEN` | 验收套件在实现之前就已通过，证明不了 RED | 需求已实现就放弃；用例太弱就 `acceptance-repair` |
 | `IMPLEMENTING` | RED 与特征化门已过，实现—分层验证—审查循环中 | 自动；可 `acceptance-repair` |
 | `CHARACTERIZATION_FAILED` | 特征化测试在旧代码上不绿 | 就地修正测试后 `run`（重新验证，不再调用代理） |
@@ -332,4 +372,4 @@ storyloop run C:\work\my-project --change FEAT-20260916-001
 | `BUDGET_EXHAUSTED` | 尝试用尽 | 用例缺陷 `acceptance-repair`；否则提高 `max_attempts` 后 `run` |
 | `WORKSPACE_TAINTED` | 工作区出现不该有的改动 | 清理后 `reset`，再 `run` |
 
-`acceptance-repair` 命令返回 `ACCEPTANCE_REPAIRED`，运行状态回到 `IMPLEMENTING`、尝试计数归零。变更本身的状态（`status --json` 顶层 `status`）只有 `DRAFT`、`APPROVED`、`PASSED`。各命令的返回状态与错误码见 [api.md](api.md#二状态与退出码)。
+`acceptance-repair` 命令返回 `ACCEPTANCE_REPAIRED`，运行状态回到 `IMPLEMENTING`、尝试计数归零。变更本身的状态（`status --json` 顶层 `status`）为 `DRAFT`、`APPROVED`、`PASSED`、`SUPERSEDED`。各命令的返回状态与错误码见 [api.md](api.md#二状态与退出码)。

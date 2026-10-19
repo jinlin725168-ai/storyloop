@@ -9,8 +9,11 @@ from pathlib import Path
 import re
 
 from .baseline import _git
+from .routing_report import report_routing, routing_markdown
 from .changes import load_change
 from .models import require
+from .report_markdown import render_presentation
+from .report_presentation import build_presentation
 from .smoke import RESULT_EVIDENCE, load_smoke_manifest, smoke_digests
 from .smoke_runner import candidate_digest
 from .storage import load_json, write_bytes_atomic, write_json, write_text_atomic
@@ -31,6 +34,7 @@ def generate_change_report(
     telemetry: dict | None = None,
     oracle: dict | None = None,
     skills_used: dict | None = None,
+    correction: dict | None = None,
 ) -> Path:
     """Write a passing report only when every layer is green and every criterion has real evidence."""
     project = Path(project).resolve()
@@ -42,6 +46,7 @@ def generate_change_report(
     )
     report = {
         "version": 1,
+        "routing": report_routing(project, change),
         "status": "PASSED",
         "change_id": change_id,
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -56,7 +61,9 @@ def generate_change_report(
         "traceability": traceability,
         "telemetry": _telemetry_view(telemetry),
         "oracle": _oracle_view(layers, oracle, skills_used),
+        "correction": correction or {"failures": [], "overrules": [], "supersedes": None},
     }
+    report["presentation"] = build_presentation(project, change, report)
     root = project / "reports" / "storyloop" / change_id
     path = root / "report.json"
     write_json(path, report, max_bytes=8_000_000)
@@ -184,6 +191,8 @@ def _write_markdown(path: Path, report: dict) -> None:
 
 
 def _render_markdown(report: dict) -> str:
+    if report.get("presentation"):
+        return render_presentation(report)
     lines = [
         f"# StoryLoop 验收报告：{report['change_id']}", "",
         f"- 状态：{report['status']}",
@@ -214,7 +223,10 @@ def _render_markdown(report: dict) -> str:
                      f"{_markdown(layer.get('reason', ''))} |")
     lines.extend(_oracle_markdown(report.get("oracle") or {"baseline": {}, "executed": {}, "uncounted": [],
                                                            "skills_used": {}}))
+    lines.extend(_correction_markdown(report.get("correction") or {
+        "failures": [], "overrules": [], "supersedes": None}))
     lines.extend(["", "## 独立审查", "", _markdown(report["review"]["summary"]), ""])
+    lines.extend(routing_markdown(report.get("routing")))
     lines.extend(_telemetry_markdown(report.get("telemetry") or {}))
     return "\n".join(lines)
 
@@ -228,6 +240,31 @@ def _oracle_view(layers: dict, oracle: dict | None, skills_used: dict | None) ->
                         for item in (layers.get(name) or {}).get("uncounted") or []})
     return {"baseline": (oracle or {}).get("baseline") or {}, "executed": counts, "uncounted": uncounted,
             "skills_used": dict(skills_used or {})}
+
+
+def correction_view(state: dict, change: dict) -> dict:
+    from .stop_report import failure_view  # local import: this module is imported by the loop
+    return {"failures": [{"attempt": item.get("attempt"),
+                           "attribution": item.get("attribution", "implement"),
+                           "signature": (item.get("signature") or "")[:8], **failure_view(item)}
+                          for item in state.get("failures") or []],
+            "overrules": list(state.get("overrules") or []),
+            "supersedes": (change.get("supersedes") or {}).get("change_id")}
+
+
+def _correction_markdown(view: dict) -> list[str]:
+    if not view["failures"] and not view["overrules"] and not view["supersedes"]:
+        return []
+    lines = ["", "## 失败归属", ""]
+    if view["supersedes"]:
+        lines += [f"修订自 {view['supersedes']}（作废并修订重开）", ""]
+    if view["failures"] or view["overrules"]:
+        lines += ["| 轮次 | 归属 | 特征 | 说明 |", "|---|---|---|---|"]
+        lines += [f"| {item['attempt']} | {item['attribution']} | {item['signature'] or '-'} | "
+                  f"{_markdown(item['gate'] + ': ' + item['reason'][:120])} |" for item in view["failures"]]
+        lines += [f"| {item.get('attempt')} | 人工驳回 | - | {_markdown(item.get('reason', ''))} |"
+                  for item in view["overrules"]]
+    return lines
 
 
 def _oracle_markdown(view: dict) -> list[str]:
@@ -248,7 +285,9 @@ def _oracle_markdown(view: dict) -> list[str]:
 
 def _telemetry_view(value: dict | None) -> dict:
     base = {"calls": 0, "failed": 0, "agent_ms": 0, "cost_usd": None, "by_role": {}, "attempts": None,
-            "loop_ms": 0}
+            "loop_ms": 0, "known_cost_usd": None, "input_tokens": None, "output_tokens": None,
+            "turns": None, "models": None, "vendors": None, "tiers": None, "skills": None,
+            "coverage": {}}
     if isinstance(value, dict):
         base.update({key: value[key] for key in base if key in value})
     return base

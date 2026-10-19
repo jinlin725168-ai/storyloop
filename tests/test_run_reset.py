@@ -13,9 +13,17 @@ from storyloop.models import StoryLoopError
 from storyloop.project_loop import load_run_state, run_change
 from storyloop.run_recovery import reset_run
 from tests.test_baseline_behavior import git
-from tests.test_workspace_scratch import _approved, _services
+from tests.test_workspace_scratch import _approved as scratch_approved, _services
+from tests.routing_support import legacy_create_change
+from unittest.mock import patch
 
 NOW = datetime(2026, 9, 19, tzinfo=timezone.utc)
+
+
+def _approved(root, settings):
+    """Keep this historical recovery fixture explicitly on its original run protocol."""
+    with patch('tests.test_workspace_scratch.create_change', legacy_create_change):
+        return scratch_approved(root, settings)
 
 
 class RunResetTests(unittest.TestCase):

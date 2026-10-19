@@ -27,7 +27,7 @@
 
 | 步骤 | 文件 | 做什么 |
 |---|---|---|
-| 1 | `storyloop/project_agents.py` | `ROLES` 加名字；`INSTRUCTIONS` 写角色说明（写给代理看，含 `FOUNDATION_NOTE` 与精确的返回形状）；Codex 沙箱在 `_codex()` 里按角色选 `read-only` 或 `workspace-write` |
+| 1 | `storyloop/project_agents.py` | `ROLES` 加名字；`role_instructions.INSTRUCTIONS` 写角色说明（写给代理看，含 `FOUNDATION_NOTE` 与精确的返回形状）；Codex 沙箱在 `_codex()` 里按角色选 `read-only` 或 `workspace-write` |
 | 2 | `storyloop/role_schemas.py` | `SCHEMAS` 加返回结构，遵守严格子集（对象封闭、全部 required、可选字段用 `_nullable`） |
 | 3 | `storyloop/project_loop.py` | `LoopServices` 加可选字段（默认 `None` 时该环节跳过并记录原因）；`_default_services()` 接上 `invoke_project_agent`；调用包在 `project_loop_guards.read_only_call` 或 `write_safely` 里；RED 之后、实现之前的门放在 `project_loop_gates` |
 | 4 | `examples/claude-code/claude_agent.py` | `ROLE_TOOLS` 给出工具集，`SCHEMA_HINTS` 给出返回形状提示；写入型角色才给 `Edit/Write` |
@@ -58,7 +58,7 @@
 
 1. 在 `storyloop/skills/<name>/` 放 `SKILL.md`，frontmatter 必须有 `name`、`version`、`description`；参考资料放 `references/`。
 2. 改内容就升 `version`：`storyloop skills` 靠它判断项目里的副本是否过期。
-3. 角色需要嵌入技能时，在 `project_agents.SKILL_ROLES` 登记；技能文本原样进入代理请求，写给代理看。
+3. frontmatter 添加 `roles: [acceptance, review]`，可选 `stacks: [python]`；按角色与技术栈选择，技能正文嵌入 instructions。无需登记角色常量。
 4. `pyproject.toml` 的 `package-data` 已包含 `skills/**/*.md`，其他扩展名需要补。
 
 ## 七、禁止事项（不变量）
@@ -76,3 +76,13 @@
 9. 任何合同修订让旧批准失效；人工验收记录与实现指纹绑定。
 10. 特征化门：开启时，实现不能修改未被 `test_roots` 内绿测试锁定的既有文件；系统冒烟只经人 `smoke-apply` 更新。
 11. 不引入第三方运行时依赖；不再引入按实例目录或 Stage 配置工作的代码路径（旧模式存档于本地 tag `archive/legacy-modes`）。
+
+## 八、扩展角色画像适配器
+
+使用 `storyloop/testing/mock_adapter.py --script FILE` 可在无密钥环境回放 role/mode/nth 的回答、creates、telemetry、失败退出/超时/非 JSON，requests 保存到脚本旁目录；脚本与请求目录放项目外，避免污染只读审计。`tests/test_adapter_conformance.py` 覆盖 manual/mock/假 Codex CLI/假 Claude CLI 的适用性质；manual 没有模型与进程调用，不伪造成功证据。新增测试由现有 CI unittest discover 收集。
+
+角色能力与协议入口见 [API §六](api.md#六角色画像子项目-4)。不要新增绕过 `invoke_project_agent(project, role, payload)` 的调用通道：会丢失账本、失控上限、技能快照和上下文记录。新逻辑用小型内部模块，公共 API 签名保持兼容。
+
+技能 frontmatter 用 `roles`/`stacks` 选择，优先 `.claude/skills`、`.codex/skills`、内置。同名项目技能正文优先；旧项目副本遗漏 roles 时仅继承同名内置角色元数据，仍交付项目正文及其 hash；显式 roles 优先，项目自有无 roles 的技能不选。每调用最多 6 包、200 KB，超限拒绝，不静默截断。影响 product/acceptance/characterize/review 的有效技能变化，BASE 更新要求 `--confirm-oracle-skills`，含优先级遮蔽变化。
+
+Claude profile 调用用 dontAsk 和明确的 Edit(path) 允许/拒绝规则；Edit 同时约束 Write，Write(path) 规则本身无效（[官方权限说明](https://code.claude.com/docs/en/permissions#read-and-edit)）。隔离用户/项目设置和 MCP 扩展，保留 OAuth；不使用 bypassPermissions。Bash 间接写入仍是尽力而为，最终以边界审计为准。Codex 不支持按路径拦截，回报 unsupported。回报 enforced 只说明编辑类工具已收窄，不是安全验证通过。

@@ -26,7 +26,8 @@ if TYPE_CHECKING:  # the loop imports this module; the services type is only an 
     from .project_loop import LoopServices
 
 
-REPAIRABLE = {"IMPLEMENTING", "BUDGET_EXHAUSTED", "NEEDS_INPUT", "EXISTING_GREEN", "ORACLE_DEFECT"}
+REPAIRABLE = {"CONTRACT_COMMITTED", "IMPLEMENTING", "BUDGET_EXHAUSTED", "NEEDS_INPUT",
+              "EXISTING_GREEN", "ORACLE_DEFECT", "NO_PROGRESS"}
 
 
 def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServices | None = None,
@@ -45,7 +46,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     require(path.exists(), "Repair needs a started run with a committed contract")
     state = load_json(path)
     require(state.get("status") in REPAIRABLE and state.get("contract_commit"),
-            f"Acceptance repair is only possible while implementing or after EXISTING_GREEN / ORACLE_DEFECT "
+            f"Acceptance repair needs a committed contract that has not completed "
             f"(current: {state.get('status')})")
     require(current_branch(project) == state["feature_branch"], "Check out the run's feature branch first")
     if services is None:
@@ -69,8 +70,15 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     paths = sorted(set(relative_files(project, [suite_root])) | set(previous))
     commit = commit_paths(project, paths, f"test({change_id}): repair acceptance suite")
     moment = (now or (lambda: datetime.now(timezone.utc)))().astimezone(timezone.utc).isoformat(timespec="seconds")
+    from .consistency import invalidate_consistency
+    invalidate_consistency(state, replan=True)
     state.setdefault("repairs", []).append({"at": moment, "reason": reason, "commit": commit["commit"],
                                             "voided_attempts": int(state.get("attempt", 0))})
+    return _prove_repaired_suite(project, change, state, commit)
+
+
+def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict) -> dict:
+    change_id = change["change_id"]
     try:
         red = read_only_call(
             project, change_id,
@@ -81,7 +89,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
         if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
             raise
         return _unproven_suite(project, state, exc)
-    for key in ("questions", "error", "pending", "acceptance", "next"):
+    for key in ("questions", "error", "pending", "acceptance", "next", "routed", "stop", "mode"):
         state.pop(key, None)
     ensure_baseline(project, state, change["product"])  # a stop before RED never sampled one
     state.update({"status": "IMPLEMENTING", "attempt": 0, "red_evidence_sha256": red["evidence_sha256"]})
@@ -103,7 +111,7 @@ def _unproven_suite(project: Path, state: dict, error: StoryLoopError) -> dict:
     """
     state.pop("red_evidence_sha256", None)
     state["attempt"] = 0
-    for key in ("questions", "pending", "next"):
+    for key in ("questions", "pending", "next", "routed", "stop", "mode"):
         state.pop(key, None)
     return pause(project, state, error.code, error=str(error),
                  acceptance={"status": error.code, **error.details})

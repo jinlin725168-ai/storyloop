@@ -13,7 +13,7 @@ import unittest
 from storyloop.approvals import approve_change
 from storyloop.base_upgrade import upgrade_baseline
 from storyloop.baseline import bootstrap_project, load_baseline
-from storyloop.changes import create_change
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, load_run_state, run_change
 from tests.support import product

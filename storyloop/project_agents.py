@@ -10,193 +10,47 @@ import sys
 import tempfile
 import time
 
+from .adapter_profiles import model_for, sequential_profile, sequential_instructions
 from .baseline import load_project_config
 from .models import StoryLoopError, require
 from .foundation_survey import foundation_payload
-from .skills import ROLE_SKILLS, skill_text
+from .skills import selected_snapshots
 from .call_log import close_call, open_call
 from .processutil import redact, run_process
 from .role_schemas import normalize, schema_errors, schema_for, wire_schema
+from .role_instructions import FOUNDATION_NOTE, INSTRUCTIONS
 from .storage import load_json, write_json
 from .telemetry import record_call
+from .role_profiles import build_profile, resolve_adapters
 
 ROLES = {"product", "acceptance", "implement", "review", "survey", "characterize", "design"}
-FOUNDATION_NOTE = (
-    "payload.foundation (when present) lists the protected knowledge base under openspec/foundation/ "
-    "(modules, architecture, extension mechanism, API surface, capabilities, building blocks, testing). "
-    "Read the documents relevant to your role before anything else and treat them as the authority on "
-    "what the base already provides and how it is extended. "
-)
-INSTRUCTIONS = {
-    "product": (
-        "Co-create only product-level intent and return the complete StoryLoop product v1 JSON. "
-        "Decide the change's nature first: a defect report is a fix, a structural goal with unchanged behaviour "
-        "is a refactor, anything else is a feature; one change has one nature, so split mixed requests. "
-        "Follow the oracle-craft skill below for row types, exemptions and the consumer matrix. "
-        "Set reproduces_defect: true only on a criterion that fails on the current, defective code (a must-be-red "
-        "row type: positive, degradation, unknown_state or form_parity), never on regression, state_preservation "
-        "or non_goal rows, which must already pass before the fix. "
-        + FOUNDATION_NOTE + "Never re-specify a capability the base already provides: reference it, "
-        "and when a story changes an existing requirement reuse that requirement's title. "
-        "Structure (spec-kit style): goal; non_goals; stories ordered by priority P1/P2/P3, each "
-        "independently testable (`independent_test` says how to verify it alone), with `rules` "
-        "written as EARS statements (\"WHEN <trigger> THE SYSTEM SHALL <behavior>\" or "
-        "\"THE SYSTEM SHALL ...\", one testable obligation each) and Given/When/Then acceptance "
-        "criteria that follow Gherkin discipline: one observable behavior per criterion, declarative "
-        "and verifiable through the product's API wherever the behavior is not inherently visual; UI-only "
-        "criteria (a page is reachable, the primary action completes, the primary validation shows) are the "
-        "core flow only, at most three per story, because browser tests written before the UI exists are fragile; "
-        "wording (what happens, never which button or SQL), Given for state, When for exactly one "
-        "action, Then for the observable outcome. Cover the primary path, alternates, and failure "
-        "cases that matter; kind is 'manual' only when no machine can observe the outcome. "
-        "Size the contract to the request: a bounded change gets one or two stories, never a "
-        "sprawling backlog. Unresolved product ambiguities become `questions`: scan functional "
-        "scope, domain/data, interaction flow, edge cases and failure handling, integration, "
-        "constraints, terminology and completion signals; ask at most 5 per revision, highest "
-        "impact first, each with 2 to 5 mutually exclusive `options`, a `recommended` option and "
-        "a one-sentence `why`. Never invent answers; mark the affected rule "
-        "\"[NEEDS CLARIFICATION: Qn]\" instead. Preserve stable IDs and every earlier "
-        "`clarifications` entry; when the request carries answers, apply them to rules and "
-        "criteria, drop the answered questions, and keep the decisions in `clarifications`. "
-        "Exact shape: {version:1, goal:string, non_goals:[string], capability?:slug, "
-        "nature?:'feature'|'fix'|'refactor', defect?:{observed,expected,reproduction:[string],"
-        "reporter_hypothesis?,root_cause:[{statement,location:'path:line'}],confirmed:[string],"
-        "unconfirmed:[string],sibling_entries?:[string],origin_change?}, refactor?:{subtype:'structure'|"
-        "'dependency-swap',scope:[string],invariants:[string],structural_goals:[string],"
-        "migration_map?:[{from,to,assertion}]}, consumers?:[{id,consumer,trigger,path,in_scope:boolean,"
-        "verification}], coverage_exemptions?:[{row_type,reason}], test_removals?:[{path,reason}], "
-        "clarifications?:[{session,question,answer}], questions:[{id,text,options:[string],"
-        "recommended?:string,why?:string}], stories:[{id,title,priority:'P1'|'P2'|'P3',"
-        "independent_test:string,as_a,want,so_that,rules:[string],out_of_scope:[string],"
-        "depends_on:[string],acceptance:[{id,given,when,then,kind:'automated'|'manual',row_type?,oracle_class?,"
-        "consumers?:[string],reproduces_defect?:boolean}]}]}; "
-        "every non-optional key is required even when empty, IDs unique across the product, no extra keys. "
-        "Write all human-facing text (goal, stories, rules, criteria, questions) in the language of the request. "
-        "If openspec/specs/<capability>/spec.md exists, it is the current behavior: a story that changes an "
-        "existing requirement must reuse that requirement's title, restate every existing scenario with its "
-        "original criterion id (updating steps where behavior changes), and add new ids only for new scenarios."
-    ),
-    "acceptance": (
-        "Act as independent external acceptance QA. Return exactly {files:[{path,content}],manifest}. "
-        + FOUNDATION_NOTE + "Use testing.md and building-blocks.md for the acceptance client, how the "
-        "app is started, and the API conventions. "
-        "Follow the oracle-craft skill below. For a fix, write the reproduction tests for criteria marked "
-        "reproduces_defect. For a refactor, the suite is the structural assertions of the contract's structural "
-        "goals (they must fail on the current code). Put must-be-red and must-already-hold criteria in different "
-        "tests, and set tier: heavy only for criteria with oracle_class auto-heavy. Keep each runner's summary "
-        "line in the output. "
-        "Generate a small core-flow smoke suite under payload.suite_root: verify every criterion that can be "
-        "observed through the API with API tests, and use a browser only for criteria that are inherently visual. "
-        "If acceptance/ui/ exists it holds "
-        "verified plans and Playwright specs of existing screens: reuse their locators, texts and flows. Every automated "
-        "criterion must be linked by ID. Tests must fail when behavior is absent and must not edit CI files. "
-        "Exact shape: {files:[{path,content}], manifest:{version:1, tests:[{id, criteria:[string], "
-        "command:[string], timeout_seconds:int}]}}; `path` is relative to the suite root, `command` "
-        "runs from the repository root with a minimal environment, use \"{python}\" for the interpreter. "
-        "When payload.mode is 'smoke-maintenance' you are proposing an update to the PROJECT-LEVEL system smoke "
-        "suite (payload.smoke_root) after the change merged: from payload.acceptance_suite pick only the change's "
-        "core flow and must-not-break basics, merge them into payload.system_smoke (keep every existing test whose "
-        "behaviour is still valid, update those the contract legitimately changed, never duplicate), and return "
-        "{files:[{path,content}], manifest:{version:1, tests:[{id, description, command:[string], timeout_seconds}]}, "
-        "rationale:string} where paths are relative to payload.smoke_root and commands run from the repository "
-        "root; a human reviews and applies it. "
-        "When payload.change.repair is present you are repairing your own suite: fix only the test defects "
-        "shown in failure_evidence (locators, timing, data setup), keep every criterion covered, never weaken "
-        "an assertion about product behavior, and return the complete suite (all files and the manifest). "
-        "When failure_evidence.status is EXISTING_GREEN the suite passed on the code before implementation "
-        "(criteria_green lists the criteria it failed to fail): strengthen those tests so they assert the "
-        "new behaviour the contract requires and fail on the current code. "
-        "When failure_evidence.status is ORACLE_DEFECT, tests for criteria that must already hold "
-        "(row types regression, state_preservation, non_goal) failed on the current code: fix those tests so "
-        "they pass on the current code, and keep every assertion about new behaviour."
-    ),
-    "implement": (
-        "Implement the approved change in this repository. Modify only new files under configured module "
-        "roots. If an integration or foundation file must change, explain that need without editing it. "
-        "payload.design_plan (when present) is the architect's plan: follow its Files, Data And Interfaces and "
-        "Decisions; modify no existing file outside its `touched` list; if you must deviate, say exactly why in "
-        "the summary. "
-        + FOUNDATION_NOTE + "Follow extension.md for where a new feature's files go and reuse what "
-        "building-blocks.md lists instead of re-implementing it. "
-        "Never delete an existing test unless the contract's test_removals lists it. In a refactor, behaviour "
-        "must not change and nothing beyond the structural goals is 'improved'. "
-        "Never edit the foundation, OpenSpec contract, acceptance "
-        "tests, reports, CI, or .storyloop. Do not commit or push. "
-        "Work test-first: for each behaviour, write a unit test in the project's own test layout, run it "
-        "and see it fail for the intended reason, write the minimal code that makes it pass, then refactor "
-        "with the tests green. Run the project's regression command before you finish. "
-        "payload.answers lists human decisions on earlier questions; follow them and never re-ask. "
-        "Return exactly {summary:string,questions:[string],design:string}. `design` is a Markdown design "
-        "record of what you actually built, with sections ## Context, ## Goals, ## Tests First (each test "
-        "you wrote, the failure you observed before implementing, and the final green run), ## Decisions "
-        "(each: Choice, Rationale, Alternatives considered), ## Risks And Trade-Offs, ## Files "
-        "(path: responsibility); questions only for genuine product ambiguities."
-    ),
-    "review": (
-        "Independently review the real implementation against the approved stories and acceptance evidence. "
-        + FOUNDATION_NOTE + "Treat re-implementation of a listed building block, or a feature placed "
-        "against extension.md, as a finding. "
-        "payload.design_plan (when present) is the architect's plan: an implementation that departs from its "
-        "Files, interfaces or decisions without a stated reason is a finding. "
-        "payload.design is the implementer's design record; check that the unit tests it lists under "
-        "## Tests First exist in the repository and cover the behaviours claimed, and treat a missing or "
-        "hollow Tests First section as a finding. "
-        "Follow the oracle-craft skill below: a test that only asserts presence or non-emptiness, a deleted "
-        "test, or an integration oracle replaced by mocks is a finding. "
-        "Do not edit files. Return exactly {verdict:'pass'|'fail'|'needs_input',summary:string,"
-        "findings:[object],questions:[string]}. Pass only with no findings or questions."
-    ),
-    "design": (
-        "You are the architect. The contract is approved and its acceptance suite already proved RED; "
-        "before anyone writes code, produce the solution design. "
-        + FOUNDATION_NOTE + "Follow extension.md for where each layer's files go, reuse what "
-        "building-blocks.md lists, and respect modules.md's dependency direction. Read the existing code "
-        "you intend to change. Return exactly {summary:string, touched:[string], design:string, questions:[string]}: "
-        "`touched` is every EXISTING non-test file the implementation will modify (repository-relative; files "
-        "that will merely be created are described in the design, not listed here); `design` is Markdown with "
-        "## Context, ## Goals, ## Decisions (each: Choice, Rationale, Alternatives considered), ## Files "
-        "(every file to create or modify with its responsibility), ## Data And Interfaces (tables, columns, "
-        "endpoints, payloads, permission strings), ## Risks And Trade-Offs. Do not write any file. "
-        "questions only for genuine decisions the contract and the base leave open (payload.answers holds "
-        "earlier answers; never re-ask)."
-    ),
-    "characterize": (
-        "Before any implementation, lock the existing behaviour of the code this change is about to modify. "
-        + FOUNDATION_NOTE + "Read payload.change (the approved contract) and, using extension.md and "
-        "building-blocks.md, decide which EXISTING non-test files the implementation will have to modify; list "
-        "them in `touched` as repository-relative paths (files that will merely be added are not listed). For "
-        "each touched path write characterization tests in the project's own unit-test layout (payload.design, "
-        "when present, is the architect's plan: its `touched` list is mandatory and its Markdown says what will "
-        "change, so lock what must stay) (only paths under "
-        "payload.test_roots may be created or changed): assert only behaviour that MUST NOT change, use "
-        "contains-style assertions for lists or fields that the change will extend, never assert the new "
-        "behaviour. Run the tests: they must pass on the current code. payload.extend lists paths the engine "
-        "found modified without a lock; when present, characterize exactly those (payload.characterization "
-        "shows what is already locked). If nothing existing will change, return touched: [] and tests: []. "
-        "Follow the oracle-craft skill below. For a refactor, touched must include every existing file inside "
-        "the contract's refactor.scope that the change will modify. "
-        "Do not modify non-test files, do not commit. Return exactly {summary:string, touched:[string], "
-        "tests:[string], questions:[]}."
-    ),
-    "survey": (
-        "Survey this repository's foundation by following the foundation-survey skill below exactly, in "
-        "its StoryLoop-engine mode: read-only, no questions, and the final answer is only one JSON object "
-        "{documents:[{path,content}]} with `path` relative to payload.foundation_root covering every name in "
-        "payload.required_documents. payload.module_roots is the mutable area and payload.integration_paths "
-        "the build integration points; everything else is protected foundation."
-    ),
-}
 
 
 FOUNDATION_LEDGER = "foundation"  # survey calls are base work, billed apart from any change
 
+REPAIR_NOTE = (
+    "\n\nWhen payload.validation_errors is present, your previous answer "
+    "(payload.previous_response) passed the response schema but failed the engine's checks "
+    "with those errors: return a complete corrected answer that fixes exactly them and "
+    "changes nothing else."
+)
+
 
 def instructions_for(project: Path, role: str) -> str:
     """Role instructions with the role's packaged skills embedded (project copy first)."""
-    text_ = INSTRUCTIONS[role]
-    for name in ROLE_SKILLS.get(role, ()):
-        text_ += f"\n\nSkill {name}:\n" + skill_text(project, name)
-    return text_
+    return _instruction_bundle(project, role)[0]
+
+
+def _instruction_bundle(project: Path, role: str, stacks: list[str] | None = None) -> tuple[str, list[dict]]:
+    if stacks is None and (project / '.storyloop/config.json').is_file():
+        stacks = load_project_config(project).get('profile', {}).get('stacks', [])
+    text_ = INSTRUCTIONS[role] + REPAIR_NOTE
+    snapshots = []
+    for skill, snapshot in selected_snapshots(project, role, stacks or []):
+        name = snapshot["name"]
+        text_ += f"\n\nSkill {name}:\n" + skill
+        snapshots.append(snapshot)
+    return text_, snapshots
 
 
 def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
@@ -211,10 +65,29 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
     require(role in ROLES, "Unknown project agent role")
     require(isinstance(payload, dict), "Agent payload must be an object")
     config = load_project_config(project)
+    from .cost_limits import check_before_call
+    from .cross_vendor import invoke
+    from .role_profiles import enabled
+    if enabled(config):
+        from .role_subagents import routing_tier
+        payload = {**payload, 'routing_tier': routing_tier(project, payload)}
+    ledger = FOUNDATION_LEDGER if role == "survey" else _change_id(payload)
+    check_before_call(project, ledger, config)
+    return invoke(project, role, payload, config, ledger,
+                  lambda settings, degraded: _invoke_once(project, role, payload, config, settings, degraded))
+
+
+def _invoke_once(project, role, payload, config, settings, degraded):
+    from .cost_limits import check_before_call
+    ledger = FOUNDATION_LEDGER if role == "survey" else _change_id(payload)
+    check_before_call(project, ledger, config)
+    adapter_name = settings["adapter"]
+    adapter_config = {**config, **resolve_adapters(config)[adapter_name]}
     foundation = foundation_payload(project) if role != "survey" else None
     if foundation and "foundation" not in payload:
         payload = {**payload, "foundation": foundation}
-    schema = schema_for(role, payload)
+    from .role_profiles import enabled
+    schema = schema_for(role, {**payload, **({"role_profile": True} if enabled(config) else {})})
     request = {
         "protocol": "storyloop.project-agent.v1",
         "role": role,
@@ -222,11 +95,31 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
         "payload": payload,
         "response_schema": wire_schema(schema),
     }
+    instructions, skill_snapshots = _instruction_bundle(project, role, (config.get('profile') or {}).get('stacks', []))
+    from .call_context import capability_for
+    capability = capability_for(project, adapter_name)
+    profile = build_profile(project, config, role, payload,
+                            {'skill_snapshots': skill_snapshots, 'capability': capability})
+    if profile is not None:
+        profile["tier"] = settings["tier"]
+        request["role_profile"] = profile
     _bounded_json(request)
-    adapter = config.get("adapter")
     ledger = FOUNDATION_LEDGER if role == "survey" else _change_id(payload)
-    call = open_call(project, role, ledger, adapter, request)
-    trace: dict = {"stderr": "", "sessions": [], "raw": None, "repairs": 0, "schema_errors": []}
+    call = open_call(project, role, ledger, adapter_name, request)
+    from .call_context import context_manifest
+    from .call_log import record_context
+    record_context(project, call, context_manifest(project, payload, skill_snapshots))
+    if profile is not None and capability.get('subagents') is not True:
+        instructions += sequential_instructions(request)
+    trace: dict = {"stderr": "", "sessions": [], "raw": None, "repairs": 0, "schema_errors": [],
+                   "instructions": instructions, "skills": skill_snapshots, "telemetry": None}
+    return _execute_call(project, role, payload, schema, request, adapter_config, settings,
+                         degraded, profile, ledger, call, trace)
+
+
+def _execute_call(project, role, payload, schema, request, adapter_config, settings,
+                  degraded, profile, ledger, call, trace):
+    adapter, adapter_name = adapter_config.get("kind"), settings["adapter"]
     started = time.monotonic()
     result = None
     error: StoryLoopError | None = None
@@ -234,10 +127,10 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
         if adapter == "manual":
             result = _manual(project, request, schema, trace)
         elif adapter == "command":
-            result = _command(project, request, config, schema, trace)
+            result = _command(project, request, adapter_config, schema, trace)
         else:
             require(adapter == "codex", "Unknown project agent adapter")
-            result = _codex(project, request, config, schema, trace)
+            result = _codex(project, request, adapter_config, schema, trace)
         return result
     except StoryLoopError as exc:
         error = exc
@@ -246,18 +139,24 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
         raise
     finally:
         wall_ms = int((time.monotonic() - started) * 1000)
-        telemetry = result.pop("_telemetry", None) if isinstance(result, dict) else None
+        telemetry = result.pop("_telemetry", None) if isinstance(result, dict) else trace["telemetry"]
+        telemetry = dict(telemetry) if isinstance(telemetry, dict) else {}
+        telemetry.pop("skills", None)
+        telemetry["skills"] = trace["skills"]
         sessions = trace["sessions"] + _telemetry_sessions(telemetry)
         waiting = error is not None and adapter == "manual" and error.code == "NEEDS_INPUT"
         # A manual adapter waiting for input is not a failed call; everything else that raised is.
         failed = result is None and not waiting
         record_call(project, role, ledger, telemetry, wall_ms, failed=failed,
-                    call=call, session=",".join(dict.fromkeys(sessions)))
+                    call=call, session=",".join(dict.fromkeys(sessions)),
+                    engine_fields=({"tier_requested": settings["tier"], "adapter": adapter_name,
+                                    **({"degraded": degraded} if degraded else {})}
+                                   if profile is not None else None))
         close_call(project, call, status="WAITING" if waiting else "FAILED" if failed else "OK",
                    wall_ms=wall_ms, response=result, raw=trace["raw"], stderr=trace["stderr"],
                    error=str(error) if error else None, code=error.code if error else None,
                    sessions=list(dict.fromkeys(sessions)), schema_errors=trace["schema_errors"],
-                   repairs=trace["repairs"])
+                   repairs=trace["repairs"], semantic_repair="validation_errors" in payload)
 
 
 def _telemetry_sessions(telemetry: object) -> list[str]:
@@ -296,7 +195,7 @@ def _require_conforming(value: dict, schema: dict, trace: dict) -> dict:
 
 def _manual(project: Path, request: dict, schema: dict, trace: dict) -> dict:
     request_id = _request_id(request)
-    envelope = {**request, "request_id": request_id, "instructions": instructions_for(project, request["role"])}
+    envelope = {**request, "request_id": request_id, "instructions": trace["instructions"]}
     request_path = project / ".storyloop" / "requests" / f"project-{request['role']}.json"
     response_path = project / ".storyloop" / "responses" / f"project-{request['role']}.json"
     write_json(request_path, envelope, max_bytes=2_000_000)
@@ -309,6 +208,7 @@ def _manual(project: Path, request: dict, schema: dict, trace: dict) -> dict:
     require(response.get("request_id") == request_id, "Manual response does not match this request")
     result = response.get("result")
     require(isinstance(result, dict), "Manual response result must be an object")
+    _capture_telemetry(result, trace)
     result = _require_conforming(result, schema, trace)
     response_path.unlink()
     return result
@@ -327,13 +227,18 @@ def _command(project: Path, request: dict, config: dict, schema: dict, trace: di
     argv[0] = str(executable)
     result = run_process(
         argv, project, config["agent_timeout_seconds"],
-        input_text=json.dumps({**request, "instructions": instructions_for(project, request["role"])},
+        input_text=json.dumps({**request, "instructions": trace["instructions"]},
                               ensure_ascii=False),
     )
     trace["stderr"] = str(result.get("stderr") or "")
-    _check_process(result)
     trace["raw"] = result.get("stdout", "")
+    try:
+        _capture_telemetry(_parse(trace["raw"]), trace)
+    except StoryLoopError:
+        pass
+    _check_process(result)
     parsed = _parse(trace["raw"])
+    _capture_telemetry(parsed, trace)
     trace["raw"] = None
     return _require_conforming(parsed, schema, trace)
 
@@ -351,17 +256,14 @@ CODEX_SCHEMA_REPAIR_PROMPT = (
 
 
 def _codex(project: Path, request: dict, config: dict, schema: dict, trace: dict) -> dict:
-    """Run Codex in a persistent session; resume it to repair a malformed final message.
-
-    The role schema is enforced natively (`--output-schema`), which removes most format
-    failures; what still goes wrong (prose, a mismatch the CLI let through) is repaired by
-    resuming the same thread with the concrete problems. Sessions are kept on disk (no
-    --ephemeral) so `codex exec resume` keeps the context. Usage comes from the --json events.
-    """
+    """Run Codex with bounded schema repairs in the same persistent session."""
     sandbox = "workspace-write" if request["role"] in {"implement", "characterize"} else "read-only"
-    common = ["--ignore-user-config", "--color", "never", "--json"]
-    prompt = instructions_for(project, request["role"]) + "\nRequest:\n" + json.dumps(request, ensure_ascii=False)
+    model = model_for(request, config.get("models"))
+    common = ["--ignore-user-config", "--color", "never", "--json"] + (["-m", model] if model else [])
+    prompt = trace["instructions"] + sequential_instructions(request) + "\nRequest:\n" + json.dumps(request, ensure_ascii=False)
     telemetry = {"turns": 0, "input_tokens": 0, "output_tokens": 0, "segments": 0}
+    telemetry.update(sequential_profile(request, "openai", model))
+    trace["telemetry"] = telemetry
     thread: str | None = None
     next_prompt = prompt
     with tempfile.TemporaryDirectory(dir=project / ".storyloop", prefix="schema-") as folder:
@@ -398,6 +300,11 @@ def _codex(project: Path, request: dict, config: dict, schema: dict, trace: dict
             body["_telemetry"] = dict(telemetry)
             return body
     raise StoryLoopError("Project agent did not return a JSON object")  # unreachable
+
+
+def _capture_telemetry(value: object, trace: dict) -> None:
+    if isinstance(value, dict) and isinstance(value.get("_telemetry"), dict):
+        trace["telemetry"] = value["_telemetry"]
 
 
 def _codex_executable() -> list[str]:

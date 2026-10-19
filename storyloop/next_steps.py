@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shlex
+from .routing_report import routing_options
 
 
 def next_step(status: str | None, change_id: str | None, project: Path | str = "<project>",
               details: dict | None = None) -> str | None:
     """A copy-pasteable next action for a run status or error code; None when nothing is pending."""
     details = details or {}
-    change = change_id or "<change-id>"
+    options = routing_options(project, change_id, status, details)
+    if options:
+        return options[0]["command"]
+    project = shlex.quote(str(project))
+    change = shlex.quote(change_id or "<change-id>")
     where = f"{project} --change {change}"
     log = f"storyloop log {where}"
     run = f"storyloop run {where}"
@@ -30,17 +36,23 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
     if status == "WORKSPACE_TAINTED":
         return (f"git status 找出非预期改动（残留的 dev server、未声明的构建产物要加进 scratch_paths、"
                 f"代理执行了 git add），清理后 storyloop reset {where} --reason <原因>，再 {run}")
+    if status == "COST_LIMIT_REACHED":
+        return f"提高 .storyloop/config.json 的 limits 后 {run}，继续原候选与同一轮；或作废重开"
     if status == "BUDGET_EXHAUSTED":
         return (f"{log} 看每轮失败原因：验收用例本身有缺陷用 storyloop acceptance-repair {where} "
                 f"--reason <原因>；实现问题就提高 .storyloop/config.json 的 max_attempts 后 {run}，"
                 f"或另开新变更（运行开始后合同不能修订）")
     if status == "ORACLE_DEFECT":
-        return (f"必须保持成立的验收条件在旧代码上就失败了，是用例写错了：storyloop acceptance-repair {where} "
+        return (f"验收判据被判定存在缺陷，请根据停止报告中的证据修正：storyloop acceptance-repair {where} "
                 f"--reason <哪条断言写错了> 让 acceptance 角色修正，再 {run}")
     if status == "EXISTING_GREEN":
         return (f"变更验收套件在实现之前就已通过，证明不了 RED：需求若其实已经实现，放弃这个变更；"
                 f"若是用例没有断言新行为，storyloop acceptance-repair {where} --reason <原因> "
                 f"让 acceptance 角色加强套件并重证 RED，再 {run}")
+    return _execution_next(status, where, log, run)
+
+
+def _execution_next(status, where, log, run):
     if status == "CHARACTERIZATION_FAILED":
         return (f"特征化测试在旧代码上不绿：就地修正 test_roots 里的这些测试（它们只锁定现有行为），"
                 f"不用提交；{run} 会重跑单元层，绿了再提交并继续")
@@ -65,8 +77,11 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
 def draft_next(project: Path | str, change: dict) -> str:
     """A draft's next step names its open questions and blocking checklist items before suggesting approve."""
     from .requirement_checklist import blocking_items, evaluate_checklist
+    source_next = supersede_revision_next(project, change)
+    if source_next:
+        return source_next
     change_id = change["change_id"]
-    where = f"{project} --change {change_id}"
+    where = shlex.join([str(project), "--change", change_id])
     questions = len(change["product"].get("questions") or [])
     blocking = len(blocking_items(evaluate_checklist(change["product"], Path(project))))
     if not questions and not blocking:
@@ -79,3 +94,26 @@ def draft_next(project: Path | str, change: dict) -> str:
         found.append(f"{blocking} 个阻断项（见 {drafts}/checklist.md）")
     return (f"草案还有{'、'.join(found)}，approve 会被拒绝：storyloop change {where} "
             f"--message \"Q1 选推荐项；Q2 …\" 回答或修订，清零后再 storyloop approve {where}")
+
+
+def supersede_revision_next(project: Path | str, change: dict) -> str | None:
+    """Require fresh product evidence on the source branch before replacement approval."""
+    link = change.get('supersedes')
+    if not link or change['status'] != 'DRAFT':
+        return None
+    from .baseline import _git
+    root = Path(project).resolve()
+    source = link['source_branch']
+    source_head = _git(root, 'rev-parse', f'refs/heads/{source}').strip()
+    stale = (change.get('intake') or {}).get('source_commit') != source_head
+    if not stale and _git(root, 'branch', '--show-current').strip() == source:
+        return None
+    where = [str(root), '--change', change['change_id']]
+    lines = [f"旧分支 feature/{link['change_id']} 保留；先提交或暂存其中未提交的改动，再执行：",
+             shlex.join(['git', '-C', str(root), 'checkout', source])]
+    if stale:
+        message = '在当前源分支重新核对范围、风险和验收证据，修订替代合同'
+        lines.append(shlex.join(['storyloop', 'change', *where, '--message', message]))
+    lines += ['核对修订后的合同，解决入口阻塞和待决问题后，明确批准：',
+              shlex.join(['storyloop', 'approve', *where])]
+    return '\n'.join(lines)

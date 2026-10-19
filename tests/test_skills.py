@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 from storyloop.project_agents import instructions_for
-from storyloop.skills import ROLE_SKILLS, used_skills
+from storyloop.skills import select_skills, used_skills
 from storyloop.baseline import bootstrap_project
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import instructions_for, invoke_project_agent
@@ -22,7 +22,7 @@ class PackagedSkillTests(unittest.TestCase):
         skills = packaged_skills()
         self.assertIn("foundation-survey", skills)
         skill = skills["foundation-survey"]
-        self.assertEqual(skill["version"], "1.0.0")
+        self.assertEqual(skill["version"], "1.0.1")
         self.assertTrue(skill["description"])
         names = {Path(p).name for p in skill["files"]}
         self.assertEqual(names, {"SKILL.md", "doc-templates.md", "survey-checklist.md"})
@@ -41,8 +41,8 @@ class PackagedSkillTests(unittest.TestCase):
             second = install_skills(root)
             self.assertEqual(second["written"], [])
             status = skill_status(root)
-            self.assertEqual(status["foundation-survey"]["packaged"], "1.0.0")
-            self.assertEqual(status["foundation-survey"]["installed"], {t: "1.0.0" for t in SKILL_TARGETS})
+            self.assertEqual(status["foundation-survey"]["packaged"], "1.0.1")
+            self.assertEqual(status["foundation-survey"]["installed"], {t: "1.0.1" for t in SKILL_TARGETS})
 
     def test_install_on_an_initialized_project_opens_a_base_proposal(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -94,10 +94,10 @@ class SurveyUsesSkillTests(unittest.TestCase):
 class OracleCraftTests(unittest.TestCase):
     def test_oracle_craft_ships_and_reaches_the_oracle_roles(self):
         self.assertIn("oracle-craft", packaged_skills())
-        for role in ("product", "acceptance", "characterize", "review"):
-            self.assertIn("oracle-craft", ROLE_SKILLS[role])
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
+            for role in ("product", "acceptance", "characterize", "review"):
+                self.assertIn("oracle-craft", select_skills(root, role, []))
             text = instructions_for(root, "acceptance")
             self.assertIn("unknown_state", text)          # from references/acceptance-matrix.md
             self.assertIn("contains", instructions_for(root, "characterize"))
@@ -126,6 +126,22 @@ class OracleCraftTests(unittest.TestCase):
             (local / "SKILL.md").write_text("---\nname: oracle-craft\nversion: 9.9.9\ndescription: x\n---\n",
                                             encoding="utf-8")
             self.assertEqual(used_skills(root, ["oracle-craft"]), {"oracle-craft": "9.9.9"})
+
+    def test_roles_learn_attribution_and_root_cause(self):
+        with tempfile.TemporaryDirectory() as folder:
+            review = instructions_for(Path(folder), "review")
+            implement = instructions_for(Path(folder), "implement")
+            acceptance = instructions_for(Path(folder), "acceptance")
+        for phrase in ("target", "oracle", "contract", "location"):
+            self.assertIn(phrase, review)
+        self.assertIn("判据与合同的归属", review)
+        self.assertIn("payload.failures", implement)
+        self.assertIn("root_cause", implement)
+        self.assertIn('failure_evidence.source is "review"', acceptance)
+
+    def test_oracle_craft_is_version_1_1_1(self):
+        from storyloop.skills import packaged_skills
+        self.assertEqual(packaged_skills()["oracle-craft"]["version"], "1.1.1")
 
 
 if __name__ == "__main__":

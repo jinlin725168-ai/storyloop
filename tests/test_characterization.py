@@ -10,7 +10,7 @@ import unittest
 
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
-from storyloop.changes import create_change
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.project_loop import LoopServices, load_run_state, run_change
 from storyloop.project_profile import matches_test_root
 from tests.support import product

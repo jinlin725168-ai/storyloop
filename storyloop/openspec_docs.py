@@ -99,9 +99,15 @@ def validate_with_cli(project: Path, kind: str, identifier_: str) -> dict:
 
 
 def render_decisions(change: dict, answers: list[dict], manual: list[dict], resets: list[dict],
-                     repairs: list[dict] | None = None) -> str:
+                     repairs: list[dict] | None = None, overrules: list[dict] | None = None) -> str:
     """Every human input that shaped the change, in order, for later readers and reviewers."""
     lines = [f"# Decisions for {change['change_id']}", "", "## Idea", "", change.get("idea", "") or "-", ""]
+    link = change.get("supersedes")
+    if link:
+        lines += [f"## Revision of {link['change_id']}", "",
+                  f"- Problem: {link.get('blocker') or '-'}",
+                  f"- Requested change: {link.get('message') or '-'}",
+                  f"- Why it is a contract defect: {link.get('reason') or 'NEEDS_SPEC_FIX'}", ""]
     lines += ["## Product revisions", ""]
     history = change.get("history") or []
     lines += [f"- r{item.get('revision')} ({item.get('replaced_at', '')}): {item.get('message') or '(no message)'}"
@@ -121,6 +127,9 @@ def render_decisions(change: dict, answers: list[dict], manual: list[dict], rese
     lines += ["", "## Smoke suite repairs", ""]
     lines += [f"- {item.get('at', '')} ({str(item.get('commit', ''))[:9]}): {item.get('reason')}"
               for item in (repairs or [])] or ["- none"]
+    lines += ["", "## Overruled attributions", ""]
+    lines += [f"- {item.get('at', '')} {item.get('status')} at attempt {item.get('attempt')}: {item.get('reason')} "
+              f"({', '.join(item.get('findings') or [])})" for item in (overrules or [])] or ["- none"]
     return "\n".join(lines) + "\n"
 
 
@@ -236,7 +245,8 @@ def document_change(project: Path, change_id: str, design_path: Path | None = No
         (base / "design.md").write_text(design.rstrip("\n") + "\n", encoding="utf-8")
         written.append(f"openspec/changes/{change_id}/design.md")
     (base / "decisions.md").write_text(
-        render_decisions(change, answers, manual, state.get("resets") or [], state.get("repairs") or []),
+        render_decisions(change, answers, manual, state.get("resets") or [], state.get("repairs") or [],
+                         overrules=state.get("overrules") or []),
         encoding="utf-8")
     written.append(f"openspec/changes/{change_id}/decisions.md")
     if capability:

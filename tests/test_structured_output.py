@@ -12,10 +12,11 @@ from unittest.mock import patch
 
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project, load_project_config
-from storyloop.changes import create_change
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
-from storyloop.project_agents import invoke_project_agent
+from storyloop.project_agents import conform, invoke_project_agent
 from storyloop.project_loop import LoopServices, run_change
+from storyloop.role_schemas import schema_for
 from storyloop.storage import write_json
 from tests.support import product
 from tests.test_baseline_behavior import repository
@@ -63,9 +64,15 @@ class CodexStructuredOutputTests(unittest.TestCase):
             with patch("storyloop.project_agents.run_process", capture), \
                     patch("storyloop.project_agents._codex_executable", return_value=["codex"]):
                 result = invoke_project_agent(root, "implement", {"change": {"change_id": "FEAT-9"}})
-            self.assertEqual(result, {"summary": "done", "questions": []})  # null optional field dropped
-            self.assertEqual(seen[0]["required"], ["summary", "questions", "design"])
+            self.assertEqual(result, {"summary": "done", "questions": []})  # nullable fields dropped
+            self.assertEqual(seen[0]["required"], ["summary", "questions", "design", "facts"])
             self.assertEqual(list(root.glob(".storyloop/schema-*")), [])
+
+    def test_a_legacy_answer_may_omit_nullable_facts(self):
+        legacy = {"summary": "done", "questions": [], "design": None}
+        normalized, errors = conform(legacy, schema_for("implement", {}))
+        self.assertEqual(errors, [])
+        self.assertEqual(normalized, {"summary": "done", "questions": []})
 
     def test_a_schema_mismatch_is_repaired_in_the_same_thread_with_the_concrete_problems(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -160,6 +167,8 @@ def contract_breaking_implement(attempts: list):
 
 
 def passing_review(project, context):
+    if context.get("mode") == "consistency":
+        return {"verdict": "coherent", "summary": "ok", "findings": [], "questions": []}
     return {"verdict": "pass", "summary": "ok", "findings": [], "questions": []}
 
 

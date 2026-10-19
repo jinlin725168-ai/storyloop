@@ -1,6 +1,7 @@
 ---
 name: foundation-survey
-version: 1.0.0
+version: 1.0.1
+roles: [survey]
 description: 底座摸底：只读探索一个已有仓库（README、构建文件、代码、接口、已有测试、验收工具），写出模块组成、架构与运行机制、扩展新功能机制、接口清单、能力清单、可复用积木、测试基础设施八份文档，挂到 openspec/foundation/ 作为受保护的底座知识库。当用户说"摸底底座"、"建立底座知识库"、"survey the foundation"、"这个项目怎么扩展新功能"，或 StoryLoop 引擎以 survey 角色调用时使用。只写知识库文档，不改代码。
 ---
 

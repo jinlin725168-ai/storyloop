@@ -14,6 +14,8 @@ Linux / WSL2：
 python3 -m venv .venv && .venv/bin/pip install .
 
 .venv/bin/storyloop init ~/work/my-project --settings ~/work/storyloop-settings.json
+.venv/bin/storyloop readiness ~/work/my-project --json
+# 若有缺口，先补基础或按报告用 --readiness DIGEST --reason 明确确认
 .venv/bin/storyloop change ~/work/my-project --idea "增加订单取消功能，已发货订单不能取消"
 # 终端里会逐条提出澄清问题（回车选推荐项）；满意后批准，闭环自动跑到底或停在明确的人工停点
 .venv/bin/storyloop approve ~/work/my-project --change FEAT-20260916-001
@@ -26,6 +28,8 @@ PowerShell：
 python -m pip install .
 
 storyloop init C:\work\my-project
+storyloop readiness C:\work\my-project --json
+# READY 后再共创需求；缺口按报告补齐或明确确认
 storyloop change C:\work\my-project --idea "增加订单取消功能，已发货订单不能取消"
 
 # 审核 .storyloop/drafts/<change-id>/ 中的故事和验收条件；需要时继续修订
@@ -42,6 +46,8 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 
 新人从 [定位与概念手册](docs/concepts.md) 和 [入门教程](docs/tutorial.md) 开始；完整说明见 [使用指南](docs/product-iteration-guide.md)，接入自己的仓库见 [接入手册](docs/onboarding-a-repository.md)。`docs/` 是本项目的知识库，入口是 [docs/README.md](docs/README.md)：使用文档之外，按模块、架构、扩展、接口、能力、积木、测试组织了给贡献者和代理读的工程文档。
 
+新协议按 light / standard / heavy 分流，重档先审核方案再实现；完整命令、预算与恢复见 [分流指南](docs/routing-guide.md)。最终报告按读者分成 0–6 节，并在每条信息旁保留来源与可用性。
+
 ## 核心保证
 
 - 产品层输入：用户无需编写技术方案和详细任务文档。
@@ -56,15 +62,17 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 - 底座独立演进：普通功能触碰底座会暂停并产生 `BASE-*` 提案。
 - CI 中立：只提供 `storyloop ci ...`；不创建或覆盖 GitHub Actions、GitLab CI、Jenkins 文件。项目自己的流水线由人通过 `base-propose --allow-ci` 纳入底座，参考模板见 [接入手册的 CI 一节](docs/onboarding-a-repository.md#9-ci)。
 - 自动本地 Git：控制器只创建本地功能分支、提交并 `--no-ff` 合并；控制器代码不调用 push、删除分支或重写历史。
-- 证据追溯：报告映射需求、故事、验收条件、测试、真实命令结果、证据摘要、实现提交和最终合并提交。
+- 证据追溯：报告映射需求、故事、验收条件、测试、命令结果、证据摘要、实现提交和最终合并提交。🔧 是引擎可核对的事实或计算，👤 是人工记录，🤖 是代理陈述；`NOT_AVAILABLE` 与 `PENDING` 不会显示成零或通过。
+- 调用对账：报告将 telemetry ledger 与每次调用的诊断 metadata 双向核对，列出失败调用及实际冻结的技能版本/哈希。调用覆盖只证明已持久化的实际调用，不会倒推未记录的理论调度次数；费用仅部分回报时显示已知小计，完整总额保持未知。
 
 ```mermaid
 flowchart TD
     A[干净的单一 Git 仓库] --> B[锁定底座]
-    B --> C[产品故事与验收条件共创]
+    B --> R[readiness 与缺口处理]
+    R --> C[产品故事与验收条件共创]
     C --> D{用户批准}
     D --> E[变更验收套件盲写并证明 RED]
-    E --> E1[design 出方案并圈定要改的既有文件<br/>故事数 ≥ design_min_stories 时]
+    E --> E1[L2 方案量测<br/>heavy 须明确方案批准]
     E1 --> E2[特征化测试锁定将改动的现有行为]
     E2 --> F[AI 实现：TDD 先红后绿]
     F --> G[单元 + 集成 + 变更验收 + 系统冒烟 + 静态检查 + 独立审查]
@@ -110,7 +118,7 @@ my-project/
 │  ├─ smoke/                           项目级系统冒烟：manifest.json + 核心链路用例，跨变更累积，只经人批准更新
 │  └─ ui/                              旧版本留下的 UI 回归资产（不进候选副本、不是证据，引擎不再生成）
 ├─ modules/ 或 features/               新业务模块（module_roots 可配置为任何目录）
-└─ reports/storyloop/<change-id>/      JSON 与 Markdown 验收报告，含成本与耗时
+└─ reports/storyloop/<change-id>/      同源 JSON/Markdown 验收报告，含来源、对账、成本覆盖与合并回执
 ```
 
 初始化时可变区之外的已跟踪文件都属于稳定底座；可变区（`module_roots`）可以是任何目录，包括已有代码的目录。`pom.xml`、`package.json` 等构建集成点如需修改，会转成独立底座提案。构建系统在仓库根或一级子目录（monorepo）都能被探测到。`.storyloop` 被加入仓库本地 `.git/info/exclude`，不会修改项目的 `.gitignore`。
@@ -129,13 +137,14 @@ my-project/
 | `ci PATH --change ID` | CI 入口：隔离运行该变更的验收套件和项目级系统冒烟 |
 | `report PATH --change ID` | 定位最终验收报告 |
 | `base-propose PATH --path P [--path P2] --reason TEXT [--allow-mutable] [--allow-ci]` | 为计划中的底座改动开 BASE 提案（无需先触发功能变更）；`--allow-ci` 是 CI 配置进入或修改底座的唯一通道，由人决定，代理永远不能 |
-| `base-update PATH --proposal BASE-ID` | 校验独立底座提交、完整回归并提升底座版本 |
+| `base-update PATH --proposal BASE-ID [--confirm-oracle-skills]` | 校验独立底座提交、完整回归并提升底座版本 |
 | `accept PATH --change ID --criterion A1 --note TEXT` | 记录人工验收条件已由人确认（仅在 `MANUAL_ACCEPTANCE_REQUIRED` 停点可用） |
 | `answer PATH --change ID --answer TEXT [--answer TEXT]` | 回答 `NEEDS_INPUT` 停点的问题（按顺序；只给一个答案则适用于全部）。在终端里 `run`/`approve` 会直接提问，无需此命令 |
 | `reset PATH --change ID --reason TEXT` | 人工复位卡住的运行（`WORKSPACE_TAINTED`，或人工验收等待期间工作区已变）；不动文件，被中断的一轮不计预算，理由留痕 |
 | `acceptance-repair PATH --change ID --reason TEXT` | 变更验收用例本身有缺陷时，让 acceptance 角色修自己的套件并从合同提交重新证明 RED；之前的尝试作废，理由写入 decisions.md（旧名 `smoke-repair`） |
 | `smoke-propose PATH --change ID` | 变更合并后，acceptance 角色提议把哪些核心链路并入或更新项目级系统冒烟，草案写到 `.storyloop/drafts/smoke/<id>/` |
 | `smoke-apply PATH --change ID` | 人审核草案后安装到 `acceptance/smoke/`，隔离跑绿才提交；红的草案不留任何改动 |
+| `adapters check PATH [--json]` | 检查角色适配器能力与档次映射 |
 | `skills PATH` | 把引擎自带的技能包（`foundation-survey`）安装或刷新到项目的 `.claude/skills/` 与 `.codex/skills/`，Claude Code 与 Codex 都能直接用；已初始化的项目自动开 BASE 提案 |
 | `survey PATH [--reason TEXT] [--from FILE]` | 底座摸底：survey 角色只读探索仓库，写出 `openspec/foundation/` 知识库（模块、架构、扩展机制、接口、能力、积木、测试）并开 BASE 提案；提交后 `base-update` 即受保护，之后每个角色起手先读它。产物校验失败时原始回答保存在 `.storyloop/state/foundation/last-survey.json`，人工修正后用 `--from` 安装，不再调用代理 |
 | `document PATH --change ID [--design FILE] [--capability NAME]` | 为已 PASSED 的变更补生成 design.md、decisions.md 和活规格（配合 `base-propose`/`base-update` 提交） |
@@ -168,7 +177,7 @@ Windows 上自动探测到的 `.cmd`、`.bat`、`.ps1` 包装器不会被直接�
 {"unit_commands":[["{python}","-m","unittest","discover","-s","tests/unit"]],"integration_commands":[["{python}","-m","unittest","discover","-s","tests/integration"]],"check_commands":[["ruff","check","."]],"test_roots":["tests"],"module_roots":["modules","features"],"integration_paths":["pyproject.toml"]}
 ```
 
-settings 只接受这些键，未知键会报错：`unit_commands`（旧名 `test_commands`）、`integration_commands`、`check_commands`、`test_roots`、`module_roots`、`integration_paths`、`candidate_allow`、`scratch_paths`。含义与默认值见 [接口与配置](docs/api.md#三配置)。`max_attempts`、`design_min_stories`、适配器等运行参数不在 settings 里，直接改 `.storyloop/config.json`。
+settings 只接受这些键，未知键会报错：`unit_commands`（旧名 `test_commands`）、`integration_commands`、`check_commands`、`test_roots`、`module_roots`、`integration_paths`、`candidate_allow`、`scratch_paths`，以及可选正整数 `max_attempts`。含义与默认值见 [接口与配置](docs/api.md#三配置)。`max_attempts` 也可在 `.storyloop/config.json` 显式设置；`design_min_stories`、适配器等运行参数直接改该文件。
 
 ```powershell
 storyloop init C:\work\my-project --settings C:\work\settings.json
@@ -187,3 +196,25 @@ storyloop init C:\work\my-project --settings C:\work\settings.json
 ## 许可证
 
 当前作为本地工程交付，尚未指定对外分发许可证。
+
+## 角色画像与跨厂商审查
+
+配置 `adapters` 和 `roles` 后，引擎给每次调用附加 `role_profile`：请求档次只有 `strong`/`standard`，与变更的 light/standard/heavy 档位分开。标准档 implement 默认 strong；review 默认 strong。适配器选择模型并回报实际 model/vendor/tier，报告第 5 节逐调用展示请求 → 实际与“已生效 / 未生效 / 未配置”。这些是适配器回报，并非模型质量或工具权限的机器证明。
+
+```json
+{
+  "adapters": {
+    "claude": {"kind": "command", "agent_command": ["{python}", "/abs/claude_agent.py", "--tier-model", "strong=opus", "--tier-model", "standard=sonnet"]},
+    "codex": {"kind": "codex", "models": {"strong": "<本机已核实可用模型>", "standard": "<本机已核实可用模型>"}}
+  },
+  "roles": {"default_adapter": "claude", "review": {"adapter": "codex"}},
+  "cross_vendor_review": {"enabled": true, "on_unavailable": "fail_closed"},
+  "limits": {"max_calls": 80, "max_agent_wall_seconds": 28800, "max_tokens": null, "max_cost_usd": null}
+}
+```
+
+先在干净项目执行 `init`，再 `skills`。若 skills 返回 BASE 提案，按提案把列出的文件独立提交，再执行 `base-update PROJECT --proposal BASE-ID --confirm-oracle-skills`；确认覆盖判据角色技能是有意变更。将上述配置合入 `.storyloop/config.json`，运行 `storyloop adapters check PROJECT --json`，然后 `change → approve → run`（approve 默认会开始运行）。准备度、重档和设计批准仍遵循原有门禁。具体协议见 [API](docs/api.md)，证据与重放步骤见 [角色画像验收](docs/superpowers/reports/2026-10-19-子项目4-验收.md)。
+
+从源码工作树验收时，CLI 和 command 适配器必须使用同一份引擎。共享 venv 若 editable 安装指向另一工作树，直接执行示例 `.py` 会导入那份代码；请在专用环境安装当前工作树，或显式设置适配器 Python 的模块搜索路径。真实验收使用显式 `sys.path.insert(0, WORKTREE)` 的 `python -c` 包装，并记录 `storyloop.__file__` 与 HEAD；没有把旧安装的结果当成新实现证据。
+
+`COST_LIMIT_REACHED` 在下一次调用前停止；提高 limits 后 `run` 恢复。失败调用也计成本；没有费用回报时只展示已知费用覆盖，不估价、不把未知当作零。无画像的旧配置继续工作，已有报告与回执保持原字节；缺少旧诊断的历史报告不会凭空补齐新状态。

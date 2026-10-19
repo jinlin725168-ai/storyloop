@@ -7,6 +7,14 @@ import io
 import json
 from pathlib import Path
 import unittest
+import tempfile
+import sys
+
+from storyloop.baseline import bootstrap_project
+from storyloop.project_agents import invoke_project_agent
+from storyloop.storage import load_json, write_json
+from storyloop.telemetry import ledger_entries
+from tests.test_baseline_behavior import repository
 from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location(
@@ -43,10 +51,13 @@ class ClaudeAdapterTests(unittest.TestCase):
         with patch.object(adapter.subprocess, "run", fake_run), \
                 patch.object(adapter.shutil, "which", return_value="/usr/bin/claude"), \
                 patch("sys.stdin", io.StringIO(json.dumps(request))), \
-                patch("sys.stdout", new_callable=io.StringIO) as out:
+                patch("sys.stdout", new_callable=io.StringIO) as out, \
+                patch("sys.stderr", new_callable=io.StringIO) as err:
             code = adapter.main_with_args(["--segment-turns", "60", "--max-segments", "5"])
         self.assertEqual(code, 0)
         self.assertEqual(len(calls), 3)
+        self.assertIn("segment 1 hit the turn cap", err.getvalue())
+        self.assertIn("cost=$1.0000", err.getvalue())
         self.assertNotIn("--resume", calls[0][0])
         self.assertIn("--resume", calls[1][0])
         self.assertEqual(calls[1][0][calls[1][0].index("--resume") + 1], "sid-1")
@@ -138,14 +149,14 @@ class ReviewPerspectiveTests(unittest.TestCase):
                 patch("sys.stderr", new_callable=io.StringIO):
             code = adapter.main_with_args([])
         self.assertEqual(code, 0)
-        self.assertEqual(len(calls), len(adapter.REVIEW_PERSPECTIVES) + 1)
+        self.assertEqual(len(calls), 4 + 1)
         result = json.loads(out.getvalue())
         self.assertEqual(result["verdict"], "fail")
         self.assertEqual(result["findings"][0]["perspective"], "security")
         telemetry = result["_telemetry"]
-        self.assertEqual(telemetry["perspectives"], len(adapter.REVIEW_PERSPECTIVES))
-        self.assertAlmostEqual(telemetry["cost_usd"], 0.1 * len(adapter.REVIEW_PERSPECTIVES) + 0.2)
-        self.assertEqual(telemetry["turns"], 2 * len(adapter.REVIEW_PERSPECTIVES) + 3)
+        self.assertEqual(telemetry["perspectives"], 4)
+        self.assertAlmostEqual(telemetry["cost_usd"], 0.1 * 4 + 0.2)
+        self.assertEqual(telemetry["turns"], 2 * 4 + 3)
 
     def test_perspectives_can_be_disabled_for_a_single_review_session(self):
         calls = []
@@ -296,6 +307,57 @@ class ImplementLaneTests(unittest.TestCase):
             code = adapter.main_with_args(self.LANES)
         self.assertEqual(code, 1)
         self.assertIn("frontend", err.getvalue())
+
+
+class ClaudeProfileTests(unittest.TestCase):
+    def test_legacy_command_config_preserves_telemetry_field_set(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            config = load_json(root / '.storyloop/config.json')
+            driver = Path(__file__).parent / 'fixtures/fake_cli/claude_driver.py'
+            config.update(adapter='command', agent_command=[sys.executable, str(driver.resolve())])
+            self.assertNotIn('adapters', config)
+            self.assertNotIn('roles', config)
+            write_json(root / '.storyloop/config.json', config)
+            write_json(root / 'scenario.json', {'result': {'summary': 'done', 'questions': []}})
+            result = invoke_project_agent(root, 'implement', {'change_id': 'FEAT-1'})
+            self.assertEqual(result, {'summary': 'done', 'questions': []})
+            self.assertEqual(set(ledger_entries(root, 'FEAT-1')[0]),
+                             {'role', 'wall_ms', 'at', 'call', 'skills', 'model', 'cost_usd',
+                              'turns', 'duration_ms', 'input_tokens', 'output_tokens', 'segments'})
+            prompt = load_json(root / 'cli-request.json')['prompt']
+            self.assertNotIn('role_profile', json.loads(prompt.split('Request:\n')[-1]))
+
+    def test_handshake_never_starts_model_and_rejects_invalid_mapping(self):
+        request = {'protocol': 'storyloop.adapter-capabilities.v1'}
+        with patch.object(adapter.subprocess, 'run') as run, \
+                patch('sys.stdin', io.StringIO(json.dumps(request))), \
+                patch('sys.stdout', new_callable=io.StringIO) as out:
+            code = adapter.main_with_args(['--tier-model', 'standard=small'])
+        self.assertEqual(code, 0)
+        run.assert_not_called()
+        self.assertEqual(json.loads(out.getvalue())['tiers'], ['standard'])
+        with patch('sys.stdin', io.StringIO(json.dumps(request))), \
+                patch('sys.stderr', new_callable=io.StringIO):
+            self.assertEqual(adapter.main_with_args(['--tier-model', 'strong=']), 2)
+
+    def test_unmapped_legacy_model_does_not_claim_tier(self):
+        request = {'role': 'implement', 'project': '/tmp/p', 'payload': {},
+                   'role_profile': {'tier': 'strong', 'subagents': {}}, 'instructions': 'implement'}
+        reply = Completed(envelope('success', '{"summary":"done","questions":[]}', 'sid', 0.1, 1))
+        with patch.object(adapter.subprocess, 'run', return_value=reply) as run, \
+                patch.object(adapter.shutil, 'which', return_value='/usr/bin/claude'), \
+                patch('sys.stdin', io.StringIO(json.dumps(request))), \
+                patch('sys.stdout', new_callable=io.StringIO) as out, \
+                patch('sys.stderr', new_callable=io.StringIO):
+            self.assertEqual(adapter.main_with_args(['--model', 'legacy-model']), 0)
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index('--model') + 1], 'legacy-model')
+        telemetry = json.loads(out.getvalue())['_telemetry']
+        self.assertEqual(telemetry['vendor'], 'anthropic')
+        self.assertNotIn('tier_applied', telemetry)
 
 
 if __name__ == "__main__":

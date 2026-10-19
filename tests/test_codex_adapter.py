@@ -11,7 +11,9 @@ from unittest.mock import patch
 from storyloop.baseline import bootstrap_project
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import invoke_project_agent
-from storyloop.telemetry import summarize
+from storyloop.telemetry import summarize, ledger_entries, record_call
+from storyloop.storage import load_json, write_json
+from storyloop.adapter_capabilities import check
 from tests.test_baseline_behavior import repository
 
 THREAD = "01a0bf27-ea11-7450-bb4a-7d83c21d63db"
@@ -63,6 +65,13 @@ class CodexAdapterTests(unittest.TestCase):
             self.assertEqual(summary["calls"], 1)
             self.assertEqual(summary["by_role"]["implement"]["turns"], 1)
             self.assertIsNone(summary["cost_usd"])
+            config = load_json(root / '.storyloop/config.json')
+            self.assertNotIn('adapters', config)
+            self.assertNotIn('roles', config)
+            self.assertEqual(set(ledger_entries(root, 'FEAT-1')[0]),
+                             {'role', 'wall_ms', 'at', 'call', 'session', 'skills',
+                              'turns', 'input_tokens', 'output_tokens', 'segments'})
+
 
     def test_non_json_final_message_is_repaired_by_resuming_the_thread(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -91,6 +100,78 @@ class CodexAdapterTests(unittest.TestCase):
                     self.assertRaises(StoryLoopError):
                 invoke_project_agent(root, "review", {"change": {"change_id": "FEAT-3"}})
             self.assertEqual(len(fake.calls), 3)  # one run plus two repairs
+
+
+class CodexProfileTests(unittest.TestCase):
+    def test_requested_model_reaches_cli_and_ledger(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            project(root)
+            config = load_json(root / '.storyloop/config.json')
+            config.update(adapters={'primary': {'kind': 'codex', 'models': {
+                'strong': 'mapped-strong', 'standard': 'mapped-standard'}}}, roles={'default_adapter': 'primary'})
+            write_json(root / '.storyloop/config.json', config)
+            fake = FakeCodex(['{"summary":"done","questions":[]}'])
+            with patch('storyloop.project_agents.run_process', fake), \
+                    patch('storyloop.project_agents._codex_executable', return_value=['codex']):
+                invoke_project_agent(root, 'implement', {'change_id': 'FEAT-1', 'routing_tier': 'light'})
+            argv = fake.calls[0][0]
+            self.assertEqual(argv[argv.index('-m') + 1], 'mapped-standard')
+            entry = ledger_entries(root, 'FEAT-1')[0]
+            self.assertEqual(entry['tier_requested'], 'standard')
+            self.assertEqual(entry['tier_applied'], 'standard')
+            self.assertEqual(entry['model'], 'mapped-standard')
+            self.assertEqual(entry['vendor'], 'openai')
+            self.assertEqual(entry['adapter'], 'primary')
+            self.assertEqual(entry['path_guard'], 'unsupported')
+            self.assertEqual(entry['subagents_applied']['mode'], 'sequential')
+
+    def test_missing_configured_tier_rejected_before_cli(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            project(root)
+            config = load_json(root / '.storyloop/config.json')
+            config.update(adapters={'primary': {'kind': 'codex', 'models': {'standard': 'small'}}},
+                          roles={'default_adapter': 'primary'})
+            write_json(root / '.storyloop/config.json', config)
+            with self.assertRaises(StoryLoopError) as caught:
+                check(root)
+            self.assertEqual(caught.exception.code, 'ADAPTER_PROFILE_UNSUPPORTED')
+
+    def test_unconfigured_models_do_not_claim_applied_tier(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            project(root)
+            config = load_json(root / '.storyloop/config.json')
+            config.update(adapters={'primary': {'kind': 'codex'}}, roles={'default_adapter': 'primary'})
+            write_json(root / '.storyloop/config.json', config)
+            fake = FakeCodex(['{"summary":"done","questions":[]}'])
+            with patch('storyloop.project_agents.run_process', fake), \
+                    patch('storyloop.project_agents._codex_executable', return_value=['codex']):
+                invoke_project_agent(root, 'implement', {'change_id': 'FEAT-2'})
+            self.assertNotIn('-m', fake.calls[0][0])
+            entry = ledger_entries(root, 'FEAT-2')[0]
+            self.assertNotIn('tier_applied', entry)
+            self.assertNotIn('model', entry)
+            self.assertEqual(entry['vendor'], 'openai')
+
+
+class AdapterDiagnosticTests(unittest.TestCase):
+    def test_diagnostics_reject_malformed_claims_and_cannot_spoof_engine_fields(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for count in (-1, True, 1.5, 10001, '1'):
+                telemetry = {'path_guard': 'unsupported', 'adapter': 'spoof', 'tier_requested': 'spoof',
+                    'subagents_applied': {'mode': 'sequential', 'perspectives': count, 'explore': 0, 'lanes': 0}}
+                entry = record_call(root, 'review', 'FEAT-1', telemetry, 1)
+                self.assertNotIn('subagents_applied', entry)
+                self.assertNotIn('adapter', entry)
+                self.assertNotIn('tier_requested', entry)
+                self.assertEqual(entry['path_guard'], 'unsupported')
+            telemetry = {'path_guard': ['enforced'], 'subagents_applied': {'mode': ['parallel']}}
+            entry = record_call(root, 'review', 'FEAT-1', telemetry, 1)
+            self.assertNotIn('path_guard', entry)
+            self.assertNotIn('subagents_applied', entry)
 
 
 if __name__ == "__main__":

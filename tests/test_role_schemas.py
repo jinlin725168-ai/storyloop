@@ -62,5 +62,22 @@ class RoleSchemaTests(unittest.TestCase):
         self.assertIs(schema_for("acceptance", {}), SCHEMAS["acceptance"])
 
 
+class FindingTargetTests(unittest.TestCase):
+    def test_a_finding_may_name_its_target_and_location(self):
+        from storyloop.role_schemas import normalize, schema_errors, schema_for
+        schema = schema_for("review", {})
+        body = normalize({"verdict": "fail", "summary": "s", "questions": [], "findings": [
+            {"message": "m", "perspective": None, "criterion_id": "A33", "evidence": None,
+             "target": "oracle", "location": "acceptance/changes/X/t.py:70"}]}, schema)
+        self.assertEqual(schema_errors(body, schema), [])
+
+    def test_an_unknown_target_is_rejected(self):
+        from storyloop.role_schemas import normalize, schema_errors, schema_for
+        schema = schema_for("review", {})
+        body = normalize({"verdict": "fail", "summary": "s", "questions": [], "findings": [
+            {"message": "m", "target": "someone-else"}]}, schema)
+        self.assertTrue(schema_errors(body, schema))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .answers import load_answers
 from .baseline import _git, advance_repository_head
-from .change_report import generate_change_report
+from .change_report import correction_view, generate_change_report
 from .manual_acceptance import load_manual_acceptance, pending_manual_criteria
 from .models import require
 from .openspec_docs import capability_of, merge_into_main_spec, render_decisions, validate_with_cli
@@ -54,10 +54,13 @@ def complete_change(
         implementation = commit_paths(project, changed_paths, subject)
     telemetry = {**summarize(project, change_id), "attempts": state["attempt"],
                  "loop_ms": _loop_ms(state)}
+    state["review"] = review
+    save_run(project, state)
     report_path = generate_change_report(
         project, change_id, implementation["commit"], layers, review,
         manual_acceptance=manual, telemetry=telemetry,
         oracle=state.get("oracle"), skills_used=state.get("skills_used"),
+        correction=correction_view(state, change),
     )
     state["manual_acceptance"] = manual
     state["telemetry"] = telemetry
@@ -96,6 +99,8 @@ def finish_merged(project: Path, change: dict, state: dict) -> dict:
 def finish_receipting(project: Path, change: dict, state: dict) -> dict:
     integration = ensure_merge_receipt(project, state)
     advance_repository_head(project, integration)
+    from .readiness_lineage import advance_readiness
+    advance_readiness(project, {**state, "integration_commit": integration})
     state.update({"status": "FINALIZING", "integration_commit": integration,
                   "report_sha256": hashlib.sha256(Path(state["report"]).read_bytes()).hexdigest()})
     save_run(project, state)
@@ -177,7 +182,7 @@ def _write_openspec_artifacts(project: Path, change: dict, state: dict, manual: 
         (base / "design.md").write_text("\n\n".join(parts) + "\n", encoding="utf-8")
         written.append(f"openspec/changes/{change_id}/design.md")
     decisions = render_decisions(change, load_answers(project, change_id), manual, state.get("resets") or [],
-                                 state.get("repairs") or [])
+                                 state.get("repairs") or [], overrules=state.get("overrules") or [])
     (base / "decisions.md").write_text(decisions, encoding="utf-8")
     written.append(f"openspec/changes/{change_id}/decisions.md")
     capability = capability_of(change["product"], change_id)

@@ -13,7 +13,7 @@ import unittest
 from storyloop.answers import record_answers
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
-from storyloop.changes import create_change
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.storage import load_json, write_json
 from storyloop.project_loop import LoopServices, load_run_state, run_change

@@ -18,7 +18,9 @@ def control_digest(
     # Staged content is covered semantically by `git diff --cached` below.
     relative_paths = [
         ".git/HEAD", ".git/config", ".git/info/exclude", ".git/packed-refs",
-        ".storyloop/config.json", ".storyloop/baseline.json",
+        ".storyloop/config.json", ".storyloop/baseline.json", "openspec/principles.json",
+        ".storyloop/state/readiness.json",
+        f"openspec/changes/{change_id}/routing-plan.json",
         f".storyloop/state/changes/{change_id}.json",
         f".storyloop/state/smoke/{change_id}.json",
         f".storyloop/state/suites/{change_id}.json",
@@ -57,19 +59,31 @@ def set_change_status(project: Path, change: dict, status: str) -> None:
                updated, max_bytes=2_000_000)
 
 
-def pause_for_boundary(project: Path, state: dict, boundary: dict) -> dict:
-    return pause(project, state, boundary["status"],
-                 violations=boundary["violations"],
-                 base_proposal=boundary["base_proposal"])
+def pause_for_boundary(
+    project: Path, state: dict, boundary: dict, phase: str | None = None,
+) -> dict:
+    details = {
+        "violations": boundary["violations"],
+        "base_proposal": boundary["base_proposal"],
+    }
+    if phase is not None:
+        details["phase"] = phase
+    return pause(project, state, boundary["status"], **details)
 
 
 def pause(project: Path, state: dict, status: str, **details) -> dict:
     """Persist an explicit stop with its details; the result always names the next command."""
+    from .stop_report import build_stop
+
     state["status"] = status
-    state.update(details)
+    persisted_details = {key: value for key, value in details.items() if key != "phase"}
+    state.update(persisted_details)
+    state["stop"] = build_stop(project, state, status, details)
     save_run(project, state)
-    hint = details.get("next") or next_step(status, state["change_id"], project, details)
-    return {"status": status, "change_id": state["change_id"], **details, "next": hint}
+    hint = (details.get("next") or next_step(status, state["change_id"], project, {**state, **details})
+            or state["stop"]["resume"])
+    return {"status": status, "change_id": state["change_id"], **details,
+            "stop": state["stop"], "next": hint}
 
 
 def _path_digest(project: Path, relative_paths: list[str]) -> str:

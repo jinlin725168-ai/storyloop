@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import subprocess
 import tempfile
@@ -11,7 +12,7 @@ from unittest.mock import patch
 
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
-from storyloop.changes import create_change
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.manual_acceptance import record_manual_acceptance
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, load_run_state, run_change
@@ -28,10 +29,13 @@ def _services(change_id: str) -> LoopServices:
         target = project / "modules/orders/service.py"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("VALUE = 1\n", encoding="utf-8")
-        return {"summary": "done", "questions": []}
+        return {"summary": "done", "questions": [], "facts": [
+            {"statement": "implementation fact", "location": "modules/orders/service.py:1"}]}
 
     return LoopServices(generate_smoke=lambda p, s: smoke_payload(change_id), implement=implement,
-                        review=lambda p, c: {"verdict": "pass", "summary": "ok", "findings": [], "questions": []})
+                        review=lambda p, c: {"verdict": "pass", "summary": "ok", "findings": [], "questions": [],
+                                             "facts": [{"statement": "review fact",
+                                                        "location": "modules/orders/service.py:1"}]})
 
 
 def _approved(root: Path, with_ui_asset: bool) -> str:
@@ -48,6 +52,16 @@ def _approved(root: Path, with_ui_asset: bool) -> str:
 
 
 class CompletionResilienceTests(unittest.TestCase):
+    def test_report_collection_sees_final_implement_and_review_facts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = _approved(root, with_ui_asset=False)
+            done = run_change(root, change_id, _services(change_id))
+            report = json.loads(Path(done["report"]).read_text(encoding="utf-8"))
+            process = report["presentation"]["sections"]["4"]["items"]
+            facts = [item["data"]["statement"] for item in process if item["id"].startswith("facts:")]
+            self.assertEqual(facts, ["implementation fact", "review fact"])
+
     def test_completion_resumes_after_a_crash_following_the_implementation_commit(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

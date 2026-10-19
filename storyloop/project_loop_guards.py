@@ -16,6 +16,9 @@ from .models import StoryLoopError, require
 from .project_loop_support import control_digest
 
 
+_VISIBILITY_MESSAGE_LIMIT = 20
+
+
 def write_safely(project: Path, change_id: str, operation: Callable[[], dict]) -> tuple[dict, list]:
     """Run an agent that may write the workspace; the control plane and the index must stay untouched."""
     before = capture_snapshot(project, include_control=True, include_ignored=True)
@@ -142,11 +145,20 @@ def _without_scratch(changes: list, scratch: list[str]) -> list:
 def require_git_visible(touched: list, boundary: dict) -> None:
     visible = {item["path"] for key in ("allowed", "violations")
                for item in boundary[key]}
-    invisible = [item.path for item in touched
+    invisible = [item for item in touched
                  if not item.path.endswith("/") and item.path not in visible]
     if invisible:
-        raise StoryLoopError("Implementation created or modified ignored files",
-                             code="WORKSPACE_TAINTED")
+        shown = [item.path for item in invisible[:_VISIBILITY_MESSAGE_LIMIT]]
+        suffix = (f" (+{len(invisible) - len(shown)} more)"
+                  if len(invisible) > len(shown) else "")
+        raise StoryLoopError(
+            "Implementation created or modified ignored files: " + ", ".join(shown) + suffix,
+            code="WORKSPACE_TAINTED",
+            details={"invisible": [
+                {"path": item.path, "kind": item.kind}
+                for item in invisible
+            ]},
+        )
 
 
 def exists_at(project: Path, commit: str, path: str) -> bool:

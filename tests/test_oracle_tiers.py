@@ -10,7 +10,7 @@ import unittest
 
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
-from storyloop.changes import create_change
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.smoke import install_smoke_suite
 from storyloop.acceptance_repair import repair_smoke
@@ -215,7 +215,7 @@ class FailedRepairTests(unittest.TestCase):
                 {"message": "keep going"}], "questions": []}
             run_change(root, change_id, LoopServices(generate_smoke=lambda p, s: suite(change_id, 1, 0),
                                                      implement=implement, review=review))
-            self.assertEqual(load_run_state(root, change_id)["status"], "BUDGET_EXHAUSTED")
+            self.assertEqual(load_run_state(root, change_id)["status"], "NO_PROGRESS")
             # New suite: AC-1 passes once the implementation exists; AC-2 ("must hold") checks a file that only
             # the implementation creates, so it fails on the contract commit: the suite itself is defective.
             exists = ("from pathlib import Path\nimport sys\n"

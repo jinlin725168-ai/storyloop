@@ -27,7 +27,8 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
             "Project must be the Git repository root")
     require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
             "Git worktree must be clean before initialization")
-    profile = validate_project_settings(project, overrides)
+    settings, budget, role_config = _bootstrap_settings(overrides)
+    profile = validate_project_settings(project, settings)
     tracked = _tracked_files(project)
     files = {relative: _sha256(project / relative) for relative in tracked}
     source_head = _git(project, "rev-parse", "HEAD").strip()
@@ -40,11 +41,12 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
         "mode": "product-iteration",
         "adapter": "codex",
         "agent_command": [],
-        "max_attempts": 3,
         "agent_timeout_seconds": 14400,  # liveness guard only; the budget is max_attempts
         "check_timeout_seconds": 300,
         "design_min_stories": 2,  # the architect step runs for changes with at least this many stories
         "profile": profile,
+        **budget,
+        **role_config,
     }
     baseline = {
         "version": 1,
@@ -61,9 +63,23 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
     write_json(project / BASELINE_PATH, baseline, max_bytes=8_000_000)
     from .system_smoke import adopt_system_smoke  # a committed system suite of a clean tree is trusted at init
     adopt_system_smoke(project)
+    if config.get("adapters") or config.get("roles"):
+        from .adapter_capabilities import check
+        check(project)
     require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
             "StoryLoop control files must stay outside Git changes")
     return _bootstrap_result(project, baseline, profile)
+
+
+def _bootstrap_settings(overrides: dict | None) -> tuple[dict, dict, dict]:
+    settings = dict(overrides or {})
+    budget = {}
+    role_config = {key: settings.pop(key) for key in ("adapters", "roles") if key in settings}
+    if 'max_attempts' in settings:
+        value = settings.pop('max_attempts')
+        require(type(value) is int and value > 0, 'Invalid max_attempts')
+        budget['max_attempts'] = value
+    return settings, budget, role_config
 
 
 def _bootstrap_result(project: Path, baseline: dict, profile: dict) -> dict:
@@ -159,8 +175,11 @@ def _inside(path: str, root: str) -> bool:
 
 def _foundation_paths(tracked: list[str], profile: dict) -> list[str]:
     mutable_roots = [*profile["module_roots"], *GENERATED_PATHS]
+    test_roots = profile.get("test_roots") or []
+    protected = set(profile["integration_paths"]) | set(profile["protected_paths"])
     return sorted(path for path in tracked
-                  if not any(_inside(path, root) for root in mutable_roots))
+                  if not any(_inside(path, root) for root in mutable_roots)
+                  and (path in protected or not matches_test_root(path, test_roots)))
 
 
 def _tracked_files(project: Path) -> list[str]:

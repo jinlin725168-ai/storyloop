@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from typing import Callable
 
-from .baseline import load_baseline
+from .baseline import load_baseline, load_project_config
 from .models import identifier, nature_of, require, text, validate_product
 from .openspec_docs import capability_of, render_delta_spec
 from .requirement_checklist import evaluate_checklist, render_checklist
@@ -20,10 +20,14 @@ Clock = Callable[[], datetime]
 
 def create_change(
     project: Path, idea: str, product: dict, now: Clock | None = None,
+    supersedes: dict | None = None,
 ) -> dict:
     """Create a local ignored draft from one short product idea."""
     project = Path(project).resolve()
     load_baseline(project)
+    if (config := load_project_config(project)).get("adapters") or config.get("roles"):
+        from .adapter_capabilities import ensure_checked
+        ensure_checked(project)
     idea = text(idea, "product idea")
     canonical = _validated_copy(product)
     moment = (now or _utc_now)()
@@ -31,6 +35,7 @@ def create_change(
     timestamp = _timestamp(moment)
     state = {
         "version": 1,
+        "routing_version": 1,
         "change_id": change_id,
         "status": "DRAFT",
         "revision": 1,
@@ -41,6 +46,10 @@ def create_change(
         "history": [],
         "approval": None,
     }
+    if supersedes is not None:
+        state["supersedes"] = _supersedes(supersedes)
+    from .intake import project_intake
+    state["intake"] = project_intake(project, canonical)
     _save(project, state)
     return deepcopy(state)
 
@@ -54,15 +63,42 @@ def load_change(project: Path, change_id: str) -> dict:
         "created_at", "updated_at", "history", "approval",
     }
     from .models import require
-    require(set(value) == required and value["version"] == 1, "Invalid change state")
+    optional = {"supersedes", "superseded_by", "routing_version", "intake"}
+    require(required <= set(value) <= required | optional and value["version"] == 1,
+            "Invalid change state")
     require(value["change_id"] == change_id, "Change state identity mismatch")
-    require(value["status"] in {"DRAFT", "APPROVED", "RUNNING", "PASSED", "PAUSED", "FAILED"},
+    require(value["status"] in {
+        "DRAFT", "APPROVED", "RUNNING", "PASSED", "PAUSED", "FAILED", "SUPERSEDED",
+    },
             "Invalid change status")
     require(type(value["revision"]) is int and value["revision"] > 0, "Invalid change revision")
+    if "routing_version" in value:
+        require(type(value["routing_version"]) is int and value["routing_version"] == 1,
+                "Invalid routing version")
+        from .intake import validate_intake_record
+        validate_intake_record(value.get("intake"))
     text(value["idea"], "product idea")
     validate_product(value["product"])
     require(isinstance(value["history"], list), "Invalid change history")
+    if "supersedes" in value:
+        _supersedes(value["supersedes"])
+    if "superseded_by" in value:
+        identifier(value["superseded_by"], "superseding change id")
     return value
+
+
+def _supersedes(value: object) -> dict:
+    """Validate and copy the immutable link to the run whose contract was replaced."""
+    require(isinstance(value, dict), "Invalid supersedes link")
+    keys = {"change_id", "message", "reason", "blocker", "source_branch", "design_summary"}
+    require(set(value) == keys, "Invalid supersedes link")
+    result = deepcopy(value)
+    identifier(result["change_id"], "superseded change id")
+    text(result["message"], "revision message")
+    text(result["source_branch"], "source branch")
+    for key in ("reason", "blocker", "design_summary"):
+        require(result[key] is None or isinstance(result[key], str), "Invalid supersedes link")
+    return result
 
 
 def revise_change(
@@ -93,6 +129,7 @@ def revise_change(
     }
     updated = {
         **current,
+        "routing_version": 1,
         "status": "DRAFT",
         "revision": current["revision"] + 1,
         "product": canonical,
@@ -100,6 +137,8 @@ def revise_change(
         "history": [*current["history"], prior],
         "approval": None,
     }
+    from .intake import project_intake
+    updated["intake"] = project_intake(project, canonical)
     _save(project, updated)
     return deepcopy(updated)
 
@@ -133,6 +172,7 @@ def draft_directory(project: Path, change_id: str) -> Path:
 
 
 def _save(project: Path, state: dict) -> None:
+    """Persist state without replacing the evidence of an existing contract."""
     write_json(_state_path(project, state["change_id"]), state, max_bytes=2_000_000)
     write_change_preview(project, state)
 

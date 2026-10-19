@@ -60,11 +60,21 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 
 **七个角色**：`survey`、`product`、`acceptance`、`design`、`characterize`、`implement`、`review`，按权限边界划分，见 [角色目录](roles.md)。都是无状态进程调用：stdin 一个请求、stdout 一个 JSON。适配器可以是 Codex CLI（默认）、Claude Code（`examples/claude-code/`）或人工桥接（manual）。
 
-**方案（design）**：RED 之后、特征化之前，design 角色只读产出 Markdown 方案和 `touched`（将修改的既有非测试文件）。实现照方案做、审查对照方案查。故事数少于 `design_min_stories`（默认 2）的小改动跳过这一步。
+**方案（design）**：RED 之后、特征化之前，design 角色只读产出 Markdown 方案和 `touched`（将修改的既有非测试文件）。实现照方案做、审查对照方案查。新协议 light 可由引擎生成精简方案，standard/heavy 调用 design；heavy 还需用户明确批准。`design_min_stories`（默认 2）仅用于 legacy。
 
-**尝试（attempt）与预算**：一轮尝试 = 实现 → 边界审计 → 分层验证（单元、集成、变更验收、系统冒烟、静态检查）→ 独立审查；实现代理的回答结构不合法也计一轮失败。`max_attempts` 是唯一的质量预算；`agent_timeout_seconds` 只是挂死保护；适配器的圈数上限只是检查点，到上限续同一会话。
+**尝试（attempt）与预算**：一轮尝试 = 实现 → 边界审计 → 分层验证（单元、集成、变更验收、系统冒烟、静态检查）→ 独立审查；功能红层也会进入只读审查以判断实现、判据或合同归属，纯环境错误则直接记录。review 的 pass 不能覆盖任何红层。实现代理的回答结构不合法也计一轮失败。`max_attempts` 是唯一的质量预算；`agent_timeout_seconds` 只是挂死保护；适配器的圈数上限只是检查点，到上限续同一会话。
 
-**边界审计**：每轮尝试后，引擎对全树快照做分类：可变区和 `test_roots` 内的改动允许；集成点、底座和 CI 改动转成 BASE 提案；合同、验收套件、系统冒烟、可变区外的新文件判 `BOUNDARY_VIOLATION`；未声明的被忽略文件、暂存、控制面改动判 `WORKSPACE_TAINTED`。`scratch_paths` 声明代理可以就地产生的构建产物。
+**失败归属（attribution）**：引擎把每轮失败归到 `implement`（实现）、`oracle`（判据）、`contract`（合同）、`base`（底座）或 `environment`（环境）。功能失败记录同时保留原始 `layers` 与校验后的 review；review 的发现用 `target: implementation/oracle/contract` 表达判断。非实现归属必须有有效条件 ID 与可定位的源码行，判据归属还必须指向判据文件；`evidence` 可补充解释性说明。条件或定位校验不通过时按实现问题处理并记录原因；同轮合同问题优先于判据问题。代理判断可以由人写明理由驳回，机器确定的 RED 判据错误不能驳回。
+
+**失败特征（signature）**：按失败的层、用例或条件、审查视角、文件路径及边界类别生成稳定标识，不把描述措辞或行号漂移当成新问题。判据修复后进入新的 `epoch`，旧轮次不参与新一轮连续失败判断；缺少特征的旧记录也会打断连续计数。红层 review 提出 `needs_input` 时仍保存失败证据，但这次问答会打断连续失败计数。
+
+**根因调查轮（root_cause）**：同一轮次区间内连续两轮失败特征相同，下一轮实现请求带 `mode: root_cause`，要求先追查原因再修改。调查轮仍是同一特征且没有原先失败的用例转绿，停在 `NO_PROGRESS`，保留剩余预算；普通 `run` 可以在人处理后继续，但不会清除失败历史。
+
+**事实记录（facts）**：design、implement、review 可返回 `{statement, location}`；引擎核对安全路径与实际源码行，按陈述与文件去重，附角色和尝试号，最多保留最近 50 条并传给后续角色。位置存在不等于陈述已被证明，停止报告明确称其为“代理陈述事实”。本期不据此自动升档或拆分。
+
+**作废并修订重开（supersede）**：运行中的合同不能原地修改。`change --supersede OLD --message "修订意见"` 让 product 只读参考旧合同、停止证据与事实，生成新 ID 的草案，新旧变更互相链接；旧运行成为 `SUPERSEDED`，分支保留。新变更重新澄清、批准，从当前源分支干净状态重跑；旧方案与事实只作为有来源的参考，不作为新验收证据。除 `NEEDS_SPEC_FIX` 外还必须提供 `--reason` 说明为何是合同问题，已合并变更不能作废。
+
+**边界审计**：每轮尝试后，引擎对全树快照做分类：可变区和 `test_roots` 内的改动允许；集成点、底座和 CI 改动转成 BASE 提案；合同、验收套件、系统冒烟、可变区外的新文件判 `BOUNDARY_VIOLATION`；未声明的被忽略文件、Git 不可见改动、暂存、控制面改动判 `WORKSPACE_TAINTED`。Git 不可见错误的消息最多列 20 条路径，错误详情保留全部 `path` 与 `kind`，供定位偶发问题；这项诊断不代表已修复其根因。`scratch_paths` 声明代理可以就地产生的构建产物。
 
 **停点**：引擎只在明确的地方停下来，每个停点对应一个命令。
 
@@ -75,12 +85,15 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 | `BASE_CHANGE_REQUIRED` | 功能触碰底座 | 在源分支独立提交后 `base-update`，把源分支合进功能分支，再 `run` |
 | `BOUNDARY_VIOLATION` | 代理写了不允许的路径 | `log` 查是哪次调用写的；还原（或经 BASE 迭代扩 `module_roots` / `test_roots`）后 `run` |
 | `WORKSPACE_TAINTED` | 工作区出现不该有的改动 | 清理后 `reset`，再 `run` |
-| `BUDGET_EXHAUSTED` | 尝试用尽 | 人判断：用例有缺陷就 `acceptance-repair`；否则提高 `.storyloop/config.json` 的 `max_attempts` 后 `run`，或放弃并另开新变更（运行开始后合同不能再修订） |
-| `ORACLE_DEFECT` | 应当保持成立的验收条件在旧代码上就失败了，是用例写错了 | `acceptance-repair` 修正用例，再 `run` |
+| `BUDGET_EXHAUSTED` | 尝试用尽 | 人判断：用例有缺陷就 `acceptance-repair`；否则提高 `.storyloop/config.json` 的 `max_attempts` 后 `run`，或 `change --supersede ID --message "修订意见" --reason "合同问题"` |
+| `ORACLE_DEFECT` | 实现前的 RED 检查或实现后的审查发现判据缺陷 | `acceptance-repair`；仅审查归属可 `run --overrule "理由"` |
+| `NEEDS_SPEC_FIX` | 审查发现合同缺陷 | `change --supersede ID --message "修订意见"`；或 `run --overrule "理由"` |
+| `NO_PROGRESS` | 根因调查后仍无进展 | 查停止报告；修判据、修合同重开，或处理后 `run` |
+| `SUPERSEDED` | 已作废并链接到修订草案 | 批准新变更；旧运行不可续跑 |
 | `EXISTING_GREEN` | 验收套件在实现之前就已通过，证明不了 RED | 需求已实现就放弃变更；用例太弱就 `acceptance-repair` |
 | `CHARACTERIZATION_FAILED` | 特征化测试在旧代码上不绿 | 就地修正测试后 `run`：引擎重跑单元层，绿了才提交并继续 |
 
-每个停点的输出都带 `next`：可以直接复制执行的下一步命令。`storyloop log` 汇总这个变更的每次代理调用和每轮失败原因，是排查任何停点的第一步。
+每个明确停点提供结构化 `stop`（阻塞点、证据、代理陈述事实、可选操作与恢复命令），保留兼容字段 `next`。`storyloop log` 汇总这个变更的每次代理调用和每轮失败原因，是排查任何停点的第一步。
 
 **acceptance-repair**：验收用例本身有缺陷（定位器、时序、数据准备）时的唯一修复通道。acceptance 角色修自己的套件，引擎从合同提交重建候选副本重新证明 RED，之前的尝试作废、预算归零，理由写进 decisions.md。
 
@@ -117,7 +130,7 @@ sequenceDiagram
     E->>S: 盲写变更验收套件
     S-->>E: files + manifest
     E->>E: 提交合同与套件，候选副本里跑 RED
-    E->>D: 方案（故事数 ≥ design_min_stories 时）
+    E->>D: L2 方案（heavy 需用户批准）
     D-->>E: design + touched
     E->>C: 锁定将改动的现有行为
     C-->>E: 特征化测试（引擎在旧代码上跑绿）
@@ -154,3 +167,9 @@ sequenceDiagram
 - 不是沙箱：指纹能发现篡改，不能隔离同用户的恶意进程。需要强隔离时放进无凭证的容器。
 - 不是部署工具：不 push、不发布。
 - 不替代产品判断：机器检查证明"做了合同里的事"，不证明合同本身正确。`manual` 条件和独立审查保留给人。
+
+角色回答通过格式校验但未满足产品、验收套件或方案的语义约束时，引擎将原回答与具体校验错误交回同一角色，另发一次调用修复；仍失败才停止。它不替代适配器的 JSON 修复，也不重试超时、限流或安全边界错误。
+
+## 分流与批准的区别
+
+L0 检查项目是否具备真实可执行的测试，L1 在产品批准时定初档，L2 量测具体方案，L3 在执行中发现新风险或范围扩大时重规划。light、standard、heavy 都有完整质量门；heavy 增加明确方案批准与一致性审查。拆分是人工停点，缺口确认、产品批准、方案批准和人工验收分别绑定不同证据，不能互相替代。详见 [分流指南](routing-guide.md)。

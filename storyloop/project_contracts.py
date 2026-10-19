@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from .models import require
+from .routing_risks import validate_routing_risks
 
 
 def validate_agent_summary(value: object) -> None:
     require(isinstance(value, dict) and {"summary", "questions"} <= set(value)
-            and set(value) <= {"summary", "questions", "design"},
+            and set(value) <= {"summary", "questions", "design", "facts", "routing_risks"},
             "Implementation agent returned an invalid contract")
+    validate_routing_risks(value.get("routing_risks"))
     require(isinstance(value["summary"], str), "Implementation summary must be text")
     require(isinstance(value.get("design", ""), str), "Implementation design must be markdown text")
     require(isinstance(value["questions"], list)
@@ -18,13 +20,16 @@ def validate_agent_summary(value: object) -> None:
 
 def validate_review(value: object) -> str:
     require(isinstance(value, dict)
-            and set(value) == {"verdict", "summary", "findings", "questions"},
+            and {"verdict", "summary", "findings", "questions"} <= set(value)
+            and set(value) <= {"verdict", "summary", "findings", "questions", "facts", "routing_risks", "coverage", "checklist"},
             "Review agent returned an invalid contract")
     require(value["verdict"] in {"pass", "fail", "needs_input"},
             "Invalid review verdict")
     require(isinstance(value["summary"], str) and isinstance(value["findings"], list)
             and isinstance(value["questions"], list), "Invalid review details")
-    if value["verdict"] == "pass":
+    if value["verdict"] == "pass" and "coverage" not in value and not any(
+            "confidence" in item for item in value["findings"]):
         require(not value["findings"] and not value["questions"],
                 "Review cannot pass with findings or questions")
+    validate_routing_risks(value.get("routing_risks"))
     return value["verdict"]

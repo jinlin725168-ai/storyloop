@@ -50,6 +50,12 @@ def without_manifest_echo(files: object) -> object:
     return [item for item in files if not (isinstance(item, dict) and item.get("path") == "manifest.json")]
 
 
+def validate_suite(change: dict, files: object, manifest: object) -> None:
+    """Validate generated suite content before any of it is written to the repository."""
+    _validate_manifest(manifest, change)
+    _validate_files(without_manifest_echo(files))
+
+
 def install_smoke_suite(
     project: Path, change_id: str, files: list[dict], manifest: dict, replace: bool = False,
 ) -> dict:

@@ -12,6 +12,21 @@ from .system_smoke import is_system_smoke_path
 from .storage import write_json
 
 
+def role_path_boundary(project: Path, role: str, payload: dict) -> dict:
+    """Expose the audit's mutable roots for adapter path guards from the same source."""
+    baseline, profile = load_baseline(project), load_project_config(project).get("profile", {})
+    writable = []
+    if role == "implement":
+        writable = [*(f"{root.rstrip('/')}/**" for root in baseline["module_roots"]),
+                    *(f"{root.rstrip('/')}/**" for root in profile.get("test_roots", []))]
+    elif role == "characterize":
+        writable = [f"{root.rstrip('/')}/**" for root in profile.get("test_roots", [])]
+    plan = payload.get("design_plan") if isinstance(payload.get("design_plan"), dict) else {}
+    forbidden = [*baseline["foundation_paths"], *baseline["protected_paths"], ".storyloop/**"]
+    forbidden.extend(plan.get("forbidden_paths", []) if isinstance(plan.get("forbidden_paths", []), list) else [])
+    return {"writable_paths": sorted(set(writable)), "forbidden_paths": sorted(set(forbidden))}
+
+
 def audit_project_changes(project: Path, change_id: str) -> dict:
     """Classify every Git-visible change against the locked logical baseline."""
     project = Path(project).resolve()

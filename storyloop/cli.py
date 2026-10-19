@@ -17,13 +17,18 @@ from .system_smoke import apply_smoke_update, propose_smoke_update
 from .change_log import change_log, render_log
 from .changes import create_change, load_change, revise_change
 from .manual_acceptance import record_manual_acceptance
-from .next_steps import draft_next, next_step
+from .next_steps import draft_next, next_step, supersede_revision_next
 from .openspec_docs import document_change
-from .models import StoryLoopError, require
+from .models import StoryLoopError, require, validate_product
 from .processutil import redact
 from .project_agents import invoke_project_agent
 from .acceptance_repair import repair_smoke
 from .project_loop import load_run_state, run_change
+from .semantic_repair import answer_with_repair
+from .stop_report import build_stop, build_entry_stop, render_stop, stop_of
+from .routing_cli import dispatch_routing, BLOCKED
+from .routing_report import draft_stop, report_routing
+from .requirement_checklist import blocking_items, evaluate_checklist
 from .run_recovery import reset_run
 from .smoke_runner import run_ci
 from .storage import load_json
@@ -35,6 +40,7 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument("--version", action="version", version=__version__)
     sub = root.add_subparsers(dest="command", required=True)
     descriptions = {
+        "readiness": "检查项目测试准备度",
         "init": "一键锁定现有 Git 工程底座",
         "change": "用一句产品意图与 AI 共创 OpenSpec 用户故事和验收条件",
         "approve": "批准产品合同，并自动完成实现、验收、报告和本地合并",
@@ -60,62 +66,94 @@ def parser() -> argparse.ArgumentParser:
         child = sub.add_parser(command, help=help_text)
         child.add_argument("project", type=Path)
         child.add_argument("--json", action="store_true", help="输出完整 JSON")
-        if command == "init":
-            child.add_argument("--settings", type=Path,
-                               help="可选 JSON 工程画像：unit_commands（旧名 test_commands）、integration_commands、"
-                                    "check_commands、test_roots、module_roots、integration_paths、"
-                                    "candidate_allow、scratch_paths")
-        elif command == "change":
-            child.add_argument("--idea")
-            child.add_argument("--change", dest="change_id")
-            child.add_argument("--message")
-            child.add_argument("--no-interactive", action="store_true",
-                               help="有待决问题时不在终端逐条澄清")
-        elif command == "log":
-            child.add_argument("--change", dest="change_id", required=True)
-        elif command in {"approve", "status", "report", "ci"}:
-            child.add_argument("--change", dest="change_id", required=command == "ci")
-            if command == "approve":
-                child.add_argument("--no-interactive", action="store_true",
-                                   help="停在 NEEDS_INPUT 时不在终端提问")
-        elif command == "answer":
-            child.add_argument("--change", dest="change_id", required=True)
-            child.add_argument("--answer", dest="answers", action="append", default=[], required=True)
-        elif command == "base-update":
-            child.add_argument("--proposal", required=True)
-        elif command == "document":
-            child.add_argument("--change", dest="change_id", required=True)
-            child.add_argument("--design", type=Path)
-            child.add_argument("--capability", help="合同未命名能力时指定活规格名称")
-        elif command in {"smoke-propose", "smoke-apply"}:
-            child.add_argument("--change", dest="change_id", required=True)
-        elif command == "survey":
-            child.add_argument("--reason", default="foundation survey")
-            child.add_argument("--from", dest="from_file", type=Path,
-                               help="不再调用代理，从保存的摸底结果安装（校验失败后人工修正再装）")
-        elif command in {"reset", "smoke-repair", "acceptance-repair"}:
-            child.add_argument("--change", dest="change_id", required=True)
-            child.add_argument("--reason", required=True)
-        elif command == "base-propose":
-            child.add_argument("--path", dest="paths", action="append", default=[], required=True)
-            child.add_argument("--reason", required=True)
-            child.add_argument("--allow-mutable", action="store_true",
-                               help="上游同步：允许提案包含可变区路径")
-            child.add_argument("--allow-ci", action="store_true",
-                               help="由人新增或修改 CI 配置（.github/workflows 等）；代理永远不能")
-        elif command == "run":
-            child.add_argument("--change", dest="change_id", required=True)
+        _product_arguments(child, command)
+        _maintenance_arguments(child, command)
+    adapters = sub.add_parser("adapters", help="检查角色适配器能力")
+    adapter_sub = adapters.add_subparsers(dest="adapter_command", required=True)
+    check = adapter_sub.add_parser("check", help="握手并校验角色档次映射")
+    check.add_argument("project", type=Path)
+    check.add_argument("--json", action="store_true", help="输出完整 JSON")
+    return root
+
+
+def _product_arguments(child, command):
+    if command == "readiness":
+        child.add_argument("--change", dest="change_id")
+    elif command == "init":
+        child.add_argument("--settings", type=Path,
+                           help="可选 JSON 工程画像：unit_commands（旧名 test_commands）、integration_commands、"
+                                "check_commands、test_roots、module_roots、integration_paths、"
+                                "candidate_allow、scratch_paths")
+    elif command == "change":
+        child.add_argument("--idea")
+        child.add_argument("--change", dest="change_id")
+        child.add_argument("--message")
+        child.add_argument("--supersede",
+                           help="作废旧运行并重开草案；切回源分支后用 --change 新ID --message 意见"
+                                "重新评估，再明确批准")
+        child.add_argument("--reason",
+                           help="在 NEEDS_SPEC_FIX 以外的停点作废时，说明为什么是合同的问题")
+        child.add_argument("--no-interactive", action="store_true",
+                           help="有待决问题时不在终端逐条澄清")
+    elif command == "log":
+        child.add_argument("--change", dest="change_id", required=True)
+    elif command in {"approve", "status", "report", "ci"}:
+        child.add_argument("--change", dest="change_id", required=command == "ci")
+        if command == "approve":
+            for flag in ("readiness", "design", "continue-heavy", "option", "reason", "tier"):
+                child.add_argument("--" + flag)
             child.add_argument("--no-interactive", action="store_true",
                                help="停在 NEEDS_INPUT 时不在终端提问")
-        elif command == "accept":
-            child.add_argument("--change", dest="change_id", required=True)
-            child.add_argument("--criterion", dest="criteria", action="append", default=[], required=True)
-            child.add_argument("--note", required=True)
-    return root
+    elif command == "answer":
+        child.add_argument("--change", dest="change_id", required=True)
+        child.add_argument("--answer", dest="answers", action="append", default=[], required=True)
+    elif command == "base-update":
+        child.add_argument("--proposal", required=True)
+        child.add_argument("--confirm-oracle-skills", action="store_true")
+
+
+def _maintenance_arguments(child, command):
+    if command == "document":
+        child.add_argument("--change", dest="change_id", required=True)
+        child.add_argument("--design", type=Path)
+        child.add_argument("--capability", help="合同未命名能力时指定活规格名称")
+    elif command in {"smoke-propose", "smoke-apply"}:
+        child.add_argument("--change", dest="change_id", required=True)
+    elif command == "survey":
+        child.add_argument("--reason", default="foundation survey")
+        child.add_argument("--from", dest="from_file", type=Path,
+                           help="不再调用代理，从保存的摸底结果安装（校验失败后人工修正再装）")
+    elif command in {"reset", "smoke-repair", "acceptance-repair"}:
+        child.add_argument("--change", dest="change_id", required=True)
+        child.add_argument("--reason", required=True)
+    elif command == "base-propose":
+        child.add_argument("--path", dest="paths", action="append", default=[], required=True)
+        child.add_argument("--reason", required=True)
+        child.add_argument("--allow-mutable", action="store_true",
+                           help="上游同步：允许提案包含可变区路径")
+        child.add_argument("--allow-ci", action="store_true",
+                           help="由人新增或修改 CI 配置（.github/workflows 等）；代理永远不能")
+    elif command == "run":
+        child.add_argument("--replan", action="store_true")
+        child.add_argument("--reason")
+        child.add_argument("--change", dest="change_id", required=True)
+        child.add_argument("--overrule", help="不同意审查对 ORACLE_DEFECT / NEEDS_SPEC_FIX 的判定：写明理由")
+        child.add_argument("--no-interactive", action="store_true",
+                           help="停在 NEEDS_INPUT 时不在终端提问")
+    elif command == "accept":
+        child.add_argument("--change", dest="change_id", required=True)
+        child.add_argument("--criterion", dest="criteria", action="append", default=[], required=True)
+        child.add_argument("--note", required=True)
 
 
 def dispatch(args) -> dict:
     project = args.project.resolve()
+    if args.command == "adapters":
+        from .adapter_capabilities import check
+        return check(project)
+    routed = dispatch_routing(project, args)
+    if routed is not None:
+        return routed
     if args.command == "init":
         require((project / ".git").exists(), "storyloop init needs an existing Git repository (git init first)")
         settings = load_json(args.settings.resolve()) if args.settings else None
@@ -128,7 +166,8 @@ def dispatch(args) -> dict:
                                    allow_ci=args.allow_ci)
     if args.command == "base-update":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
-        return upgrade_baseline(project, args.proposal)
+        from .oracle_skill_approval import confirmed_upgrade
+        return confirmed_upgrade(project, args.proposal, args.confirm_oracle_skills)
     if args.command == "skills":
         return install_skills(project)
     if args.command == "smoke-propose":
@@ -148,26 +187,56 @@ def dispatch(args) -> dict:
 
 def _change(project: Path, args) -> dict:
     require(_is_product_project(project), "Run storyloop init on this Git project first")
+    from .adapter_capabilities import ensure_checked
+    ensure_checked(project)
     interactive = not getattr(args, "no_interactive", False)
+    if args.supersede:
+        require(args.message and not args.idea and not args.change_id,
+                "--supersede needs --message (and no --idea / --change)")
+        from .supersede import supersede_change
+        from .project_loop_guards import read_only_call
+        reviser = lambda payload: _product_answer(  # noqa: E731
+            project, payload,
+            call=lambda request: read_only_call(
+                project, args.supersede,
+                lambda: invoke_project_agent(project, "product", request)))
+        created = supersede_change(project, args.supersede, args.message, reviser,
+                                   reason=args.reason)
+        adopt_pending(project, created["change_id"])
+        state = clarify_interactively(project, created["change_id"], _revise_with_agent, interactive)
+        pending = state["product"]["questions"] or blocking_items(
+            evaluate_checklist(state["product"], project))
+        return _draft_result(project, state, draft_next(project, state) if pending else created["next"])
+    require(not args.reason, "--reason is only valid with --supersede")
     if args.idea:
         require(not args.change_id and not args.message,
                 "Use --idea for a new change, or --change with --message for a revision")
-        product = invoke_project_agent(project, "product", {"idea": args.idea})
+        from .readiness import require_readiness
+        require_readiness(project)
+        product = _product_answer(project, {"idea": args.idea})
         created = create_change(project, args.idea, product)
         adopt_pending(project, created["change_id"])
         state = clarify_interactively(project, created["change_id"], _revise_with_agent, interactive)
-        return {**state, "next": draft_next(project, state)}
+        return _draft_result(project, state)
     require(args.change_id and args.message,
             "Revision needs both --change and --message")
     _revise_with_agent(project, args.change_id, args.message, [])
     state = clarify_interactively(project, args.change_id, _revise_with_agent, interactive)
-    return {**state, "next": draft_next(project, state)}
+    return _draft_result(project, state)
+
+
+def _draft_result(project, state, next_action=None):
+    stop = draft_stop(project, state)
+    pending = state["product"].get("questions") or blocking_items(evaluate_checklist(state["product"], project))
+    hint = draft_next(project, state) if pending else (stop["resume"] if stop else next_action)
+    return {**state, "stop": stop,
+            "next": supersede_revision_next(project, state) or hint or draft_next(project, state)}
 
 
 def _revise_with_agent(project: Path, change_id: str, message: str, answers: list[dict]) -> dict:
     """One product revision: the agent rewrites the contract, the engine records the answers."""
     current = load_change(project, change_id)
-    product = invoke_project_agent(project, "product", {
+    product = _product_answer(project, {
         "change_id": change_id, "message": message,
         "answers": [{"question_id": a["question_id"], "question": a["question"], "answer": a["answer"]}
                     for a in answers],
@@ -175,6 +244,21 @@ def _revise_with_agent(project: Path, change_id: str, message: str, answers: lis
     })
     return revise_change(project, change_id, product, message,
                          clarifications=[{"question": a["question"], "answer": a["answer"]} for a in answers])
+
+
+def _product_answer(project: Path, payload: dict, call=None) -> dict:
+    """Get one semantically valid product answer, allowing one corrective call."""
+    from .baseline import _git
+    from .project_loop_guards import read_only_call
+    payload = {**payload, "routing_version": 1,
+               "source_commit": _git(project, "rev-parse", "HEAD").strip()}
+    def validate(value):
+        validate_product(value)
+        require(isinstance(value.get("assessment"), dict), "Product assessment is required")
+    operation = lambda: answer_with_repair(
+        call or (lambda request: invoke_project_agent(project, "product", request)), payload, validate)
+    return read_only_call(project, payload.get("change_id", "pending"), operation)
+
 
 
 def clarify_interactively(project: Path, change_id: str, reviser, interactive: bool,
@@ -242,7 +326,8 @@ def _product_dispatch(project: Path, args) -> dict:
         return run_with_answers(project, change_id, interactive=not args.no_interactive)
     if args.command == "run":
         require(change_id, "Product execution needs --change")
-        return run_with_answers(project, change_id, interactive=not args.no_interactive)
+        return run_with_answers(project, change_id, interactive=not args.no_interactive,
+                                overrule=getattr(args, "overrule", None))
     if args.command == "answer":
         return record_answers(project, change_id, args.answers)
     if args.command == "status":
@@ -250,11 +335,14 @@ def _product_dispatch(project: Path, args) -> dict:
         change = load_change(project, change_id)
         run_path = project / ".storyloop/state/runs" / f"{change_id}.json"
         run = load_run_state(project, change_id) if run_path.exists() else None
-        return {"status": change["status"], "change_id": change_id,
+        return {"status": (run or {}).get("status", change["status"]), "change_id": change_id,
                 "revision": change["revision"], "run": run,
+                "stop": stop_of(project, run) if run else draft_stop(project, change),
+                "routing": report_routing(project, change),
                 "telemetry": summarize(project, change_id),
-                "next": (draft_next(project, change) if run is None and change["status"] == "DRAFT"
-                         else next_step((run or {}).get("status") or change["status"], change_id, project, run))}
+                "next": (_draft_result(project, change)["next"] if run is None and change["status"] == "DRAFT"
+                         else (next_step((run or {}).get("status") or change["status"], change_id, project, run)
+                               or ((run or {}).get("stop") or {}).get("resume")))}
     if args.command == "log":
         return change_log(project, change_id)
     if args.command == "reset":
@@ -276,14 +364,14 @@ def _product_dispatch(project: Path, args) -> dict:
 
 
 def run_with_answers(project: Path, change_id: str, interactive: bool,
-                     runner=None) -> dict:
+                     runner=None, overrule: str | None = None) -> dict:
     """Run the change; when it pauses for input and a terminal is present, ask right here.
 
     Answers are recorded exactly as `storyloop answer` would record them, then the run
     continues. Without a terminal (CI, pipes) the NEEDS_INPUT result is returned unchanged.
     """
     runner = runner or run_change  # resolved at call time so tests can patch cli.run_change
-    result = runner(project, change_id)
+    result = runner(project, change_id, **({"overrule": overrule} if overrule is not None else {}))
     while result.get("status") == "NEEDS_INPUT" and interactive and _terminal():
         questions = pending_questions(project, change_id)
         if not questions:
@@ -320,8 +408,40 @@ def display(result: dict, complete_json: bool) -> None:
     for key in ("change_id", "project", "next", "report", "pending", "accepted", "paths", "written"):
         if key in result and result[key] is not None:
             print(f"{key}: {result[key]}")
+    if isinstance(result.get("stop"), dict):
+        for line in render_stop(result["stop"]):
+            print(line)
     for warning in result.get("warnings", []):
         print(f"warning: {warning}")
+
+
+def _error_stop(args, exc: StoryLoopError) -> dict | None:
+    """Best-effort stop context; a damaged run must not mask the original error."""
+    change_id = getattr(args, "change_id", None)
+    if exc.code in BLOCKED or exc.code == "NEEDS_INPUT":
+        if not change_id or not (args.project.resolve() / ".storyloop/state/runs" / f"{change_id}.json").exists():
+            return build_entry_stop(args.project.resolve(), exc.code,
+                                    {**(exc.details or {}), **({"change_id": change_id} if change_id else {})})
+    if not change_id or getattr(args, "command", None) not in {"run", "approve"}:
+        return None
+    project = args.project.resolve()
+    path = project / ".storyloop/state/runs" / f"{change_id}.json"
+    if not path.exists():
+        return None
+    try:
+        run = load_run_state(project, change_id)
+        return stop_of(project, run) or build_stop(
+            project, run, exc.code, {"error": redact(str(exc))})
+    except (OSError, ValueError, TypeError, KeyError, StoryLoopError):
+        return None
+
+
+def _redact_value(value: object) -> object:
+    if isinstance(value, dict):
+        return {key: _redact_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    return redact(value) if isinstance(value, str) else value
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -337,16 +457,19 @@ def main(argv: list[str] | None = None) -> int:
             "UNSAFE_CONTAINMENT", "WORKSPACE_TAINTED",
             "BUDGET_EXHAUSTED", "BASE_CHANGE_REQUIRED",
             "BOUNDARY_VIOLATION", "ERROR", "CHARACTERIZATION_FAILED",
-            "SMOKE_UPDATE_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT",
+            "SMOKE_UPDATE_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_SPEC_FIX", "NO_PROGRESS",
         }
-        return 2 if result.get("status") in failures else 0
+        return 2 if result.get("status") in failures | BLOCKED else 0
     except StoryLoopError as exc:
         error = {"status": exc.code, "message": redact(str(exc))}
         change_id = getattr(args, "change_id", None)
-        hint = next_step(exc.code, change_id, args.project.resolve()) if change_id else None
+        stop = _error_stop(args, exc)
+        if stop is not None:
+            error["stop"] = stop
+        hint = stop["resume"] if stop else next_step(exc.code, change_id, args.project.resolve(), exc.details)
         if hint:
             error["next"] = hint
-        print(json.dumps(error, ensure_ascii=False), file=sys.stderr)
+        print(json.dumps(_redact_value(error), ensure_ascii=False), file=sys.stderr)
         return 2
     except (OSError, ValueError, TypeError) as exc:
         print(json.dumps({"status": "BLOCKED", "message": "Operation could not complete: " + type(exc).__name__}), file=sys.stderr)

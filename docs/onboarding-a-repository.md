@@ -11,6 +11,8 @@ flowchart LR
     S2[acceptance/smoke 系统冒烟基线] --> M
 ```
 
+先按 **init → readiness → 补基础或确认缺口 → change → 产品批准 → 重档方案批准 → run** 接入。详见 [分流、审批与恢复](routing-guide.md)，其中说明 0/未知执行数、人工缺口、预算及适配器新字段。
+
 ## 1. 仓库准备
 
 - 单一 Git 根目录，工作树干净，处在有名字的本地分支。多个上游用 `git subtree add --squash` 引进来（`backend/`、`frontend/`），上游同步就是一次 BASE 迭代。
@@ -72,7 +74,7 @@ flowchart LR
 ```
 
 - `--bash` 只放行构建和测试工具的前缀；不要放行 `git -C:*` 这类能绕到写操作的前缀。
-- `design_min_stories`：故事数达到它才运行 design 角色（默认 2，单故事变更跳过）；全栈或跨模块变更通常故事更多，自然会触发。
+- `design_min_stories` 只适用于 legacy；新协议由三档与证据完整性决定 design，heavy 必须明确方案批准。
 - `max_attempts` 是质量预算。全栈故事通常 2 到 4 轮；`agent_timeout_seconds` 只防挂死，别用它限制代理。
 - 用 `--dry-run` 看适配器实际拼出的 `claude` argv。
 
@@ -128,6 +130,7 @@ Claude 适配器用 `--guide` 把这份文件附到每个角色的提示里，�
 - [ ] 适配器 `--dry-run` 的 argv 正确，`--guide` 文件存在。
 - [ ] 所有 dev server 已停（残留的 vite 会重写 `auto-imports.d.ts` 触发 `WORKSPACE_TAINTED`）。
 - [ ] `storyloop survey` 已跑、产物已审、已 `base-update`。
+- [ ] `storyloop readiness PATH --json` 为 READY；缺 checks/system smoke 已补齐或以真实摘要和理由确认，失败测试不能豁免。
 - [ ] 第一个变更选一个单表、无界面依赖的小功能，跑通后再做全栈故事。
 - [ ] 第一个变更合并后，把运行中发现的规范缺口用一次 BASE 迭代补进 AGENT_GUIDE。
 

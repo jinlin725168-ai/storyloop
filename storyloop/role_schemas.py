@@ -71,11 +71,57 @@ STORY = _obj({
     "acceptance": {"type": "array", "items": CRITERION},
 })
 FINDING = _obj({"message": STRING, "perspective": _nullable(STRING),
-                "criterion_id": _nullable(STRING), "evidence": _nullable(STRING)}, open_=True)
+                "criterion_id": _nullable(STRING), "evidence": _nullable(STRING),
+                "target": _nullable({"type": "string", "enum": ["implementation", "oracle", "contract", "out_of_scope"]}),
+                "location": _nullable(STRING)}, open_=True)
+FACTS = _nullable({"type": "array", "items": _obj({"statement": STRING, "location": STRING})})
+
+EVIDENCE = _obj({'locations': STRINGS, 'search_scope': STRINGS})
+METHOD = _obj({'commands': {'type': 'array', 'items': STRINGS},
+               'steps': STRINGS, 'expected': STRING})
+ASSESSMENT_CRITERION = _obj({
+    'story_id': STRING, 'criterion_id': STRING,
+    'feasibility': {'type': 'string', 'enum': ['local_automated', 'manual', 'infeasible', 'unknown']},
+    'existence': {'type': 'string', 'enum': ['exists', 'partial', 'absent', 'unknown']},
+    'method': METHOD, 'evidence': EVIDENCE})
+from .routing_policy import RISK_FIELDS
+ASSESSMENT = _obj({
+    'verifiable_goal': {'type': 'boolean'},
+    'scope': _obj({'touched': STRINGS, 'creates': STRINGS, 'interfaces': STRINGS,
+                   'symbols': {'type': 'array', 'items': _obj({'path': STRING, 'symbol': STRING})}}),
+    'risks': _obj({key: _obj({'value': {'type': 'string', 'enum': ['yes', 'no', 'unknown']},
+                              'evidence': EVIDENCE}) for key in RISK_FIELDS}),
+    'criteria': {'type': 'array', 'items': ASSESSMENT_CRITERION}})
+
+PLAN_OPTION = _obj({
+    'id': STRING, 'summary': STRING,
+    **ASSESSMENT['properties']['scope']['properties'],
+    'risks': ASSESSMENT['properties']['risks'], 'forbidden_paths': STRINGS,
+    'constraints': {'type': 'array', 'items': _obj(
+        {'criterion_id': STRING, 'path': STRING, 'rule': STRING})},
+    'regression': STRINGS, 'migration': _obj({'steps': STRINGS, 'reason': STRING}),
+    'dependencies': {'type': 'array', 'items': _obj({
+        'ecosystem': STRING, 'name': STRING, 'version': STRING,
+        'verification': _obj({'check_index': {'type': 'integer'}})})},
+    'principle_checks': {'type': 'array', 'items': _obj({
+        'principle_id': STRING, 'verdict': {'type': 'string', 'enum': [
+            'complies', 'deviates', 'not_applicable', 'unknown']}, 'reason': STRING})}})
+ROUTING_PLAN = _obj({'main_option': STRING,
+                    'options': {'type': 'array', 'items': PLAN_OPTION},
+                    'questions': STRINGS, 'design': STRING, 'facts': FACTS})
+
+CONSISTENCY = _obj({
+    'verdict': {'type': 'string', 'enum': ['coherent', 'blocked', 'needs_input']},
+    'summary': STRING, 'questions': STRINGS,
+    'findings': {'type': 'array', 'items': _obj({
+        'target': {'type': 'string', 'enum': ['contract', 'oracle', 'design']},
+        'criterion_id': STRING, 'location': STRING, 'blocking': {'type': 'boolean'},
+        'message': STRING})}})
 
 SCHEMAS = {
     "product": _obj({
         "version": {"type": "integer", "enum": [1]}, "goal": STRING, "non_goals": STRINGS,
+        "assessment": _nullable(ASSESSMENT),
         "capability": _nullable(STRING),
         "clarifications": _nullable({"type": "array", "items": _obj(
             {"session": STRING, "question": STRING, "answer": STRING})}),
@@ -96,20 +142,59 @@ SCHEMAS = {
         "version": {"type": "integer", "enum": [1]},
         "tests": {"type": "array", "items": SYSTEM_SMOKE_TEST}}),
         "rationale": _nullable(STRING)}),
-    "design": _obj({"summary": STRING, "touched": STRINGS, "design": STRING, "questions": STRINGS}),
+    "design": _obj({"summary": STRING, "touched": STRINGS, "design": STRING, "questions": STRINGS,
+                    "facts": FACTS}),
     "characterize": _obj({"summary": STRING, "touched": STRINGS, "tests": STRINGS, "questions": STRINGS}),
-    "implement": _obj({"summary": STRING, "questions": STRINGS, "design": _nullable(STRING)}),
+    "implement": _obj({"summary": STRING, "questions": STRINGS, "design": _nullable(STRING),
+                       "facts": FACTS}),
     "review": _obj({"verdict": {"type": "string", "enum": ["pass", "fail", "needs_input"]},
                     "summary": STRING, "findings": {"type": "array", "items": FINDING},
-                    "questions": STRINGS}),
+                    "questions": STRINGS, "facts": FACTS}),
     "survey": _obj({"documents": FILES}),
 }
 
 
+REVIEW_FIELDS = {"severity": {"type": "string", "enum": ["P0", "P1", "P2", "question"]},
+                 "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+                 "introduced": {"type": "boolean"}, "trigger": STRING, "impact": STRING, "fix": STRING}
+CHECKLIST = {"type": "array", "items": _obj({"decision": STRING,
+             "status": {"type": "string", "enum": ["pass", "issue", "unconfirmed"]}})}
+SCHEMAS["review"]["properties"].update(coverage=_nullable(STRINGS), checklist=_nullable(CHECKLIST))
+SCHEMAS["review"]["required"] = list(SCHEMAS["review"]["properties"])
+VERIFY = _obj({"results": {"type": "array", "items": _obj({"id": STRING,
+               "confirmed": {"type": "boolean"}, "reason": STRING})}})
+
+
+def _profiled_review(schema):
+    schema = copy.deepcopy(schema)
+    finding = schema['properties']['findings']['items']
+    finding['properties'].update(REVIEW_FIELDS)
+    finding['properties']['id'] = _nullable(STRING)
+    finding['required'] = list(finding['properties'])
+    schema['properties'].update(coverage=STRINGS, checklist=_nullable(CHECKLIST))
+    schema['required'] = list(schema['properties'])
+    return schema
+
+
 def schema_for(role: str, payload: dict) -> dict:
     """The engine-side schema of one call (acceptance changes shape in smoke-maintenance mode)."""
+    if role == "review" and payload.get("mode") == "verify":
+        return VERIFY
     if role == "acceptance" and payload.get("mode") == "smoke-maintenance":
         return SCHEMAS["smoke-maintenance"]
+    if role == "design" and payload.get("mode") == "routing-plan":
+        return ROUTING_PLAN
+    if role == 'review' and payload.get('mode') == 'consistency':
+        return CONSISTENCY
+    if role in {"implement", "review"} and payload.get("routing_tier"):
+        schema = copy.deepcopy(SCHEMAS[role])
+        schema["properties"]["routing_risks"] = _nullable({"type": "array", "items": _obj({
+            "risk": {"type": "string", "enum": list(RISK_FIELDS)},
+            "statement": STRING, "location": STRING})})
+        schema["required"].append("routing_risks")
+        return _profiled_review(schema) if role == "review" and payload.get("role_profile") else schema
+    if role == "review" and payload.get("role_profile"):
+        return _profiled_review(SCHEMAS[role])
     return SCHEMAS[role]
 
 
@@ -153,6 +238,8 @@ def _check(value: object, schema: dict, path: str, errors: list[str]) -> None:
     if not _type_matches(value, schema["type"]):
         errors.append(f"{path}: expected {_type_name(schema['type'])}, got {_type_name(_json_type(value))}")
         return
+    if type(value) in (int, float) and (value < schema.get("minimum", value) or value > schema.get("maximum", value)):
+        errors.append(f"{path}: number outside allowed range")
     if "enum" in schema and value not in schema["enum"]:
         allowed = ", ".join(repr(item) for item in schema["enum"] if item is not None)
         errors.append(f"{path}: must be one of {allowed}")

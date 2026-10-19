@@ -6,8 +6,8 @@ import unittest
 
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
-from storyloop.change_report import generate_change_report
-from storyloop.changes import create_change
+from storyloop.change_report import _telemetry_view, generate_change_report
+from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.smoke import install_smoke_suite
 from storyloop.smoke_runner import run_smoke
@@ -24,6 +24,15 @@ def _layers(acceptance: dict) -> dict:
 
 
 class ChangeReportTests(unittest.TestCase):
+    def test_report_telemetry_retains_complete_call_coverage_fields(self):
+        telemetry = {"calls": 2, "known_cost_usd": 0.25, "input_tokens": None,
+                     "output_tokens": 8, "turns": 3, "models": ["m"], "vendors": ["v"],
+                     "tiers": ["standard"], "skills": [{"name": "s"}],
+                     "coverage": {"cost_usd": {"known": 1, "total": 2}}}
+        view = _telemetry_view(telemetry)
+        for key, value in telemetry.items():
+            self.assertEqual(view[key], value)
+
     def _setup(self):
         temporary = tempfile.TemporaryDirectory()
         root = Path(temporary.name)
@@ -59,6 +68,7 @@ class ChangeReportTests(unittest.TestCase):
             self.assertEqual(trace["tests"][0]["result"]["status"], "PASS")
             self.assertEqual(trace["evidence_sha256"], smoke["evidence_sha256"])
             self.assertEqual(report["implementation_commit"], head)
+            self.assertEqual(set(report["presentation"]["sections"]), set("0123456"))
             self.assertTrue(path.with_suffix(".md").is_file())
         finally:
             temporary.cleanup()
