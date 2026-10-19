@@ -247,3 +247,91 @@ class EdgeTests(unittest.TestCase):
             result = perform_review(None, state, SimpleNamespace(review=lambda p, c: answer), {}, {})
         self.assertEqual(result['verdict'], 'pass')
         self.assertFalse(result['findings'])
+
+
+class ReviewFixRoundTests(unittest.TestCase):
+    def test_duplicate_agent_ids_bind_independent_verification(self):
+        def service(p, context):
+            if context.get('mode') == 'verify':
+                findings = context['findings']
+                self.assertNotEqual(findings[0]['id'], findings[1]['id'])
+                return {'results': [{'id': row['id'], 'confirmed': index == 1, 'reason': 'checked'}
+                                    for index, row in enumerate(findings)]}
+            answer = review_answer()
+            answer['findings'] = [{**answer['findings'][0], 'id': 'duplicate', 'message': message}
+                                  for message in ('first', 'second')]
+            return answer
+        state = {'change_id': 'C', 'attempt': 1}
+        result = ReviewIntegrationTests().run_review(service, state)
+        self.assertEqual(result['verdict'], 'fail')
+        self.assertEqual([row['message'] for row in result['findings']], ['second'])
+        self.assertEqual([row['message'] for row in state['review_disposition']['focus']], ['first'])
+
+    def test_repair_contract_error_preserves_candidate_and_missing_decisions_on_run_resume(self):
+        from storyloop.baseline import load_project_config
+        from storyloop.storage import write_json
+        from storyloop.project_loop import LoopServices, run_change, load_run_state
+        from tests.test_structured_output import approved_change
+        from tests.test_project_loop import smoke_payload
+        from tests.test_agent_unavailable import implement_after, single_attempt
+        temporary, root, change_id = approved_change()
+        implementations, reviews = [], []
+        def service(project, context):
+            reviews.append(context)
+            if 'validation_errors' in context:
+                raise StoryLoopError('repair schema invalid', code='AGENT_CONTRACT_INVALID')
+            answer = review_answer()
+            answer['findings'] = []
+            if len(reviews) > 2:
+                answer['checklist'] = [{'decision': 'decision', 'status': 'pass'}]
+            return answer
+        services = LoopServices(lambda p, c: smoke_payload(change_id),
+                                implement_after(0, implementations), service)
+        try:
+            single_attempt(root)
+            config = load_project_config(root)
+            config['roles'] = {'review': {'tier': 'strong'}}
+            write_json(root / '.storyloop/config.json', config)
+            with patch('storyloop.cross_vendor.prepare_run'), \
+                    patch('storyloop.review_disposition._decisions', return_value=['decision']):
+                with self.assertRaises(StoryLoopError) as caught:
+                    run_change(root, change_id, services)
+                self.assertEqual(caught.exception.code, 'AGENT_CONTRACT_INVALID')
+                state = load_run_state(root, change_id)
+                self.assertEqual(state['attempt'], 0)
+                self.assertIn('cost_candidate', state)
+                self.assertEqual(state['review_disposition']['checklist_missing'], ['decision'])
+                self.assertEqual(caught.exception.details['checklist_missing'], ['decision'])
+                self.assertEqual(run_change(root, change_id, services)['status'], 'PASSED')
+            self.assertEqual(implementations, [1])
+            self.assertEqual(load_run_state(root, change_id)['review_disposition']['checklist_missing'], [])
+        finally:
+            temporary.cleanup()
+
+    def test_duplicate_findings_cannot_be_cleared_by_one_false_result(self):
+        def service(p, context):
+            if context.get('mode') == 'verify':
+                return {'results': [{'id': context['findings'][0]['id'],
+                                     'confirmed': False, 'reason': 'no'}]}
+            answer = review_answer()
+            answer['findings'] = [{**answer['findings'][0], 'id': 'same'} for _ in range(2)]
+            return answer
+        with self.assertRaisesRegex(StoryLoopError, 'each finding exactly once'):
+            ReviewIntegrationTests().run_review(service)
+
+    def test_repair_infrastructure_errors_keep_codes_and_missing_evidence(self):
+        for code in ('COST_LIMIT_REACHED', 'AGENT_UNAVAILABLE'):
+            with self.subTest(code=code):
+                state = {'change_id': 'C', 'attempt': 1}
+                failure = StoryLoopError('infrastructure', code=code)
+                def service(p, context):
+                    if 'validation_errors' in context:
+                        raise failure
+                    return review_answer()
+                with patch('storyloop.review_disposition._decisions', return_value=['decision']):
+                    with self.assertRaises(StoryLoopError) as caught:
+                        ReviewIntegrationTests().run_review(service, state)
+                self.assertEqual(caught.exception.code, code)
+                self.assertNotIn('review_semantic', caught.exception.details)
+                self.assertEqual(state['pending_review']['checklist_missing'], ['decision'])
+                self.assertEqual(state['review_disposition']['checklist_missing'], ['decision'])

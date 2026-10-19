@@ -17,8 +17,11 @@ def dispose(findings, thresholds, plan_decisions) -> dict:
     result.update(dropped=0, checklist_missing=[])
     for index, original in enumerate(findings):
         item = dict(original)
-        item.setdefault('id', 'F-' + hashlib.sha256(json.dumps(
-            [index, original], sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16])
+        if 'id' in item:
+            item['agent_id'] = item['id']
+        # The ordinal guarantees independent identity even for identical adapter IDs/content.
+        item['id'] = f'F-{index + 1}-' + hashlib.sha256(json.dumps(
+            original, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
         confidence = item.get('confidence', 100)
         require(type(confidence) is int and 0 <= confidence <= 100, 'Invalid finding confidence')
         if item.get('introduced', True) is False:

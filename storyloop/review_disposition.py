@@ -33,18 +33,39 @@ def _answer(project, state, services, context, pending, decisions):
         pending['review'] = _redacted(_call(project, state['change_id'], services, context))
         save_run(project, state)
     try:
-        check_checklist(pending['review'], decisions)
+        _check_decisions(project, state, pending, decisions)
     except StoryLoopError as error:
         if pending.get('repaired'):
             raise
         request = {**context, 'previous_response': pending['review'],
                    'validation_errors': [str(error)]}
-        pending['review'] = _redacted(_call(project, state['change_id'], services, request))
+        try:
+            pending['review'] = _redacted(_call(project, state['change_id'], services, request))
+        except StoryLoopError as repair_error:
+            if repair_error.code == 'AGENT_CONTRACT_INVALID':
+                repair_error.details.update(review_semantic=True,
+                                            checklist_missing=pending['checklist_missing'])
+            raise
         pending['repaired'] = True
         save_run(project, state)
-        check_checklist(pending['review'], decisions)
+        _check_decisions(project, state, pending, decisions)
     validate_review(pending['review'])
     return pending['review']
+
+
+def _check_decisions(project, state, pending, decisions):
+    """Keep missing-decision evidence across repair errors and cost pauses."""
+    missing = []
+    try:
+        check_checklist(pending['review'], decisions)
+    except StoryLoopError as error:
+        missing = error.details['checklist_missing']
+        raise
+    finally:
+        pending['checklist_missing'] = missing
+        state['review_disposition'] = {'attempt': state['attempt'],
+                                      **dispose([], {}, []), 'checklist_missing': missing}
+        save_run(project, state)
 
 
 def _verify(project, state, services, context, pending, result):
@@ -57,7 +78,7 @@ def _verify(project, state, services, context, pending, result):
     errors = schema_errors(answer, schema_for('review', {'mode': 'verify'}))
     rows = answer.get('results', []) if isinstance(answer, dict) else []
     ids = [row.get('id') for row in rows if isinstance(row, dict)]
-    if errors or len(ids) != len(set(ids)) or set(ids) != {item['id'] for item in findings}:
+    if errors or len(ids) != len(findings) or len(ids) != len(set(ids)) or set(ids) != {item['id'] for item in findings}:
         raise StoryLoopError('Verification must answer each finding exactly once',
                              code='AGENT_CONTRACT_INVALID')
     confirmed = {row['id']: row for row in rows}
