@@ -68,7 +68,7 @@ class PermissionBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='python path ') as folder:
             executable = Path(folder) / 'python'
             executable.write_text('placeholder', encoding='utf-8')
-            values.append((str(executable), str(executable)))
+            values.append((str(executable), executable.as_posix()))
             for value, expected in values:
                 with self.subTest(value=value):
                     if value.startswith('C:'):
@@ -113,7 +113,7 @@ class PermissionBoundaryTests(unittest.TestCase):
                 base = profile_command('claude', request, 80, [], 'opus')
                 lane = lane_command(base, request, 'src')
                 readonly = readonly_command(base, request)
-            expected = 'Bash(' + shlex.quote(str(executable)) + ' -m unittest:*)'
+            expected = 'Bash(' + shlex.quote(executable.as_posix()) + ' -m unittest:*)'
             self.assertIn(expected, lane)
             self.assertIn(expected, readonly)
             self.assertNotIn('Edit(/src/**)', readonly)
