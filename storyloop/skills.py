@@ -115,7 +115,7 @@ def instruction_skill_snapshot(project: Path, name: str) -> tuple[str, dict]:
     return text, {
         "name": name,
         "path": path,
-        "version": _frontmatter(skill_file.read_text(encoding="utf-8")).get("version", "0"),
+        "version": _frontmatter(text).get("version", "0"),
         "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
     }
 

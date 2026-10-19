@@ -46,3 +46,38 @@
 ## 提交
 
 提交：`feat(reports): capture call provenance and complete cost coverage`（本报告随该提交提交，最终哈希见任务结果）。
+
+## Fix round 1（独立审查）
+
+### 修复
+
+- 没有任何调用明确报告费用时，`known_cost_usd` 现在为 `None`；这同时适用于零调用、仅有缺失费用的调用及 per-role 摘要。
+- `models/vendors/tiers/skills` 加入逐调用 coverage。完全缺失时聚合值为 `None`；存在明确值时返回稳定列表。旧账本缺少 `skills` 与新调用显式 `skills: []` 分别表示为 `None` 和 `[]`，并由 coverage 明确区分。
+- 技能 `version` 直接从已经冻结并用于交付及哈希的同一个文本解析，不再二次读取 `SKILL.md`。
+
+### RED
+
+命令：
+
+```text
+/home/jinlin/work/storyloop/.venv/bin/python -m unittest tests.test_report_call_provenance -v
+```
+
+结果：10 tests；4 failures、1 error（exit 1）。分别证明无费用小计错误为零、categorical unknown 错为空列表、categorical coverage 缺失、legacy/显式空技能不可区分，以及技能文件发生了第二次读取。
+
+### GREEN
+
+命令：
+
+```text
+/home/jinlin/work/storyloop/.venv/bin/python -m unittest tests.test_report_call_provenance tests.test_telemetry tests.test_project_agents tests.test_codex_adapter tests.test_claude_adapter -v
+```
+
+结果：31 tests，全部通过（exit 0，19.448s）。未运行全仓测试，符合 controller 的任务限定。
+
+### 自审与疑虑
+
+- 数值与 categorical coverage 均使用 `{known, total}`，总摘要和 per-role 摘要走同一纯函数。
+- 显式 `skills: []` 只有字段实际存在于账本时才算 known；不会从角色配置或最终磁盘状态推断。
+- controller 修改的计划文件未纳入本次提交。
+- 无新增疑虑；Task 1 原报告所述“进程在结构化 telemetry 前崩溃时 usage unknown”和“旧账本无法倒推历史技能快照”限制仍成立。
