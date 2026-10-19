@@ -1,9 +1,8 @@
 """Prove characterization against committed old code plus declared lock artifacts."""
-import io
+import os
 from pathlib import Path
 import shutil
 import subprocess
-import tarfile
 import tempfile
 
 from .baseline import _git, load_project_config
@@ -49,11 +48,25 @@ def run_characterization_baseline(project, commands, timeout, pending):
 
 
 def _baseline(project, candidate, commit):
-    archive = subprocess.run(['git', 'archive', '--format=tar', commit], cwd=project,
-                             capture_output=True, check=True).stdout
-    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
-        members = [member for member in tar.getmembers() if member.isfile()]
-        for member in members:
-            safe_target(candidate, member.name, 'characterization baseline target')
-        tar.extractall(candidate, members=members, filter='data')
-    return {member.name for member in members}
+    # Archive attributes may drop tests or substitute bytes; read raw tree/blob objects.
+    tree = subprocess.run(['git', 'ls-tree', '-rz', '--full-tree', commit], cwd=project,
+                          capture_output=True, check=True).stdout
+    paths = set()
+    for entry in tree.split(b'\0'):
+        if not entry:
+            continue
+        metadata, raw_path = entry.split(b'\t', 1)
+        mode, kind, oid = metadata.split()
+        require(kind == b'blob' and mode in {b'100644', b'100755'},
+                'Characterization baseline must contain only regular files')
+        relative = os.fsdecode(raw_path)
+        target = safe_target(candidate, relative, 'characterization baseline target')
+        require(target.relative_to(candidate).as_posix() == relative,
+                'Characterization baseline path must be canonical')
+        content = subprocess.run(['git', 'cat-file', 'blob', oid.decode('ascii')], cwd=project,
+                                 capture_output=True, check=True).stdout
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        target.chmod(0o755 if mode == b'100755' else 0o644)
+        paths.add(relative)
+    return paths

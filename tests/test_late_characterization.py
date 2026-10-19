@@ -1,5 +1,6 @@
 """Late locks prove old behavior without discarding implementation-authored tests."""
 from dataclasses import replace
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -75,6 +76,31 @@ class LateCharacterizationTests(unittest.TestCase):
         self.assertIn(FEATURE_TEST, (root / 'tests/test_new.py').read_text())
 
 class CharacterizationCandidateSafetyTests(unittest.TestCase):
+    def test_head_files_ignore_archive_attributes_and_keep_exact_bytes(self):
+        from storyloop.characterization_baseline import _baseline
+        from tests.routing_support import readiness_repository
+        from tests.test_baseline_behavior import git
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as target:
+            root, candidate = Path(directory), Path(target)
+            readiness_repository(root)
+            content = b'original $Format:%H$\r\n\x00unchanged\xff'
+            (root / 'tests/substitute.bin').write_bytes(content)
+            (root / '.gitattributes').write_text(
+                'tests/test_service.py export-ignore\ntests/substitute.bin export-subst\n')
+            git(root, 'add', '.')
+            git(root, 'update-index', '--chmod=+x', 'tests/substitute.bin')
+            git(root, 'commit', '-qm', 'archive attributes fixture')
+            paths = _baseline(root, candidate, 'HEAD')
+            with self.subTest(attribute='export-ignore'):
+                self.assertIn('tests/test_service.py', paths)
+                self.assertEqual((candidate / 'tests/test_service.py').read_bytes(),
+                                 (root / 'tests/test_service.py').read_bytes())
+            with self.subTest(attribute='export-subst'):
+                self.assertEqual((candidate / 'tests/substitute.bin').read_bytes(), content)
+            self.assertEqual((root / 'tests/substitute.bin').read_bytes(), content)
+            if os.name != 'nt':
+                self.assertTrue((candidate / 'tests/substitute.bin').stat().st_mode & 0o111)
+
     def test_non_test_artifact_cannot_overlay_business_code(self):
         from storyloop.characterization_baseline import run_characterization_baseline
         from storyloop.models import StoryLoopError
