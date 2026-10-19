@@ -162,7 +162,7 @@ class ReportEvidenceTests(unittest.TestCase):
         self.assertEqual(result["status"], "MISMATCH")
         self.assertTrue(any(c["status"] == "MISMATCH" for c in result["checks"]))
 
-    def test_legacy_empty_ledger_is_not_available_and_does_not_read_payloads(self):
+    def test_empty_ledger_keeps_orphan_and_does_not_read_payloads(self):
         self._run()
         self._ledger([])
         folder = self.root / ".storyloop/state/telemetry/calls/legacy"
@@ -171,7 +171,7 @@ class ReportEvidenceTests(unittest.TestCase):
         (folder / "response.json").write_bytes(b"\xff private response")
         evidence = collect_evidence(self.root, self.change, self._report())
         result = reconcile(self.root, self.change, self._report(), evidence)
-        self.assertEqual(result["status"], "NOT_AVAILABLE")
+        self.assertEqual(result["status"], "MISMATCH")
         self.assertTrue(any("legacy" in item.lower() for item in result["limitations"]))
 
     def test_bounds_metadata_and_rejects_traversal_and_external_symlinks(self):

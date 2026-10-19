@@ -41,16 +41,34 @@ def _conclusion(items: dict) -> list[str]:
     lines = _statement("目标", items.get("goal"))
     lines += _statement("非目标", items.get("non_goals"))
     lines += _criteria(items.get("criteria"))
-    completion = _data(items.get("completion")) or {}
-    lines += ["### 完成情况", "", f"完成进度：{inline(completion.get('completed'))}/{inline(completion.get('total'))}", ""]
-    lines += _gates(_data(items.get("gates")))
-    lines += _traceability(_data(items.get("ac_matrix")))
-    lines += _consumers(_data(items.get("consumer_matrix")))
+    lines += _reader(items.get("completion"), _completion)
+    lines += _reader(items.get("gates"), _gates)
+    lines += _reader(items.get("ac_matrix"), _traceability)
+    lines += _reader(items.get("consumer_matrix"), _consumers)
     for identifier, title in (("manual_confirmations", "人工确认"), ("reconciliation", "运行对账"),
                               ("discovered", "发现测试数"),
                               ("added", "新增测试数")):
         lines += _summary(title, items.get(identifier))
     return lines
+
+
+def _reader(entry, render):
+    """Keep metadata adjacent to every specialized block, including partial tables."""
+    lines = render(_data(entry))
+    if not entry or entry.get("availability") != "AVAILABLE" or _data(entry) is None:
+        return lines[:2] + _meta(entry) + ["未提供", ""]
+    return lines[:2] + _meta(entry) + lines[2:]
+
+
+def _completion(data):
+    data = data or {}
+    return ["### 完成情况", "", f"完成进度：{inline(data.get('completed'))}/{inline(data.get('total'))}", ""]
+
+
+def _plan(data):
+    data = data or {}
+    return ["### 计划偏差", "", f"未计划变更：{_joined(data.get('unplanned'))}",
+            f"计划但未变更：{_joined(data.get('not_changed'))}", ""]
 
 
 def _criteria(entry: dict | None) -> list[str]:
@@ -92,13 +110,11 @@ def _traceability(rows: object) -> list[str]:
 
 
 def _focus(items: dict) -> list[str]:
-    lines = _paths(_data(items.get("paths")))
-    plan = _data(items.get("plan_paths")) or {}
-    lines += ["### 计划偏差", "", f"未计划变更：{_joined(plan.get('unplanned'))}",
-              f"计划但未变更：{_joined(plan.get('not_changed'))}", ""]
-    lines += _risks(_data(items.get("risks")))
-    lines += _gaps(_data(items.get("layer_gaps")))
-    lines += _commands(_data(items.get("verification")))
+    lines = _reader(items.get("paths"), _paths)
+    lines += _reader(items.get("plan_paths"), _plan)
+    lines += _reader(items.get("risks"), _risks)
+    lines += _reader(items.get("layer_gaps"), _gaps)
+    lines += _reader(items.get("verification"), _commands)
     lines += _summary("人工验证引用", items.get("human_verification"))
     for identifier in ("runtime_concurrency", "expiring_constants", "semantic_decisions",
                        "refactor_behavior_differences", "historical_review_issues", "performance"):
@@ -137,6 +153,8 @@ def _commands(rows: object) -> list[str]:
     lines = ["### 可复制验证命令", ""]
     for row in rows if isinstance(rows, list) else []:
         lines += [f"#### {inline(row.get('criterion_id'))} / {inline(row.get('test_id'))}", "",
+                  f"重放工作目录：{inline(row.get('cwd'))}；{inline(row.get('cwd_basis'))}",
+                  f"原执行目录：{inline(row.get('execution_cwd'))}；参数映射：{inline(row.get('argv_projection'))}", "",
                   fenced(str(row.get("command") or ""), "sh"), ""]
     return lines + (["未提供", ""] if len(lines) == 2 else [])
 

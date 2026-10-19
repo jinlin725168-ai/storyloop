@@ -12,8 +12,12 @@ def build_focus(change: dict, report: dict, evidence: dict) -> list[dict]:
     """Build machine templates from exact paths, explicit links and executed argv."""
     git = evidence.get('git') or {}
     files = git.get('files') if git.get('availability') == 'AVAILABLE' else None
-    result = [item('paths', _rank_paths(change, files)), _plan_paths(evidence, files),
-              item('verification', _commands(report)), item('human_verification', _human_paths(report)),
+    commands = _commands(report, evidence)
+    result = [item('paths', _rank_paths(change, files),
+                   reason='SNAPSHOT_TRUNCATED' if git.get('truncated') else None),
+              _plan_paths(evidence, None if git.get('truncated') else files),
+              item('verification', commands, reason='EXECUTED_ARGV_ONLY' if commands is not None
+                   else 'EXECUTED_ARGV_NOT_AVAILABLE'), item('human_verification', _human_paths(report)),
               item('layer_gaps', _layer_gaps(report))]
     if effective_tier(change, report, evidence) == 'heavy':
         result.append(item('risks', _risks(change, report, evidence)))
@@ -27,7 +31,7 @@ def _rank_paths(change, files):
     consumers = (change.get('product') or {}).get('consumers') or []
     core = {c.get('path') for c in consumers if c.get('in_scope') is True}
     ordered = sorted(files, key=lambda f: (f['path'] not in core, not f.get('existed'), f['path']))
-    return [{**{key: f.get(key) for key in ('path', 'status', 'existed', 'whitespace_only')},
+    return [{**{key: f.get(key) for key in ('path', 'previous_path', 'status', 'existed', 'whitespace_only')},
              'priority': 'CORE_DECLARED_PATH' if f['path'] in core else
              'EXISTING_PATH' if f.get('existed') else 'ADDED_PATH'} for f in ordered]
 
@@ -43,17 +47,21 @@ def _plan_paths(evidence, files):
                               'not_changed': sorted(expected - actual), 'comparison': 'EXACT_PATH_SET'})
 
 
-def _commands(report):
-    if 'traceability' not in report:
+def _commands(report, evidence):
+    executed = evidence.get('verification')
+    if 'traceability' not in report or executed is None:
         return None
+    by_id = {row['test_id']: row for row in executed}
     records = []
     for row in report['traceability']:
         for test in row.get('tests', []):
-            argv = test.get('command')
-            if test.get('id') != 'human' and isinstance(argv, list) and argv and all(
-                    isinstance(a, str) and '\x00' not in a for a in argv):
-                records.append({'criterion_id': row.get('criterion', {}).get('id'),
-                                'test_id': test.get('id'), 'argv': argv, 'command': shlex.join(argv)})
+            actual = by_id.get(test.get('id'))
+            if test.get('id') == 'human':
+                continue
+            if actual is None:
+                return None
+            records.append({**actual, 'criterion_id': row.get('criterion', {}).get('id'),
+                            'command': shlex.join(actual['argv'])})
     return records
 
 

@@ -122,7 +122,10 @@ class TelemetryTests(unittest.TestCase):
             self.assertIsNone(telemetry["cost_usd"])
             self.assertGreaterEqual(telemetry["loop_ms"], 0)
             markdown = Path(done["report"]).with_suffix(".md").read_text(encoding="utf-8")
-            self.assertIn("## 成本与耗时", markdown)
+            self.assertIn("## 5. 成本", markdown)
+            cost = next(item for item in report["presentation"]["sections"]["5"]["items"]
+                        if item["id"] == "cost")
+            self.assertEqual(cost["availability"], "NOT_AVAILABLE")
 
 
 if __name__ == "__main__":

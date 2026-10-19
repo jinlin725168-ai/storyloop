@@ -16,6 +16,8 @@ class FocusTests(unittest.TestCase):
             'availability': 'AVAILABLE', 'files': [
                 {'path': 'a.py', 'existed': False}, {'path': 'b.py', 'existed': True},
                 {'path': 'z.py', 'existed': True}]}}
+        evidence['verification'] = [{'test_id': 'T', 'argv': ['python', 'a b.py', '$(oops)'],
+                                     'cwd': '/repo'}]
         return change, report, evidence
 
     def test_machine_only_paths_commands_and_uncovered(self):

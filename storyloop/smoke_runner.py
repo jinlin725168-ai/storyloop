@@ -372,6 +372,7 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> 
         "id": test["id"],
         "criteria": list(test["criteria"]),
         "command": argv,
+        "cwd": str(project),
         "status": status,
         "returncode": outcome.get("returncode"),
         "timed_out": bool(outcome.get("timed_out")),

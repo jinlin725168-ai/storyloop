@@ -5,14 +5,18 @@ from __future__ import annotations
 import hashlib
 from itertools import islice
 import json
+import math
 from pathlib import Path
 import re
-import subprocess
 
 from .telemetry import ledger_entries, summarize
 from .processutil import redact
+from .report_git import git_snapshot
+from .report_commands import execution_commands
+from .telemetry_summary import NUMERIC, _valid
 
 
+MAX_GIT_BYTES = 1_000_000
 MAX_RUN_BYTES = 2_000_000
 MAX_LEDGER_BYTES = 4_000_000
 MAX_META_BYTES = 256_000
@@ -47,7 +51,7 @@ def collect_evidence(project: Path, change: dict, report: dict) -> dict:
     entries, telemetry, entry_status, truncated = _load_entries(root, change_id)
     calls, calls_truncated = _load_calls(
         root, change_id, {item.get("call") for item in entries if isinstance(item.get("call"), str)})
-    git = _git_snapshot(root, run, report)
+    git = git_snapshot(root, run, report, MAX_GIT_BYTES, MAX_ENTRIES)
     protected = _protected_evidence(root, change_id, report)
     answers, answers_status, answers_truncated = _load_answers(root, change_id)
     return {
@@ -56,6 +60,7 @@ def collect_evidence(project: Path, change: dict, report: dict) -> dict:
         "entries": {"ledger": entries, "calls": calls,
                     "truncated": {"ledger": truncated, "calls": calls_truncated}},
         "telemetry": telemetry,
+        "verification": execution_commands(root, change_id, _read_object, MAX_RUN_BYTES),
         "git": git,
         "availability": {"run": run_status, "run_truncated": run_truncated,
                          "entries": entry_status, "answers": answers_status,
@@ -110,6 +115,8 @@ def _bounded(value: object, depth: int = 0) -> tuple[object, bool]:
         converted = [(str(key)[:200], _bounded(item, depth + 1)) for key, item in items]
         return {key: item for key, (item, _) in converted}, (len(value) > MAX_LIST
                 or any(flag for _, (_, flag) in converted))
+    if isinstance(value, float) and not math.isfinite(value):
+        return None, True
     return value if value is None or isinstance(value, (bool, int, float)) else None, False
 
 
@@ -128,12 +135,13 @@ def _load_entries(root: Path, change_id: str | None) -> tuple[list, dict | None,
     bounded = raw[:MAX_ENTRIES]
     projected = [{key: item[key] for key in ENTRY_FIELDS if key in item}
                  for item in bounded if isinstance(item, dict)]
-    converted = [_bounded(item) for item in projected]
+    malformed = any(not _valid_entry(item) for item in bounded)
+    converted = [_bounded(_diagnostic_record(item)) for item in projected]
     totals, totals_truncated = _bounded(totals)
     clean = [item for item, _ in converted]
-    incomplete = (truncated or totals_truncated or len(clean) != len(bounded)
+    incomplete = (malformed or truncated or totals_truncated or len(clean) != len(bounded)
                   or any(flag for _, flag in converted))
-    return clean, totals, "AVAILABLE", incomplete
+    return clean, totals, "NOT_AVAILABLE" if malformed else "AVAILABLE", incomplete
 
 
 def _load_calls(root: Path, change_id: str | None, ledger_ids: set[str]) -> tuple[list[dict], bool]:
@@ -151,50 +159,37 @@ def _load_calls(root: Path, change_id: str | None, ledger_ids: set[str]) -> tupl
         value = None if call_id is None or folder.is_symlink() else _read_object(
             root, folder / "meta.json", MAX_META_BYTES)
         if value is None or value.get("call") != call_id:
-            incomplete = incomplete or folder.name in ledger_ids
+            incomplete = (incomplete or folder.name in ledger_ids
+                          or isinstance(value, dict) and value.get("ledger") == change_id)
             continue
         adopted = (value.get("ledger") is None and value.get("role") == "product"
                    and call_id in ledger_ids)
         if value.get("ledger") != change_id and not adopted:
+            incomplete = incomplete or call_id in ledger_ids
             continue
+        malformed = (not _identifier(value.get("role"))
+                     or not isinstance(value.get("status"), str))
         projected, truncated = _bounded({key: value[key] for key in META_FIELDS if key in value})
-        calls.append(projected)
-        incomplete = incomplete or truncated
+        calls.append(_diagnostic_record(projected))
+        incomplete = incomplete or truncated or malformed
     return calls, incomplete or len(sampled) > MAX_CALLS
 
 
-def _git_snapshot(root: Path, run: dict | None, report: dict) -> dict:
-    base = (run or {}).get("source_head")
-    head = report.get("implementation_commit")
-    if not (_commit(root, base) and _commit(root, head)):
-        return {"base": None, "head": head if _commit(root, head) else None,
-                "files": [], "availability": "NOT_AVAILABLE"}
-    result = _git(root, "diff", "--name-status", base, head, "--")
-    if result.returncode:
-        return {"base": base, "head": head, "files": [], "availability": "NOT_AVAILABLE"}
-    files = [_git_file(root, base, head, line) for line in result.stdout.splitlines()[:MAX_ENTRIES]]
-    return {"base": base, "head": head, "files": [item for item in files if item],
-            "availability": "AVAILABLE", "truncated": len(result.stdout.splitlines()) > MAX_ENTRIES}
+def _valid_entry(value):
+    if not isinstance(value, dict) or not _identifier(value.get("role")):
+        return False
+    if "call" in value and not _identifier(value["call"]):
+        return False
+    return all(_valid(value[key]) for key in NUMERIC if key in value)
 
 
-def _git_file(root: Path, base: str, head: str, line: str) -> dict | None:
-    parts = line.split("\t")
-    if len(parts) < 2:
-        return None
-    status, path = parts[0], parts[-1]
-    existed = _git(root, "cat-file", "-e", f"{base}:{path}").returncode == 0
-    raw = _git(root, "diff", "--quiet", base, head, "--", path).returncode
-    ignored = _git(root, "diff", "-w", "--quiet", base, head, "--", path).returncode
-    return {"path": path, "status": status, "existed": existed,
-            "whitespace_only": status.startswith("M") and raw == 1 and ignored == 0}
-
-
-def _commit(root: Path, value: object) -> bool:
-    return isinstance(value, str) and _git(root, "cat-file", "-e", f"{value}^{{commit}}").returncode == 0
-
-
-def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], cwd=root, text=True, capture_output=True, check=False)
+def _diagnostic_record(value):
+    result = dict(value)
+    for key in ("call", "role", "ledger", "status"):
+        if key in result and result[key] is not None and not _identifier(result[key]):
+            result[key] = None
+            result["invalid_fields"] = [*result.get("invalid_fields", []), key]
+    return result
 
 
 def _protected_evidence(root: Path, change_id: str | None, report: dict) -> dict:

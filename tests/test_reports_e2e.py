@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import textwrap
 import unittest
@@ -49,6 +50,14 @@ class ReportsEndToEndTests(unittest.TestCase):
             self.assertEqual(result["status"], "PASSED")
             self._assert_presentation_and_calls(root, report, markdown, entries)
             self._assert_receipt_and_repository(root, change_id, result, report)
+            commands = self._presentation_item(report, "2", "verification")["data"]
+            self.assertTrue(commands)
+            for command in commands:
+                self.assertEqual(command["argv"][0], sys.executable)
+                self.assertTrue(command["execution_cwd"])
+                self.assertEqual(command["cwd_basis"], "PROJECT_ROOT_REPLAY")
+                executed = subprocess.run(command["argv"], cwd=command["cwd"], capture_output=True)
+                self.assertEqual(executed.returncode, 0, executed.stderr)
 
     def test_skill_snapshot_check_rejects_empty_or_incomplete_provenance(self):
         expected = [{"name": "oracle-craft", "path": "storyloop/skills/oracle-craft/SKILL.md",
