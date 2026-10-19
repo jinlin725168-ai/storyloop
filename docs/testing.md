@@ -48,8 +48,10 @@
 
 | 作业 | 内容 |
 |---|---|
-| 测试（矩阵） | Ubuntu + Python 3.11、Ubuntu + Python 3.12、Windows + Python 3.12，全部必须通过；步骤为 `compileall`（含 `examples/claude-code`）→ `pip install .`（确认打包与技能包数据）→ 全量 unittest |
-| 密钥扫描 | gitleaks 扫描整个工作树 |
+| 改动范围 | 判断是否只改了文档（`docs/`、`LICENSE`、`storyloop/` 与 `tests/` 以外的 `.md`）；是则跳过测试 |
+| 测试（矩阵） | Ubuntu、Windows，Python 统一 3.11（pyproject 声明的最低版本），全部必须通过；步骤为 `compileall`（含 `examples/claude-code`）→ `pip install .`（确认打包与技能包数据）→ 全量 unittest |
+| 密钥扫描 | gitleaks（固定版本、校验摘要）扫描本次引入的每个提交，手动触发时扫描全部历史；只改文档时也运行 |
+| CI 结果 | 汇总以上作业，跳过算通过；`main` 的分支规则只要求这一项 |
 
 ## 三、真实模型验证
 
