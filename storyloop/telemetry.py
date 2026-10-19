@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import math
 from pathlib import Path
 from typing import Callable
 
@@ -12,6 +13,7 @@ from .storage import load_json, write_json
 Clock = Callable[[], datetime]
 PENDING = "pending"  # product calls made before the change id exists
 NUMERIC = ("cost_usd", "turns", "duration_ms", "input_tokens", "output_tokens", "segments", "lanes", "perspectives")
+STRINGS = ("model", "vendor", "tier_applied")
 
 
 def record_call(project: Path, role: str, change_id: str | None, telemetry: object,
@@ -34,10 +36,15 @@ def record_call(project: Path, role: str, change_id: str | None, telemetry: obje
     if isinstance(telemetry, dict):
         for key in NUMERIC:
             value = telemetry.get(key)
-            if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+            if (_finite_number(value) and value >= 0):
                 entry[key] = value
-        if isinstance(telemetry.get("model"), str) and telemetry["model"]:
-            entry["model"] = telemetry["model"][:120]
+        for key in STRINGS:
+            value = telemetry.get(key)
+            if isinstance(value, str) and value:
+                entry[key] = value[:120]
+        skills = telemetry.get("skills")
+        if isinstance(skills, list) and all(_valid_skill(item) for item in skills):
+            entry["skills"] = skills
     key = change_id or PENDING
     entries = _entries(project, key)
     entries.append(entry)
@@ -59,22 +66,10 @@ def adopt_pending(project: Path, change_id: str) -> int:
 
 
 def summarize(project: Path, change_id: str) -> dict:
-    """Totals per change and per role; cost is None when no call reported one."""
-    entries = _entries(Path(project).resolve(), change_id)
-    by_role: dict[str, dict] = {}
-    for entry in entries:
-        role = by_role.setdefault(entry["role"], {"calls": 0, "failed": 0, "agent_ms": 0,
-                                                  "cost_usd": None, "turns": 0})
-        role["calls"] += 1
-        role["failed"] += 1 if entry.get("failed") else 0
-        role["agent_ms"] += int(entry.get("wall_ms", 0))
-        role["turns"] += int(entry.get("turns", 0))
-        if "cost_usd" in entry:
-            role["cost_usd"] = round((role["cost_usd"] or 0.0) + float(entry["cost_usd"]), 4)
-    costs = [role["cost_usd"] for role in by_role.values() if role["cost_usd"] is not None]
-    return {"calls": len(entries), "failed": sum(1 for e in entries if e.get("failed")),
-            "agent_ms": sum(int(e.get("wall_ms", 0)) for e in entries),
-            "cost_usd": round(sum(costs), 4) if costs else None, "by_role": by_role}
+    """Totals per change and role, keeping partial values separate from complete totals."""
+    from .telemetry_summary import summarize_entries
+
+    return summarize_entries(_entries(Path(project).resolve(), change_id))
 
 
 def ledger_entries(project: Path, change_id: str) -> list[dict]:
@@ -102,3 +97,15 @@ def _path(project: Path, key: str) -> Path:
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _finite_number(value: object) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return not isinstance(value, float) or math.isfinite(value)
+
+
+def _valid_skill(value: object) -> bool:
+    return isinstance(value, dict) and set(value) == {"name", "path", "version", "sha256"} and all(
+        isinstance(value[key], str) and len(value[key]) <= 500 for key in value
+    )

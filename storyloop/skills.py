@@ -13,6 +13,7 @@ role), preferring the project's installed copy so local amendments win over the 
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 import re
 
@@ -97,10 +98,36 @@ def skill_status(project: Path) -> dict[str, dict]:
 
 def skill_text(project: Path, name: str) -> str:
     """The skill's SKILL.md plus references, project copy first, packaged copy as fallback."""
+    root = _skill_root(project, name)
+    return _skill_text(root)
+
+
+def instruction_skill_snapshot(project: Path, name: str) -> tuple[str, dict]:
+    """Return the exact delivered skill text and its immutable call provenance."""
+    project = Path(project).resolve()
+    root = _skill_root(project, name)
+    text = _skill_text(root)
+    skill_file = root / "SKILL.md"
+    try:
+        path = skill_file.relative_to(project).as_posix()
+    except ValueError:
+        path = skill_file.relative_to(SKILLS_ROOT.parent.parent).as_posix()
+    return text, {
+        "name": name,
+        "path": path,
+        "version": _frontmatter(skill_file.read_text(encoding="utf-8")).get("version", "0"),
+        "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+    }
+
+
+def _skill_root(project: Path, name: str) -> Path:
     project = Path(project).resolve()
     require(name in packaged_skills(), f"Unknown skill {name}")
     roots = [project / target / name for target in SKILL_TARGETS] + [SKILLS_ROOT / name]
-    root = next(r for r in roots if (r / "SKILL.md").is_file())
+    return next(root for root in roots if (root / "SKILL.md").is_file())
+
+
+def _skill_text(root: Path) -> str:
     parts = [(root / "SKILL.md").read_text(encoding="utf-8")]
     for reference in sorted((root / "references").glob("*.md")) if (root / "references").is_dir() else []:
         parts.append(f"\n\n<!-- references/{reference.name} -->\n" + reference.read_text(encoding="utf-8"))

@@ -80,7 +80,9 @@ class TelemetryTests(unittest.TestCase):
             self.assertEqual(done["status"], "PASSED", done)
             telemetry = load_run_state(root, change_id)["telemetry"]
             self.assertEqual(telemetry["calls"], 3)
-            self.assertAlmostEqual(telemetry["cost_usd"], 0.7)
+            self.assertIsNone(telemetry["cost_usd"])
+            self.assertAlmostEqual(telemetry["known_cost_usd"], 0.7)
+            self.assertEqual(telemetry["coverage"]["cost_usd"], {"known": 2, "total": 3})
 
     def test_adapter_telemetry_is_stripped_from_results_and_recorded(self):
         with tempfile.TemporaryDirectory() as folder:

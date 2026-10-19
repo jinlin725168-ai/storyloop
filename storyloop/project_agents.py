@@ -13,7 +13,7 @@ import time
 from .baseline import load_project_config
 from .models import StoryLoopError, require
 from .foundation_survey import foundation_payload
-from .skills import ROLE_SKILLS, skill_text
+from .skills import ROLE_SKILLS, instruction_skill_snapshot
 from .call_log import close_call, open_call
 from .processutil import redact, run_process
 from .role_schemas import normalize, schema_errors, schema_for, wire_schema
@@ -36,10 +36,17 @@ REPAIR_NOTE = (
 
 def instructions_for(project: Path, role: str) -> str:
     """Role instructions with the role's packaged skills embedded (project copy first)."""
+    return _instruction_bundle(project, role)[0]
+
+
+def _instruction_bundle(project: Path, role: str) -> tuple[str, list[dict]]:
     text_ = INSTRUCTIONS[role] + REPAIR_NOTE
+    snapshots = []
     for name in ROLE_SKILLS.get(role, ()):
-        text_ += f"\n\nSkill {name}:\n" + skill_text(project, name)
-    return text_
+        skill, snapshot = instruction_skill_snapshot(project, name)
+        text_ += f"\n\nSkill {name}:\n" + skill
+        snapshots.append(snapshot)
+    return text_, snapshots
 
 
 def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
@@ -69,7 +76,9 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
     adapter = config.get("adapter")
     ledger = FOUNDATION_LEDGER if role == "survey" else _change_id(payload)
     call = open_call(project, role, ledger, adapter, request)
-    trace: dict = {"stderr": "", "sessions": [], "raw": None, "repairs": 0, "schema_errors": []}
+    instructions, skill_snapshots = _instruction_bundle(project, role)
+    trace: dict = {"stderr": "", "sessions": [], "raw": None, "repairs": 0, "schema_errors": [],
+                   "instructions": instructions, "skills": skill_snapshots, "telemetry": None}
     started = time.monotonic()
     result = None
     error: StoryLoopError | None = None
@@ -89,7 +98,10 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
         raise
     finally:
         wall_ms = int((time.monotonic() - started) * 1000)
-        telemetry = result.pop("_telemetry", None) if isinstance(result, dict) else None
+        telemetry = result.pop("_telemetry", None) if isinstance(result, dict) else trace["telemetry"]
+        telemetry = dict(telemetry) if isinstance(telemetry, dict) else {}
+        telemetry.pop("skills", None)
+        telemetry["skills"] = trace["skills"]
         sessions = trace["sessions"] + _telemetry_sessions(telemetry)
         waiting = error is not None and adapter == "manual" and error.code == "NEEDS_INPUT"
         # A manual adapter waiting for input is not a failed call; everything else that raised is.
@@ -139,7 +151,7 @@ def _require_conforming(value: dict, schema: dict, trace: dict) -> dict:
 
 def _manual(project: Path, request: dict, schema: dict, trace: dict) -> dict:
     request_id = _request_id(request)
-    envelope = {**request, "request_id": request_id, "instructions": instructions_for(project, request["role"])}
+    envelope = {**request, "request_id": request_id, "instructions": trace["instructions"]}
     request_path = project / ".storyloop" / "requests" / f"project-{request['role']}.json"
     response_path = project / ".storyloop" / "responses" / f"project-{request['role']}.json"
     write_json(request_path, envelope, max_bytes=2_000_000)
@@ -152,6 +164,7 @@ def _manual(project: Path, request: dict, schema: dict, trace: dict) -> dict:
     require(response.get("request_id") == request_id, "Manual response does not match this request")
     result = response.get("result")
     require(isinstance(result, dict), "Manual response result must be an object")
+    _capture_telemetry(result, trace)
     result = _require_conforming(result, schema, trace)
     response_path.unlink()
     return result
@@ -170,13 +183,18 @@ def _command(project: Path, request: dict, config: dict, schema: dict, trace: di
     argv[0] = str(executable)
     result = run_process(
         argv, project, config["agent_timeout_seconds"],
-        input_text=json.dumps({**request, "instructions": instructions_for(project, request["role"])},
+        input_text=json.dumps({**request, "instructions": trace["instructions"]},
                               ensure_ascii=False),
     )
     trace["stderr"] = str(result.get("stderr") or "")
-    _check_process(result)
     trace["raw"] = result.get("stdout", "")
+    try:
+        _capture_telemetry(_parse(trace["raw"]), trace)
+    except StoryLoopError:
+        pass
+    _check_process(result)
     parsed = _parse(trace["raw"])
+    _capture_telemetry(parsed, trace)
     trace["raw"] = None
     return _require_conforming(parsed, schema, trace)
 
@@ -203,8 +221,9 @@ def _codex(project: Path, request: dict, config: dict, schema: dict, trace: dict
     """
     sandbox = "workspace-write" if request["role"] in {"implement", "characterize"} else "read-only"
     common = ["--ignore-user-config", "--color", "never", "--json"]
-    prompt = instructions_for(project, request["role"]) + "\nRequest:\n" + json.dumps(request, ensure_ascii=False)
+    prompt = trace["instructions"] + "\nRequest:\n" + json.dumps(request, ensure_ascii=False)
     telemetry = {"turns": 0, "input_tokens": 0, "output_tokens": 0, "segments": 0}
+    trace["telemetry"] = telemetry
     thread: str | None = None
     next_prompt = prompt
     with tempfile.TemporaryDirectory(dir=project / ".storyloop", prefix="schema-") as folder:
@@ -241,6 +260,11 @@ def _codex(project: Path, request: dict, config: dict, schema: dict, trace: dict
             body["_telemetry"] = dict(telemetry)
             return body
     raise StoryLoopError("Project agent did not return a JSON object")  # unreachable
+
+
+def _capture_telemetry(value: object, trace: dict) -> None:
+    if isinstance(value, dict) and isinstance(value.get("_telemetry"), dict):
+        trace["telemetry"] = value["_telemetry"]
 
 
 def _codex_executable() -> list[str]:
