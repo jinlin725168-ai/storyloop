@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 
@@ -7,10 +8,35 @@ from storyloop.baseline import bootstrap_project, load_project_config
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import invoke_project_agent
 from storyloop.storage import write_json
+from storyloop.telemetry import ledger_entries
 from tests.test_baseline_behavior import git, repository
 
 
 class ProjectAgentTests(unittest.TestCase):
+    def test_role_adapter_request_contains_profile_and_engine_ledger_fields(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            script = root / "agent.py"
+            script.write_text(
+                "import json, sys\nrequest=json.load(sys.stdin)\n"
+                "json.dump(request, open(sys.argv[1], 'w'))\n"
+                "print(json.dumps({'verdict':'pass','summary':'ok','questions':[],'findings':[], '_telemetry': {'tier_requested':'bad','adapter':'bad'}}))\n",
+                encoding="utf-8")
+            seen = root / "seen.json"
+            config = load_project_config(root)
+            config.update({"adapters": {"reviewer": {"kind": "command", "agent_command": [sys.executable, str(script), str(seen)]}},
+                           "roles": {"default_adapter": "reviewer", "review": {"adapter": "reviewer"}}})
+            write_json(root / ".storyloop/config.json", config)
+
+            invoke_project_agent(root, "review", {"change": {"change_id": "FEAT-1"}})
+
+            request = json.loads(seen.read_text(encoding="utf-8"))
+            self.assertEqual(request["role_profile"]["tier"], "strong")
+            entry = ledger_entries(root, "FEAT-1")[0]
+            self.assertEqual(entry["tier_requested"], "strong")
+            self.assertEqual(entry["adapter"], "reviewer")
     def test_implement_request_preserves_legacy_roots_under_plan_and_green_locks(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

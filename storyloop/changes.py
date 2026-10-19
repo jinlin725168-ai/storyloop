@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from typing import Callable
 
-from .baseline import load_baseline
+from .baseline import load_baseline, load_project_config
 from .models import identifier, nature_of, require, text, validate_product
 from .openspec_docs import capability_of, render_delta_spec
 from .requirement_checklist import evaluate_checklist, render_checklist
@@ -25,6 +25,9 @@ def create_change(
     """Create a local ignored draft from one short product idea."""
     project = Path(project).resolve()
     load_baseline(project)
+    if (config := load_project_config(project)).get("adapters") or config.get("roles"):
+        from .adapter_capabilities import ensure_checked
+        ensure_checked(project)
     idea = text(idea, "product idea")
     canonical = _validated_copy(product)
     moment = (now or _utc_now)()

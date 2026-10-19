@@ -27,7 +27,7 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
             "Project must be the Git repository root")
     require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
             "Git worktree must be clean before initialization")
-    settings, budget = _bootstrap_settings(overrides)
+    settings, budget, role_config = _bootstrap_settings(overrides)
     profile = validate_project_settings(project, settings)
     tracked = _tracked_files(project)
     files = {relative: _sha256(project / relative) for relative in tracked}
@@ -46,6 +46,7 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
         "design_min_stories": 2,  # the architect step runs for changes with at least this many stories
         "profile": profile,
         **budget,
+        **role_config,
     }
     baseline = {
         "version": 1,
@@ -62,19 +63,23 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
     write_json(project / BASELINE_PATH, baseline, max_bytes=8_000_000)
     from .system_smoke import adopt_system_smoke  # a committed system suite of a clean tree is trusted at init
     adopt_system_smoke(project)
+    if config.get("adapters") or config.get("roles"):
+        from .adapter_capabilities import check
+        check(project)
     require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
             "StoryLoop control files must stay outside Git changes")
     return _bootstrap_result(project, baseline, profile)
 
 
-def _bootstrap_settings(overrides: dict | None) -> tuple[dict, dict]:
+def _bootstrap_settings(overrides: dict | None) -> tuple[dict, dict, dict]:
     settings = dict(overrides or {})
     budget = {}
+    role_config = {key: settings.pop(key) for key in ("adapters", "roles") if key in settings}
     if 'max_attempts' in settings:
         value = settings.pop('max_attempts')
         require(type(value) is int and value > 0, 'Invalid max_attempts')
         budget['max_attempts'] = value
-    return settings, budget
+    return settings, budget, role_config
 
 
 def _bootstrap_result(project: Path, baseline: dict, profile: dict) -> dict:

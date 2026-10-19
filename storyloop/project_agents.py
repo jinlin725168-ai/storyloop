@@ -20,6 +20,7 @@ from .role_schemas import normalize, schema_errors, schema_for, wire_schema
 from .role_instructions import FOUNDATION_NOTE, INSTRUCTIONS
 from .storage import load_json, write_json
 from .telemetry import record_call
+from .role_profiles import build_profile, role_settings, resolve_adapters
 
 ROLES = {"product", "acceptance", "implement", "review", "survey", "characterize", "design"}
 
@@ -61,6 +62,12 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
     require(role in ROLES, "Unknown project agent role")
     require(isinstance(payload, dict), "Agent payload must be an object")
     config = load_project_config(project)
+    if config.get("adapters") or config.get("roles"):
+        from .adapter_capabilities import ensure_checked
+        ensure_checked(project)
+    settings = role_settings(config, role, _routing_tier(payload))
+    adapter_name = settings["adapter"]
+    adapter_config = {**config, **resolve_adapters(config)[adapter_name]}
     foundation = foundation_payload(project) if role != "survey" else None
     if foundation and "foundation" not in payload:
         payload = {**payload, "foundation": foundation}
@@ -72,10 +79,13 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
         "payload": payload,
         "response_schema": wire_schema(schema),
     }
+    profile = build_profile(project, config, role, payload, {})
+    if profile is not None:
+        request["role_profile"] = profile
     _bounded_json(request)
-    adapter = config.get("adapter")
+    adapter = adapter_config.get("kind")
     ledger = FOUNDATION_LEDGER if role == "survey" else _change_id(payload)
-    call = open_call(project, role, ledger, adapter, request)
+    call = open_call(project, role, ledger, adapter_name, request)
     instructions, skill_snapshots = _instruction_bundle(project, role)
     trace: dict = {"stderr": "", "sessions": [], "raw": None, "repairs": 0, "schema_errors": [],
                    "instructions": instructions, "skills": skill_snapshots, "telemetry": None}
@@ -86,10 +96,10 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
         if adapter == "manual":
             result = _manual(project, request, schema, trace)
         elif adapter == "command":
-            result = _command(project, request, config, schema, trace)
+            result = _command(project, request, adapter_config, schema, trace)
         else:
             require(adapter == "codex", "Unknown project agent adapter")
-            result = _codex(project, request, config, schema, trace)
+            result = _codex(project, request, adapter_config, schema, trace)
         return result
     except StoryLoopError as exc:
         error = exc
@@ -107,7 +117,9 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
         # A manual adapter waiting for input is not a failed call; everything else that raised is.
         failed = result is None and not waiting
         record_call(project, role, ledger, telemetry, wall_ms, failed=failed,
-                    call=call, session=",".join(dict.fromkeys(sessions)))
+                    call=call, session=",".join(dict.fromkeys(sessions)),
+                    engine_fields=({"tier_requested": settings["tier"], "adapter": adapter_name}
+                                   if profile is not None else None))
         close_call(project, call, status="WAITING" if waiting else "FAILED" if failed else "OK",
                    wall_ms=wall_ms, response=result, raw=trace["raw"], stderr=trace["stderr"],
                    error=str(error) if error else None, code=error.code if error else None,
@@ -128,6 +140,11 @@ def _change_id(payload: dict) -> str | None:
         change = payload.get("change")
         value = change.get("change_id") if isinstance(change, dict) else None
     return value if isinstance(value, str) and value else None
+
+
+def _routing_tier(payload: dict) -> str | None:
+    value = payload.get("routing_tier") or payload.get("tier")
+    return value if isinstance(value, str) else None
 
 
 def conform(value: dict, schema: dict) -> tuple[dict, list[str]]:

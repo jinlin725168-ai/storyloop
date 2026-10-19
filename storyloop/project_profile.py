@@ -47,6 +47,7 @@ def detect_project(root: Path) -> dict:
         "candidate_allow": [],
         "scratch_paths": [],
         "test_count_patterns": [],
+        "stacks": [],
         "warnings": warnings,
     }
 
@@ -58,7 +59,7 @@ def validate_project_settings(root: Path, overrides: dict | None = None) -> dict
     overrides = overrides or {}
     allowed = {"test_commands", "unit_commands", "integration_commands", "check_commands", "test_roots",
                "module_roots", "integration_paths", "candidate_allow", "scratch_paths",
-               "test_count_patterns"}
+               "test_count_patterns", "stacks"}
     require(set(overrides) <= allowed, "Unknown project setting")
     require(not ("test_commands" in overrides and "unit_commands" in overrides),
             "test_commands is the old name of unit_commands; give one of them")
@@ -77,6 +78,10 @@ def validate_project_settings(root: Path, overrides: dict | None = None) -> dict
     if "test_count_patterns" in overrides:
         from .oracle_counts import validate_patterns  # local import: oracle_counts reads project config
         profile["test_count_patterns"] = validate_patterns(overrides["test_count_patterns"])
+    if "stacks" in overrides:
+        require(isinstance(overrides["stacks"], list) and all(isinstance(item, str) and item.strip()
+                for item in overrides["stacks"]), "stacks must be a list of names")
+        profile["stacks"] = sorted(set(item.strip() for item in overrides["stacks"]))
     protected = set(profile["protected_paths"])
     require(not protected.intersection(profile["module_roots"]),
             "Protected CI paths cannot be module roots")

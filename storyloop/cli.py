@@ -68,6 +68,11 @@ def parser() -> argparse.ArgumentParser:
         child.add_argument("--json", action="store_true", help="输出完整 JSON")
         _product_arguments(child, command)
         _maintenance_arguments(child, command)
+    adapters = sub.add_parser("adapters", help="检查角色适配器能力")
+    adapter_sub = adapters.add_subparsers(dest="adapter_command", required=True)
+    check = adapter_sub.add_parser("check", help="握手并校验角色档次映射")
+    check.add_argument("project", type=Path)
+    check.add_argument("--json", action="store_true", help="输出完整 JSON")
     return root
 
 
@@ -142,6 +147,9 @@ def _maintenance_arguments(child, command):
 
 def dispatch(args) -> dict:
     project = args.project.resolve()
+    if args.command == "adapters":
+        from .adapter_capabilities import check
+        return check(project)
     routed = dispatch_routing(project, args)
     if routed is not None:
         return routed
@@ -177,6 +185,8 @@ def dispatch(args) -> dict:
 
 def _change(project: Path, args) -> dict:
     require(_is_product_project(project), "Run storyloop init on this Git project first")
+    from .adapter_capabilities import ensure_checked
+    ensure_checked(project)
     interactive = not getattr(args, "no_interactive", False)
     if args.supersede:
         require(args.message and not args.idea and not args.change_id,

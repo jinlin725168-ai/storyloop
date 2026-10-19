@@ -18,7 +18,8 @@ STRINGS = ("model", "vendor", "tier_applied")
 
 def record_call(project: Path, role: str, change_id: str | None, telemetry: object,
                 wall_ms: int, now: Clock | None = None, failed: bool = False,
-                call: str | None = None, session: str | None = None) -> dict:
+                call: str | None = None, session: str | None = None,
+                engine_fields: dict | None = None) -> dict:
     """Append one agent call; adapter telemetry is optional and only known keys are kept.
 
     `call` names the diagnostic record under calls/ and `session` the agent CLI session ids
@@ -45,6 +46,11 @@ def record_call(project: Path, role: str, change_id: str | None, telemetry: obje
         skills = telemetry.get("skills")
         if isinstance(skills, list) and all(_valid_skill(item) for item in skills):
             entry["skills"] = skills
+    if isinstance(engine_fields, dict):
+        for key in ("tier_requested", "adapter", "degraded", "subagents_applied", "path_guard"):
+            value = engine_fields.get(key)
+            if isinstance(value, (str, bool, dict)):
+                entry[key] = value
     key = change_id or PENDING
     entries = _entries(project, key)
     entries.append(entry)
