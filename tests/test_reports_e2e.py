@@ -7,7 +7,6 @@ from pathlib import Path
 import sys
 import subprocess
 import tempfile
-import textwrap
 import unittest
 
 from storyloop.approvals import approve_change
@@ -27,13 +26,14 @@ class ReportsEndToEndTests(unittest.TestCase):
     def test_native_command_adapter_closes_git_loop_with_traceable_report(self):
         """The adapter is simulated; Git, call records, report, merge and receipt are real."""
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            root = Path(folder) / "project"
+            root.mkdir()
             repository(root)
             bootstrap_project(root, {"test_commands": []})
             state = create_change(root, "report provenance", product())
             change_id = state["change_id"]
             approve_change(root, change_id)
-            self._install_deterministic_command_adapter(root)
+            self._install_deterministic_command_adapter(root, change_id)
 
             with self.assertRaises(StoryLoopError) as invalid:
                 invoke_project_agent(root, "review", {
@@ -143,51 +143,32 @@ class ReportsEndToEndTests(unittest.TestCase):
                     if item["id"] == identifier)
 
     @staticmethod
-    def _install_deterministic_command_adapter(root: Path) -> None:
-        script = root / ".storyloop" / "deterministic-report-adapter.py"
-        script.write_text(textwrap.dedent("""
-            import json
-            from pathlib import Path
-            import sys
-
-            request = json.load(sys.stdin)
-            role = request["role"]
-            payload = request["payload"]
-            telemetry = {"model": "fixture-model", "vendor": "fixture-vendor",
-                         "tier_applied": "fixture-tier", "turns": 1}
-            if payload.get("fixture_failure"):
-                telemetry["cost_usd"] = 0.25
-                answer = {"summary": "intentionally invalid fixture response",
-                          "_telemetry": telemetry}
-            elif role == "acceptance":
-                change_id = payload["change"]["change_id"]
-                source = ("from pathlib import Path\\n"
-                          "p = Path('modules/orders/service.py')\\n"
-                          "raise SystemExit(0 if p.is_file() and "
-                          "p.read_text().strip() == 'VALUE = 1' else 1)\\n")
-                answer = {"files": [{"path": "flow.py", "content": source}],
-                          "manifest": {"version": 1, "tests": [{
-                              "id": "SMOKE-REPORT", "criteria": ["AC-1"],
-                              "command": ["{python}",
-                                          f"acceptance/changes/{change_id}/flow.py"],
-                              "timeout_seconds": 10}]}, "_telemetry": telemetry}
-            elif role == "implement":
-                target = Path("modules/orders/service.py")
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text("VALUE = 1\\n", encoding="utf-8")
-                answer = {"summary": "deterministic fixture implementation",
-                          "questions": [], "facts": [{"statement": "service value written",
-                          "location": "modules/orders/service.py:1"}], "_telemetry": telemetry}
-            elif role == "review":
-                answer = {"verdict": "pass", "summary": "deterministic fixture review",
-                          "findings": [], "questions": [], "facts": [],
-                          "_telemetry": telemetry}
-            else:
-                raise SystemExit(f"unexpected role: {role}")
-            print(json.dumps(answer))
-        """).lstrip(), encoding="utf-8")
+    def _install_deterministic_command_adapter(root: Path, change_id: str) -> None:
+        script = root.parent / "report-script.json"
+        source = ("from pathlib import Path\n"
+                  "p = Path('modules/orders/service.py')\n"
+                  "raise SystemExit(0 if p.is_file() and p.read_text().strip() == 'VALUE = 1' else 1)\n")
+        telemetry = {"model": "fixture-model", "vendor": "fixture-vendor",
+                     "tier_applied": "fixture-tier", "turns": 1}
+        calls = [
+            {"role": "review", "nth": 1, "result": {"summary": "intentionally invalid fixture response"},
+             "telemetry": {**telemetry, "cost_usd": 0.25}},
+            {"role": "acceptance", "result": {"files": [{"path": "flow.py", "content": source}],
+             "manifest": {"version": 1, "tests": [{"id": "SMOKE-REPORT", "criteria": ["AC-1"],
+                 "command": ["{python}", f"acceptance/changes/{change_id}/flow.py"], "timeout_seconds": 10}]}},
+             "telemetry": telemetry},
+            {"role": "implement", "creates": [{"path": "modules/orders/service.py", "content": "VALUE = 1\n"}],
+             "result": {"summary": "deterministic fixture implementation", "questions": [],
+                        "facts": [{"statement": "service value written", "location": "modules/orders/service.py:1"}]},
+             "telemetry": telemetry},
+            {"role": "review", "nth": 2, "result": {"verdict": "pass", "summary": "deterministic fixture review",
+                                                   "findings": [], "questions": [], "facts": []},
+             "telemetry": telemetry},
+        ]
+        write_json(script, {"calls": calls})
+        adapter = Path(__file__).resolve().parents[1] / "storyloop/testing/mock_adapter.py"
         config = load_project_config(root)
-        config.update({"adapter": "command", "agent_command": [sys.executable, str(script)]})
+        config.update({"adapter": "command", "agent_command": [sys.executable, str(adapter), "--script", str(script)]})
         write_json(root / ".storyloop/config.json", config)
 
 

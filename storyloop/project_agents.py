@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 
+from .adapter_profiles import model_for, sequential_profile, sequential_instructions
 from .baseline import load_project_config
 from .models import StoryLoopError, require
 from .foundation_survey import foundation_payload
@@ -229,17 +230,13 @@ CODEX_SCHEMA_REPAIR_PROMPT = (
 
 
 def _codex(project: Path, request: dict, config: dict, schema: dict, trace: dict) -> dict:
-    """Run Codex in a persistent session; resume it to repair a malformed final message.
-
-    The role schema is enforced natively (`--output-schema`), which removes most format
-    failures; what still goes wrong (prose, a mismatch the CLI let through) is repaired by
-    resuming the same thread with the concrete problems. Sessions are kept on disk (no
-    --ephemeral) so `codex exec resume` keeps the context. Usage comes from the --json events.
-    """
+    """Run Codex with bounded schema repairs in the same persistent session."""
     sandbox = "workspace-write" if request["role"] in {"implement", "characterize"} else "read-only"
-    common = ["--ignore-user-config", "--color", "never", "--json"]
-    prompt = trace["instructions"] + "\nRequest:\n" + json.dumps(request, ensure_ascii=False)
+    model = model_for(request, config.get("models"))
+    common = ["--ignore-user-config", "--color", "never", "--json"] + (["-m", model] if model else [])
+    prompt = trace["instructions"] + sequential_instructions(request) + "\nRequest:\n" + json.dumps(request, ensure_ascii=False)
     telemetry = {"turns": 0, "input_tokens": 0, "output_tokens": 0, "segments": 0}
+    telemetry.update(sequential_profile(request, "openai", model))
     trace["telemetry"] = telemetry
     thread: str | None = None
     next_prompt = prompt

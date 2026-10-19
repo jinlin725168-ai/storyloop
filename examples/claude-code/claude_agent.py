@@ -10,16 +10,6 @@ stdout : exactly one JSON object (the role result, plus `_telemetry` which Story
 Claude Code runs in --restricted print mode; tools are narrowed per role and any
 permission that would prompt is denied instead of hanging.
 
-Structured output: when the request carries `response_schema` (engines that publish role
-schemas), the final session runs with `--json-schema` and its `structured_output` is the answer,
-so the shape is enforced by the CLI instead of by prompt discipline; intermediate sessions (review
-perspectives, implement lanes) use this adapter's own schemas. Session ids are reported in
-`_telemetry.sessions` so a call can be reopened with `claude --resume <id>`.
-
-Turn caps are checkpoints, not failures: each segment runs up to --segment-turns agentic
-turns; when Claude stops with error_max_turns the same session is resumed (`--resume`) with
-its full context, up to --max-segments. Whether the work is good enough is judged by
-StoryLoop's attempt budget, not by how many turns it took.
 """
 
 from __future__ import annotations
@@ -31,6 +21,9 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+
+from storyloop.adapter_profiles import (model_for, tier_models, cli_capabilities,
+                                       sequential_profile, sequential_instructions)
 
 READ_ONLY = ["Read", "Grep", "Glob"]
 ROLE_TOOLS = {
@@ -186,9 +179,10 @@ def main() -> int:
     return main_with_args(None)
 
 
-def main_with_args(argv: list[str] | None) -> int:
+def _arguments(argv: list[str] | None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default=None)
+    parser.add_argument("--tier-model", action="append", default=[])
     parser.add_argument("--segment-turns", type=int, default=80,
                         help="agentic turns per claude -p segment before the session is resumed")
     parser.add_argument("--max-segments", type=int, default=10,
@@ -205,10 +199,23 @@ def main_with_args(argv: list[str] | None) -> int:
     parser.add_argument("--implement-lanes", default="",
                         help="per-layer implement lanes as name=path-prefix,name=path-prefix (needs a design_plan)")
     parser.add_argument("--implement-parallel", type=int, default=3, help="max concurrent lane sessions")
-    args = parser.parse_args(argv)
+    return parser.parse_args(argv)
+
+
+def main_with_args(argv: list[str] | None) -> int:
+    args = _arguments(argv)
     segment_turns = args.max_turns or args.segment_turns
 
     request = json.load(sys.stdin)
+    try:
+        models = tier_models(args.tier_model)
+        model = model_for(request, models)
+    except (ValueError, RuntimeError) as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    if request.get("protocol") == "storyloop.adapter-capabilities.v1":
+        print(json.dumps(cli_capabilities(models, "anthropic")))
+        return 0
     role = request.get("role")
     if role not in ROLE_TOOLS:
         print(f"unsupported role {role!r}", file=sys.stderr)
@@ -219,22 +226,23 @@ def main_with_args(argv: list[str] | None) -> int:
         return 2
 
     prompt = _prompt(request, role, args.guide)
-    base = _base_command(claude, role, segment_turns, args.bash, args.model)
+    base = _base_command(claude, role, segment_turns, args.bash, model or args.model)
     if args.dry_run:
         print(json.dumps({"command": base, "prompt_chars": len(prompt)}))
         return 0
 
     perspectives = [p for p in args.review_perspectives.split(",") if p and p != "none"]
-    if role == "review" and perspectives:
+    if role == "review" and perspectives and "role_profile" not in request:
         return _review_with_perspectives(request, base, args, perspectives)
     lanes = _parse_lanes(args.implement_lanes)
-    if role == "implement" and lanes and (request.get("payload") or {}).get("design_plan"):
+    if role == "implement" and lanes and "role_profile" not in request and (request.get("payload") or {}).get("design_plan"):
         return _implement_with_lanes(request, base, prompt, args, lanes)
 
     result, telemetry, _ = _run_session(base, prompt, role, args, request.get("project"),
                                         schema=request.get("response_schema"))
     if result is None:
         return 1
+    telemetry.update(sequential_profile(request, "anthropic", model))
     return _emit(result, telemetry, role)
 
 
@@ -456,7 +464,7 @@ def _finish(telemetry: dict) -> dict:
 
 
 def _prompt(request: dict, role: str, guides: list[str], extra: str = "", schema: bool = True) -> str:
-    parts = [request.get("instructions", "")]
+    parts = [request.get("instructions", "") + sequential_instructions(request)]
     if extra:
         parts.append(extra)
     if schema:

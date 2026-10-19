@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 from typing import Callable
 
+from .adapter_profiles import diagnostic_fields
 from .models import require
 from .storage import load_json, write_json
 
@@ -35,6 +36,7 @@ def record_call(project: Path, role: str, change_id: str | None, telemetry: obje
     if session:
         entry["session"] = session[:400]
     if isinstance(telemetry, dict):
+        entry.update(diagnostic_fields(telemetry))
         for key in NUMERIC:
             value = telemetry.get(key)
             if (_finite_number(value) and value >= 0):

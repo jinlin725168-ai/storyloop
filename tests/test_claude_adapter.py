@@ -298,5 +298,36 @@ class ImplementLaneTests(unittest.TestCase):
         self.assertIn("frontend", err.getvalue())
 
 
+class ClaudeProfileTests(unittest.TestCase):
+    def test_handshake_never_starts_model_and_rejects_invalid_mapping(self):
+        request = {'protocol': 'storyloop.adapter-capabilities.v1'}
+        with patch.object(adapter.subprocess, 'run') as run, \
+                patch('sys.stdin', io.StringIO(json.dumps(request))), \
+                patch('sys.stdout', new_callable=io.StringIO) as out:
+            code = adapter.main_with_args(['--tier-model', 'standard=small'])
+        self.assertEqual(code, 0)
+        run.assert_not_called()
+        self.assertEqual(json.loads(out.getvalue())['tiers'], ['standard'])
+        with patch('sys.stdin', io.StringIO(json.dumps(request))), \
+                patch('sys.stderr', new_callable=io.StringIO):
+            self.assertEqual(adapter.main_with_args(['--tier-model', 'strong=']), 2)
+
+    def test_unmapped_legacy_model_does_not_claim_tier(self):
+        request = {'role': 'implement', 'project': '/tmp/p', 'payload': {},
+                   'role_profile': {'tier': 'strong', 'subagents': {}}, 'instructions': 'implement'}
+        reply = Completed(envelope('success', '{"summary":"done","questions":[]}', 'sid', 0.1, 1))
+        with patch.object(adapter.subprocess, 'run', return_value=reply) as run, \
+                patch.object(adapter.shutil, 'which', return_value='/usr/bin/claude'), \
+                patch('sys.stdin', io.StringIO(json.dumps(request))), \
+                patch('sys.stdout', new_callable=io.StringIO) as out, \
+                patch('sys.stderr', new_callable=io.StringIO):
+            self.assertEqual(adapter.main_with_args(['--model', 'legacy-model']), 0)
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index('--model') + 1], 'legacy-model')
+        telemetry = json.loads(out.getvalue())['_telemetry']
+        self.assertEqual(telemetry['vendor'], 'anthropic')
+        self.assertNotIn('tier_applied', telemetry)
+
+
 if __name__ == "__main__":
     unittest.main()
