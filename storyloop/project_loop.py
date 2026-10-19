@@ -13,6 +13,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from . import cost_resume
+from .cross_vendor import prepare_run
+from .cost_limits import check_before_call
 from .answers import _pending as _unanswered, load_answers
 from .baseline import _git, load_baseline, load_project_config, verify_baseline
 from .boundaries import capture_snapshot
@@ -101,6 +104,7 @@ def _run_change_locked(
             "Change must be approved before automatic execution")
     services = services or _default_services()
     config = load_project_config(project)
+    prepare_run(project, config)
     routing = None
     if saved is None and is_routed(change):
         require_intake(project, change)
@@ -108,7 +112,13 @@ def _run_change_locked(
     state, start_attempt, fresh = _open_run(project, change, routing)
     config = run_config(config, change, state)
     save_run(project, state)
-    paused = _resume_and_prepare(project, change, state, services, config, fresh, overrule)
+    cost_resume.restore(project, state)
+    try:
+        paused = _resume_and_prepare(project, change, state, services, config, fresh, overrule)
+    except StoryLoopError as exc:
+        if exc.code == "COST_LIMIT_REACHED":
+            return cost_resume.stop(project, state, exc)
+        raise
     if paused is not None:
         return paused
     return _attempts(project, change, state, services, config, start_attempt)
@@ -153,9 +163,15 @@ def _attempts(project: Path, change: dict, state: dict, services: LoopServices,
         try:
             outcome = _run_attempt(project, change, state, services, config)
         except StoryLoopError as exc:
+            if exc.code == "COST_LIMIT_REACHED":
+                return cost_resume.stop(project, state, exc, in_attempt=True)
+            state.pop("cost_candidate", None)
+            save_run(project, state)
             if exc.code == "AGENT_UNAVAILABLE":
                 _hand_back_attempt(project, state, exc)
             raise
+        state.pop("cost_candidate", None)
+        save_run(project, state)
         if outcome is not None:
             return outcome
     return pause(project, state, "BUDGET_EXHAUSTED")
@@ -170,7 +186,7 @@ def _open_run(project: Path, change: dict, routing: dict | None = None) -> tuple
     path = run_path(project, change_id)
     if path.exists():
         state = load_json(path)
-        resumable = {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED",
+        resumable = {"COST_LIMIT_REACHED", "PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED",
                      "IMPLEMENTING", "BASE_CHANGE_REQUIRED",
                      "BOUNDARY_VIOLATION", "NEEDS_INPUT", "BUDGET_EXHAUSTED",
                      "CHARACTERIZATION_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_SPEC_FIX",
@@ -250,11 +266,13 @@ def _run_attempt(
                "mode": state["mode"],
                "design_plan": design_plan(state),
                **({"routing_tier": state["routing"]["effective_tier"]} if is_routed(change, state) else {})}
-    response, touched = write_safely(project, change_id, lambda: _implement_answer(services, project, context))
+    saved = cost_resume.candidate(project, state)
+    response, touched = saved or write_safely(project, change_id, lambda: _implement_answer(services, project, context))
     if "_contract_error" in response:
         # The work on disk stays; the malformed answer costs this attempt and is fed back as a failure.
         return record_failure(project, state, {"attempt": state["attempt"], "contract": {
             "status": "INVALID", "message": response["_contract_error"]}}, "implement")
+    cost_resume.checkpoint(project, state, response, touched)
     return _judge_attempt(project, change, state, services, config, response, touched)
 
 
@@ -284,6 +302,8 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
         require(services.characterize is not None and config['profile'].get('test_roots')
                 and layer_commands(config['profile'], 'unit'),
                 'Changed existing paths require a configured characterization gate')
+        # Stop before restoring candidate bytes when the next characterization cannot start.
+        check_before_call(project, change_id, config)
         # Existing behaviour must be locked before it is changed: restore, lock, and try again.
         _git(project, "checkout", state["contract_commit"], "--", *uncharacterized)
         paused = characterize_paths(project, change, state, services, config, extend=uncharacterized)

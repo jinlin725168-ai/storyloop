@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import shlex
+from .cost_limits import stop_fields, render_usage
 from .routing_report import STATUSES, routing_options, routing_view
 
 
@@ -12,7 +13,7 @@ PHASES = frozenset({"contract", "prepare", "planning", "implement", "verify", "f
 STOP_STATUSES = STATUSES | frozenset({
     "NEEDS_INPUT", "ORACLE_DEFECT", "EXISTING_GREEN", "CHARACTERIZATION_FAILED",
     "BOUNDARY_VIOLATION", "BASE_CHANGE_REQUIRED", "WORKSPACE_TAINTED",
-    "BUDGET_EXHAUSTED", "NO_PROGRESS", "MANUAL_ACCEPTANCE_REQUIRED", "NEEDS_SPEC_FIX",
+    "COST_LIMIT_REACHED", "BUDGET_EXHAUSTED", "NO_PROGRESS", "MANUAL_ACCEPTANCE_REQUIRED", "NEEDS_SPEC_FIX",
 })
 
 BLOCKERS = {
@@ -23,6 +24,7 @@ BLOCKERS = {
     "BOUNDARY_VIOLATION": "代理写了不允许的路径",
     "BASE_CHANGE_REQUIRED": "改动碰到了底座",
     "WORKSPACE_TAINTED": "工作区出现了非预期的改动",
+    "COST_LIMIT_REACHED": "变更的代理调用达到成本上限",
     "BUDGET_EXHAUSTED": "实现轮次用完了",
     "NO_PROGRESS": "根因调查后失败特征仍不变",
     "MANUAL_ACCEPTANCE_REQUIRED": "有验收条件需要人工核对",
@@ -64,6 +66,7 @@ def _options(status: str, project: str, change_id: str, routed: bool) -> list[di
             "storyloop", "base-update", project, "--proposal", "<BASE-ID>")}],
         "WORKSPACE_TAINTED": [{"action": "清理后复位", "command": _command(
             "storyloop", "reset", *where, "--reason", "<原因>")}],
+        "COST_LIMIT_REACHED": [{**run, "action": "提高 .storyloop/config.json 的 limits 后继续同一轮"}, supersede],
         "BUDGET_EXHAUSTED": [repair, supersede_with_reason, run],
         "NO_PROGRESS": [repair, supersede_with_reason, run],
         "MANUAL_ACCEPTANCE_REQUIRED": [{"action": "逐条人工验收", "command": _command(
@@ -200,6 +203,7 @@ def build_stop(project: Path | str, state: dict, status: str, details: dict) -> 
     routed_options = routing_options(project, change_id, status, {**state, **details})
     options = routed_options or _options(status, project_text, change_id, bool(state.get("routed")))
     return {
+        **stop_fields(project, change_id, details),
         "status": status,
         "routing": routing_view(state),
         "phase": _phase(state, status, details),
@@ -237,7 +241,7 @@ def stop_of(project: Path | str, run: dict | None) -> dict | None:
 
 def render_stop(stop: dict) -> list[str]:
     """Render the report in the decision order defined by the design."""
-    lines = [f"阻塞点：{stop['blocker']}"]
+    lines = [f"阻塞点：{stop['blocker']}"] + render_usage(stop)
     for key, heading in (("evidence", "证据"), ("facts", "代理陈述事实"), ("questions", "问题")):
         if stop.get(key):
             lines.append(f"{heading}：")

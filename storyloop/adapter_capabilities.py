@@ -45,19 +45,30 @@ def check(project: Path) -> dict:
     """Probe configured adapters, reject known missing mappings, and replace the cache."""
     project, config = Path(project).resolve(), load_project_config(project)
     if not enabled(config):
+        from .cross_vendor import require_distinct
+        require_distinct(config, {})
         return {"status": "ADAPTERS_UNCONFIGURED", "adapters": {}}
     adapters = resolve_adapters(config)
     results = {name: probe(project, name, adapter) for name, adapter in adapters.items()}
-    _require_mappings(config, adapters, results)
     record = {"version": 1, "config_sha256": _digest(config), "argv_sha256": _argv_digest(project, adapters),
               "adapters": results}
-    write_json(project / ".storyloop/state/adapters.json", record, max_bytes=512_000)
+    cache = project / ".storyloop/state/adapters.json"
+    try:
+        _require_mappings(config, adapters, results)
+    except StoryLoopError as error:
+        if error.code == "AGENT_UNAVAILABLE" and error.details.get("cross_vendor"):
+            # Keep the observed unknown capability too: guarded role calls must not rewrite cache.
+            write_json(cache, record, max_bytes=512_000)
+        raise
+    write_json(cache, record, max_bytes=512_000)
     return {"status": "ADAPTERS_CHECKED", **record}
 
 
 def ensure_checked(project: Path) -> dict | None:
     project, config = Path(project).resolve(), load_project_config(project)
     if not enabled(config):
+        from .cross_vendor import require_distinct
+        require_distinct(config, {})
         return None
     adapters = resolve_adapters(config)
     cached = _load_cache(project, adapters)
@@ -68,6 +79,7 @@ def ensure_checked(project: Path) -> dict | None:
 
 
 def _require_mappings(config: dict, adapters: dict, results: dict) -> None:
+    from .cross_vendor import require_distinct
     for role in ROLES:
         for routing in ROUTING:
             setting = role_settings(config, role, routing)
@@ -77,6 +89,7 @@ def _require_mappings(config: dict, adapters: dict, results: dict) -> None:
             if setting["tier"] not in capability["tiers"]:
                 raise StoryLoopError("ADAPTER_PROFILE_UNSUPPORTED", code="ADAPTER_PROFILE_UNSUPPORTED",
                                      details={"role": role, "tier": setting["tier"], "adapter": setting["adapter"]})
+    require_distinct(config, results)
 
 
 def _response(raw: object) -> dict:

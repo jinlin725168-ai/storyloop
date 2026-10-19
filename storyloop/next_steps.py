@@ -36,6 +36,8 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
     if status == "WORKSPACE_TAINTED":
         return (f"git status 找出非预期改动（残留的 dev server、未声明的构建产物要加进 scratch_paths、"
                 f"代理执行了 git add），清理后 storyloop reset {where} --reason <原因>，再 {run}")
+    if status == "COST_LIMIT_REACHED":
+        return f"提高 .storyloop/config.json 的 limits 后 {run}，继续原候选与同一轮；或作废重开"
     if status == "BUDGET_EXHAUSTED":
         return (f"{log} 看每轮失败原因：验收用例本身有缺陷用 storyloop acceptance-repair {where} "
                 f"--reason <原因>；实现问题就提高 .storyloop/config.json 的 max_attempts 后 {run}，"
