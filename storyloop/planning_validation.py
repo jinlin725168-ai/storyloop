@@ -7,7 +7,7 @@ from .baseline import load_baseline, load_project_config
 from .intake import digest, _validate_locations
 from .models import require, text
 from .principles import check_principles, load_principles
-from .path_security import repository_relative, safe_target
+from .path_security import forbidden_path_root, repository_relative, safe_target
 from .project_boundaries import _category, _inside
 from .role_schemas import schema_errors, schema_for
 from .routing_evidence import measure_scope
@@ -84,7 +84,7 @@ def _paths_and_constraints(project: Path, change: dict, option: dict) -> None:
     baseline = load_baseline(project)
     roots = load_project_config(project)['profile'].get('test_roots', [])
     paths = option['touched'] + option['creates']
-    forbidden = [repository_relative(p, 'forbidden path') for p in option['forbidden_paths']]
+    forbidden = [forbidden_path_root(p) for p in option['forbidden_paths']]
     option['forbidden_paths'] = sorted(set(forbidden))
     for path in paths:
         safe_target(project, path, 'plan path')

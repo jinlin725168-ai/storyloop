@@ -23,6 +23,16 @@ def repository_relative(value: object, label: str = "path") -> str:
     return path.as_posix()
 
 
+def forbidden_path_root(value: object) -> str:
+    """Normalize an exact forbidden path or its sole supported recursive shorthand."""
+    require(isinstance(value, str), "forbidden path is required")
+    normalized = value.replace("\\", "/")
+    root = normalized[:-3] if normalized.endswith("/**") else normalized
+    require(not any(marker in root for marker in "*?[]"),
+            "Unsupported forbidden path wildcard; use an exact path or terminal /**")
+    return repository_relative(root, "forbidden path")
+
+
 def safe_target(
     root: Path, relative: object, label: str = "path",
     target_directory: bool = False,

@@ -111,6 +111,60 @@ class PlanningTests(unittest.TestCase):
                 with self.assertRaises(StoryLoopError):
                     self.plan(response)
 
+    def test_terminal_recursive_forbidden_path_normalizes_before_scope_overlap(self):
+        response = answer()
+        response['options'][0]['creates'] = ['app/generated/new.py']
+        response['options'][0]['forbidden_paths'] = ['app/generated/**']
+
+        with self.assertRaisesRegex(StoryLoopError, 'Forbidden path overlaps plan scope'):
+            self.plan(response)
+
+    def test_terminal_recursive_forbidden_path_is_stored_as_literal_root(self):
+        response = answer()
+        response['options'][0]['forbidden_paths'] = ['tests/**']
+
+        plan = self.plan(response)
+
+        self.assertEqual(plan['options'][0]['forbidden_paths'], ['tests'])
+
+    def test_unsupported_forbidden_glob_gets_one_semantic_repair(self):
+        self.state['routing'].update(initial_tier='heavy', effective_tier='heavy')
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            response['options'][0]['forbidden_paths'] = ['tests/*'] if len(requests) == 1 else []
+            return response
+
+        self.assertIsNone(self.ensure(design))
+
+        self.assertEqual(len(requests), 2)
+        self.assertIn('Unsupported forbidden path wildcard', requests[1]['validation_errors'][0])
+
+    def test_repeated_unsupported_forbidden_glob_fails_closed(self):
+        self.state['routing'].update(initial_tier='heavy', effective_tier='heavy')
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            response['options'][0]['forbidden_paths'] = ['tests/[ab]']
+            return response
+
+        with self.assertRaisesRegex(StoryLoopError, 'Unsupported forbidden path wildcard'):
+            self.ensure(design)
+
+        self.assertEqual(len(requests), 2)
+
+    def test_terminal_recursive_forbidden_path_rejects_empty_repository_root(self):
+        for forbidden in ('/**', './**'):
+            with self.subTest(forbidden=forbidden):
+                response = answer()
+                response['options'][0]['forbidden_paths'] = [forbidden]
+                with self.assertRaises(StoryLoopError):
+                    self.plan(response)
+
     def test_unknown_high_risk_becomes_question_not_safe_default(self):
         response = answer()
         response['options'][0]['risks']['migration']['value'] = 'unknown'
@@ -218,6 +272,7 @@ class PlanningTests(unittest.TestCase):
         self.assertIn('every returned option', initial_prompt.lower())
         self.assertIn('payload.replanning.actual.touched', initial_prompt)
         self.assertIn('immutable source for every risk evidence location', initial_prompt)
+        self.assertIn('only terminal /** is accepted', initial_prompt)
         repair_request = json.loads(fake.calls[1][1].split('\nRequest:\n', 1)[1])
         self.assertEqual(repair_request['payload']['validation_errors'], [
             "L3 option 'main' omits observed candidate scope; every option must include "

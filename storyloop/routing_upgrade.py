@@ -95,8 +95,8 @@ def enforce_forbidden_paths(state: dict, boundary: dict) -> None:
     plan = state.get('planning', {}).get('plan')
     if not plan:
         return
-    from .path_security import repository_relative
-    roots = [repository_relative(p, 'forbidden path') for p in selected_option(plan)['forbidden_paths']]
+    from .path_security import forbidden_path_root
+    roots = [forbidden_path_root(p) for p in selected_option(plan)['forbidden_paths']]
     forbidden = [item for item in boundary['allowed'] if any(
         item['path'] == root or item['path'].startswith(root + '/') for root in roots)]
     if forbidden:

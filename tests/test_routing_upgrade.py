@@ -133,6 +133,53 @@ class L3IntegrationTests(unittest.TestCase):
         state = load_run_state(self.root, self.identifier)
         self.assertFalse(any(h['stage'] == 'L3' for h in state['routing']['history']))
 
+    def test_legacy_recursive_forbidden_test_creation_stops_before_l3(self):
+        from dataclasses import replace
+        from storyloop.project_loop import run_change, load_run_state
+        from tests.test_routing_planning import answer
+        services = self.services(role='none')
+        design_calls = []
+
+        def design(project, context):
+            design_calls.append(context)
+            result = answer(self.change['product'])
+            result['options'][0]['forbidden_paths'] = ['tests/**']
+            return result
+
+        def implement(project, context):
+            result = services.implement(project, context)
+            target = project / 'tests/test_forbidden.py'
+            target.parent.mkdir(exist_ok=True)
+            target.write_text('FORBIDDEN = True\n', encoding='utf-8')
+            return result
+
+        result = run_change(self.root, self.identifier, replace(
+            services, design=design, implement=implement))
+
+        self.assertEqual(result['status'], 'BOUNDARY_VIOLATION')
+        self.assertIn({'path': 'tests/test_forbidden.py', 'category': 'PLAN_FORBIDDEN'},
+                      result['violations'])
+        state = load_run_state(self.root, self.identifier)
+        self.assertEqual(len(design_calls), 1)
+        self.assertNotEqual(state.get('planning', {}).get('origin'), 'L3')
+
+    def test_literal_forbidden_root_still_blocks_candidate(self):
+        from storyloop.routing_upgrade import enforce_forbidden_paths
+        state = {'planning': {'plan': {
+            'status': 'DONE', 'main_option': 'main',
+            'options': [{'id': 'main', 'forbidden_paths': ['tests']}],
+        }}}
+        boundary = {'status': 'ALLOWED', 'allowed': [
+            {'path': 'tests/test_forbidden.py', 'category': 'TEST'},
+        ], 'violations': []}
+
+        enforce_forbidden_paths(state, boundary)
+
+        self.assertEqual(boundary['status'], 'BOUNDARY_VIOLATION')
+        self.assertEqual(boundary['violations'], [
+            {'path': 'tests/test_forbidden.py', 'category': 'PLAN_FORBIDDEN'},
+        ])
+
     def test_approval_locks_reapproval_then_next_attempt_completes(self):
         from dataclasses import replace
         from storyloop.design_approval import approve_design
