@@ -46,7 +46,7 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 
 新人从 [定位与概念手册](docs/concepts.md) 和 [入门教程](docs/tutorial.md) 开始；完整说明见 [使用指南](docs/product-iteration-guide.md)，接入自己的仓库见 [接入手册](docs/onboarding-a-repository.md)。`docs/` 是本项目的知识库，入口是 [docs/README.md](docs/README.md)：使用文档之外，按模块、架构、扩展、接口、能力、积木、测试组织了给贡献者和代理读的工程文档。
 
-新协议按 light / standard / heavy 分流，重档先审核方案再实现；完整命令、预算与恢复见 [分流指南](docs/routing-guide.md)。子项目 2b 真实代理验收（Task 12）仍待完成。
+新协议按 light / standard / heavy 分流，重档先审核方案再实现；完整命令、预算与恢复见 [分流指南](docs/routing-guide.md)。最终报告按读者分成 0–6 节，并在每条信息旁保留来源与可用性。
 
 ## 核心保证
 
@@ -62,7 +62,8 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 - 底座独立演进：普通功能触碰底座会暂停并产生 `BASE-*` 提案。
 - CI 中立：只提供 `storyloop ci ...`；不创建或覆盖 GitHub Actions、GitLab CI、Jenkins 文件。项目自己的流水线由人通过 `base-propose --allow-ci` 纳入底座，参考模板见 [接入手册的 CI 一节](docs/onboarding-a-repository.md#9-ci)。
 - 自动本地 Git：控制器只创建本地功能分支、提交并 `--no-ff` 合并；控制器代码不调用 push、删除分支或重写历史。
-- 证据追溯：报告映射需求、故事、验收条件、测试、真实命令结果、证据摘要、实现提交和最终合并提交。
+- 证据追溯：报告映射需求、故事、验收条件、测试、命令结果、证据摘要、实现提交和最终合并提交。🔧 是引擎可核对的事实或计算，👤 是人工记录，🤖 是代理陈述；`NOT_AVAILABLE` 与 `PENDING` 不会显示成零或通过。
+- 调用对账：报告将 telemetry ledger 与每次调用的诊断 metadata 双向核对，列出失败调用及实际冻结的技能版本/哈希。调用覆盖只证明已持久化的实际调用，不会倒推未记录的理论调度次数；费用仅部分回报时显示已知小计，完整总额保持未知。
 
 ```mermaid
 flowchart TD
@@ -117,7 +118,7 @@ my-project/
 │  ├─ smoke/                           项目级系统冒烟：manifest.json + 核心链路用例，跨变更累积，只经人批准更新
 │  └─ ui/                              旧版本留下的 UI 回归资产（不进候选副本、不是证据，引擎不再生成）
 ├─ modules/ 或 features/               新业务模块（module_roots 可配置为任何目录）
-└─ reports/storyloop/<change-id>/      JSON 与 Markdown 验收报告，含成本与耗时
+└─ reports/storyloop/<change-id>/      同源 JSON/Markdown 验收报告，含来源、对账、成本覆盖与合并回执
 ```
 
 初始化时可变区之外的已跟踪文件都属于稳定底座；可变区（`module_roots`）可以是任何目录，包括已有代码的目录。`pom.xml`、`package.json` 等构建集成点如需修改，会转成独立底座提案。构建系统在仓库根或一级子目录（monorepo）都能被探测到。`.storyloop` 被加入仓库本地 `.git/info/exclude`，不会修改项目的 `.gitignore`。
