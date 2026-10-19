@@ -187,6 +187,22 @@ class ReportRenderingTests(unittest.TestCase):
         self.assertIn("`AVAILABLE`", merge_block)
         self.assertNotIn("PENDING", merge_block)
 
+    def test_layer_heading_keeps_reader_name_evidence_and_availability(self):
+        report = _report()
+        entry = report["presentation"]["sections"]["3"]["items"][0]
+        entry["data"]["integration"] = {"status": "PASSED", "results": [
+            {"id": "INTEGRATION-1", "command": ["python", "integration.py"], "status": "PASS"}]}
+        entry["reason"] = "SNAPSHOT_TRUNCATED"
+        markdown = render_presentation(report)
+        block = markdown.split("### layers", 1)[1].split("###", 1)[0]
+        for expected in ("分层验证", "🔧 机器", "AVAILABLE", "SNAPSHOT_TRUNCATED",
+                         "unit", "integration", "INTEGRATION-1", "integration.py", "PASSED"):
+            self.assertIn(expected, block)
+        entry.update(data=None, availability="NOT_AVAILABLE", reason="SOURCE_NOT_PERSISTED")
+        block = render_presentation(report).split("### layers", 1)[1].split("###", 1)[0]
+        for expected in ("分层验证", "NOT_AVAILABLE", "SOURCE_NOT_PERSISTED", "未提供"):
+            self.assertIn(expected, block)
+
     def test_legacy_receipt_markdown_stays_byte_identical(self):
         report = json.loads((FIXTURES / "report_legacy_input.json").read_text(encoding="utf-8"))
         actual = merge_receipt_bytes(report, "a" * 40)[1]

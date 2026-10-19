@@ -52,7 +52,8 @@ def _render_item(entry: dict, report: dict) -> list[str]:
     merged = identifier == "merge_commit" and report.get("merge_commit")
     data = report.get("merge_commit") if merged else entry.get("data")
     availability = "AVAILABLE" if merged else availability
-    lines = [f"### {_text(identifier)}", "", f"- 来源：{source}", f"- 可用性：`{_text(availability)}`"]
+    title = "layers（分层验证）" if identifier == "layers" else identifier
+    lines = [f"### {_text(title)}", "", f"- 来源：{source}", f"- 可用性：`{_text(availability)}`"]
     if entry.get("reason") and not merged:
         lines.append(f"- 说明：`{_text(entry['reason'])}`")
     if isinstance(data, dict) and data.get("verification") == "CONTENT_NOT_MACHINE_VERIFIED":
