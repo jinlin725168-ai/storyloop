@@ -80,7 +80,8 @@ def _invoke_once(project, role, payload, config, settings, degraded):
     foundation = foundation_payload(project) if role != "survey" else None
     if foundation and "foundation" not in payload:
         payload = {**payload, "foundation": foundation}
-    schema = schema_for(role, payload)
+    from .role_profiles import enabled
+    schema = schema_for(role, {**payload, **({"role_profile": True} if enabled(config) else {})})
     request = {
         "protocol": "storyloop.project-agent.v1",
         "role": role,
@@ -90,6 +91,7 @@ def _invoke_once(project, role, payload, config, settings, degraded):
     }
     profile = build_profile(project, config, role, payload, {})
     if profile is not None:
+        profile["tier"] = settings["tier"]
         request["role_profile"] = profile
     _bounded_json(request)
     ledger = FOUNDATION_LEDGER if role == "survey" else _change_id(payload)

@@ -36,10 +36,17 @@ def invoke(project, role, payload, config, ledger, call):
     """Route a call and, only by explicit policy, retry review on the implement adapter."""
     from .adapter_capabilities import ensure_checked
     settings = role_settings(config, role, payload.get('routing_tier') or payload.get('tier'))
+    from .review_context import verification_active
+    verifying = role == 'review' and verification_active()
+    if verifying:
+        settings = {**settings, 'tier': 'strong'}
     active = policy(config)['enabled'] and role == 'review'
     started = time.monotonic()
     try:
         ensure_checked(project)
+        if verifying:
+            from .adapter_capabilities import require_role_target
+            require_role_target(project, config, role, settings)
     except StoryLoopError as error:
         if error.code != 'AGENT_UNAVAILABLE' or not error.details.get('cross_vendor'):
             raise

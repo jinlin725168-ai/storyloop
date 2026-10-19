@@ -21,13 +21,14 @@ def validate_agent_summary(value: object) -> None:
 def validate_review(value: object) -> str:
     require(isinstance(value, dict)
             and {"verdict", "summary", "findings", "questions"} <= set(value)
-            and set(value) <= {"verdict", "summary", "findings", "questions", "facts", "routing_risks"},
+            and set(value) <= {"verdict", "summary", "findings", "questions", "facts", "routing_risks", "coverage", "checklist"},
             "Review agent returned an invalid contract")
     require(value["verdict"] in {"pass", "fail", "needs_input"},
             "Invalid review verdict")
     require(isinstance(value["summary"], str) and isinstance(value["findings"], list)
             and isinstance(value["questions"], list), "Invalid review details")
-    if value["verdict"] == "pass":
+    if value["verdict"] == "pass" and "coverage" not in value and not any(
+            "confidence" in item for item in value["findings"]):
         require(not value["findings"] and not value["questions"],
                 "Review cannot pass with findings or questions")
     validate_routing_risks(value.get("routing_risks"))

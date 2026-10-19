@@ -72,7 +72,7 @@ STORY = _obj({
 })
 FINDING = _obj({"message": STRING, "perspective": _nullable(STRING),
                 "criterion_id": _nullable(STRING), "evidence": _nullable(STRING),
-                "target": _nullable({"type": "string", "enum": ["implementation", "oracle", "contract"]}),
+                "target": _nullable({"type": "string", "enum": ["implementation", "oracle", "contract", "out_of_scope"]}),
                 "location": _nullable(STRING)}, open_=True)
 FACTS = _nullable({"type": "array", "items": _obj({"statement": STRING, "location": STRING})})
 
@@ -154,8 +154,32 @@ SCHEMAS = {
 }
 
 
+REVIEW_FIELDS = {"severity": {"type": "string", "enum": ["P0", "P1", "P2", "question"]},
+                 "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+                 "introduced": {"type": "boolean"}, "trigger": STRING, "impact": STRING, "fix": STRING}
+CHECKLIST = {"type": "array", "items": _obj({"decision": STRING,
+             "status": {"type": "string", "enum": ["pass", "issue", "unconfirmed"]}})}
+SCHEMAS["review"]["properties"].update(coverage=_nullable(STRINGS), checklist=_nullable(CHECKLIST))
+SCHEMAS["review"]["required"] = list(SCHEMAS["review"]["properties"])
+VERIFY = _obj({"results": {"type": "array", "items": _obj({"id": STRING,
+               "confirmed": {"type": "boolean"}, "reason": STRING})}})
+
+
+def _profiled_review(schema):
+    schema = copy.deepcopy(schema)
+    finding = schema['properties']['findings']['items']
+    finding['properties'].update(REVIEW_FIELDS)
+    finding['properties']['id'] = _nullable(STRING)
+    finding['required'] = list(finding['properties'])
+    schema['properties'].update(coverage=STRINGS, checklist=_nullable(CHECKLIST))
+    schema['required'] = list(schema['properties'])
+    return schema
+
+
 def schema_for(role: str, payload: dict) -> dict:
     """The engine-side schema of one call (acceptance changes shape in smoke-maintenance mode)."""
+    if role == "review" and payload.get("mode") == "verify":
+        return VERIFY
     if role == "acceptance" and payload.get("mode") == "smoke-maintenance":
         return SCHEMAS["smoke-maintenance"]
     if role == "design" and payload.get("mode") == "routing-plan":
@@ -168,7 +192,9 @@ def schema_for(role: str, payload: dict) -> dict:
             "risk": {"type": "string", "enum": list(RISK_FIELDS)},
             "statement": STRING, "location": STRING})})
         schema["required"].append("routing_risks")
-        return schema
+        return _profiled_review(schema) if role == "review" and payload.get("role_profile") else schema
+    if role == "review" and payload.get("role_profile"):
+        return _profiled_review(SCHEMAS[role])
     return SCHEMAS[role]
 
 
@@ -212,6 +238,8 @@ def _check(value: object, schema: dict, path: str, errors: list[str]) -> None:
     if not _type_matches(value, schema["type"]):
         errors.append(f"{path}: expected {_type_name(schema['type'])}, got {_type_name(_json_type(value))}")
         return
+    if type(value) in (int, float) and (value < schema.get("minimum", value) or value > schema.get("maximum", value)):
+        errors.append(f"{path}: number outside allowed range")
     if "enum" in schema and value not in schema["enum"]:
         allowed = ", ".join(repr(item) for item in schema["enum"] if item is not None)
         errors.append(f"{path}: must be one of {allowed}")

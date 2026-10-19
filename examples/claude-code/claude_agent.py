@@ -150,17 +150,19 @@ def _strict(properties: dict) -> dict:
     return {"type": "object", "properties": properties, "required": list(properties),
             "additionalProperties": False}
 
-
 _TEXT = {"type": "string"}
 _TEXTS = {"type": "array", "items": _TEXT}
 PERSPECTIVE_OUTPUT = _strict({"summary": _TEXT, "findings": {"type": "array", "items": _strict(
-    {"message": _TEXT, "evidence": _TEXT})}, "questions": _TEXTS})
+    {"message": _TEXT, "evidence": _TEXT, "severity": {"type": "string", "enum": ["P0", "P1", "P2", "question"]},
+     "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+     "introduced": {"type": "boolean"}, "trigger": _TEXT, "impact": _TEXT, "fix": _TEXT})}, "questions": _TEXTS})
 LANE_PLAN_OUTPUT = _strict({"lanes": {"type": "array", "items": _strict({"name": _TEXT, "task": _TEXT})}})
 LANE_OUTPUT = _strict({"summary": _TEXT, "files": _TEXTS, "questions": _TEXTS})
 PERSPECTIVE_MARK = "[review perspective: {name}]"
 LEAD_MARK = "[lead reviewer]"
 PERSPECTIVE_SCHEMA = (
-    "Return ONLY {summary:string, findings:[{message:string, evidence:string}], questions:[string]}. A finding "
+    "Return summary, questions and findings with message, evidence, severity P0/P1/P2/question, "
+    "confidence 0-100, introduced boolean, trigger, impact and fix. A finding "
     "must name a concrete defect you can point to (file, line or evidence id); doubts without evidence go "
     "into summary, not findings. questions only for genuine product ambiguities."
 )
@@ -169,11 +171,12 @@ LEAD_RULES = (
     "Merge them into the final review: verdict is 'fail' if any retained finding remains, 'needs_input' if "
     "there are no findings but open questions, otherwise 'pass'. You may drop a reviewer's finding only "
     "by verifying it yourself and stating the reason in the summary; never drop it silently. Deduplicate, "
-    "keep each retained finding's `perspective` and `message`, and give a one-line conclusion per "
+    "keep each retained finding's perspective, message, severity, confidence, introduced, trigger, impact "
+    "and fix. Include coverage and the requested decision checklist. Give a one-line conclusion per "
     "perspective in the summary. Return ONLY {verdict:'pass'|'fail'|'needs_input', summary:string, "
-    "findings:[{perspective:string, message:string}], questions:[string]}."
+    "findings:[{perspective,message,severity,confidence,introduced,trigger,impact,fix}], "
+    "coverage:[string], checklist:[{decision,status}], questions:[string]}."
 )
-
 
 def main() -> int:
     return main_with_args(None)
@@ -343,7 +346,8 @@ def _review_with_perspectives(request: dict, base: list[str], args, perspectives
     if not ({"verdict", "summary", "findings", "questions"} <= set(result)):
         print("claude review: lead result lacks verdict/summary/findings/questions", file=sys.stderr)
         return 1
-    result = {key: result[key] for key in ("verdict", "summary", "findings", "questions")}
+    result = {key: result[key] for key in ("verdict", "summary", "findings", "questions", "coverage", "checklist")
+              if key in result}
     total["perspectives"] = len(perspectives)
     return _emit(result, total, "review")
 

@@ -165,9 +165,11 @@ def _attempts(project: Path, change: dict, state: dict, services: LoopServices,
         except StoryLoopError as exc:
             if exc.code == "COST_LIMIT_REACHED":
                 return cost_resume.stop(project, state, exc, in_attempt=True)
-            state.pop("cost_candidate", None)
+            state.pop("pending_review", None)
+            if not exc.details.get("review_semantic"):
+                state.pop("cost_candidate", None)
             save_run(project, state)
-            if exc.code == "AGENT_UNAVAILABLE":
+            if exc.code == "AGENT_UNAVAILABLE" or exc.details.get("review_semantic"):
                 _hand_back_attempt(project, state, exc)
             raise
         state.pop("cost_candidate", None)
@@ -324,7 +326,7 @@ def _verify_attempt(project, change, state, services, config, boundary):
         return record_failure(project, state, {"attempt": state["attempt"], **layers},
                               "environment")
     review = _perform_review(project, change, state, services, boundary, layers)
-    verdict = validate_review(review)
+    verdict = review["verdict"]
     merge_facts(project, state, review.get("facts"), "review")
     risk_pause = _risk_updates(project, state, review, 'review')
     if risk_pause is not None:
@@ -358,7 +360,7 @@ def _hand_back_attempt(project: Path, state: dict, error: StoryLoopError) -> Non
     consumed = state.get('planning', {}).get('consumed_attempt', 0)
     state["attempt"] = max(int(state["attempt"]) - 1, consumed)
     from .stop_report import build_stop
-    state["stop"] = build_stop(project, state, "AGENT_UNAVAILABLE", {"error": redact(str(error))})
+    state["stop"] = build_stop(project, state, error.code, {"error": redact(str(error))})
     save_run(project, state)
 
 
@@ -451,9 +453,8 @@ def _perform_review(
                "answers": load_answers(project, change["change_id"]),
                "design": state.get("design") or "", **review_focus(state)}
     try:
-        return read_only_call(
-            project, change["change_id"], lambda: services.review(project, context)
-        )
+        from .review_disposition import perform_review
+        return perform_review(project, state, services, context, load_project_config(project))
     except StoryLoopError as exc:
         if exc.code == "AGENT_UNAVAILABLE":
             exc.details.setdefault("role", "review")

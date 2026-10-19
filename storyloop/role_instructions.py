@@ -152,6 +152,10 @@ INSTRUCTIONS = {
         + FACTS_NOTE
     ),
     "review": (
+        "When mode is verify, return only results:[{id,confirmed:boolean,reason}] for every supplied finding. "
+        "For profiled reviews include coverage and each finding severity P0/P1/P2/question, confidence 0-100, "
+        "introduced:boolean, trigger, impact, fix; target may be out_of_scope. "
+        "Return checklist:[{decision,status:pass|issue|unconfirmed}] exactly once for each plan_decisions entry. "
         "When payload.mode is consistency, review the approved contract, protected acceptance suite "
         "and routing-plan artifact BEFORE implementation. Use the separate consistency schema: "
         "{verdict:coherent|blocked|needs_input,summary,questions,findings}. Each finding contains "
