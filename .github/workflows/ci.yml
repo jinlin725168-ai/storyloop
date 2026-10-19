@@ -1,6 +1,7 @@
 name: CI
 
-# StoryLoop 引擎自己的 CI：全量测试（Linux 两个 Python 版本，Windows 一个，全部必须通过）、字节码编译、密钥扫描。
+# StoryLoop 引擎自己的 CI：全量测试（Linux 与 Windows，全部必须通过）、字节码编译、密钥扫描。
+# Python 统一用 3.11：pyproject 声明的最低版本，也是本地开发版本；两个系统只差操作系统。
 # 只改文档时跳过测试，密钥扫描照常运行。
 # 引擎只用标准库，没有依赖安装步骤；测试会创建临时 Git 仓库，所以需要 git 身份。
 
@@ -57,7 +58,7 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"
 
   tests:
-    name: 测试（${{ matrix.os }}，Python ${{ matrix.python }}）
+    name: 测试（${{ matrix.os }}）
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
@@ -65,18 +66,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            python: "3.11"
-          - os: ubuntu-latest
-            python: "3.12"
-          - os: windows-latest
-            python: "3.12"
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: ${{ matrix.python }}
+          python-version: "3.11"
       - name: Git 身份（测试会提交到临时仓库）
         run: |
           git config --global user.email "ci@storyloop.invalid"
