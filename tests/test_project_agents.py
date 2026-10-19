@@ -11,7 +11,7 @@ from tests.test_baseline_behavior import git, repository
 
 
 class ProjectAgentTests(unittest.TestCase):
-    def test_implement_request_allows_existing_and_new_module_and_test_files(self):
+    def test_implement_request_preserves_legacy_roots_under_plan_and_green_locks(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             repository(root)
@@ -27,7 +27,13 @@ class ProjectAgentTests(unittest.TestCase):
             write_json(root / ".storyloop/config.json", config)
 
             with self.assertRaisesRegex(StoryLoopError, "Manual input"):
-                invoke_project_agent(root, "implement", {"change": {"change_id": "FEAT-1"}})
+                invoke_project_agent(root, "implement", {
+                    "change": {"change_id": "FEAT-1"},
+                    "design_plan": {"forbidden_paths": ["tests"], "constraints": []},
+                    "characterization": {
+                        "status": "GREEN", "tests": ["tests/test_cli.py"], "locks": {},
+                    },
+                })
             request = json.loads(
                 (root / ".storyloop/requests/project-implement.json").read_text(encoding="utf-8")
             )
@@ -38,6 +44,11 @@ class ProjectAgentTests(unittest.TestCase):
             self.assertIn("integration path or foundation file", instructions)
             self.assertIn("existing non-test file outside its `touched` list", instructions)
             self.assertNotIn("Modify only new files", instructions)
+            self.assertIn("structured approved plan is authoritative", instructions)
+            self.assertIn("forbidden_paths", instructions)
+            self.assertIn("GREEN characterization artifacts", instructions)
+            self.assertIn("run the existing approved checks", instructions)
+            self.assertIn("never invent a test or a failing result", instructions)
 
     def test_manual_agent_response_is_bound_to_exact_request_and_consumed(self):
         with tempfile.TemporaryDirectory() as folder:

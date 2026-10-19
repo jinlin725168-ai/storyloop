@@ -65,6 +65,7 @@ def ensure_routing_plan(project: Path, change: dict, state: dict, services,
 
 def _design(project: Path, change: dict, state: dict, services) -> dict:
     context = {'mode': 'routing-plan', 'change': change,
+               'evidence_source_commit': state['contract_commit'],
                'routing': deepcopy(state['routing']),
                'answers': load_answers(project, change['change_id']),
                'facts': list(state.get('facts') or []), 'principles': load_principles(project),

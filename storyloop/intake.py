@@ -141,8 +141,16 @@ def _validate_locations(project: Path, commit: str, assessment: dict) -> None:
             match = re.fullmatch(r'(.+):([1-9][0-9]*)', location)
             require(match is not None, 'Evidence location must be path:line')
             path = repository_relative(match[1], 'evidence path')
-            content = _git(project, 'show', f'{commit}:{path}')
+            content = _evidence_content(project, commit, path)
             require(int(match[2]) <= len(content.splitlines()), 'Evidence line absent at source commit')
+
+
+def _evidence_content(project: Path, commit: str, path: str) -> str:
+    """Read evidence only from a valid source commit; a missing path is role-repairable."""
+    _git(project, 'cat-file', '-e', f'{commit}^{{commit}}')
+    visible = _git(project, 'ls-tree', '-z', '--name-only', commit, '--', path).split('\0')
+    require(path in visible, f'Evidence path absent at source commit {commit}: {path}')
+    return _git(project, 'show', f'{commit}:{path}')
 
 
 def project_intake(project: Path, product: dict) -> dict:

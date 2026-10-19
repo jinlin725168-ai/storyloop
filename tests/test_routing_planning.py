@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from storyloop.baseline import load_project_config
-from storyloop.intake import digest
+from storyloop.intake import _validate_locations, digest
 from storyloop.models import StoryLoopError
 from storyloop.planning import ensure_routing_plan, required_locks, validate_plan
 from storyloop.routing_policy import DEFAULT_POLICY
@@ -145,6 +145,55 @@ class PlanningTests(unittest.TestCase):
         self.assertIn('validation_errors', calls[1])
         self.assertEqual(self.state['routing']['effective_tier'], 'heavy')
 
+    def test_post_contract_evidence_path_is_repaired_against_explicit_source_commit(self):
+        self.state['routing'].update(initial_tier='heavy', effective_tier='heavy')
+        test = self.root / 'tests/test_service_characterization.py'
+        test.parent.mkdir(exist_ok=True)
+        test.write_text('CHARACTERIZED = True\n', encoding='utf-8')
+        git(self.root, 'add', str(test.relative_to(self.root)))
+        git(self.root, 'commit', '-q', '-m', 'characterize service')
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            if len(requests) == 1:
+                response['options'][0]['risks']['sensitive']['evidence']['locations'] = [
+                    'tests/test_service_characterization.py:1'
+                ]
+            return response
+
+        self.assertIsNone(self.ensure(design))
+
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(requests[0]['evidence_source_commit'], self.commit)
+        self.assertIn('tests/test_service_characterization.py',
+                      requests[1]['validation_errors'][0])
+        self.assertIn(self.commit, requests[1]['validation_errors'][0])
+        self.assertEqual(self.state['planning']['plan']['binding']['source_commit'], self.commit)
+
+    def test_invalid_evidence_source_commit_remains_git_blocked_without_repair(self):
+        with self.assertRaises(StoryLoopError) as raised:
+            _validate_locations(self.root, '0' * 40, {
+                'risks': answer()['options'][0]['risks'], 'criteria': [],
+            })
+
+        self.assertEqual(raised.exception.code, 'GIT_BLOCKED')
+
+    def test_evidence_source_accepts_exact_unicode_file_path(self):
+        evidence = self.root / 'app/证据.py'
+        evidence.write_text('VALUE = 1\n', encoding='utf-8')
+        git(self.root, 'add', str(evidence.relative_to(self.root)))
+        git(self.root, 'commit', '-q', '-m', 'add unicode evidence')
+        commit = git(self.root, 'rev-parse', 'HEAD').strip()
+
+        _validate_locations(self.root, commit, {
+            'risks': {'sensitive': {'evidence': {
+                'locations': ['app/证据.py:1'], 'search_scope': ['app'],
+            }}},
+            'criteria': [],
+        })
+
     def test_native_l3_request_explains_every_option_scope_and_names_repair_gap(self):
         from storyloop.project_agents import invoke_project_agent
         from tests.test_codex_adapter import FakeCodex
@@ -163,10 +212,12 @@ class PlanningTests(unittest.TestCase):
 
         initial_prompt = fake.calls[0][1]
         initial_request = json.loads(initial_prompt.split('\nRequest:\n', 1)[1])
+        self.assertEqual(initial_request['payload']['evidence_source_commit'], self.commit)
         self.assertEqual(initial_request['payload']['replanning']['actual']['touched'],
                          ['app/service.py'])
         self.assertIn('every returned option', initial_prompt.lower())
         self.assertIn('payload.replanning.actual.touched', initial_prompt)
+        self.assertIn('immutable source for every risk evidence location', initial_prompt)
         repair_request = json.loads(fake.calls[1][1].split('\nRequest:\n', 1)[1])
         self.assertEqual(repair_request['payload']['validation_errors'], [
             "L3 option 'main' omits observed candidate scope; every option must include "
