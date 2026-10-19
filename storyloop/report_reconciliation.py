@@ -39,6 +39,9 @@ def _evidence_check(evidence: dict) -> dict:
     if item.get("availability") != "AVAILABLE" and not declared:
         return _check("protected_evidence", "PENDING", "no protected evidence was declared")
     path_matches = item.get("declared_path_matches")
+    if path_matches is None:
+        return _check("protected_evidence", "NOT_AVAILABLE",
+                      "protected evidence path was not explicitly declared", declared, actual)
     status = "MATCH" if (actual and declared and set(declared) == {actual}
                          and path_matches is not False) else "MISMATCH"
     return _check("protected_evidence", status, "actual digest must equal every declaration",
@@ -86,7 +89,7 @@ def _pair_check(change_id: object, entries: list[dict], calls: list[dict]) -> di
         meta = by_id.get(entry.get("call"))
         if meta is None:
             continue
-        adopted = (entry.get("role") == "product" and meta.get("ledger") == "pending")
+        adopted = (entry.get("role") == "product" and meta.get("ledger") is None)
         if meta.get("role") != entry.get("role") or (meta.get("ledger") != change_id and not adopted):
             problems.append(entry.get("call"))
         elif meta.get("status") not in TERMINAL_CALLS:

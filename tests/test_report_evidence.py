@@ -58,7 +58,7 @@ class ReportEvidenceTests(unittest.TestCase):
         write_json(self.root / ".storyloop/state/telemetry/FEAT-1.json",
                    {"version": 1, "change_id": "FEAT-1", "entries": entries})
 
-    def _meta(self, call: str, role: str, ledger: str = "FEAT-1", status: str = "OK") -> None:
+    def _meta(self, call: str, role: str, ledger: object = "FEAT-1", status: str = "OK") -> None:
         write_json(self.root / f".storyloop/state/telemetry/calls/{call}/meta.json",
                    {"version": 1, "call": call, "role": role, "ledger": ledger,
                     "status": status, "wall_ms": 3, "sessions": [], "repairs": 0})
@@ -98,6 +98,20 @@ class ReportEvidenceTests(unittest.TestCase):
         check = next(item for item in result["checks"] if item["id"] == "protected_evidence")
         self.assertEqual(check["status"], "MISMATCH")
 
+    def test_digest_without_declared_evidence_path_is_not_a_match(self):
+        self._run()
+        evidence_path = self.root / ".storyloop/evidence/FEAT-1/acceptance-result.json"
+        write_json(evidence_path, {"status": "PASSED"})
+        digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        layers = {key: dict(value) for key, value in LAYERS.items()}
+        layers["acceptance"] = {"status": "PASSED", "results": [],
+                                "evidence_sha256": digest}
+        report = self._report(layers=layers)
+        result = reconcile(self.root, self.change, report,
+                           collect_evidence(self.root, self.change, report))
+        check = next(item for item in result["checks"] if item["id"] == "protected_evidence")
+        self.assertEqual(check["status"], "NOT_AVAILABLE")
+
     def test_unknown_source_head_does_not_guess_a_parent(self):
         self._run(source_head="not-a-commit")
         evidence = collect_evidence(self.root, self.change, self._report())
@@ -111,7 +125,7 @@ class ReportEvidenceTests(unittest.TestCase):
         self._run()
         self._ledger([{"role": "product", "call": "call-product", "wall_ms": 2},
                       {"role": "review", "call": "call-review", "wall_ms": 3}])
-        self._meta("call-product", "product", ledger="pending")
+        self._meta("call-product", "product", ledger=None)
         self._meta("call-review", "review")
         evidence = collect_evidence(self.root, self.change, self._report())
         result = reconcile(self.root, self.change, self._report(), evidence)
@@ -119,6 +133,22 @@ class ReportEvidenceTests(unittest.TestCase):
         self.assertTrue(all(check["status"] in {"MATCH", "PENDING"}
                             for check in result["checks"]))
         self.assertTrue(any("theoretical" in item.lower() for item in result["limitations"]))
+
+    def test_malformed_ledger_entries_are_bounded_unavailable_instead_of_raising(self):
+        self._run()
+        malformed = [
+            [1],
+            [{}],
+            [{"role": [], "wall_ms": 1}],
+            [{"role": "review", "wall_ms": "bad"}],
+            [{"role": "review", "wall_ms": 1, "cost_usd": "not-number"}],
+        ]
+        for entries in malformed:
+            with self.subTest(entries=entries):
+                self._ledger(entries)
+                evidence = collect_evidence(self.root, self.change, self._report())
+                self.assertEqual(evidence["availability"]["entries"], "NOT_AVAILABLE")
+                self.assertTrue(evidence["entries"]["truncated"]["ledger"])
 
     def test_reports_missing_duplicate_orphan_and_running_meta_as_mismatch(self):
         self._run()

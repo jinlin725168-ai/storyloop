@@ -119,7 +119,7 @@ def _load_entries(root: Path, change_id: str | None) -> tuple[list, dict | None,
     try:
         raw = ledger_entries(root, change_id)
         totals = summarize(root, change_id)
-    except (OSError, RuntimeError, ValueError):
+    except (OSError, RuntimeError, ValueError, KeyError, TypeError, AttributeError, OverflowError):
         return [], None, "NOT_AVAILABLE", True
     truncated = len(raw) > MAX_ENTRIES
     bounded = raw[:MAX_ENTRIES]
@@ -150,7 +150,7 @@ def _load_calls(root: Path, change_id: str | None, ledger_ids: set[str]) -> tupl
         if value is None or value.get("call") != call_id:
             incomplete = incomplete or folder.name in ledger_ids
             continue
-        adopted = (value.get("ledger") == "pending" and value.get("role") == "product"
+        adopted = (value.get("ledger") is None and value.get("role") == "product"
                    and call_id in ledger_ids)
         if value.get("ledger") != change_id and not adopted:
             continue
