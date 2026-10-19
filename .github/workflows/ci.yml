@@ -11,9 +11,10 @@ on:
   pull_request:
   workflow_dispatch:
 
-# PR 上新推送会取消旧运行；main 上每次合并都要跑完，留下完整记录。
+# PR 上新推送会取消旧运行；main 与手动触发按提交分组，每次都跑完，留下完整记录。
+# （同一组最多保留一个排队中的运行，按分支分组会让新合并挤掉排队中的旧合并。）
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || format('{0}-{1}', github.event_name, github.sha) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
