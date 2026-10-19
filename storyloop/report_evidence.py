@@ -49,14 +49,17 @@ def collect_evidence(project: Path, change: dict, report: dict) -> dict:
         root, change_id, {item.get("call") for item in entries if isinstance(item.get("call"), str)})
     git = _git_snapshot(root, run, report)
     protected = _protected_evidence(root, change_id, report)
+    answers, answers_status, answers_truncated = _load_answers(root, change_id)
     return {
         "run": run,
+        "answers": answers,
         "entries": {"ledger": entries, "calls": calls,
                     "truncated": {"ledger": truncated, "calls": calls_truncated}},
         "telemetry": telemetry,
         "git": git,
         "availability": {"run": run_status, "run_truncated": run_truncated,
-                         "entries": entry_status,
+                         "entries": entry_status, "answers": answers_status,
+                         "answers_truncated": answers_truncated,
                          "telemetry": entry_status, "evidence": protected},
     }
 
@@ -224,3 +227,19 @@ def _declared_path_matches(root: Path, expected: Path, declared: object) -> bool
         return not candidate.is_symlink() and candidate.resolve() == expected.resolve()
     except OSError:
         return False
+
+
+def _load_answers(root: Path, change_id: str | None) -> tuple[list | None, str, bool]:
+    if change_id is None:
+        return None, "NOT_AVAILABLE", False
+    path = root / ".storyloop/state/answers" / f"{change_id}.json"
+    value = _read_object(root, path, MAX_RUN_BYTES)
+    if (value is None or value.get("version") != 1 or value.get("change_id") != change_id
+            or not isinstance(value.get("entries"), list)):
+        return None, "NOT_AVAILABLE", False
+    fields = {"attempt", "question", "answer", "answered_at"}
+    entries = value["entries"]
+    projected = [{key: record[key] for key in fields if key in record}
+                 for record in entries[:MAX_LIST] if isinstance(record, dict)]
+    bounded, truncated = _bounded(projected)
+    return bounded, "AVAILABLE", truncated or len(entries) > MAX_LIST or len(projected) != len(entries)
