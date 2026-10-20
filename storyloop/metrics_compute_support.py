@@ -9,8 +9,8 @@ from typing import Any
 
 TIER_ORDER = {"light": 0, "standard": 1, "heavy": 2}
 UNRECORDED = "未记录"
-TERMINAL_OUTCOMES = frozenset({"PASSED", "FAILED", "SUPERSEDED"})
-FAILED_OUTCOMES = frozenset({"FAILED", "SUPERSEDED"})
+FAILED_OUTCOMES = frozenset({"FAILED", "BUDGET_EXHAUSTED", "NO_PROGRESS", "SUPERSEDED"})
+M7_OUTCOMES = frozenset({"PASSED"}) | FAILED_OUTCOMES
 
 
 def metric(
@@ -38,7 +38,7 @@ def _forced_summary(id: str, records: list[dict], missing: list[dict]) -> dict:
     outcomes, known, failures, attempt_values, attempt_ids = Counter(), [], [], [], []
     for record in records:
         status = record.get("status")
-        if isinstance(status, str) and status in TERMINAL_OUTCOMES:
+        if isinstance(status, str) and status in M7_OUTCOMES:
             outcomes[status] += 1
             known.append(_id(record))
             if status in FAILED_OUTCOMES:

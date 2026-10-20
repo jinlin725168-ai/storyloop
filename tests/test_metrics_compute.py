@@ -216,14 +216,14 @@ class ComputeTests(unittest.TestCase):
         records = [
             rec("A", continue_heavy=True, attempts=2,
                 by_role={"implement": {"tiers": ["strong"]}}),
-            rec("B", continue_heavy=True, status="SUPERSEDED", attempts=4,
+            rec("B", continue_heavy=True, status="BUDGET_EXHAUSTED", attempts=4,
                 ledger=[{"role": "implement", "tier_applied": "standard"}]),
             rec("C", continue_heavy=False),
         ]
 
         result = forced_heavy(records)
 
-        self.assertEqual(result["outcomes"], {"PASSED": 1, "SUPERSEDED": 1})
+        self.assertEqual(result["outcomes"], {"PASSED": 1, "BUDGET_EXHAUSTED": 1})
         self.assertEqual((result["value"], result["mean_attempts"], result["n"]),
                          (0.5, 3.0, 2))
         self.assertEqual(list(result["by"]), ["standard", "strong"])
@@ -258,6 +258,28 @@ class ComputeTests(unittest.TestCase):
             {"change_id": "APPROVAL", "reason": "NO_SAMPLE"},
             {"change_id": "IMPLEMENTING", "reason": "NO_SAMPLE"},
         ])
+
+    def test_forced_heavy_counts_actual_failed_stops_alongside_pending_state(self):
+        records = [
+            rec("BUDGET", continue_heavy=True, status="BUDGET_EXHAUSTED", attempts=4),
+            rec("NO-PROGRESS", continue_heavy=True, status="NO_PROGRESS", attempts=3),
+            rec("PASSED", continue_heavy=True, status="PASSED", attempts=2),
+            rec("PENDING", continue_heavy=True, status="SPLIT_RECOMMENDED", attempts=1),
+        ]
+        for record in records:
+            record["by_role"] = {"implement": {"tiers": ["strong"]}}
+
+        result = forced_heavy(records)
+
+        self.assertEqual(result["outcomes"], {
+            "BUDGET_EXHAUSTED": 1, "NO_PROGRESS": 1, "PASSED": 1,
+        })
+        self.assertEqual((result["numerator"], result["denominator"], result["value"]),
+                         (2, 3, 0.6667))
+        self.assertEqual(result["failure_changes"], ["BUDGET", "NO-PROGRESS"])
+        self.assertEqual(result["changes"], ["BUDGET", "NO-PROGRESS", "PASSED"])
+        self.assertEqual(result["missing"], [{"change_id": "PENDING", "reason": "NO_SAMPLE"}])
+        self.assertEqual(result["by"]["strong"]["denominator"], 3)
 
     def test_overrule_rate_counts_historical_overruled_findings_in_denominator(self):
         result = overrule_rate([
