@@ -1,0 +1,184 @@
+import shutil
+import unittest
+from unittest import mock
+
+from storyloop.base_upgrade import upgrade_baseline
+from storyloop.drafts import create_draft, load_draft, set_draft_status
+from storyloop.lesson_landing import approve_draft
+from storyloop.lesson_store import load_lessons_at
+from storyloop.models import StoryLoopError
+from storyloop.storage import load_json, write_json
+from tests.lesson_support import initialized_project, sample, head, _git, commit_file
+
+
+class LandingTests(unittest.TestCase):
+    def setUp(self):
+        self.project = initialized_project()
+        self.addCleanup(shutil.rmtree, self.project)
+
+    def draft(self, action='create', target=None, landing=None, **overrides):
+        entry = sample(**overrides)
+        entry.pop('id')
+        body = entry.pop('body')
+        payload = dict(action=action, target=target, entry=entry, why_needed='需要',
+                       evidence=['人工确认'], landing=landing)
+        return 'lesson/' + create_draft(self.project, 'lesson', 'manual', None, payload, body)
+
+    def snapshot(self):
+        p = self.project
+        return (head(p), _git(p, 'status', '--porcelain'),
+                (p / '.git/index').read_bytes(),
+                (p / '.storyloop/config.json').read_bytes(),
+                {x.name: x.read_bytes() for x in (p / '.storyloop/base-proposals').glob('*.json')})
+
+    def foundation(self, path='openspec/foundation/runtime.md'):
+        return dict(kind='foundation', path=path, append='## 时钟\n先校时。')
+
+    def test_prose_create_and_consecutive_ids(self):
+        for number in (1, 2):
+            ref = self.draft()
+            result = approve_draft(self.project, ref)
+            self.assertEqual(result['lesson_id'], f'L-{number:04d}')
+            self.assertEqual(result['commit'], head(self.project))
+            self.assertEqual(load_draft(self.project, ref)['status'], 'approved')
+            self.assertEqual(_git(self.project, 'log', '-1', '--format=%s'), 'chore(lessons): 经验')
+
+    def test_update_and_retire(self):
+        approve_draft(self.project, self.draft())
+        approve_draft(self.project, self.draft('update', 'L-0001', summary='改过'))
+        self.assertEqual(load_lessons_at(self.project, 'HEAD')[0]['summary'], '改过')
+        approve_draft(self.project, self.draft('retire', 'L-0001'))
+        self.assertEqual(load_lessons_at(self.project, 'HEAD')[0]['status'], 'retired')
+
+    def test_knowledge_exact_paths_and_actual_base_update_after_prose(self):
+        approve_draft(self.project, self.draft())
+        result = approve_draft(self.project, self.draft(strength='knowledge', landing=self.foundation()))
+        changed = _git(self.project, 'show', '--name-only', '--format=', 'HEAD').splitlines()
+        self.assertEqual(sorted(changed), ['openspec/foundation/runtime.md', 'openspec/lessons/L-0002.md'])
+        self.assertIn('base-update', result['next'])
+        self.assertEqual(upgrade_baseline(self.project, result['base_proposal'])['status'], 'BASELINE_UPGRADED')
+
+    def test_unicode_foundation_snapshot(self):
+        approve_draft(self.project, self.draft(strength='knowledge', landing=self.foundation('openspec/foundation/运行时.md')))
+        self.assertEqual(load_lessons_at(self.project, 'HEAD')[0]['strength'], 'knowledge')
+
+    def test_config_refused(self):
+        with self.assertRaises(StoryLoopError) as caught:
+            approve_draft(self.project, self.draft(strength='config'))
+        self.assertEqual(caught.exception.code, 'LANDING_UNSUPPORTED')
+
+    def test_invalid_draft_no_trace(self):
+        ref = self.draft(tier='legendary')
+        before = self.snapshot()
+        with self.assertRaisesRegex(StoryLoopError, 'tier'):
+            approve_draft(self.project, ref)
+        self.assertEqual(self.snapshot(), before)
+        self.assertIn('tier', load_draft(self.project, ref)['failure'])
+
+    def test_commit_failure_restores_exact_snapshot(self):
+        ref = self.draft(strength='knowledge', landing=self.foundation())
+        before = self.snapshot()
+        with mock.patch('storyloop.lesson_landing.commit_paths', side_effect=StoryLoopError('boom')):
+            with self.assertRaisesRegex(StoryLoopError, 'boom'):
+                approve_draft(self.project, ref)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_postcommit_failure_restores_exact_snapshot(self):
+        ref = self.draft(strength='knowledge', landing=self.foundation())
+        before = self.snapshot()
+        def fail_approval(project, reference, status, failure=None):
+            if status == 'approved':
+                raise StoryLoopError('postcommit')
+            set_draft_status(project, reference, status, failure)
+        with mock.patch('storyloop.lesson_landing.set_draft_status', side_effect=fail_approval):
+            with self.assertRaisesRegex(StoryLoopError, 'postcommit'):
+                approve_draft(self.project, ref)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_external_commit_is_preserved(self):
+        ref = self.draft()
+        external = []
+        def fail_approval(project, reference, status, failure=None):
+            if status == 'approved':
+                external.append(commit_file(project, 'external.txt', 'other work'))
+                raise StoryLoopError('external')
+            set_draft_status(project, reference, status, failure)
+        with mock.patch('storyloop.lesson_landing.set_draft_status', side_effect=fail_approval):
+            with self.assertRaises(StoryLoopError):
+                approve_draft(self.project, ref)
+        self.assertEqual(head(self.project), external[0])
+        self.assertEqual(_git(self.project, 'status', '--porcelain'), '')
+
+    def test_active_run_refused(self):
+        write_json(self.project / '.storyloop/state/runs/FEAT-20261019-009.json', {'status': 'IMPLEMENTING'})
+        with self.assertRaisesRegex(StoryLoopError, 'FEAT-20261019-009'):
+            approve_draft(self.project, self.draft())
+
+    def test_postcommit_query_failure_restores_snapshot(self):
+        from storyloop import project_git
+        real_git = project_git._git
+        def fail_query(project, *args):
+            if args == ('rev-parse', 'HEAD'):
+                raise StoryLoopError('result query failed')
+            return real_git(project, *args)
+        ref = self.draft()
+        before = self.snapshot()
+        with mock.patch('storyloop.project_git._git', side_effect=fail_query):
+            with self.assertRaisesRegex(StoryLoopError, 'result query failed'):
+                approve_draft(self.project, ref)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_cli_draft_dispatch_and_exclusion(self):
+        import json
+        from tests.test_cli import storyloop
+        ref = self.draft()
+        result = storyloop('approve', str(self.project), '--draft', ref, '--json')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['status'], 'APPLIED')
+        result = storyloop('approve', str(self.project), '--draft', ref, '--change', 'FEAT-1')
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_unknown_role_and_core_budget_rejected(self):
+        ref = self.draft(roles=['unknown'])
+        with self.assertRaises(StoryLoopError):
+            approve_draft(self.project, ref)
+        approve_draft(self.project, self.draft(tier='core', body='x' * 3000))
+        before = self.snapshot()
+        with self.assertRaises(StoryLoopError):
+            approve_draft(self.project, self.draft(tier='core', body='y' * 2000))
+        self.assertEqual(self.snapshot(), before)
+
+    def test_existing_foundation_bytes_restored(self):
+        commit_file(self.project, 'openspec/foundation/runtime.md', 'original\r\n')
+        # Bind this foundation as baseline before injecting a failed landing.
+        from storyloop.base_upgrade import propose_base_change
+        proposal = propose_base_change(self.project, ['openspec/foundation/runtime.md'], 'seed')
+        upgrade_baseline(self.project, proposal['change_id'])
+        before = (self.project / 'openspec/foundation/runtime.md').read_bytes()
+        ref = self.draft(strength='knowledge', landing=self.foundation())
+        with mock.patch('storyloop.lesson_landing.commit_paths', side_effect=StoryLoopError('boom')):
+            with self.assertRaises(StoryLoopError):
+                approve_draft(self.project, ref)
+        self.assertEqual((self.project / 'openspec/foundation/runtime.md').read_bytes(), before)
+
+    def test_invalid_missing_landing_reference_leaves_no_trace(self):
+        ref = self.draft(landings=[{'kind': 'foundation', 'path': 'openspec/foundation/missing.md'}])
+        before = self.snapshot()
+        with self.assertRaises(StoryLoopError):
+            approve_draft(self.project, ref)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_write_failure_after_proposal_restores_snapshot(self):
+        from storyloop.lesson_landing import write_bytes_atomic
+        failed = []
+        def fail_once(path, content):
+            if 'openspec/foundation' in str(path) and not failed:
+                failed.append(True)
+                raise OSError('write failure')
+            return write_bytes_atomic(path, content)
+        ref = self.draft(strength='knowledge', landing=self.foundation())
+        before = self.snapshot()
+        with mock.patch('storyloop.lesson_landing.write_bytes_atomic', side_effect=fail_once):
+            with self.assertRaises(OSError):
+                approve_draft(self.project, ref)
+        self.assertEqual(self.snapshot(), before)

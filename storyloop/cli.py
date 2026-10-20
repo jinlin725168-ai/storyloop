@@ -102,7 +102,10 @@ def _product_arguments(child, command):
     elif command == "log":
         child.add_argument("--change", dest="change_id", required=True)
     elif command in {"approve", "status", "report", "ci"}:
-        child.add_argument("--change", dest="change_id", required=command == "ci")
+        group = child.add_mutually_exclusive_group() if command == "approve" else child
+        group.add_argument("--change", dest="change_id", required=command == "ci")
+        if command == "approve":
+            group.add_argument("--draft", help="审批经验或勘误草案")
         if command == "approve":
             for flag in ("readiness", "design", "continue-heavy", "option", "reason", "tier"):
                 child.add_argument("--" + flag)
@@ -155,6 +158,8 @@ def dispatch(args) -> dict:
     if args.command == "adapters":
         from .adapter_capabilities import check
         return check(project)
+    if args.command == "approve" and getattr(args, "draft", None):
+        return dispatch_memory(project, args)
     routed = dispatch_routing(project, args)
     if routed is not None:
         return routed

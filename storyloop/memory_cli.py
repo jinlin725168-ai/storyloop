@@ -35,6 +35,12 @@ def dispatch_drafts(project, args):
 
 
 def dispatch_memory(project, args):
+    if args.command == "approve":
+        from .lesson_landing import approve_draft
+        require(not any(getattr(args, flag, None) for flag in
+                        ("readiness", "design", "continue_heavy", "option", "reason", "tier")),
+                "--draft 不能与变更审批选项一起使用")
+        return approve_draft(project, args.draft)
     return dispatch_lessons(project, args) if args.command == "lessons" else dispatch_drafts(project, args)
 
 

@@ -32,10 +32,10 @@ def _resolve_commit(project: Path, commit: str) -> str:
 
 
 def _tree_record(project: Path, commit: str, path: str) -> tuple[str, str, str] | None:
-    output = _git(project, "ls-tree", commit, "--", path).strip()
+    output = _git(project, "ls-tree", "-z", commit, "--", path)
     if not output:
         return None
-    records = output.splitlines()
+    records = output.rstrip("\0").split("\0")
     if len(records) != 1 or "\t" not in records[0]:
         raise _invalid(f"Git 树条目异常：{path}")
     header, actual = records[0].split("\t", 1)

@@ -77,3 +77,12 @@ def commit_file(project: Path, relative: str, content: str) -> str:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
     return commit_all(project, f"update {relative}")
+
+
+def initialized_project() -> Path:
+    """Create a bootstrapped project with a real passing regression command."""
+    import sys
+    from storyloop.baseline import bootstrap_project
+    project = git_repo()
+    bootstrap_project(project, {'test_commands': [[sys.executable, '-c', 'pass']]})
+    return project
