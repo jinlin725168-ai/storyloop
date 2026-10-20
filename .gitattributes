@@ -1,2 +1,5 @@
 # Preserve CommonMark hard-break spaces and the immutable legacy report's exact bytes.
 tests/fixtures/report_presentation_v1_expected.md whitespace=-blank-at-eol
+# Golden fixtures are compared byte for byte: never convert line endings on checkout
+# (Git for Windows and GitHub's Windows runners default to core.autocrlf=true).
+tests/fixtures/** -text
