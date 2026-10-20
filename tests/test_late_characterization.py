@@ -2,6 +2,7 @@
 from dataclasses import replace
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -93,8 +94,10 @@ class CharacterizationCandidateSafetyTests(unittest.TestCase):
             paths = _baseline(root, candidate, 'HEAD')
             with self.subTest(attribute='export-ignore'):
                 self.assertIn('tests/test_service.py', paths)
-                self.assertEqual((candidate / 'tests/test_service.py').read_bytes(),
-                                 (root / 'tests/test_service.py').read_bytes())
+                # The committed blob, not the checkout: core.autocrlf may rewrite the worktree copy.
+                blob = subprocess.run(['git', 'cat-file', 'blob', 'HEAD:tests/test_service.py'],
+                                      cwd=root, capture_output=True, check=True).stdout
+                self.assertEqual((candidate / 'tests/test_service.py').read_bytes(), blob)
             with self.subTest(attribute='export-subst'):
                 self.assertEqual((candidate / 'tests/substitute.bin').read_bytes(), content)
             self.assertEqual((root / 'tests/substitute.bin').read_bytes(), content)
