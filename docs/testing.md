@@ -11,9 +11,24 @@
 运行：
 
 ```bash
-.venv/bin/python -m unittest discover -s tests -t .          # 全量
+.venv/bin/python tests/run.py --suite full          # 全量：每个模块一个进程，按 CPU 核数并行
+.venv/bin/python tests/run.py --suite core          # 核心套件（CI 在每个 PR 上跑的那部分）
+.venv/bin/python tests/run.py --suite core --list   # 只列出模块
 .venv/bin/python -m unittest tests.test_project_loop tests.test_smoke_repair   # 指定模块
 ```
+
+`unittest discover` 仍可用，但串行跑全量要一小时左右（Linux，约 870 个测试）；`run.py` 的墙钟时间由最慢的单个模块决定（目前是 `test_routing_e2e`，约 8 分钟）。
+
+### 测试套件
+
+套件定义在 `tests/suites.py`：
+
+| 套件 | 内容 | 什么时候跑 |
+|---|---|---|
+| `core` | 主流程端到端（`test_product_e2e`、`test_nature_e2e`、`test_reports_e2e`、`test_roles_e2e`、`test_project_loop`）、安全边界、命令行、跨平台回归（短路径、autocrlf、UTF-8 管道），以及每个都在几秒内跑完的纯逻辑模块 | 每个 PR、每次 push 到 main；Linux 4 路并行约 1 分钟 |
+| `full` | `tests/test_*.py` 全部模块 | CI 每天定时一次、手动触发；本地合并前、按计划实现时 |
+
+新增的测试模块默认只在 `full` 里；作者认为它守护的是主流程或安全边界时，在 `suites.py` 对应分组里加上它，`test_suites` 会检查名单里的模块都存在。分流、设计批准等重型流程的模块（单个就要几分钟）只在 `full` 里，它们的回归最晚在第二天的定时全量里暴露。
 
 测试会提交到临时仓库，所以本机需要 git 身份（`user.name`、`user.email`）。
 
@@ -44,12 +59,12 @@
 
 ## 二、CI
 
-`.github/workflows/ci.yml`，push 到 main、PR 与手动触发：
+`.github/workflows/ci.yml`，push 到 main、PR、每天定时（UTC 19:00）与手动触发：
 
 | 作业 | 内容 |
 |---|---|
 | 改动范围 | 判断是否只改了文档（`docs/`、`LICENSE`、`storyloop/` 与 `tests/` 以外的 `.md`）；是则跳过测试 |
-| 测试（矩阵） | Ubuntu、Windows，Python 统一 3.11（pyproject 声明的最低版本），全部必须通过；步骤为 `compileall`（含 `examples/claude-code`）→ `pip install .`（确认打包与技能包数据）→ 全量 unittest |
+| 测试（矩阵） | Ubuntu、Windows，Python 统一 3.11（pyproject 声明的最低版本），全部必须通过；步骤为 `compileall`（含 `examples/claude-code`）→ `pip install .`（确认打包与技能包数据）→ `tests/run.py`：PR 与 push 跑 `core`，定时跑 `full`，手动触发可选（默认 `full`），4 路并行 |
 | 密钥扫描 | gitleaks（固定版本、校验摘要）扫描本次引入的每个提交，手动触发时扫描全部历史；只改文档时也运行 |
 | CI 结果 | 汇总以上作业，跳过算通过；`main` 的分支规则只要求这一项 |
 

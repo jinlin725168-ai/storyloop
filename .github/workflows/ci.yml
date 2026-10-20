@@ -1,6 +1,8 @@
 name: CI
 
-# StoryLoop 引擎自己的 CI：全量测试（Linux 与 Windows，全部必须通过）、字节码编译、密钥扫描。
+# StoryLoop 引擎自己的 CI：测试（Linux 与 Windows，全部必须通过）、字节码编译、密钥扫描。
+# PR 与 push 只跑核心套件（tests/suites.py：主流程端到端、安全边界、命令行、快速模块）；
+# 每天定时与手动触发跑全量。套件由 tests/run.py 按模块并行执行。
 # Python 统一用 3.11：pyproject 声明的最低版本，也是本地开发版本；两个系统只差操作系统。
 # 只改文档时跳过测试，密钥扫描照常运行。
 # 引擎只用标准库，没有依赖安装步骤；测试会创建临时 Git 仓库，所以需要 git 身份。
@@ -9,7 +11,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "0 19 * * *"   # 每天一次全量（UTC 19:00）
   workflow_dispatch:
+    inputs:
+      suite:
+        description: 测试套件
+        type: choice
+        options: [full, core]
+        default: full
 
 # PR 上新推送会取消旧运行；main 与手动触发按提交分组，每次都跑完，留下完整记录。
 # （同一组最多保留一个排队中的运行，按分支分组会让新合并挤掉排队中的旧合并。）
@@ -64,6 +74,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
+    env:
+      SUITE: ${{ github.event_name == 'schedule' && 'full' || github.event_name == 'workflow_dispatch' && inputs.suite || 'core' }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -83,8 +95,8 @@ jobs:
         run: python -m compileall -q storyloop examples/claude-code
       - name: 安装（确认打包配置与技能包数据完整）
         run: python -m pip install --quiet .
-      - name: 全量测试
-        run: python -m unittest discover -s tests -t .
+      - name: 测试（${{ env.SUITE }}）
+        run: python tests/run.py --suite ${{ env.SUITE }} --workers 4
 
   security:
     name: 密钥扫描
