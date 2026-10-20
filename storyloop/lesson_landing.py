@@ -104,14 +104,19 @@ def _check_argv(project: Path, draft: dict, green_commit: str) -> list[str]:
 def _run_check_at(project: Path, argv: list[str], commit: str, timeout: int) -> dict:
     with tempfile.TemporaryDirectory(prefix='storyloop-check-') as temporary:
         checkout = Path(temporary) / 'checkout'
-        added = False
+        original_error = None
         try:
             _git(project, 'worktree', 'add', '--detach', str(checkout), commit)
-            added = True
             return run_process(argv, checkout, timeout)
+        except BaseException as exc:
+            original_error = exc
+            raise
         finally:
-            if added:
+            try:
                 _git(project, 'worktree', 'remove', '--force', str(checkout))
+            except BaseException:
+                if original_error is None:
+                    raise
 
 
 def prove_check(project: Path, argv: list[str], red_commit: str,

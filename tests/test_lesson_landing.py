@@ -5,7 +5,8 @@ from unittest import mock
 
 from storyloop.base_upgrade import upgrade_baseline
 from storyloop.drafts import create_draft, load_draft, set_draft_status
-from storyloop.lesson_landing import approve_draft
+from storyloop import lesson_landing
+from storyloop.lesson_landing import approve_draft, prove_check
 from storyloop.lesson_store import load_lessons_at
 from storyloop.models import StoryLoopError
 from storyloop.storage import load_json, write_json
@@ -108,6 +109,54 @@ class LandingTests(unittest.TestCase):
         landing = {'kind': 'check_command', 'argv': [sys.executable, '-c', 'pass']}
         with self.assertRaisesRegex(StoryLoopError, '证明会红'):
             approve_draft(self.project, self.draft(strength='check', landing=landing))
+
+    def test_worktree_registered_before_add_failure_is_removed(self):
+        real_git = lesson_landing._git
+        registered = []
+
+        def fail_after_registration(project, *args):
+            if args[:2] == ('worktree', 'add'):
+                checkout, commit = args[-2:]
+                real_git(project, 'worktree', 'add', '--detach', '--no-checkout',
+                         checkout, commit)
+                registered.append(checkout)
+                raise StoryLoopError('checkout failed')
+            return real_git(project, *args)
+
+        try:
+            with mock.patch('storyloop.lesson_landing._git', side_effect=fail_after_registration):
+                with self.assertRaisesRegex(StoryLoopError, 'checkout failed'):
+                    lesson_landing._run_check_at(
+                        self.project, [sys.executable, '-c', 'pass'], head(self.project), 10,
+                    )
+            listed = real_git(self.project, 'worktree', 'list', '--porcelain')
+            self.assertNotIn(registered[0], listed)
+        finally:
+            for checkout in registered:
+                if checkout in real_git(self.project, 'worktree', 'list', '--porcelain'):
+                    real_git(self.project, 'worktree', 'remove', '--force', checkout)
+
+    def test_process_failures_cannot_count_as_red(self):
+        good = {'returncode': 0, 'contained': True, 'timed_out': False,
+                'truncated': False, 'error': ''}
+        cases = (
+            {'returncode': 1, 'contained': True, 'timed_out': True,
+             'truncated': False, 'error': ''},
+            {'returncode': None, 'contained': False, 'timed_out': False,
+             'truncated': False, 'error': 'Unable to start configured executable'},
+            {'returncode': 1, 'contained': False, 'timed_out': False,
+             'truncated': False, 'error': ''},
+            {'returncode': 1, 'contained': True, 'timed_out': False,
+             'truncated': True, 'error': ''},
+        )
+        for invalid in cases:
+            with self.subTest(result=invalid):
+                with mock.patch('storyloop.lesson_landing._run_check_at',
+                                side_effect=[invalid, good]):
+                    with self.assertRaises(StoryLoopError) as caught:
+                        prove_check(self.project, [sys.executable, '-c', 'pass'],
+                                    head(self.project), head(self.project))
+                self.assertEqual(caught.exception.code, 'CHECK_NOT_PROVEN')
 
     def test_check_config_write_failure_restores_commit_config_and_index(self):
         change_id = self.passed_change()
