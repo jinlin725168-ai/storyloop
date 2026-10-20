@@ -35,7 +35,7 @@ class CallFinalizationTests(unittest.TestCase):
         self.assertEqual(load_meta(self.root, self.call)['code'], 'AGENT_UNAVAILABLE')
 
     def test_each_diagnostic_is_independent_and_success_survives(self):
-        for failing in ('_record_memory_evidence', 'record_call', 'close_call'):
+        for failing in ('_record_memory_evidence', 'close_call'):
             self.call = open_call(self.root, 'implement', 'FEAT-1', 'command', {})
             with self.subTest(failing=failing), \
                     patch('storyloop.project_agents._command', return_value={'summary': 'ok'}), \
@@ -47,6 +47,22 @@ class CallFinalizationTests(unittest.TestCase):
                     self.assertEqual(load_meta(self.root, self.call)['status'], 'OK')
                 if failing != 'record_call':
                     self.assertIn(self.call, [row['call'] for row in ledger_entries(self.root, 'FEAT-1')])
+
+    def test_ledger_failure_after_success_propagates_and_closes_record(self):
+        failure = OSError('ledger unavailable')
+        with patch('storyloop.project_agents._command', return_value={'summary': 'ok'}),                 patch('storyloop.project_agents.record_call', side_effect=failure):
+            with self.assertRaises(OSError) as raised:
+                self.execute()
+        self.assertIs(raised.exception, failure)
+        self.assertEqual(load_meta(self.root, self.call)['status'], 'OK')
+
+    def test_ledger_failure_preserves_any_original_adapter_error(self):
+        for original in (StoryLoopError('adapter failed'), OSError('adapter IO failed')):
+            with self.subTest(error=type(original).__name__),                     patch('storyloop.project_agents._command', side_effect=original),                     patch('storyloop.project_agents.record_call', side_effect=ValueError('ledger')):
+                with self.assertRaises(type(original)) as raised:
+                    self.execute()
+                self.assertIs(raised.exception, original)
+                self.assertEqual(load_meta(self.root, self.call)['status'], 'FAILED')
 
     def test_errata_failure_keeps_success_and_closed_record(self):
         with patch('storyloop.project_agents._command', return_value={'summary': 'ok'}), \
