@@ -4,7 +4,7 @@
 
 ## 一、命令
 
-入口：`storyloop`，等价于 `python -m storyloop`（`python -m storyloop.cli` 也可用）。每个子命令都接受 `PATH`（目标仓库根目录）和 `--json`（输出完整 JSON）。除 `init`、`skills`、`ci` 外，都要求仓库已 `init`。
+入口：`storyloop`，等价于 `python -m storyloop`（`python -m storyloop.cli` 也可用）。每个子命令都接受 `PATH`（目标仓库根目录）和 `--json`（输出完整 JSON）。除 `init`、`skills`、`ci`、`metrics` 外，都要求仓库已 `init`。
 
 | 命令 | 参数 | 返回状态 |
 |---|---|---|
@@ -27,12 +27,44 @@
 | `base-propose` | `--path P [--path P …] --reason TEXT [--allow-mutable] [--allow-ci]` | `PROPOSED` |
 | `base-update` | `--proposal BASE-ID [--confirm-oracle-skills]` | `BASELINE_UPGRADED` |
 | `ci` | `--change ID` | `PASSED` 或 `FAILED` |
+| `metrics` | `[--since YYYY-MM-DD] [--ci-results DIR] [--save]` | `METRICS` |
 | `report` | `--change ID` | `REPORT`（报告路径） |
 | `drafts` | `[--reject KIND/ID --reason TEXT]` | `DRAFTS` 清单或状态为 `rejected` 的草案；`--reason` 只与 `--reject` 同用 |
 | `lessons` | `[--confirm ID \| --retire ID --reason TEXT]` | 经验清单或 `COMMITTED`；确认与退休互斥，退休必须给理由 |
 | `lessons-propose` | `--change ID` | `DONE`、`FAILED`、`SKIPPED_NO_SIGNAL` 或 `SKIPPED_COST_LIMIT` 的复盘结果 |
 
 各命令的用法见 [使用指南](product-iteration-guide.md)。
+
+### 外环指标 JSON
+
+`storyloop metrics PATH` 默认打印 Markdown；`--json` 返回以下完整结构。`--since` 按变更批准日期（含当日）筛选，必须是 ISO 日期。`--save` 同日覆盖两份 UTC 日期命名的文件，并在返回值增加仓库相对路径 `written`；除此之外命令只读、不调用代理、不要求工作区干净。
+
+```json
+{
+  "status": "METRICS",
+  "generated_at": "2026-10-20T12:00:00+00:00",
+  "since": "2026-10-01",
+  "changes": 12,
+  "metrics": {
+    "M1": {
+      "id": "M1", "value": 0.75, "numerator": 9, "denominator": 12, "n": 12,
+      "changes": ["CHANGE-1"], "missing": [{"change_id": "CHANGE-2", "reason": "UNREADABLE"}]
+    }
+  },
+  "suggestions": [],
+  "deferred": [],
+  "manual_deferred": [],
+  "missing": [],
+  "discrepancies": [],
+  "written": ["reports/storyloop/metrics/2026-10-20.md", "reports/storyloop/metrics/2026-10-20.json"]
+}
+```
+
+M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate` 两个同形子指标。M11 另给 `calls`、`agent_ms`、`known_cost_calls`、`cost_coverage` 和按 `角色|实际档次` 的 `by`，未知费用不估价。建议项保留规则 ID、触发值、阈值、样本、至多十个证据变更及剩余数量；R3、R7、R11 还分别保留升档规则 ID、CI 失败层、角色和实际档次。样本不足的项用 `insufficient`，证据不足的项用 `unavailable`，不会混成未触发。
+
+指标缺失原因码为 `NO_SAMPLE`、`CI_RESULTS_NOT_PROVIDED`、`LESSONS_NOT_CONFIGURED`、`UNKNOWN_REPORT_VERSION`、`NO_ROUTING`、`NO_TIER_RECORDED`、`UNREADABLE`。CI 文件提交与变更合并提交无祖先关系时另记 `CI_COMMIT_UNRELATED`。`discrepancies` 的每项为 `{change_id, field, report, run}`，报告快照优先，运行状态只补报告没有的字段。
+
+`storyloop ci PATH --change ID --record FILE` 在正常运行两层 CI 后写出版本 1 的有界 JSON：`change_id`、总 `status`、当前 `commit`、带时区的 `recorded_at`，以及 `layers.acceptance/smoke`。`metrics --ci-results DIR` 只读 `ci-*.json`，同一变更取真实 UTC 时间最新且提交相关的一份；文本子进程显式使用 UTF-8。
 
 ## 二、状态与退出码
 
@@ -141,6 +173,7 @@
 | `agent_timeout_seconds` | `14400` | 代理进程挂死保护 |
 | `check_timeout_seconds` | `300` | 单元、集成、静态检查与特征化回归的单条命令上限 |
 | `design_min_stories` | `2` | 故事数少于它时跳过 design；必须是 ≥1 的整数 |
+| `metrics.thresholds` | `{}` | 按 R1–R12 覆盖 `threshold`、`min_sample`；R8 也可覆盖 `low`。未知规则/字段、布尔、负数、非有限数值报错 |
 | `version`、`mode` | `1`、`"product-iteration"` | 由 init 写入，目前不读取 |
 
 ## 四、代理协议（`storyloop.project-agent.v1`）

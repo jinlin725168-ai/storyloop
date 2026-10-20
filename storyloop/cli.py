@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import json
 from pathlib import Path
 import sys
@@ -13,7 +14,7 @@ from .base_upgrade import propose_base_change, upgrade_baseline
 from .foundation_survey import survey_foundation
 from .skills import install_skills
 from .system_smoke import apply_smoke_update, propose_smoke_update
-from .change_log import change_log, render_log
+from .change_log import change_log
 from .changes import create_change, load_change, revise_change
 from .manual_acceptance import record_manual_acceptance
 from .next_steps import append_pending_memory, draft_next, next_step, supersede_revision_next
@@ -24,7 +25,7 @@ from .project_agents import invoke_project_agent
 from .acceptance_repair import repair_smoke
 from .project_loop import load_run_state, run_change
 from .semantic_repair import answer_with_repair
-from .stop_report import build_stop, build_entry_stop, render_stop, stop_of
+from .stop_report import build_stop, build_entry_stop, stop_of
 from .routing_cli import dispatch_routing, BLOCKED
 from .routing_report import draft_stop, report_routing
 from .requirement_checklist import blocking_items, evaluate_checklist
@@ -32,7 +33,8 @@ from .run_recovery import reset_run
 from .ci_command import run_ci_command
 from .storage import load_json
 from .telemetry import adopt_pending, summarize
-from .memory_cli import add_memory_arguments, dispatch_memory, render_memory
+from .memory_cli import add_memory_arguments, dispatch_memory
+from .cli_output import display
 
 
 def parser() -> argparse.ArgumentParser:
@@ -63,6 +65,7 @@ def parser() -> argparse.ArgumentParser:
         "survey": "底座摸底：代理只读探索仓库，写出 openspec/foundation/ 知识库并开 BASE 提案；提交后 base-update 即受保护",
         "lessons": "列出、确认或退休仓库经验", "lessons-propose": "复盘已结束的变更并提议经验草案",
         "drafts": "列出或驳回待批草案",
+        "metrics": "跨变更汇总指标与调整建议（只读）",
     }
     for command, help_text in descriptions.items():
         child = sub.add_parser(command, help=help_text)
@@ -120,7 +123,11 @@ def _product_arguments(child, command):
 
 
 def _maintenance_arguments(child, command):
-    if command == "document":
+    if command == "metrics":
+        child.add_argument("--since", type=_since_date, metavar="YYYY-MM-DD")
+        child.add_argument("--ci-results", type=Path, metavar="DIR")
+        child.add_argument("--save", action="store_true")
+    elif command == "document":
         child.add_argument("--change", dest="change_id", required=True)
         child.add_argument("--design", type=Path)
         child.add_argument("--capability", help="合同未命名能力时指定活规格名称")
@@ -151,6 +158,16 @@ def _maintenance_arguments(child, command):
         child.add_argument("--change", dest="change_id", required=True)
         child.add_argument("--criterion", dest="criteria", action="append", default=[], required=True)
         child.add_argument("--note", required=True)
+
+
+def _since_date(value: str) -> date:
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("日期必须是 YYYY-MM-DD") from exc
+    if parsed.isoformat() != value:
+        raise argparse.ArgumentTypeError("日期必须是 YYYY-MM-DD")
+    return parsed
 
 
 def dispatch(args) -> dict:
@@ -193,6 +210,12 @@ def dispatch(args) -> dict:
         return dispatch_memory(project, args)
     if args.command == "ci":
         return run_ci_command(project, args.change_id, args.record)
+    if args.command == "metrics":
+        from .metrics import build_metrics, save_metrics
+        result = build_metrics(project, args.since, args.ci_results)
+        if args.save:
+            result["written"] = save_metrics(project, result)
+        return result
     require(_is_product_project(project), "Run storyloop init on this Git project first")
     return _product_dispatch(project, args)
 
@@ -270,7 +293,6 @@ def _product_answer(project: Path, payload: dict, call=None) -> dict:
     operation = lambda: answer_with_repair(
         call or (lambda request: invoke_project_agent(project, "product", request)), payload, validate)
     return read_only_call(project, payload.get("change_id", "pending"), operation)
-
 
 
 def clarify_interactively(project: Path, change_id: str, reviser, interactive: bool,
@@ -408,28 +430,6 @@ def _terminal() -> bool:
 
 def _is_product_project(project: Path) -> bool:
     return (project / BASELINE_PATH).is_file()
-
-
-def display(result: dict, complete_json: bool) -> None:
-    if complete_json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        return
-    if result.get("status") == "LOG":
-        print(render_log(result))
-        return
-    rendered = render_memory(result)
-    if rendered is not None:
-        print(rendered)
-        return
-    print(result.get("status", "REPORT"))
-    for key in ("change_id", "project", "next", "report", "pending", "accepted", "paths", "written"):
-        if key in result and result[key] is not None:
-            print(f"{key}: {result[key]}")
-    if isinstance(result.get("stop"), dict):
-        for line in render_stop(result["stop"]):
-            print(line)
-    for warning in result.get("warnings", []):
-        print(f"warning: {warning}")
 
 
 def _error_stop(args, exc: StoryLoopError) -> dict | None:
