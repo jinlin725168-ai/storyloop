@@ -134,8 +134,12 @@ def _r2(metrics: dict, limits: dict) -> list[dict]:
     if not total:
         return [_unavailable("R2", "ATTRIBUTION_EVIDENCE_NOT_RECORDED")]
     share = attribution.get("implement", 0) / total
+    sources = rework.get("attribution_changes")
+    evidence = sources.get("implement") if isinstance(sources, dict) else None
+    if share > 0.6 and not _identifiers(evidence):
+        return [_unavailable("R2", "ATTRIBUTION_EVIDENCE_NOT_RECORDED")]
     return [_fired("R2", value, limits["R2"]["threshold"], n,
-                   rework.get("changes"), TEXTS["R2"])] if share > 0.6 else []
+                   evidence, TEXTS["R2"])] if share > 0.6 else []
 
 
 def _r3(metrics: dict, limits: dict) -> list[dict]:

@@ -94,7 +94,11 @@ class CiResultTests(unittest.TestCase):
             folder, outside = Path(folder_name), Path(outside_name)
             _write_ci(outside, "outside.json", change="FEAT-1", status="FAILED", commit=merge,
                       at="2026-10-20T01:00:00+00:00")
-            (folder / "ci-link.json").symlink_to(outside / "outside.json")
+            with self.subTest(case="symlink"):
+                try:
+                    (folder / "ci-link.json").symlink_to(outside / "outside.json")
+                except (OSError, NotImplementedError) as error:
+                    self.skipTest(f"Symlinks unavailable: {error}")
             (folder / "ci-large.json").write_bytes(b" " * 1_000_001)
             _write_ci(folder, "ci-invalid.json", change="FEAT-1", status="FAILED", commit=merge,
                       at="2026-10-20T01:00:00")
@@ -115,6 +119,56 @@ class CiResultTests(unittest.TestCase):
 
         self.assertEqual(results, {})
         self.assertEqual(missing, [{"change_id": "FEAT-1", "reason": "UNREADABLE"}])
+
+    def test_invalid_ci_schema_does_not_become_a_valid_sample(self):
+        cases = (
+            {"status": "CANCELLED"}, {"layers": {}},
+            {"layers": {"acceptance": "PASSED"}},
+            {"layers": {"acceptance": "SKIPPED", "smoke": "PASSED"}},
+            {"layers": {"acceptance": "PASSED", "smoke": "CANCELLED"}},
+            {"layers": {"acceptance": ["PASSED"], "smoke": "PASSED"}},
+            {"version": True}, {"version": 2},
+        )
+        merge = head(self.project)
+        records = [rec("A", commits={"merge_commit": merge})]
+        for invalid in cases:
+            with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as directory:
+                folder = Path(directory)
+                value = {"version": 1, "change_id": "A", "status": "PASSED", "commit": merge,
+                         "recorded_at": "2026-10-20T02:00:00+00:00",
+                         "layers": {"acceptance": "PASSED", "smoke": "PASSED"}, **invalid}
+                (folder / "ci-new.json").write_text(json.dumps(value), encoding="utf-8")
+
+                results, missing = load_ci_results(self.project, folder, records)
+
+                self.assertEqual(results, {})
+                self.assertEqual(missing, [{"change_id": "A", "reason": "UNREADABLE"}])
+                self.assertIsNone(local_green_ci_red(results, records)["value"])
+
+                _write_ci(folder, "ci-old.json", change="A", status="FAILED", commit=merge,
+                          at="2026-10-20T01:00:00+00:00")
+                results, missing = load_ci_results(self.project, folder, records)
+
+                self.assertEqual(results["A"]["status"], "FAILED")
+                self.assertEqual(local_green_ci_red(results, records)["value"], 1.0)
+                self.assertEqual(missing, [{"change_id": "A", "reason": "UNREADABLE"}])
+
+    def test_ci_accepts_real_error_and_skipped_layer_statuses(self):
+        merge = head(self.project)
+        records = [rec("A", commits={"merge_commit": merge})]
+        for acceptance, smoke, status in (
+            ("ERROR", "ERROR", "FAILED"), ("PASSED", "SKIPPED", "PASSED"),
+        ):
+            with self.subTest(acceptance=acceptance), tempfile.TemporaryDirectory() as directory:
+                folder = Path(directory)
+                _write_ci(folder, "ci-result.json", change="A", status=status, commit=merge,
+                          at="2026-10-20T01:00:00+00:00",
+                          layers={"acceptance": acceptance, "smoke": smoke})
+
+                results, missing = load_ci_results(self.project, folder, records)
+
+                self.assertEqual(results["A"]["status"], status)
+                self.assertEqual(missing, [])
 
     def test_local_green_ci_red_counts_only_passed_changes_with_results(self):
         result = local_green_ci_red({

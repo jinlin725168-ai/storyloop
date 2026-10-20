@@ -157,7 +157,10 @@ class MetricsCommandTests(unittest.TestCase):
         outside = Path(tempfile.mkdtemp(prefix="storyloop-metrics-outside-"))
         metrics_folder = project / "reports/storyloop/metrics"
         metrics_folder.parent.mkdir(parents=True, exist_ok=True)
-        metrics_folder.symlink_to(outside, target_is_directory=True)
+        try:
+            metrics_folder.symlink_to(outside, target_is_directory=True)
+        except (OSError, NotImplementedError) as error:
+            self.skipTest(f"Symlinks unavailable: {error}")
 
         with self.assertRaises(StoryLoopError):
             save_metrics(project, build_metrics(project, None, None))

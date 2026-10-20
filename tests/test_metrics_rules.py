@@ -29,7 +29,8 @@ def metrics_for(rule: str, value: float, n: int) -> dict:
                          "progressing_value": 0.6667, "changes": changes}}
     if rule == "R2":
         return {"M1": metric(value, n),
-                "M3": {**metric(0.1, n, changes), "attribution": {"implement": 7, "contract": 3}}}
+                "M3": {**metric(0.1, n, changes), "attribution": {"implement": 7, "contract": 3},
+                       "attribution_changes": {"implement": changes}}}
     if rule == "R3":
         return {"M2": {"by": {"light": metric(value, n, changes)}}}
     if rule == "R4":

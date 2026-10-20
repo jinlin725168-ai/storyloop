@@ -120,6 +120,7 @@ def _upgrade_group(rows: list[tuple[str, str, bool, list[str]]]) -> dict:
 def rework(records: list[dict]) -> dict:
     """M3: contract rework rate and all recorded failure attributions."""
     valid, changed, missing, attribution = [], [], [], Counter()
+    attribution_changes: dict[str, list[str]] = {}
     for record in records:
         failures, stops = record.get("failures"), record.get("stops")
         if not isinstance(failures, list) and not isinstance(stops, (list, set, tuple)):
@@ -129,13 +130,17 @@ def rework(records: list[dict]) -> dict:
         known_failures = failures if isinstance(failures, list) else []
         for failure in known_failures:
             name = failure.get("attribution") if isinstance(failure, dict) else None
-            attribution[name if isinstance(name, str) and name else UNRECORDED] += 1
+            name = name if isinstance(name, str) and name else UNRECORDED
+            attribution[name] += 1
+            attribution_changes.setdefault(name, []).append(_id(record))
         if (isinstance(stops, (list, set, tuple)) and "NEEDS_SPEC_FIX" in stops
                 or any(isinstance(item, dict) and item.get("attribution") == "contract"
                        for item in known_failures)):
             changed.append(_id(record))
     result = metric("M3", len(changed), len(valid), changed, missing)
     result["attribution"] = _counts(attribution)
+    result["attribution_changes"] = {name: _unique(changes)
+                                     for name, changes in attribution_changes.items()}
     return result
 
 
@@ -322,17 +327,22 @@ def lessons(project: Path, records: list[dict]) -> dict:
                 "unclaimed_rate": _not_configured_metric()}
     provided_by_change, provided_count, unclaimed, unclaimed_changes, missing = _lesson_usage(records)
     recurrence_state = _recurrence_state(root)
+    recurrence_missing = list(missing)
+    recurred = []
     if recurrence_state is None:
-        recurrence_missing = [{"change_id": change_id, "reason": "UNREADABLE"}
-                              for change_id in provided_by_change]
-        recurrence = metric("M12", 0, 0, [], recurrence_missing)
+        for change_id in provided_by_change:
+            _miss(recurrence_missing, {"change_id": change_id}, "UNREADABLE")
     else:
         relevant_lessons = {item for items in provided_by_change.values() for item in items}
         cohort = {_id(record) for record in records if _id(record)}
         recurred = sorted({change_id for lesson_id in relevant_lessons
                            for change_id in _recurrences(recurrence_state.get(lesson_id))
                            if change_id in cohort})
-        recurrence = metric("M12", len(recurred), len(cohort), recurred)
+    recurrence = metric("M12", len(recurred), len(provided_by_change),
+                        recurred, recurrence_missing)
+    # Missing provision evidence leaves both the relevant lessons and denominator unknown.
+    if recurrence_missing or recurrence_state is None:
+        recurrence.update({"value": None, "reason": "UNREADABLE"})
     return {"id": "M12", "recurrence_rate": recurrence,
             "unclaimed_rate": metric("M12", unclaimed, provided_count,
                                      unclaimed_changes, missing)}

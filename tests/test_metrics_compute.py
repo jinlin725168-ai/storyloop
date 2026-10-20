@@ -474,7 +474,7 @@ class ComputeTests(unittest.TestCase):
             result = lessons(project, records)["recurrence_rate"]
 
         self.assertEqual((result["numerator"], result["denominator"], result["value"]),
-                         (1, 2, 0.5))
+                         (1, 1, 1.0))
         self.assertEqual(result["changes"], ["B"])
 
 

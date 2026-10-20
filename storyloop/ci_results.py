@@ -80,12 +80,17 @@ def _safe_folder(folder: Path) -> Path | None:
 
 def _valid_result(value: dict) -> datetime | None:
     required = ("change_id", "status", "commit", "recorded_at", "layers")
-    if value.get("version") != 1 or not all(key in value for key in required):
+    if (type(value.get("version")) is not int or value["version"] != 1
+            or not all(key in value for key in required)):
         return None
-    if (not isinstance(value["change_id"], str) or not isinstance(value["status"], str)
+    if (not isinstance(value["change_id"], str) or value["status"] not in ("PASSED", "FAILED")
             or not isinstance(value["layers"], dict)
             or not isinstance(value["commit"], str)
             or COMMIT.fullmatch(value["commit"]) is None):
+        return None
+    layers = value["layers"]
+    if (layers.get("acceptance") not in ("PASSED", "FAILED", "ERROR")
+            or layers.get("smoke") not in ("PASSED", "FAILED", "ERROR", "SKIPPED")):
         return None
     try:
         parsed = datetime.fromisoformat(str(value["recorded_at"]).replace("Z", "+00:00"))

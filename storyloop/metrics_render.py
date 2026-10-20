@@ -18,6 +18,9 @@ def render_metrics(result: dict) -> str:
     lines.extend(rows or ["| — | 无数据（NO_SAMPLE） | 0/0；n=0 | 无数据 |"])
     fired, insufficient, unavailable = _suggestion_groups(result.get("suggestions"))
     _append_list(lines, "调整建议", [_suggestion(item) for item in fired], "无")
+    metrics = result.get("metrics")
+    m10 = metrics.get("M10", {}) if isinstance(metrics, dict) else {}
+    _append_list(lines, "自动化方向参考", _intervention_counts(m10.get("value"))[:3], "无")
     _append_list(lines, "样本不足", [_insufficient(item) for item in insufficient], "无")
     _append_list(lines, "规则证据不可用", [_unavailable(item) for item in unavailable], "无")
     _append_list(lines, "延后项信号", [_deferred(item) for item in _list(result.get("deferred"))], "无")
@@ -54,6 +57,8 @@ def _metric_rows(value: object) -> list[str]:
 def _metric_row(metric_id: str, metric: dict) -> str:
     value = metric.get("value")
     shown = _number(value) if value is not None else f"无数据（{_metric_reason(metric)}）"
+    if metric_id == "M10" and isinstance(value, dict):
+        shown = "；".join(_intervention_counts(value)) or "0"
     sample = f"{_number(metric.get('numerator'))}/{_number(metric.get('denominator'))}；n={_number(metric.get('n'))}"
     details = []
     changes = _list(metric.get("changes"))
@@ -66,6 +71,13 @@ def _metric_row(metric_id: str, metric: dict) -> str:
     if extras:
         details.append(_compact(extras))
     return f"| {_safe(metric_id)} | {_safe(shown)} | {_safe(sample)} | {_safe('；'.join(details) or '—')} |"
+
+
+def _intervention_counts(value: object) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    counts = [(name, count) for name, count in value.items() if type(count) is int and count > 0]
+    return [f"{name}={count}" for name, count in sorted(counts, key=lambda item: -item[1])]
 
 
 def _metric_reason(metric: dict) -> str:

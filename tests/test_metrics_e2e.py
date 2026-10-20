@@ -35,11 +35,32 @@ class MetricsEndToEndTests(unittest.TestCase):
             self.assertEqual(metrics["M10"]["value"]["continue_heavy"], 1)
             self.assertGreater(metrics["M11"]["calls"], 0)
             self.assertGreater(metrics["M12"]["recurrence_rate"]["numerator"], 0)
+            self.assert_unclaimed_matches_ledger(root, changes, metrics["M12"]["unclaimed_rate"])
             self.assertTrue(any(s.get("rule") and s.get("text")
                                 for s in result["suggestions"]))
             self.assertEqual(result["discrepancies"], [])
             self.assertTrue(render_metrics(result).rstrip().endswith("以上建议由人决定是否采纳"))
             self.assert_real_evidence(root, changes)
+
+    def assert_unclaimed_matches_ledger(self, root, changes, actual):
+        provided_count = unclaimed_count = 0
+        unclaimed_changes = set()
+        for identifier in changes.values():
+            for entry in ledger_entries(root, identifier):
+                provided = entry.get("lessons_provided", [])
+                claimed = entry.get("lessons_claimed", [])
+                provided_count += len(provided)
+                unused = [lesson for lesson in provided if lesson not in claimed]
+                unclaimed_count += len(unused)
+                if unused:
+                    unclaimed_changes.add(identifier)
+        self.assertGreater(provided_count, 0)
+        self.assertEqual(actual["numerator"], unclaimed_count)
+        self.assertEqual(actual["denominator"], provided_count)
+        self.assertEqual(actual["n"], provided_count)
+        self.assertEqual(actual["value"], round(unclaimed_count / provided_count, 4))
+        self.assertEqual(set(actual["changes"]), unclaimed_changes)
+        self.assertEqual(actual["missing"], [])
 
     def assert_real_evidence(self, root, changes):
         for name in ("first", "second", "fix"):
