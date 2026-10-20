@@ -372,6 +372,40 @@ class ComputeTests(unittest.TestCase):
         self.assertEqual((result["value"], result["calls"], result["cost_coverage"]),
                          (0.75, 3, 0.6667))
 
+    def test_cost_uses_report_role_summary_without_guessing_tier_allocation(self):
+        records = [rec("A", ledger=None, by_role={
+            "review": {
+                "calls": 2,
+                "agent_ms": 30,
+                "cost_usd": None,
+                "known_cost_usd": 0.5,
+                "coverage": {"cost_usd": {"known": 1, "total": 2}},
+                "tiers": ["standard", "strong"],
+            },
+        })]
+
+        result = cost(records)
+
+        self.assertEqual(result["by"], {
+            "review|未记录": {
+                "calls": 2, "agent_ms": 30, "cost_usd": 0.5, "cost_coverage": 0.5,
+            },
+        })
+        self.assertEqual((result["value"], result["calls"]), (0.5, 2))
+        self.assertEqual(result["missing"], [])
+
+    def test_cost_without_any_call_is_no_sample_instead_of_zero_cost(self):
+        for records in (
+            [],
+            [rec("A", ledger=None, by_role=None, gaps={"ledger": "UNREADABLE"})],
+        ):
+            with self.subTest(records=records):
+                result = cost(records)
+
+                self.assertIsNone(result["value"])
+                self.assertEqual((result["denominator"], result["n"], result["reason"]),
+                                 (0, 0, "NO_SAMPLE"))
+
     def test_lessons_not_configured(self):
         with tempfile.TemporaryDirectory() as folder:
             result = lessons(Path(folder), [rec("A")])
@@ -406,6 +440,27 @@ class ComputeTests(unittest.TestCase):
                           result["unclaimed_rate"]["denominator"],
                           result["unclaimed_rate"]["value"]), (1, 3, 0.3333))
         self.assertEqual(result["unclaimed_rate"]["changes"], ["A"])
+
+    def test_lesson_recurrence_includes_cohort_change_that_did_not_provide_lessons(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = Path(folder)
+            (project / "openspec/lessons").mkdir(parents=True)
+            state = project / ".storyloop/state/lessons.json"
+            state.parent.mkdir(parents=True)
+            state.write_text(json.dumps({
+                "L-1": {"recurrences": ["B", "OUTSIDE"]},
+            }), encoding="utf-8")
+            records = [
+                rec("A", ledger=[{"lessons_provided": ["L-1"],
+                                  "lessons_claimed": ["L-1"]}]),
+                rec("B", ledger=[{"lessons_provided": [], "lessons_claimed": []}]),
+            ]
+
+            result = lessons(project, records)["recurrence_rate"]
+
+        self.assertEqual((result["numerator"], result["denominator"], result["value"]),
+                         (1, 2, 0.5))
+        self.assertEqual(result["changes"], ["B"])
 
 
 if __name__ == "__main__":

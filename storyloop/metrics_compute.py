@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections import Counter
-import math
 from pathlib import Path
 
 from . import baseline
+from .metrics_cost import cost
 from .metrics_compute_support import (
     TIER_ORDER,
     UNRECORDED,
@@ -308,38 +308,6 @@ def interventions(records: list[dict]) -> dict:
             "missing": missing, "coverage": dict(coverage)}
 
 
-def cost(records: list[dict]) -> dict:
-    """M11: known call cost and raw wall time by role and applied tier."""
-    rows: dict[str, dict] = {}
-    changes, missing = [], []
-    for record in records:
-        ledger = record.get("ledger")
-        if not isinstance(ledger, list):
-            _miss(missing, record, _gap(record, "ledger"))
-            continue
-        if ledger:
-            changes.append(_id(record))
-        for entry in ledger:
-            if not isinstance(entry, dict):
-                _miss(missing, record, "UNREADABLE")
-                continue
-            role = _label(entry.get("role"))
-            tier = _label(entry.get("tier_applied"))
-            row = rows.setdefault(f"{role}|{tier}", {
-                "calls": 0, "agent_ms": 0, "cost_usd": 0.0, "known_cost_calls": 0,
-            })
-            _add_call(row, entry)
-    by = {key: _cost_row(value) for key, value in sorted(rows.items())}
-    calls = sum(row["calls"] for row in by.values())
-    known = sum(rows[key]["known_cost_calls"] for key in rows)
-    known_cost = round(sum(row["cost_usd"] for row in by.values()), 4)
-    return {"id": "M11", "value": known_cost, "numerator": known_cost,
-            "denominator": calls, "n": calls, "changes": _unique(changes),
-            "missing": missing, "calls": calls,
-            "agent_ms": sum(row["agent_ms"] for row in by.values()),
-            "cost_coverage": _ratio(known, calls), "by": by}
-
-
 def lessons(project: Path, records: list[dict]) -> dict:
     """M12: recurrence among provided changes and unclaimed provided entries."""
     root = Path(project).resolve()
@@ -355,7 +323,7 @@ def lessons(project: Path, records: list[dict]) -> dict:
         recurrence = metric("M12", 0, 0, [], recurrence_missing)
     else:
         relevant_lessons = {item for items in provided_by_change.values() for item in items}
-        cohort = set(provided_by_change)
+        cohort = {_id(record) for record in records if _id(record)}
         recurred = sorted({change_id for lesson_id in relevant_lessons
                            for change_id in _recurrences(recurrence_state.get(lesson_id))
                            if change_id in cohort})
@@ -385,31 +353,6 @@ def local_green_ci_red(results: dict[str, dict] | None, records: list[dict]) -> 
             if isinstance(layer, str) and status == "FAILED":
                 layers[layer] += 1
     return metric("M6", len(failed), len(eligible), failed, by=_counts(layers))
-
-
-def _add_call(row: dict, entry: dict) -> None:
-    row["calls"] += 1
-    wall_ms = entry.get("wall_ms")
-    if _finite_nonnegative(wall_ms):
-        row["agent_ms"] += wall_ms
-    value = entry.get("cost_usd")
-    if _finite_nonnegative(value):
-        row["cost_usd"] += value
-        row["known_cost_calls"] += 1
-
-
-def _cost_row(row: dict) -> dict:
-    return {"calls": row["calls"], "agent_ms": row["agent_ms"],
-            "cost_usd": round(row["cost_usd"], 4),
-            "cost_coverage": _ratio(row["known_cost_calls"], row["calls"])}
-
-
-def _label(value: object) -> str:
-    return value if isinstance(value, str) and value else UNRECORDED
-
-
-def _finite_nonnegative(value: object) -> bool:
-    return type(value) in (int, float) and math.isfinite(value) and value >= 0
 
 
 def _configured_lessons(root: Path, folder: Path) -> bool:
