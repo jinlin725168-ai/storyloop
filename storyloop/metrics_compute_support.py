@@ -9,6 +9,8 @@ from typing import Any
 
 TIER_ORDER = {"light": 0, "standard": 1, "heavy": 2}
 UNRECORDED = "未记录"
+TERMINAL_OUTCOMES = frozenset({"PASSED", "FAILED", "SUPERSEDED"})
+FAILED_OUTCOMES = frozenset({"FAILED", "SUPERSEDED"})
 
 
 def metric(
@@ -36,11 +38,13 @@ def _forced_summary(id: str, records: list[dict], missing: list[dict]) -> dict:
     outcomes, known, failures, attempt_values, attempt_ids = Counter(), [], [], [], []
     for record in records:
         status = record.get("status")
-        if isinstance(status, str):
+        if isinstance(status, str) and status in TERMINAL_OUTCOMES:
             outcomes[status] += 1
             known.append(_id(record))
-            if status != "PASSED":
+            if status in FAILED_OUTCOMES:
                 failures.append(_id(record))
+        elif isinstance(status, str):
+            _miss(missing, record, "NO_SAMPLE")
         else:
             _miss(missing, record, _gap(record, "status"))
         value = record.get("attempts")
@@ -49,7 +53,7 @@ def _forced_summary(id: str, records: list[dict], missing: list[dict]) -> dict:
             attempt_ids.append(_id(record))
         else:
             _miss(missing, record, _gap(record, "attempts"))
-    result = metric(id, len(failures), len(known), [_id(record) for record in records], missing)
+    result = metric(id, len(failures), len(known), known, missing)
     result.update({"outcomes": _counts(outcomes), "failure_changes": failures,
                    "mean_attempts": _mean(attempt_values),
                    "attempt_denominator": len(attempt_values), "attempt_changes": attempt_ids})

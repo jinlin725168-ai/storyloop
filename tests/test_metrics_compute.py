@@ -216,18 +216,48 @@ class ComputeTests(unittest.TestCase):
         records = [
             rec("A", continue_heavy=True, attempts=2,
                 by_role={"implement": {"tiers": ["strong"]}}),
-            rec("B", continue_heavy=True, status="BUDGET_EXHAUSTED", attempts=4,
+            rec("B", continue_heavy=True, status="SUPERSEDED", attempts=4,
                 ledger=[{"role": "implement", "tier_applied": "standard"}]),
             rec("C", continue_heavy=False),
         ]
 
         result = forced_heavy(records)
 
-        self.assertEqual(result["outcomes"], {"PASSED": 1, "BUDGET_EXHAUSTED": 1})
+        self.assertEqual(result["outcomes"], {"PASSED": 1, "SUPERSEDED": 1})
         self.assertEqual((result["value"], result["mean_attempts"], result["n"]),
                          (0.5, 3.0, 2))
         self.assertEqual(list(result["by"]), ["standard", "strong"])
         self.assertEqual(result["by"]["strong"]["outcomes"], {"PASSED": 1})
+
+    def test_forced_heavy_excludes_recoverable_states_from_terminal_outcomes(self):
+        records = [
+            rec("PASSED", continue_heavy=True, status="PASSED", attempts=2),
+            rec("FAILED", continue_heavy=True, status="FAILED", attempts=4),
+            rec("SUPERSEDED", continue_heavy=True, status="SUPERSEDED", attempts=3),
+            rec("SPLIT", continue_heavy=True, status="SPLIT_RECOMMENDED", attempts=1),
+            rec("APPROVAL", continue_heavy=True, status="DESIGN_APPROVAL_REQUIRED", attempts=0),
+            rec("IMPLEMENTING", continue_heavy=True, status="IMPLEMENTING", attempts=2),
+        ]
+        for record in records:
+            record["by_role"] = {"implement": {"tiers": ["strong"]}}
+
+        result = forced_heavy(records)
+
+        self.assertEqual(result["outcomes"], {"FAILED": 1, "PASSED": 1, "SUPERSEDED": 1})
+        self.assertEqual((result["numerator"], result["denominator"], result["value"]),
+                         (2, 3, 0.6667))
+        self.assertEqual(result["failure_changes"], ["FAILED", "SUPERSEDED"])
+        self.assertEqual(result["changes"], ["PASSED", "FAILED", "SUPERSEDED"])
+        self.assertEqual(result["mean_attempts"], 2.0)
+        self.assertEqual(result["attempt_denominator"], 6)
+        self.assertEqual((result["by"]["strong"]["outcomes"],
+                          result["by"]["strong"]["denominator"]),
+                         ({"FAILED": 1, "PASSED": 1, "SUPERSEDED": 1}, 3))
+        self.assertEqual(result["missing"], [
+            {"change_id": "SPLIT", "reason": "NO_SAMPLE"},
+            {"change_id": "APPROVAL", "reason": "NO_SAMPLE"},
+            {"change_id": "IMPLEMENTING", "reason": "NO_SAMPLE"},
+        ])
 
     def test_overrule_rate_counts_historical_overruled_findings_in_denominator(self):
         result = overrule_rate([
