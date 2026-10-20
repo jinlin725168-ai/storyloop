@@ -218,7 +218,9 @@ def require_idle_source(project: Path) -> None:
 def _mutated_entries(entries: list[dict], lesson_id: str, updates: dict) -> tuple[list[dict], dict]:
     lesson_id = text(lesson_id, "lesson id")
     require(any(entry["id"] == lesson_id for entry in entries), f"经验不存在：{lesson_id}")
-    changed = [{**entry, **updates} if entry["id"] == lesson_id else entry for entry in entries]
+    from .lessons import render_lesson
+    changed = [parse_lesson(render_lesson({**entry, **updates}), f"{lesson_id}.md")
+               if entry["id"] == lesson_id else entry for entry in entries]
     from .project_agents import ROLES
     validate_lessons(changed, set(ROLES))
     return changed, next(entry for entry in changed if entry["id"] == lesson_id)

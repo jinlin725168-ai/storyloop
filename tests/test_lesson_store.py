@@ -109,6 +109,20 @@ class LessonStoreTests(unittest.TestCase):
         self.assertNotEqual(head(repo), before)
         self.assertEqual(load_lessons_at(repo, head(repo))[0]["baseline_commit"], before)
 
+    def test_retire_rejects_oversized_body_without_writes(self):
+        for body, reason in [('x' * 4090, '结束'), ('正文', '界' * 1400)]:
+            with self.subTest(body_bytes=len(body.encode())):
+                repo = git_repo(lessons=[sample(body=body)])
+                self.addCleanup(shutil.rmtree, repo)
+                before = head(repo)
+                target = repo / 'openspec/lessons/L-0001.md'
+                original = target.read_bytes()
+                with self.assertRaisesRegex(StoryLoopError, '4096'):
+                    retire_lesson(repo, 'L-0001', reason)
+                self.assertEqual(head(repo), before)
+                self.assertEqual(target.read_bytes(), original)
+                self.assertEqual(real_git(repo, 'status', '--porcelain'), '')
+
     def test_retire_requires_reason_and_appends_it(self):
         repo = git_repo(lessons=[sample(body="保留正文\n")])
         self.addCleanup(shutil.rmtree, repo)
