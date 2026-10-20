@@ -1,9 +1,9 @@
 import json
-import shutil
 import sys
 import unittest
 from unittest import mock
 
+from tests.lesson_support import cleanup_repo
 from storyloop.errata import capture_errata, next_errata_id, ERRATA_PATH, defer_errata, release_errata
 from storyloop.drafts import load_draft
 from storyloop.lesson_landing import approve_draft
@@ -25,7 +25,7 @@ class ErrataTests(unittest.TestCase):
         self.project = git_repo(files={'README.md': 'repo\n', 'app/clock.py': 'SYNCED = False\n',
             'openspec/foundation/README.md': '# foundation\n',
             ERRATUM['document']: '# 运行时\n时钟同步。\n'})
-        self.addCleanup(shutil.rmtree, self.project)
+        self.addCleanup(cleanup_repo, self.project)
         bootstrap_project(self.project, {'test_commands': [[sys.executable, '-c', 'pass']]})
 
     def capture(self, **changes):
@@ -60,7 +60,7 @@ class ErrataTests(unittest.TestCase):
     def test_landing_appends_and_opens_upgradeable_base(self):
         original = (self.project / ERRATUM['document']).read_bytes()
         result = approve_draft(self.project, 'errata/' + self.capture()['drafts'][0])
-        content = (self.project / ERRATA_PATH).read_text()
+        content = (self.project / ERRATA_PATH).read_text(encoding='utf-8')
         self.assertTrue(content.startswith('# 知识库勘误\n'))
         self.assertIn('## E-0001', content)
         self.assertIn(ERRATUM['claim'], content)
@@ -68,7 +68,7 @@ class ErrataTests(unittest.TestCase):
         self.assertEqual(upgrade_baseline(self.project, result['base_proposal'])['status'], 'BASELINE_UPGRADED')
         second = approve_draft(self.project, 'errata/' + self.capture()['drafts'][0])
         self.assertEqual(second['errata_id'], 'E-0002')
-        self.assertTrue((self.project / ERRATA_PATH).read_text().startswith(content))
+        self.assertTrue((self.project / ERRATA_PATH).read_text(encoding='utf-8').startswith(content))
         self.assertEqual(foundation_payload(self.project)['documents'][0], ERRATA_PATH)
 
     def test_edited_draft_revalidated(self):

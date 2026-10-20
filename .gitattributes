@@ -1,2 +1,3 @@
 # Preserve CommonMark hard-break spaces and the immutable legacy report's exact bytes.
-tests/fixtures/report_presentation_v1_expected.md whitespace=-blank-at-eol
+tests/fixtures/report_presentation_v1_expected.md text eol=lf whitespace=-blank-at-eol
+tests/fixtures/report_legacy_receipt.md text eol=lf

@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from tests.lesson_support import cleanup_repo
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
 from tests.routing_support import legacy_create_change as create_change
@@ -36,7 +37,7 @@ def smoke_payload(change_id: str) -> dict:
 class ProjectLoopTests(unittest.TestCase):
     def _approved(self, add_core: bool = False, add_lesson: bool = False):
         temporary = tempfile.TemporaryDirectory()
-        root = Path(temporary.name)
+        root = Path(temporary.name).resolve()
         repository(root)
         if add_core:
             (root / "core.py").write_text("STABLE = True\n", encoding="utf-8")
@@ -199,9 +200,8 @@ class RetrospectiveFixtureTests(unittest.TestCase):
         from storyloop.storage import load_json, write_json
         from tests.routing_support import local_retrospective_adapter
         from tests.lesson_support import initialized_project
-        import shutil
         root = initialized_project()
-        self.addCleanup(shutil.rmtree, root)
+        self.addCleanup(cleanup_repo, root)
         path = root / '.storyloop/config.json'
         original = load_json(path)
         for explicit in ({'adapter': 'manual'}, {'adapter': 'command', 'agent_command': ['test-fixture']},
