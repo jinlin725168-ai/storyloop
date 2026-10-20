@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path, PurePosixPath
+import os
+import shutil
 
-from .baseline import _git
+from .baseline import GIT_ENVIRONMENT, _git, _git_failure
+from .processutil import run_process
 from .lessons import LESSONS_ROOT, parse_lesson, validate_lessons
 from .models import StoryLoopError, identifier, require, text
 from .path_security import forbidden_path_root
@@ -125,11 +128,28 @@ def lesson_source_commit(project: Path, change_id: str | None) -> str:
     return _git(project, "rev-parse", "HEAD").strip()
 
 
+def _is_ancestor(project: Path, baseline: str, commit: str) -> bool:
+    """Only a clean Git exit 1 means non-ancestor; diagnostics remain errors."""
+    executable = shutil.which("git")
+    require(bool(executable), "Git executable is unavailable")
+    result = run_process(
+        [executable, "-c", f"core.hooksPath={os.devnull}",
+         "merge-base", "--is-ancestor", baseline, commit], project, 30,
+        environment_allowlist=GIT_ENVIRONMENT, source_environment=os.environ,
+    )
+    if (result.get("contained") is not True or result.get("timed_out")
+            or result.get("truncated") or result.get("error")):
+        raise StoryLoopError("Git process failed safely", code="GIT_BLOCKED")
+    # Git can return 1 with an error diagnostic for a missing parent object.
+    if result.get("returncode") not in (0, 1) or result.get("stderr", "").strip():
+        raise StoryLoopError(_git_failure(result.get("stderr", "")), code="GIT_BLOCKED")
+    return result["returncode"] == 0
+
+
 def stale_ids(project: Path, entries: list[dict], commit: str) -> set[str]:
     """Compute active lessons whose scope changed after their baseline commit."""
     project = Path(project).resolve()
     resolved = _resolve_commit(project, commit)
-    ancestors = set(_git(project, "rev-list", resolved).splitlines())
     stale = set()
     for entry in entries:
         if entry["status"] != "active":
@@ -139,7 +159,7 @@ def stale_ids(project: Path, entries: list[dict], commit: str) -> set[str]:
         except StoryLoopError:
             stale.add(entry["id"])
             continue
-        if baseline not in ancestors:
+        if not _is_ancestor(project, baseline, resolved):
             stale.add(entry["id"])
             continue
         roots = ([] if "**" in entry["scope"] else

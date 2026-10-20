@@ -236,6 +236,29 @@ class LessonStoreTests(unittest.TestCase):
         commit_file(repo, "backend/a.py", "2")
         self.assertEqual(stale_ids(repo, [entry], head(repo)), {"L-0001"})
 
+    def test_staleness_does_not_enumerate_full_history(self):
+        repo = git_repo(files={'app/a.py': '1'})
+        self.addCleanup(shutil.rmtree, repo)
+        baseline = head(repo)
+        commit_file(repo, 'app/a.py', '2')
+        def bounded_git(project, *args):
+            self.assertNotEqual(args[0], 'rev-list', 'must not enumerate full history')
+            return real_git(project, *args)
+        with patch('storyloop.lesson_store._git', side_effect=bounded_git):
+            self.assertEqual(stale_ids(repo, [sample(baseline_commit=baseline)], head(repo)), {'L-0001'})
+
+    def test_real_broken_git_history_is_not_treated_as_nonancestor(self):
+        repo = git_repo()
+        self.addCleanup(shutil.rmtree, repo)
+        baseline = head(repo)
+        missing = commit_file(repo, 'middle.py', 'middle')
+        target = commit_file(repo, 'last.py', 'last')
+        # Corrupt only this disposable fixture: both endpoint commits still resolve.
+        (repo / '.git/objects' / missing[:2] / missing[2:]).unlink()
+        with self.assertRaises(StoryLoopError) as raised:
+            stale_ids(repo, [sample(baseline_commit=baseline)], target)
+        self.assertEqual(raised.exception.code, 'GIT_BLOCKED')
+
     def test_unreachable_or_non_ancestor_baseline_is_stale(self):
         repo = git_repo()
         self.addCleanup(shutil.rmtree, repo)
