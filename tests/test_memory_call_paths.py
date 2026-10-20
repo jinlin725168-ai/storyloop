@@ -16,7 +16,7 @@ class MemoryCallPathTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.project = Path(temporary.name)
+        self.project = Path(temporary.name).resolve()
 
     def test_all_consumers_follow_the_shared_call_storage_location(self):
         with patch('storyloop.call_log.CALLS_ROOT', Path('.storyloop/state/telemetry/alternate-calls')):

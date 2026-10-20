@@ -1,5 +1,5 @@
-import shutil
 import unittest
+from tests.lesson_support import cleanup_repo
 from storyloop.principles import validate_principles, load_principles
 from storyloop.storage import load_json
 from storyloop.base_upgrade import upgrade_baseline
@@ -12,7 +12,7 @@ from tests import test_lesson_landing
 class PrinciplesTests(unittest.TestCase):
     def test_defaults_and_legacy(self):
         project = initialized_project()
-        self.addCleanup(shutil.rmtree, project)
+        self.addCleanup(cleanup_repo, project)
         self.assertEqual(load_principles(project)['status'], 'NOT_CONFIGURED')
         self.assertEqual(validate_principles({'principles': []}), {'version': '0.0.0', 'changelog': []})
         self.assertEqual(validate_principles({'version': 1, 'principles': []})['version'], '0.0.0')
@@ -34,7 +34,7 @@ class PrinciplesTests(unittest.TestCase):
         from storyloop.baseline import bootstrap_project
         from tests.lesson_support import git_repo
         project = git_repo(files={'openspec/principles.json': '{"version":1,"principles":[{"id":"P1","text":"old"}]}'})
-        self.addCleanup(shutil.rmtree, project)
+        self.addCleanup(cleanup_repo, project)
         bootstrap_project(project)
         self.assertEqual(load_principles(project)['principles'][0]['text'], 'old')
         self.assertEqual(validate_principles(load_json(project / 'openspec/principles.json'))['version'], '0.0.0')

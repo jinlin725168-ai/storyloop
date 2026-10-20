@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 
+from tests.lesson_support import cleanup_repo, git_blob
 from storyloop.baseline import bootstrap_project, load_project_config
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import invoke_project_agent
@@ -133,10 +134,9 @@ if __name__ == "__main__":
 
 class LessonInjectionTests(unittest.TestCase):
     def invoke(self, lessons=None, raw=None, extra=None, fail=False):
-        import shutil
         from tests.lesson_support import git_repo
         root = git_repo(lessons=lessons, raw_lessons=raw)
-        self.addCleanup(shutil.rmtree, root)
+        self.addCleanup(cleanup_repo, root)
         bootstrap_project(root)
         script = root / '.storyloop/replay.json'
         write_json(script, {'calls': [{'role': 'implement', 'result': {
@@ -154,7 +154,9 @@ class LessonInjectionTests(unittest.TestCase):
             result = invoke_project_agent(root, 'implement', {})
         entry = ledger_entries(root, 'pending')[-1]
         folder = root / '.storyloop/state/telemetry/calls' / entry['call']
-        return root, result, entry, json.loads((folder / 'meta.json').read_text()), json.loads((folder / 'request.json').read_text())
+        meta = json.loads((folder / 'meta.json').read_text(encoding='utf-8'))
+        request = json.loads((folder / 'request.json').read_text(encoding='utf-8'))
+        return root, result, entry, meta, request
 
     def test_claims_and_frozen_context_without_profile(self):
         import hashlib
@@ -165,7 +167,7 @@ class LessonInjectionTests(unittest.TestCase):
         self.assertEqual(entry['lessons_claimed'], ['L-0001'])
         self.assertEqual(entry['lessons_unknown'], ['L-0404'])
         path = 'openspec/lessons/L-0001.md'
-        self.assertEqual(meta['context']['lessons'], [{'path': path, 'sha256': hashlib.sha256((root / path).read_bytes()).hexdigest()}])
+        self.assertEqual(meta['context']['lessons'], [{'path': path, 'sha256': hashlib.sha256(git_blob(root, path)).hexdigest()}])
 
     def test_absent_and_invalid(self):
         *_, request = self.invoke()

@@ -1,8 +1,8 @@
-import shutil
 import sys
 import unittest
 from unittest import mock
 
+from tests.lesson_support import cleanup_repo
 from storyloop.base_upgrade import upgrade_baseline
 from storyloop.drafts import create_draft, load_draft, set_draft_status
 from storyloop import lesson_landing
@@ -16,7 +16,7 @@ from tests.lesson_support import initialized_project, sample, head, _git, commit
 class LandingTests(unittest.TestCase):
     def setUp(self):
         self.project = initialized_project()
-        self.addCleanup(shutil.rmtree, self.project)
+        self.addCleanup(cleanup_repo, self.project)
 
     def draft(self, action='create', target=None, landing=None, source='manual', **overrides):
         entry = sample(**overrides)
@@ -344,7 +344,7 @@ class LandingTests(unittest.TestCase):
         for suffix in (' ', '\t'):
             with self.subTest(suffix=repr(suffix)):
                 self.project = initialized_project()
-                self.addCleanup(shutil.rmtree, self.project)
+                self.addCleanup(cleanup_repo, self.project)
                 ref = self.draft(summary='经验' + suffix)
                 result = approve_draft(self.project, ref)
                 self.assertEqual(result['commit'], head(self.project))
@@ -363,7 +363,7 @@ class LandingTests(unittest.TestCase):
         for suffix in (' ', '\t'):
             with self.subTest(suffix=repr(suffix)):
                 self.project = initialized_project()
-                self.addCleanup(shutil.rmtree, self.project)
+                self.addCleanup(cleanup_repo, self.project)
                 ref = self.draft(summary='经验' + suffix, strength='knowledge', landing=self.foundation())
                 before = self.snapshot()
                 with mock.patch('storyloop.lesson_landing.set_draft_status', side_effect=fail_approval):

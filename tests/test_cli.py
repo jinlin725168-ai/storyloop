@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 
+from tests.lesson_support import cleanup_repo
 from tests.lesson_support import git_repo, sample
 
 
@@ -17,7 +18,7 @@ def storyloop(*args: str) -> subprocess.CompletedProcess:
 class CliTests(unittest.TestCase):
     def test_lessons_json_exposes_vector_signal(self):
         repo = git_repo(lessons=[sample()])
-        self.addCleanup(__import__("shutil").rmtree, repo)
+        self.addCleanup(cleanup_repo, repo)
         baseline = repo / ".storyloop/baseline.json"
         baseline.parent.mkdir(parents=True, exist_ok=True)
         baseline.write_text("{}\n", encoding="utf-8")
@@ -30,7 +31,7 @@ class CliTests(unittest.TestCase):
     def test_lessons_text_renders_chinese_status_and_upgrade_advice(self):
         entry = sample(status="needs-review")
         repo = git_repo(lessons=[entry])
-        self.addCleanup(__import__("shutil").rmtree, repo)
+        self.addCleanup(cleanup_repo, repo)
         baseline = repo / ".storyloop/baseline.json"
         baseline.parent.mkdir(parents=True, exist_ok=True)
         baseline.write_text("{}\n", encoding="utf-8")

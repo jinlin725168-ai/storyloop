@@ -45,6 +45,7 @@ COMMAND_LINE = ["tests.test_cli", "tests.test_product_cli"]
 PLATFORM = [
     "tests.test_characterization_baseline", "tests.test_claude_adapter_encoding",
     "tests.test_evidence_root_spelling", "tests.test_line_endings",
+    "tests.test_memory_fixture_portability",
 ]
 
 # The suite runner and this list.

@@ -5,6 +5,9 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 import subprocess
+import os
+import shutil
+import stat
 
 from storyloop.lessons import render_lesson
 
@@ -37,7 +40,7 @@ def git_repo(
 ) -> Path:
     import tempfile
 
-    project = Path(tempfile.mkdtemp())
+    project = Path(tempfile.mkdtemp()).resolve()
     _git(project, "init", "-q")
     _git(project, "config", "user.email", "storyloop@example.invalid")
     _git(project, "config", "user.name", "StoryLoop Test")
@@ -86,3 +89,20 @@ def initialized_project() -> Path:
     project = git_repo()
     bootstrap_project(project, {'test_commands': [[sys.executable, '-c', 'pass']]})
     return project
+
+
+def cleanup_repo(project: Path) -> None:
+    """Remove a test-owned temporary repository, including Windows read-only objects."""
+    def retry_readonly(operation, path, error):
+        if not isinstance(error[1], PermissionError):
+            raise error[1]
+        os.chmod(path, os.stat(path).st_mode | stat.S_IWRITE)
+        operation(path)
+
+    shutil.rmtree(project, onerror=retry_readonly)
+
+
+def git_blob(project: Path, relative: str, commit: str = "HEAD") -> bytes:
+    """Read exact committed fixture bytes without worktree newline conversion."""
+    return subprocess.run(["git", "show", f"{commit}:{relative}"], cwd=project,
+                          capture_output=True, check=True).stdout
