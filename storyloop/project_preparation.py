@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from .approvals import materialize_approved_change
 from .baseline import _git
 from .models import StoryLoopError, require
+from .lesson_store import lessons_digest
 from .openspec_docs import validate_with_cli
 from .project_git import commit_paths
 from .project_loop_guards import read_only_call
@@ -46,8 +47,10 @@ def _prepare_acceptance(
         state["status"] = "CONTRACT_READY"
         save_run(project, state)
     if state["status"] == "CONTRACT_READY":
+        contract_commit = _ensure_contract_commit(project, state, paths)
         state.update({"status": "CONTRACT_COMMITTED",
-                      "contract_commit": _ensure_contract_commit(project, state, paths)})
+                      "contract_commit": contract_commit,
+                      "lessons_digest": lessons_digest(project, contract_commit)})
         save_run(project, state)
     try:
         red = _ensure_red_evidence(project, change_id, state["contract_commit"])

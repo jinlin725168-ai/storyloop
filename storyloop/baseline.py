@@ -164,7 +164,8 @@ def _verify_tracked_scope(project: Path, baseline: dict, profile: dict) -> None:
     tests = profile.get("test_roots") or []  # earlier changes may merge tests there, outside module_roots
     escaped = [path for path in _tracked_files(project)
                if path not in known and not any(_inside(path, root) for root in roots)
-               and not matches_test_root(path, tests)]
+               and not matches_test_root(path, tests)
+               and not _inside(path, "openspec/lessons")]
     require(not escaped, "Tracked files outside feature modules require a base iteration")
 
 
@@ -178,6 +179,7 @@ def _foundation_paths(tracked: list[str], profile: dict) -> list[str]:
     test_roots = profile.get("test_roots") or []
     protected = set(profile["integration_paths"]) | set(profile["protected_paths"])
     return sorted(path for path in tracked
+                  if not _inside(path, "openspec/lessons")
                   if not any(_inside(path, root) for root in mutable_roots)
                   and (path in protected or not matches_test_root(path, test_roots)))
 

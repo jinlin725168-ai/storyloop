@@ -8,6 +8,7 @@ from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.project_loop import LoopServices, run_change
+from storyloop.lesson_store import lessons_digest
 from tests.support import product
 from tests.test_baseline_behavior import git, repository
 
@@ -32,7 +33,7 @@ def smoke_payload(change_id: str) -> dict:
 
 
 class ProjectLoopTests(unittest.TestCase):
-    def _approved(self, add_core: bool = False):
+    def _approved(self, add_core: bool = False, add_lesson: bool = False):
         temporary = tempfile.TemporaryDirectory()
         root = Path(temporary.name)
         repository(root)
@@ -40,13 +41,18 @@ class ProjectLoopTests(unittest.TestCase):
             (root / "core.py").write_text("STABLE = True\n", encoding="utf-8")
             git(root, "add", "core.py")
             git(root, "commit", "-q", "-m", "core")
+        if add_lesson:
+            from tests.lesson_support import sample, write_lesson
+            write_lesson(root, sample(baseline_commit=git(root, "rev-parse", "HEAD")))
+            git(root, "add", ".")
+            git(root, "commit", "-q", "-m", "lesson")
         bootstrap_project(root, {"test_commands": []})
         state = create_change(root, "orders", product(), now=lambda: NOW)
         approve_change(root, state["change_id"], now=lambda: NOW)
         return temporary, root, state["change_id"]
 
     def test_external_loop_proves_red_retries_then_merges_locally(self):
-        temporary, root, change_id = self._approved()
+        temporary, root, change_id = self._approved(add_lesson=True)
         attempts = []
 
         def implement(project, context):
@@ -74,6 +80,10 @@ class ProjectLoopTests(unittest.TestCase):
             self.assertEqual(len(parents), 3)
             self.assertEqual(git(root, "rev-parse", "HEAD"), result["integration_commit"])
             self.assertTrue((root / "modules/orders/service.py").is_file())
+            from storyloop.project_loop import load_run_state
+            saved = load_run_state(root, change_id)
+            self.assertEqual(saved["lessons_digest"],
+                             lessons_digest(root, saved["contract_commit"]))
         finally:
             temporary.cleanup()
 

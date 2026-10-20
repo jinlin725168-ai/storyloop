@@ -22,7 +22,8 @@ def role_path_boundary(project: Path, role: str, payload: dict) -> dict:
     elif role == "characterize":
         writable = [f"{root.rstrip('/')}/**" for root in profile.get("test_roots", [])]
     plan = payload.get("design_plan") if isinstance(payload.get("design_plan"), dict) else {}
-    forbidden = [*baseline["foundation_paths"], *baseline["protected_paths"], ".storyloop/**"]
+    forbidden = [*baseline["foundation_paths"], *baseline["protected_paths"],
+                 "openspec/lessons/**", ".storyloop/**"]
     forbidden.extend(plan.get("forbidden_paths", []) if isinstance(plan.get("forbidden_paths", []), list) else [])
     return {"writable_paths": sorted(set(writable)), "forbidden_paths": sorted(set(forbidden))}
 
@@ -89,6 +90,8 @@ def _category(relative: str, baseline: dict, change_id: str, test_roots: list[st
             or _inside(relative, f"acceptance/smoke/{change_id}")
             or _inside(relative, f"acceptance/changes/{change_id}")):
         return "CONTRACT_PROTECTED"
+    if _inside(relative, "openspec/lessons"):
+        return "LESSON_PROTECTED"
     if is_system_smoke_path(relative):
         return "SMOKE_PROTECTED"
     if relative in baseline["integration_paths"]:
