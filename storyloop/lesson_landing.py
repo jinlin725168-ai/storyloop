@@ -128,7 +128,8 @@ def _own_commit(project, parent, tree, message):
     candidate = _git(project, 'rev-parse', 'HEAD').strip()
     if candidate == parent or tree is None:
         return None
-    actual = _git(project, 'show', '-s', '--format=%P%n%T%n%s', candidate).splitlines()
+    # NUL fields preserve legal Unicode line separators inside the subject.
+    actual = _git(project, 'show', '-s', '--format=%P%x00%T%x00%s', candidate).rstrip('\n').split('\0')
     return candidate if actual == [parent, tree, message] else None
 
 
@@ -156,7 +157,8 @@ def _approve_lesson(project, ref, draft):
         raise StoryLoopError('草案元数据或落点结构无效', code='LESSON_INVALID') from exc
     originals = _snapshot(project, writes)
     proposal, own, tree = None, None, None
-    message = 'chore(lessons): ' + entry['summary']
+    # Match Git's trailing ASCII-whitespace cleanup before binding commit identity.
+    message = ('chore(lessons): ' + entry['summary']).rstrip(' \t\r\n\v\f')
     try:
         if len(writes) > 1:
             proposal = propose_base_change(project, _proposal_paths(project, writes), draft['payload']['why_needed'])

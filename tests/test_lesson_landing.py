@@ -182,3 +182,55 @@ class LandingTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 approve_draft(self.project, ref)
         self.assertEqual(self.snapshot(), before)
+
+    def test_trailing_summary_whitespace_approves_once(self):
+        for suffix in (' ', '\t'):
+            with self.subTest(suffix=repr(suffix)):
+                self.project = initialized_project()
+                self.addCleanup(shutil.rmtree, self.project)
+                ref = self.draft(summary='经验' + suffix)
+                result = approve_draft(self.project, ref)
+                self.assertEqual(result['commit'], head(self.project))
+                self.assertEqual(load_draft(self.project, ref)['status'], 'approved')
+                self.assertEqual(_git(self.project, 'log', '-1', '--format=%s'), 'chore(lessons): 经验')
+                before = head(self.project)
+                with self.assertRaisesRegex(StoryLoopError, 'pending'):
+                    approve_draft(self.project, ref)
+                self.assertEqual(head(self.project), before)
+
+    def test_trailing_summary_whitespace_postcommit_failure_rolls_back(self):
+        def fail_approval(project, reference, status, failure=None):
+            if status == 'approved':
+                raise StoryLoopError('postcommit whitespace')
+            set_draft_status(project, reference, status, failure)
+        for suffix in (' ', '\t'):
+            with self.subTest(suffix=repr(suffix)):
+                self.project = initialized_project()
+                self.addCleanup(shutil.rmtree, self.project)
+                ref = self.draft(summary='经验' + suffix, strength='knowledge', landing=self.foundation())
+                before = self.snapshot()
+                with mock.patch('storyloop.lesson_landing.set_draft_status', side_effect=fail_approval):
+                    with self.assertRaisesRegex(StoryLoopError, 'postcommit whitespace'):
+                        approve_draft(self.project, ref)
+                self.assertEqual(self.snapshot(), before)
+                self.assertEqual(load_draft(self.project, ref)['status'], 'pending')
+
+    def test_unicode_summary_separator_preserves_commit_identity(self):
+        summary = '经验\u2028继续'
+        ref = self.draft(summary=summary)
+        result = approve_draft(self.project, ref)
+        self.assertEqual(result['commit'], head(self.project))
+        self.assertEqual(load_draft(self.project, ref)['status'], 'approved')
+        self.assertEqual(load_lessons_at(self.project, 'HEAD')[0]['summary'], summary)
+
+    def test_unicode_summary_separator_postcommit_failure_rolls_back(self):
+        ref = self.draft(summary='经验\u2028继续')
+        before = self.snapshot()
+        def fail_approval(project, reference, status, failure=None):
+            if status == 'approved':
+                raise StoryLoopError('postcommit separator')
+            set_draft_status(project, reference, status, failure)
+        with mock.patch('storyloop.lesson_landing.set_draft_status', side_effect=fail_approval):
+            with self.assertRaisesRegex(StoryLoopError, 'postcommit separator'):
+                approve_draft(self.project, ref)
+        self.assertEqual(self.snapshot(), before)
