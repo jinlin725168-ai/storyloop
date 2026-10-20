@@ -98,6 +98,57 @@ class ProjectLoopTests(unittest.TestCase):
         finally:
             temporary.cleanup()
 
+    def test_preparation_isolates_invalid_lesson_root_and_preserves_diagnostics(self):
+        from storyloop.project_preparation import _prepare_acceptance
+        from storyloop.project_loop import load_run_state
+        from storyloop.lesson_retrieval import lessons_payload
+        from storyloop.call_log import open_call, record_lessons_skipped
+        from storyloop.report_evidence import collect_evidence
+        from storyloop.report_memory import memory_items
+        from storyloop.report_markdown import render_presentation
+        from storyloop.changes import load_change
+        temporary, root, change_id = self._approved()
+        self.addCleanup(temporary.cleanup)
+        (root / 'openspec').mkdir(exist_ok=True)
+        (root / 'openspec/lessons').write_text('not a directory', encoding='utf-8')
+        git(root, 'add', 'openspec/lessons')
+        git(root, 'commit', '-qm', 'invalid lesson root')
+        state = {'change_id': change_id, 'status': 'PREPARING',
+                 'source_head': git(root, 'rev-parse', 'HEAD')}
+        services = LoopServices(generate_smoke=lambda p, c: smoke_payload(change_id),
+                                implement=None, review=None)
+        self.assertIsNone(_prepare_acceptance(root, load_change(root, change_id), services, state))
+        saved = load_run_state(root, change_id)
+        self.assertEqual(saved['status'], 'IMPLEMENTING')
+        self.assertTrue(saved['red_evidence_sha256'])
+        self.assertIsNone(saved['lessons_digest'])
+        self.assertIn('LESSON_INVALID', saved['lessons_digest_error'])
+        provided, reason = lessons_payload(root, 'implement', {'change_id': change_id})
+        self.assertIsNone(provided)
+        self.assertIn('LESSON_INVALID', reason)
+        call = open_call(root, 'implement', change_id, 'offline', {})
+        record_lessons_skipped(root, call, reason)
+        evidence = collect_evidence(root, {'change_id': change_id}, {})
+        items = memory_items(root, {'change_id': change_id}, {}, evidence)
+        rendered = render_presentation({'presentation': {'tier': 'heavy', 'sections': {
+            '6': {'title': '记忆', 'items': items}}}})
+        self.assertIn('LESSON_INVALID', rendered)
+        self.assertNotIn('LESSONS_NOT_CONFIGURED', rendered)
+
+    def test_snapshot_freezing_propagates_git_and_system_errors(self):
+        from storyloop.project_preparation import _lesson_snapshot
+        from storyloop.models import StoryLoopError
+        errors = [StoryLoopError('git failed'), OSError('filesystem failed')]
+        wrapped = StoryLoopError('invalid commit', code='LESSON_INVALID')
+        wrapped.__cause__ = StoryLoopError('git resolution failed')
+        errors.append(wrapped)
+        for error in errors:
+            with self.subTest(error=str(error)):
+                with patch('storyloop.project_preparation.lessons_digest', side_effect=error):
+                    with self.assertRaises(type(error)) as caught:
+                        _lesson_snapshot(Path('.'), 'frozen')
+                    self.assertIs(caught.exception, error)
+
     def test_a_manifest_echoed_among_the_generated_files_is_ignored(self):
         """Found in real acceptance: the acceptance agent listed manifest.json among its files; the
         repair path already ignored that echo, first generation refused it and blocked the run."""

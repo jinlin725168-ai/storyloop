@@ -50,7 +50,7 @@ def _prepare_acceptance(
         contract_commit = _ensure_contract_commit(project, state, paths)
         state.update({"status": "CONTRACT_COMMITTED",
                       "contract_commit": contract_commit,
-                      "lessons_digest": lessons_digest(project, contract_commit)})
+                      **_lesson_snapshot(project, contract_commit)})
         save_run(project, state)
     try:
         red = _ensure_red_evidence(project, change_id, state["contract_commit"])
@@ -66,6 +66,18 @@ def _prepare_acceptance(
                   "red_evidence_sha256": red["evidence_sha256"]})
     save_run(project, state)
     return None
+
+
+def _lesson_snapshot(project: Path, commit: str) -> dict:
+    """Freeze invalid-layer diagnostics without hiding repository or system failures."""
+    try:
+        return {"lessons_digest": lessons_digest(project, commit)}
+    except StoryLoopError as exc:
+        # Resolution failures wrap a Git error; only a directly identified bad layer
+        # can be isolated after the immutable contract has been committed.
+        if exc.code != "LESSON_INVALID" or exc.__cause__ is not None:
+            raise
+        return {"lessons_digest": None, "lessons_digest_error": f"LESSON_INVALID: {exc}"}
 
 
 def _ensure_contract_commit(project: Path, state: dict, paths: list[str]) -> str:

@@ -67,6 +67,12 @@ class LessonFormatTests(unittest.TestCase):
     def test_body_limit_is_measured_in_utf8_bytes(self):
         self.assert_invalid(sample(body="界" * 1366), "4096")
 
+    def test_body_exact_utf8_limit_and_adjacent_failure(self):
+        body = '界' * 1365 + 'x'
+        self.assertEqual(len(body.encode('utf-8')), 4096)
+        self.assertEqual(parse_lesson(render_lesson(sample(body=body)), 'L-0001.md')['body'], body)
+        self.assert_invalid(sample(body=body + 'x'), '4096')
+
     def test_body_must_be_utf8_encodable(self):
         self.assert_invalid(sample(body="\ud800"), "body")
 
@@ -166,6 +172,14 @@ class LessonSetTests(unittest.TestCase):
             validate_lessons(core, ROLES)
         core[-1]["status"] = "retired"
         validate_lessons(core, ROLES)
+
+    def test_active_core_total_exact_limit_and_adjacent_failure(self):
+        entries = [sample(id='L-0001', tier='core', body='x' * 2048),
+                   sample(id='L-0002', tier='core', body='界' * 682 + 'xx')]
+        validate_lessons(entries, ROLES)
+        entries[1]['body'] += 'x'
+        with self.assertRaisesRegex(StoryLoopError, '4096'):
+            validate_lessons(entries, ROLES)
 
     def test_unknown_role_rejected(self):
         with self.assertRaisesRegex(StoryLoopError, "roles"):

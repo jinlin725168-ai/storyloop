@@ -69,26 +69,7 @@ def render_log(result: dict) -> str:
         lines.append(f"  错误: {result['error']}")
     lines.append("")
     lines.append("代理调用：")
-    for call in result["calls"] or []:
-        cost = f" ${call['cost_usd']:.2f}" if isinstance(call.get("cost_usd"), (int, float)) else ""
-        state = call.get("status") or ("FAILED" if call.get("failed") else "OK")
-        lines.append(f"  {call.get('at', '?')}  {call['role']:<12} {state:<7} "
-                     f"{call.get('wall_ms', 0) / 1000:>7.1f}s{cost}"
-                     + (f"  会话 {call['session']}" if call.get("session") else ""))
-        if call.get("mode"):
-            lines.append(f"      模式: {call['mode']}")
-        if call.get("repairs"):
-            lines.append(f"      修复重试 {call['repairs']} 次")
-        if call.get("semantic_repair"):
-            lines.append("      语义校验修复：带着上一次的校验错误重答")
-        for problem in call.get("schema_errors") or []:
-            lines.append(f"      结构问题: {problem}")
-        if call.get("error"):
-            lines.append(f"      错误: {call['error'][:300]}")
-        if call.get("folder"):
-            lines.append(f"      记录: {call['folder']}")
-    if not result["calls"]:
-        lines.append("  （无）")
+    lines.extend(_render_calls(result["calls"]))
     if result["failures"]:
         lines.append("")
         lines.append("失败的尝试：")
@@ -115,3 +96,28 @@ def render_log(result: dict) -> str:
     if result.get("next"):
         lines.append(f"下一步: {result['next']}")
     return "\n".join(lines)
+
+
+def _render_calls(calls: list[dict]) -> list[str]:
+    lines = []
+    for call in calls or []:
+        cost = f" ${call['cost_usd']:.2f}" if isinstance(call.get("cost_usd"), (int, float)) else ""
+        state = call.get("status") or ("FAILED" if call.get("failed") else "OK")
+        lines.append(f"  {call.get('at', '?')}  {call['role']:<12} {state:<7} "
+                     f"{call.get('wall_ms', 0) / 1000:>7.1f}s{cost}"
+                     + (f"  会话 {call['session']}" if call.get("session") else ""))
+        if call.get("mode"):
+            lines.append(f"      模式: {call['mode']}")
+        if call.get("repairs"):
+            lines.append(f"      修复重试 {call['repairs']} 次")
+        if call.get("semantic_repair"):
+            lines.append("      语义校验修复：带着上一次的校验错误重答")
+        for problem in call.get("schema_errors") or []:
+            lines.append(f"      结构问题: {problem}")
+        if call.get("error"):
+            lines.append(f"      错误: {call['error'][:300]}")
+        if call.get("folder"):
+            lines.append(f"      记录: {call['folder']}")
+    if not calls:
+        lines.append("  （无）")
+    return lines

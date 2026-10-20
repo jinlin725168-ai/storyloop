@@ -20,10 +20,12 @@ _FIELDS = ("lessons_provided", "lessons_claimed", "lessons_unknown")
 def memory_items(project: Path, change: dict, report: dict, evidence: dict) -> list[dict]:
     """Describe supplied and claimed lessons without treating agent claims as verified facts."""
     project = Path(project).resolve()
-    if not (project / "openspec/lessons").is_dir():
+    digest, digest_error = _digest(project, evidence)
+    skipped = _skipped_calls(evidence)
+    if (not (project / "openspec/lessons").is_dir() and digest is None
+            and not digest_error and not skipped):
         return [item("memory", reason="LESSONS_NOT_CONFIGURED")]
     rows, error = _lesson_rows(project, evidence)
-    digest, digest_error = _digest(project, evidence)
     summary = {"provided": _ids(rows, "provided"), "claimed": _ids(rows, "claimed"),
                "unknown": _ids(rows, "unknown"), "digest": digest}
     summary_reason = "代理声称使用了未提供的条目" if summary["unknown"] else digest_error
@@ -34,7 +36,16 @@ def memory_items(project: Path, change: dict, report: dict, evidence: dict) -> l
         signals = item("lesson_signals", detect_signals(project, change, evidence.get("run") or {}))
     except Exception as exc:
         signals = item("lesson_signals", reason="SIGNALS_UNAVAILABLE: " + str(exc))
-    return [provided, summarized, signals]
+    diagnostics = [item("lessons_skipped", skipped, reason="经验整层跳过")] if skipped else []
+    return [provided, summarized, *diagnostics, signals]
+
+
+def _skipped_calls(evidence: dict) -> list[dict]:
+    return [{"call": call.get("call"), "role": call.get("role"),
+             "reason": call["lessons_skipped"]}
+            for call in (evidence.get("entries") or {}).get("calls") or []
+            if isinstance(call, dict) and isinstance(call.get("lessons_skipped"), str)
+            and call["lessons_skipped"].strip()]
 
 
 def _lesson_rows(project: Path, evidence: dict) -> tuple[list[dict], str | None]:
@@ -86,8 +97,11 @@ def _digest(project: Path, evidence: dict) -> tuple[str | None, str | None]:
     if "lessons_digest" in run:
         value = run["lessons_digest"]
         if value is None or isinstance(value, str):
-            return value, None
+            return value, run.get("lessons_digest_error")
         return None, "LESSONS_DIGEST_INVALID"
+    root = project / "openspec/lessons"
+    if not (run.get("contract_commit") or run.get("source_head") or root.exists() or root.is_symlink()):
+        return None, None
     try:
         return lessons_digest(project, _source_commit(project, evidence)), None
     except Exception as exc:

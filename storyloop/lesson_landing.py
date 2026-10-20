@@ -68,7 +68,8 @@ def _candidate(project, draft, head):
     strength = entry.get('strength')
     if strength == 'config':
         raise StoryLoopError('config 强度本期不自动落地：请把草案改为 prose，并手工修改配置', code='LANDING_UNSUPPORTED')
-    if strength == 'check':
+    argv = None
+    if strength == 'check' and action != 'retire':
         argv = _check_argv(project, draft, head)
         entry['landings'] = [{'kind': 'check_command', 'argv': argv}]
     writes = land_knowledge(project, draft, entry) if strength == 'knowledge' and action != 'retire' else land_prose(entry)
@@ -80,7 +81,7 @@ def _candidate(project, draft, head):
                    if landing.get('path', 'openspec/principles.json') not in writes]
     _validate_landings_at(project, head, [{**entry, 'landings': frozen_refs}])
     writes[relative] = render_lesson(entry).encode('utf-8')
-    return entry, writes, argv if strength == 'check' else None
+    return entry, writes, argv
 
 
 def _check_argv(project: Path, draft: dict, green_commit: str) -> list[str]:

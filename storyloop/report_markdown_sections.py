@@ -43,7 +43,8 @@ def render_reader_section(key: str, section: dict) -> list[str] | None:
 def _memory(entries: list[dict]) -> list[str]:
     lines = []
     titles = {"memory": "记忆", "lessons_provided": "经验提供与使用声明",
-              "lessons_summary": "经验摘要", "lesson_signals": "复盘信号"}
+              "lessons_summary": "经验摘要", "lesson_signals": "复盘信号",
+              "lessons_skipped": "经验整层跳过"}
     for entry in entries:
         identifier = entry.get("id")
         lines += [f"### {titles.get(identifier, identifier)}", "", *_meta(entry)]

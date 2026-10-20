@@ -27,6 +27,49 @@ class ReportMemoryTests(unittest.TestCase):
             items = memory_items(Path(folder), CHANGE, REPORT, {"entries": {"ledger": []}})
         self.assertEqual(items[0]["reason"], "LESSONS_NOT_CONFIGURED")
 
+    def test_invalid_layer_diagnostic_reaches_collected_markdown(self):
+        from storyloop.call_log import record_lessons_skipped
+        from storyloop.lesson_retrieval import lessons_payload
+        project = git_repo(raw_lessons={'L-0001.md': 'invalid'})
+        provided, reason = lessons_payload(project, 'implement', {})
+        self.assertIsNone(provided)
+        call = open_call(project, 'implement', 'FEAT-1', 'offline', {})
+        record_lessons_skipped(project, call, reason)
+        from storyloop.telemetry import record_call
+        record_call(project, 'implement', 'FEAT-1', {}, 1, call=call)
+        evidence = collect_evidence(project, CHANGE, REPORT)
+        self.assertEqual(evidence['entries']['calls'][0]['lessons_skipped'], reason)
+        items = memory_items(project, CHANGE, REPORT, evidence)
+        rendered = render_presentation({'presentation': {'version': 1, 'tier': 'heavy',
+            'sections': {'6': {'title': '记忆', 'items': items}}, 'reconciliation': {}}})
+        self.assertIn('LESSON_INVALID', rendered)
+        self.assertIn(call, rendered)
+        self.assertIn('整层跳过', rendered)
+        self.assertIn('代理声称使用', rendered)
+
+    def test_malformed_skip_diagnostic_is_disclosed_and_bounded(self):
+        project = git_repo(lessons=[sample()])
+        call = open_call(project, 'implement', 'FEAT-1', 'offline', {})
+        from storyloop.call_log import record_lesson_evidence
+        for value in ({'unexpected': 'shape'}, '', 'x' * 20001):
+            with self.subTest(value_type=type(value).__name__):
+                record_lesson_evidence(project, call, {'lessons_skipped': value})
+                evidence = collect_evidence(project, CHANGE, REPORT)
+                reason = evidence['entries']['calls'][0]['lessons_skipped']
+                self.assertIsInstance(reason, str)
+                self.assertLessEqual(len(reason), 20000)
+                if not isinstance(value, str) or not value:
+                    self.assertEqual(reason, 'LESSONS_SKIPPED_INVALID')
+                else:
+                    self.assertTrue(evidence['entries']['truncated']['calls'])
+
+    def test_legacy_invalid_root_is_not_reported_as_unconfigured(self):
+        project = git_repo(files={'openspec/lessons': 'invalid root'})
+        items = memory_items(project, CHANGE, REPORT, {
+            'run': {'contract_commit': head(project)}, 'entries': {'ledger': []}})
+        self.assertNotIn('LESSONS_NOT_CONFIGURED', str(items))
+        self.assertIn('LESSONS_DIGEST_UNAVAILABLE', str(items))
+
     def test_provided_and_claimed_per_call(self):
         project = git_repo(lessons=[sample()])
         evidence = {"run": {"contract_commit": head(project)}, "entries": {"ledger": [{
@@ -54,6 +97,16 @@ class ReportMemoryTests(unittest.TestCase):
         damaged = {item["id"]: item for item in memory_items(project, CHANGE, REPORT, evidence)}
         self.assertEqual(damaged["lessons_provided"]["availability"], "NOT_AVAILABLE")
         self.assertIn("COMPLETE_EVIDENCE", damaged["lessons_provided"]["reason"])
+
+    def test_frozen_layer_survives_missing_workspace_directory(self):
+        project = git_repo(lessons=[sample()])
+        frozen = head(project)
+        (project / 'openspec/lessons').rename(project / 'workspace-lesson-backup')
+        items = memory_items(project, CHANGE, REPORT, {
+            'run': {'contract_commit': frozen}, 'entries': {'ledger': []}})
+        self.assertNotIn('LESSONS_NOT_CONFIGURED', str(items))
+        summary = next(item for item in items if item['id'] == 'lessons_summary')
+        self.assertIsNotNone(summary['data']['digest'])
 
     def test_legacy_digest_uses_contract_commit_without_writing_report(self):
         project = git_repo(lessons=[sample()])

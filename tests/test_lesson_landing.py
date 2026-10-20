@@ -62,6 +62,39 @@ class LandingTests(unittest.TestCase):
         approve_draft(self.project, self.draft('retire', 'L-0001'))
         self.assertEqual(load_lessons_at(self.project, 'HEAD')[0]['status'], 'retired')
 
+    def test_retire_check_preserves_config_and_landing_without_proof(self):
+        from storyloop.lessons import render_lesson
+        argv = [sys.executable, '-c', 'pass']
+        landing = {'kind': 'check_command', 'argv': argv}
+        commit_file(self.project, 'openspec/lessons/L-0001.md',
+                    render_lesson(sample(strength='check', landings=[landing])))
+        config_path = self.project / '.storyloop/config.json'
+        config = load_json(config_path)
+        config['profile']['check_commands'] = [argv]
+        write_json(config_path, config)
+        before = config_path.read_bytes()
+        with mock.patch('storyloop.lesson_landing.prove_check') as proof:
+            result = approve_draft(self.project, self.draft('retire', 'L-0001'))
+        proof.assert_not_called()
+        self.assertEqual(config_path.read_bytes(), before)
+        entry = load_lessons_at(self.project, 'HEAD')[0]
+        self.assertEqual(entry['status'], 'retired')
+        self.assertEqual(entry['landings'], [landing])
+        self.assertIsNone(result['base_proposal'])
+        self.assertEqual(_git(self.project, 'show', '--format=', '--name-only', 'HEAD'),
+                         'openspec/lessons/L-0001.md')
+
+    def test_retire_config_remains_unsupported(self):
+        from storyloop.lessons import render_lesson
+        landing = {'kind': 'check_command', 'argv': [sys.executable, '-c', 'pass']}
+        commit_file(self.project, 'openspec/lessons/L-0001.md',
+                    render_lesson(sample(strength='config', landings=[landing])))
+        before = self.snapshot()
+        with self.assertRaises(StoryLoopError) as caught:
+            approve_draft(self.project, self.draft('retire', 'L-0001'))
+        self.assertEqual(caught.exception.code, 'LANDING_UNSUPPORTED')
+        self.assertEqual(self.snapshot(), before)
+
     def test_knowledge_exact_paths_and_actual_base_update_after_prose(self):
         approve_draft(self.project, self.draft())
         result = approve_draft(self.project, self.draft(strength='knowledge', landing=self.foundation()))

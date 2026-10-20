@@ -159,14 +159,7 @@ def _execute_call(project, role, payload, schema, request, adapter_config, setti
         waiting = error is not None and adapter == "manual" and error.code == "NEEDS_INPUT"
         # A manual adapter waiting for input is not a failed call; everything else that raised is.
         failed = result is None and not waiting
-        from .lesson_retrieval import provided_ids, claimed_lessons
-        from .call_log import record_lesson_evidence
-        provided = None if payload.get('mode') == 'retrospective' else payload.get('lessons')
-        claimed, unknown = claimed_lessons(provided, result or {})
-        evidence = dict(zip(('lessons_provided', 'lessons_claimed', 'lessons_unknown'),
-                            (provided_ids(provided), claimed, unknown)))
-        evidence['lessons_truncated'] = any(len(value) > 20 for value in evidence.values())
-        record_lesson_evidence(project, call, evidence)
+        evidence = _record_memory_evidence(project, call, payload, result)
         record_call(project, role, ledger, telemetry, wall_ms, failed=failed,
                     call=call, session=",".join(dict.fromkeys(sessions)),
                     engine_fields={**evidence, **({"tier_requested": settings["tier"], "adapter": adapter_name,
@@ -180,6 +173,18 @@ def _execute_call(project, role, payload, schema, request, adapter_config, setti
         if not failed and not waiting and isinstance(result, dict):
             from .errata import capture_errata
             capture_errata(project, result, role, call, _change_id(payload))
+
+
+def _record_memory_evidence(project, call, payload, result):
+    from .lesson_retrieval import provided_ids, claimed_lessons
+    from .call_log import record_lesson_evidence
+    provided = None if payload.get('mode') == 'retrospective' else payload.get('lessons')
+    claimed, unknown = claimed_lessons(provided, result or {})
+    evidence = dict(zip(('lessons_provided', 'lessons_claimed', 'lessons_unknown'),
+                        (provided_ids(provided), claimed, unknown)))
+    evidence['lessons_truncated'] = any(len(value) > 20 for value in evidence.values())
+    record_lesson_evidence(project, call, evidence)
+    return evidence
 
 
 def _telemetry_sessions(telemetry: object) -> list[str]:
