@@ -36,6 +36,29 @@ class Completed:
 
 
 class ClaudeAdapterTests(unittest.TestCase):
+    def test_retrospective_uses_one_cli_session_and_its_schema(self):
+        from storyloop.role_schemas import schema_for, wire_schema
+        from storyloop.role_subagents import subagents_for
+        reply = {'lessons': [], 'errata': [], 'uncovered_concepts': [], 'nothing_to_learn': 'none'}
+        schema = wire_schema(schema_for('review', {'mode': 'retrospective'}))
+        request = {'role': 'review', 'project': '/tmp/p', 'payload': {'mode': 'retrospective'},
+                   'response_schema': schema, 'instructions': 'Read only retrospective'}
+        calls = []
+        def fake_run(command, **kwargs):
+            calls.append(command)
+            return Completed(envelope('success', json.dumps(reply), 'retro-session', 0.1, 1))
+        with patch.object(adapter.subprocess, 'run', fake_run), patch.object(
+                adapter.shutil, 'which', return_value='/usr/bin/claude'), patch(
+                'sys.stdin', io.StringIO(json.dumps(request))), patch(
+                'sys.stdout', new_callable=io.StringIO) as out, patch('sys.stderr', new_callable=io.StringIO):
+            self.assertEqual(adapter.main_with_args([]), 0)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(json.loads(calls[0][calls[0].index('--json-schema') + 1]), schema)
+        result = json.loads(out.getvalue().strip().splitlines()[-1])
+        self.assertEqual(result['nothing_to_learn'], 'none')
+        self.assertEqual(result['_telemetry']['subagents_applied']['perspectives'], 0)
+        self.assertEqual(subagents_for('review', 'heavy', request['payload'], {} )['perspectives'], [])
+
     def test_turn_cap_resumes_the_session_and_sums_telemetry(self):
         calls = []
         replies = [envelope("error_max_turns", "", "sid-1", 0.5, 60),

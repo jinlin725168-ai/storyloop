@@ -58,7 +58,10 @@ def _lesson_references(project: Path, payload: dict, result: dict) -> None:
     lessons = payload.get('lessons') or {}
     if not lessons:
         return
-    source = _resolve_commit(project, lesson_source_commit(project, change_id(payload)))
+    retrospective = payload.get('mode') == 'retrospective'
+    source = _resolve_commit(project, 'HEAD' if retrospective else lesson_source_commit(project, change_id(payload)))
+    if retrospective:
+        lessons = {'relevant': lessons}
     for key in ('core', 'relevant'):
         for row in lessons.get(key, []):
             path = row.get('path')

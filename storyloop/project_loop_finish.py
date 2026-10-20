@@ -116,6 +116,16 @@ def finalize_change(project: Path, change: dict, state: dict) -> dict:
         set_change_status(project, change, "PASSED")
     state["status"] = "PASSED"
     save_run(project, state)
+    try:
+        from .retrospective import retrospect_after_pass
+        retrospect_after_pass(project, change, state)
+    except Exception as exc:
+        state['lessons'] = {'retrospective': 'FAILED', 'signals': [], 'drafts': [],
+                            'upgrade_suggested': [], 'error': str(exc)}
+    try:
+        save_run(project, state)
+    except Exception:
+        pass  # PASSED was already persisted; diagnostics cannot undo completion.
     return passed_result(state)
 
 

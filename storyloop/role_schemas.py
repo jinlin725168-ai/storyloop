@@ -176,6 +176,28 @@ def _profiled_review(schema):
     return schema
 
 
+RETROSPECTIVE_LANDING = _obj({'kind': STRING, 'path': _nullable(STRING),
+    'append': _nullable(STRING), 'argv': _nullable(STRINGS), 'anchor': _nullable(STRING),
+    'name': _nullable(STRING), 'change': _nullable(STRING),
+    'principle': _nullable(_obj({'id': STRING, 'text': STRING}))}, open_=True)
+RETROSPECTIVE_ENTRY = _obj({
+    'summary': STRING, 'tier': STRING, 'scope': STRINGS, 'roles': STRINGS, 'strength': STRING,
+    'source': STRING, 'baseline_commit': STRING, 'status': STRING, 'updated_at': STRING,
+    'supersedes': STRINGS, 'landings': {'type': 'array', 'items': RETROSPECTIVE_LANDING}})
+RETROSPECTIVE = _obj({
+    'lessons': {'type': 'array', 'items': _obj({'action': STRING, 'target': _nullable(STRING),
+        'entry': RETROSPECTIVE_ENTRY, 'body': STRING, 'why_needed': STRING, 'evidence': STRINGS,
+        'landing': _nullable(RETROSPECTIVE_LANDING)})},
+    'errata': {'type': 'array', 'items': _obj({'document': STRING, 'claim': STRING,
+        'correction': STRING, 'evidence': STRINGS})},
+    'uncovered_concepts': {'type': 'array', 'items': _obj({'concept': STRING, 'evidence': STRINGS,
+        'suggested_document': STRING})}, 'nothing_to_learn': _nullable(STRING)})
+# Retrospective proposals are independently validated/dropped after the read-only guard.
+# Keep their strict wire shape; never weaken the top-level response or ordinary roles.
+for _proposal_field in ('lessons', 'uncovered_concepts'):
+    RETROSPECTIVE['properties'][_proposal_field]['items']['x-deferred-validation'] = True
+
+
 def schema_for(role: str, payload: dict) -> dict:
     """Add optional memory metadata to every ordinary call, including special modes."""
     schema = copy.deepcopy(_selected_schema(role, payload))
@@ -193,6 +215,8 @@ def schema_for(role: str, payload: dict) -> dict:
 
 def _selected_schema(role: str, payload: dict) -> dict:
     """The engine-side schema of one call (acceptance changes shape in smoke-maintenance mode)."""
+    if role == "review" and payload.get("mode") == "retrospective":
+        return RETROSPECTIVE
     if role == "review" and payload.get("mode") == "verify":
         return VERIFY
     if role == "acceptance" and payload.get("mode") == "smoke-maintenance":
@@ -248,6 +272,8 @@ def schema_errors(value: object, schema: dict, path: str = "$") -> list[str]:
 
 
 def _check(value: object, schema: dict, path: str, errors: list[str]) -> None:
+    if schema.get('x-deferred-validation'):
+        return
     if len(errors) >= MAX_ERRORS:
         return
     if not _type_matches(value, schema["type"]):

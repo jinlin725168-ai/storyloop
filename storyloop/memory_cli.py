@@ -20,7 +20,9 @@ def add_drafts_arguments(child) -> None:
 
 
 def add_memory_arguments(child, command: str) -> None:
-    if command == "lessons":
+    if command == "lessons-propose":
+        child.add_argument("--change", required=True, help="需要复盘的变更 ID")
+    elif command == "lessons":
         add_lessons_arguments(child)
     elif command == "drafts":
         add_drafts_arguments(child)
@@ -35,6 +37,10 @@ def dispatch_drafts(project, args):
 
 
 def dispatch_memory(project, args):
+    if args.command == "lessons-propose":
+        from .retrospective import retrospect
+        result = retrospect(project, args.change, manual=True)
+        return {'status': result['retrospective'], 'change_id': args.change, **result}
     if args.command == "approve":
         from .lesson_landing import approve_draft
         require(not any(getattr(args, flag, None) for flag in
@@ -79,6 +85,16 @@ def render_drafts(result: dict) -> str:
 
 
 def render_memory(result: dict) -> str | None:
+    if 'retrospective' in result:
+        labels = {'DONE': '复盘完成', 'FAILED': '复盘失败',
+                  'SKIPPED_NO_SIGNAL': '没有问题信号，跳过复盘', 'SKIPPED_COST_LIMIT': '达到成本上限，跳过复盘'}
+        lines = [labels.get(result['retrospective'], result['retrospective'])]
+        lines.extend('待审批草案：' + ref for ref in result.get('drafts', []))
+        if result.get('error'):
+            lines.append('原因：' + result['error'])
+        if result.get('dropped'):
+            lines.append(f"已丢弃 {len(result['dropped'])} 条无效或超限提议（--json 查看详情）")
+        return '\n'.join(lines)
     if "vector_signal" in result and "lessons" in result:
         return render_lessons(result)
     if result.get("status") == "DRAFTS":

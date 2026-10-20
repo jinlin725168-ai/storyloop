@@ -62,7 +62,7 @@ def parser() -> argparse.ArgumentParser:
         "smoke-apply": "把审核过的系统冒烟草案安装到 acceptance/smoke/，隔离跑绿后提交；红的草案不会留下任何改动",
         "skills": "把引擎自带的技能（foundation-survey 等）安装或刷新到项目的 .claude/skills 与 .codex/skills；已初始化的项目会自动开 BASE 提案",
         "survey": "底座摸底：代理只读探索仓库，写出 openspec/foundation/ 知识库并开 BASE 提案；提交后 base-update 即受保护",
-        "lessons": "列出、确认或退休仓库经验",
+        "lessons": "列出、确认或退休仓库经验", "lessons-propose": "复盘已结束的变更并提议经验草案",
         "drafts": "列出或驳回待批草案",
     }
     for command, help_text in descriptions.items():
@@ -188,7 +188,7 @@ def dispatch(args) -> dict:
     if args.command == "survey":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return survey_foundation(project, args.reason, from_file=args.from_file)
-    if args.command in {"lessons", "drafts"}:
+    if args.command in {"lessons", "drafts", "lessons-propose"}:
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return dispatch_memory(project, args)
     if args.command == "ci":

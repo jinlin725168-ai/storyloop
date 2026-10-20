@@ -102,6 +102,9 @@ def _invoke_once(project, role, payload, config, settings, degraded):
         "response_schema": wire_schema(schema),
     }
     instructions, skill_snapshots = _instruction_bundle(project, role, (config.get('profile') or {}).get('stacks', []))
+    if role == 'review' and payload.get('mode') == 'retrospective':
+        from .role_instructions import RETROSPECTIVE_NOTE
+        instructions = RETROSPECTIVE_NOTE
     from .call_context import capability_for
     capability = capability_for(project, adapter_name)
     profile = build_profile(project, config, role, payload,
@@ -158,9 +161,10 @@ def _execute_call(project, role, payload, schema, request, adapter_config, setti
         failed = result is None and not waiting
         from .lesson_retrieval import provided_ids, claimed_lessons
         from .call_log import record_lesson_evidence
-        claimed, unknown = claimed_lessons(payload.get('lessons'), result or {})
+        provided = None if payload.get('mode') == 'retrospective' else payload.get('lessons')
+        claimed, unknown = claimed_lessons(provided, result or {})
         evidence = dict(zip(('lessons_provided', 'lessons_claimed', 'lessons_unknown'),
-                            (provided_ids(payload.get('lessons')), claimed, unknown)))
+                            (provided_ids(provided), claimed, unknown)))
         evidence['lessons_truncated'] = any(len(value) > 20 for value in evidence.values())
         record_lesson_evidence(project, call, evidence)
         record_call(project, role, ledger, telemetry, wall_ms, failed=failed,
