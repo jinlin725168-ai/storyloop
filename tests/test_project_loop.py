@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
@@ -51,6 +52,14 @@ class ProjectLoopTests(unittest.TestCase):
         approve_change(root, state["change_id"], now=lambda: NOW)
         return temporary, root, state["change_id"]
 
+    def setUp(self):
+        blocker = patch('storyloop.project_agents._codex', side_effect=AssertionError('Real CLI forbidden'))
+        self.real_adapter = blocker.start()
+        self.addCleanup(blocker.stop)
+
+    def tearDown(self):
+        self.real_adapter.assert_not_called()  # Retrospective intentionally catches failures.
+
     def test_external_loop_proves_red_retries_then_merges_locally(self):
         temporary, root, change_id = self._approved(add_lesson=True)
         attempts = []
@@ -83,6 +92,7 @@ class ProjectLoopTests(unittest.TestCase):
             self.assertTrue((root / "modules/orders/service.py").is_file())
             from storyloop.project_loop import load_run_state
             saved = load_run_state(root, change_id)
+            self.assertEqual(saved["lessons"]["retrospective"], "DONE", saved["lessons"])
             self.assertEqual(saved["lessons_digest"],
                              lessons_digest(root, saved["contract_commit"]))
         finally:
@@ -131,6 +141,25 @@ class ProjectLoopTests(unittest.TestCase):
             self.assertTrue(Path(result["base_proposal"]).is_file())
         finally:
             temporary.cleanup()
+
+
+class RetrospectiveFixtureTests(unittest.TestCase):
+    def test_explicit_adapters_are_preserved(self):
+        from storyloop.storage import load_json, write_json
+        from tests.routing_support import local_retrospective_adapter
+        from tests.lesson_support import initialized_project
+        import shutil
+        root = initialized_project()
+        self.addCleanup(shutil.rmtree, root)
+        path = root / '.storyloop/config.json'
+        original = load_json(path)
+        for explicit in ({'adapter': 'manual'}, {'adapter': 'command', 'agent_command': ['test-fixture']},
+                         {'adapters': {'chosen': {'kind': 'codex'}}}, {'roles': {'default_adapter': 'chosen'}}):
+            with self.subTest(explicit=explicit):
+                config = {**original, **explicit}
+                write_json(path, config)
+                local_retrospective_adapter(root)
+                self.assertEqual(load_json(path), config)
 
 
 if __name__ == "__main__":

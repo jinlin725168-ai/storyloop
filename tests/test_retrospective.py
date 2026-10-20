@@ -261,3 +261,18 @@ class RetrospectiveTests(unittest.TestCase):
         self.assertTrue(schema_errors({**NOTHING, 'lessons': 'invalid'}, schema))
         self.assertTrue(schema_errors({**NOTHING, 'unexpected': True}, schema))
         self.assertTrue(schema_errors({'verdict': 1}, schema_for('review', {})))
+
+    def test_command_adapter_drops_unknown_original_entry_body(self):
+        import json, sys
+        bad = {**self.proposal(), 'entry': {**self.proposal()['entry'], 'body': {'unexpected': True}}}
+        reply = {**NOTHING, 'lessons': [bad, {**self.proposal(), 'entry': None}, self.proposal()]}
+        path = self.project / '.storyloop/config.json'
+        config = load_json(path)
+        script = 'import sys,json; json.load(sys.stdin); print(' + repr(json.dumps(reply)) + ')'
+        config.update(adapter='command', agent_command=[sys.executable, '-c', script])
+        write_json(path, config)
+        self.state['failures'] = [{}]
+        retrospect_after_pass(self.project, self.change, self.state)
+        self.assertEqual(self.state['lessons']['retrospective'], 'DONE', self.state['lessons'])
+        self.assertEqual(len(self.state['lessons']['drafts']), 1)
+        self.assertEqual(len(self.state['lessons']['dropped']), 2)

@@ -133,6 +133,8 @@ def _validate_proposal(project, proposal, known):
             and all(valid_location(project, x) for x in evidence), 'evidence 必须指向真实源码行')
     entry, body = proposal.get('entry'), proposal.get('body')
     require(isinstance(entry, dict) and 'id' not in entry, 'entry 必须是不含 id 的元数据')
+    from .role_schemas import RETROSPECTIVE_ENTRY
+    require(set(entry) == set(RETROSPECTIVE_ENTRY['properties']), 'entry 字段缺失或未知')
     require(isinstance(body, str), 'body 必须是文本')
     # Synthetic identity is only a field-validation adapter; no ID is allocated here.
     parsed = parse_lesson(render_lesson({**entry, 'id': 'L-0000', 'body': body}), 'L-0000.md')
