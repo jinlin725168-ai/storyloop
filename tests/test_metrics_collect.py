@@ -5,6 +5,7 @@ import os
 import shutil
 import unittest
 
+from storyloop.change_report import correction_view
 from storyloop.metrics_collect import collect
 from tests.metrics_support import (
     link_report_outside_project,
@@ -184,6 +185,48 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(record["ledger"], [{"role": "implement", "wall_ms": 12}])
         fields = {item["field"] for item in result["discrepancies"]}
         self.assertEqual(fields, {"implementation_commit", "merge_commit"})
+
+    def test_every_entry_in_a_safe_ledger_is_available_for_metrics(self):
+        project = self.project()
+        write_run(project, "FEAT-MANY-CALLS")
+        entries = [{"role": "implement", "wall_ms": index} for index in range(1_001)]
+        write_ledger(project, "FEAT-MANY-CALLS", entries)
+
+        record = collect(project)["changes"][0]
+
+        self.assertEqual(record["ledger"], entries)
+        self.assertNotIn("ledger_truncated", record)
+
+    def test_cohort_enumeration_has_no_silent_item_limit(self):
+        project = self.project()
+        total = 10_002
+        for index in range(total):
+            write_change(project, f"BULK-{index:05d}")
+
+        records = collect(project)["changes"]
+
+        self.assertEqual(len(records), total)
+        self.assertEqual({record["change_id"] for record in records},
+                         {f"BULK-{index:05d}" for index in range(total)})
+
+    def test_run_failures_use_the_same_projection_as_report_corrections(self):
+        project = self.project()
+        failure = {
+            "attempt": 1, "attribution": "implement", "signature": "1234567890",
+            "epoch": 0, "mode": None, "unit": {"status": "FAILED"},
+        }
+        projected = correction_view({"failures": [failure]}, {})["failures"]
+        write_report(project, "BOTH", failures=projected)
+        write_run(project, "BOTH", failures=[failure])
+        write_run(project, "RUN-ONLY", failures=[failure])
+
+        result = collect(project)
+        records = {record["change_id"]: record for record in result["changes"]}
+
+        self.assertEqual(records["BOTH"]["failures"], projected)
+        self.assertEqual(records["RUN-ONLY"]["failures"], projected)
+        self.assertFalse(any(item["field"] == "failures"
+                             for item in result["discrepancies"]))
 
     def test_only_persisted_signal_evidence_is_carried_forward(self):
         project = self.project()

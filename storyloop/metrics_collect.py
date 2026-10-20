@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from itertools import islice
 from pathlib import Path
 from typing import Any
 
-from .report_evidence import IDENTIFIER, MAX_ENTRIES, MAX_LEDGER_BYTES, _read_object
+from .report_evidence import IDENTIFIER, MAX_LEDGER_BYTES, _read_object
 from .stop_report import STOP_STATUSES
 from .telemetry import ledger_entries
 
@@ -16,7 +15,6 @@ MAX_CHANGE_BYTES = 2_000_000
 MAX_RUN_BYTES = 8_000_000
 MAX_REPORT_BYTES = 8_000_000
 MAX_AUX_BYTES = 2_000_000
-MAX_CHANGES = 10_000
 MISSING = object()
 
 
@@ -45,16 +43,15 @@ def _change_ids(root: Path) -> list[str]:
     reports = root / "reports/storyloop"
     if _safe_directory(root, reports):
         try:
-            children = list(islice(reports.iterdir(), MAX_CHANGES + 1))
+            for child in reports.iterdir():
+                if not IDENTIFIER.fullmatch(child.name):
+                    continue
+                if child.is_symlink():
+                    identifiers.add(child.name)
+                elif child.is_dir() and _present(child / "report.json"):
+                    identifiers.add(child.name)
         except OSError:
-            children = []
-        for child in children:
-            if not IDENTIFIER.fullmatch(child.name):
-                continue
-            if child.is_symlink():
-                identifiers.add(child.name)
-            elif child.is_dir() and _present(child / "report.json"):
-                identifiers.add(child.name)
+            pass
     return sorted(identifiers)
 
 
@@ -63,12 +60,11 @@ def _file_ids(root: Path, directory: Path) -> list[str]:
         return []
     identifiers = []
     try:
-        paths = list(islice(directory.iterdir(), MAX_CHANGES + 1))
+        for path in directory.iterdir():
+            if path.suffix == ".json" and IDENTIFIER.fullmatch(path.stem):
+                identifiers.append(path.stem)
     except OSError:
         return []
-    for path in paths:
-        if path.suffix == ".json" and IDENTIFIER.fullmatch(path.stem):
-            identifiers.append(path.stem)
     return identifiers
 
 
@@ -114,7 +110,7 @@ def _record(root: Path, change_id: str, change: dict | None, run: dict | None,
     _run_fields(record, gaps, root, change_id, run, missing)
     _link_fields(record, change, run, report)
     _commit_fields(record, gaps, change_id, report, run, discrepancies)
-    record["ledger"], record["ledger_truncated"] = _ledger(root, change_id)
+    record["ledger"] = _ledger(root, change_id)
     if record["ledger"] is None:
         gaps["ledger"] = "UNREADABLE"
         if _present(root / ".storyloop/state/telemetry" / f"{change_id}.json"):
@@ -141,7 +137,7 @@ def _preferred_fields(record: dict, gaps: dict, change_id: str, report: dict | N
     pairs = {
         "status": (_string(_nested(report, "status")), _string(_nested(run, "status"))),
         "failures": (_list(_nested(report, "correction", "failures")),
-                     _list(_nested(run, "failures"))),
+                     _run_failures(run)),
         "overrules": (_list(_nested(report, "correction", "overrules")),
                       _list(_nested(run, "overrules"))),
         "attempts": (_integer(_nested(report, "telemetry", "attempts")),
@@ -244,19 +240,19 @@ def _aux_list(root: Path, path: Path, change_id: str, field: str) -> list | obje
     return _list(value.get(field, MISSING))
 
 
-def _ledger(root: Path, change_id: str) -> tuple[list | None, bool]:
+def _ledger(root: Path, change_id: str) -> list | None:
     path = root / ".storyloop/state/telemetry" / f"{change_id}.json"
     if not _present(path):
-        return None, False
+        return None
     value = _read_object(root, path, MAX_LEDGER_BYTES)
     if (value is None or value.get("version") != 1 or value.get("change_id") != change_id
             or not isinstance(value.get("entries"), list)):
-        return None, False
+        return None
     try:
         entries = ledger_entries(root, change_id)
     except (OSError, RuntimeError, ValueError, KeyError, TypeError, AttributeError):
-        return None, False
-    return entries[:MAX_ENTRIES], len(entries) > MAX_ENTRIES
+        return None
+    return entries
 
 
 def _signal_evidence(change: dict | None, report: dict | None) -> dict:
@@ -277,6 +273,17 @@ def _review_stop_findings(report: dict | None) -> int | None:
         return None
     return sum(isinstance(item, dict) and item.get("target") in {"oracle", "contract"}
                for item in findings)
+
+
+def _run_failures(run: dict | None) -> list | object:
+    failures = _list(_nested(run, "failures"))
+    if failures is MISSING:
+        return MISSING
+    try:
+        from .change_report import correction_view
+        return correction_view({"failures": failures}, {})["failures"]
+    except (AttributeError, KeyError, TypeError):
+        return MISSING
 
 
 def _stops(run: dict | None, failures: object) -> list[str] | object:
