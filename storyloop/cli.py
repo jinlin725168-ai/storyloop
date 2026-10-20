@@ -33,7 +33,7 @@ from .run_recovery import reset_run
 from .smoke_runner import run_ci
 from .storage import load_json
 from .telemetry import adopt_pending, summarize
-from .memory_cli import add_lessons_arguments, dispatch_lessons, render_lessons
+from .memory_cli import add_memory_arguments, dispatch_memory, render_memory
 
 
 def parser() -> argparse.ArgumentParser:
@@ -63,6 +63,7 @@ def parser() -> argparse.ArgumentParser:
         "skills": "把引擎自带的技能（foundation-survey 等）安装或刷新到项目的 .claude/skills 与 .codex/skills；已初始化的项目会自动开 BASE 提案",
         "survey": "底座摸底：代理只读探索仓库，写出 openspec/foundation/ 知识库并开 BASE 提案；提交后 base-update 即受保护",
         "lessons": "列出、确认或退休仓库经验",
+        "drafts": "列出或驳回待批草案",
     }
     for command, help_text in descriptions.items():
         child = sub.add_parser(command, help=help_text)
@@ -70,8 +71,7 @@ def parser() -> argparse.ArgumentParser:
         child.add_argument("--json", action="store_true", help="输出完整 JSON")
         _product_arguments(child, command)
         _maintenance_arguments(child, command)
-        if command == "lessons":
-            add_lessons_arguments(child)
+        add_memory_arguments(child, command)
     adapters = sub.add_parser("adapters", help="检查角色适配器能力")
     adapter_sub = adapters.add_subparsers(dest="adapter_command", required=True)
     check = adapter_sub.add_parser("check", help="握手并校验角色档次映射")
@@ -183,9 +183,9 @@ def dispatch(args) -> dict:
     if args.command == "survey":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return survey_foundation(project, args.reason, from_file=args.from_file)
-    if args.command == "lessons":
+    if args.command in {"lessons", "drafts"}:
         require(_is_product_project(project), "Run storyloop init on this Git project first")
-        return dispatch_lessons(project, args)
+        return dispatch_memory(project, args)
     if args.command == "ci":
         return run_ci(project, args.change_id)
     require(_is_product_project(project), "Run storyloop init on this Git project first")
@@ -411,8 +411,9 @@ def display(result: dict, complete_json: bool) -> None:
     if result.get("status") == "LOG":
         print(render_log(result))
         return
-    if "vector_signal" in result and "lessons" in result:
-        print(render_lessons(result))
+    rendered = render_memory(result)
+    if rendered is not None:
+        print(rendered)
         return
     print(result.get("status", "REPORT"))
     for key in ("change_id", "project", "next", "report", "pending", "accepted", "paths", "written"):
