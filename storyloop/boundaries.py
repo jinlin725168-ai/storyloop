@@ -106,8 +106,11 @@ def _scan_once(root: Path, max_files: int, ignored: set[str],
         require(not _is_link(current), "Links are not allowed in project snapshots")
         if scratch:
             base = "" if current == root else current.relative_to(root).as_posix() + "/"
+            # Pending memory drafts are control state even when a scratch name matches.
             names[:] = [name for name in names
-                        if name not in scratch and base + name not in scratch]
+                        if (track_directories and (base + name in {'.storyloop', '.storyloop/drafts'}
+                            or (base + name).startswith('.storyloop/drafts/')))
+                        or (name not in scratch and base + name not in scratch)]
         _reject_links(current, [*names, *files])
         names[:] = sorted(name for name in names if name.casefold() not in ignored)
         if track_directories:

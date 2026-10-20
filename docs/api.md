@@ -1,6 +1,6 @@
 # 接口与配置
 
-对应引擎版本：0.1.0，核对日期 2026-10-16（子项目 2a 工作分支）。本页是对外接口的权威清单：命令、状态与退出码、配置、代理协议、目标仓库里的文件约定。原 `docs/protocols.md` 并入本页。
+对应引擎版本：0.1.0，核对日期 2026-10-20（子项目 5 工作分支）。本页是对外接口的权威清单：命令、状态与退出码、配置、代理协议、目标仓库里的文件约定。原 `docs/protocols.md` 并入本页。
 
 ## 一、命令
 
@@ -13,7 +13,7 @@
 | `skills` | — | `SKILLS_INSTALLED` |
 | `survey` | `[--reason TEXT] [--from FILE]` | `SURVEYED` |
 | `change` | `--idea TEXT`、`--change ID --message TEXT` 或 `--supersede ID --message TEXT [--reason TEXT]`；`[--no-interactive]` | 变更状态（`DRAFT`） |
-| `approve` | `--change ID [--no-interactive]` | 运行状态（见第二节） |
+| `approve` | `--change ID [--no-interactive]` 或 `--draft KIND/ID`（二者互斥） | 运行状态（见第二节）或 `APPLIED` |
 | `run` | `--change ID [--overrule TEXT] [--no-interactive]` | 运行状态 |
 | `status` | `--change ID` | 变更状态，附 `run`、`telemetry`、`next`、`stop` |
 | `log` | `--change ID` | `LOG` |
@@ -28,6 +28,9 @@
 | `base-update` | `--proposal BASE-ID [--confirm-oracle-skills]` | `BASELINE_UPGRADED` |
 | `ci` | `--change ID` | `PASSED` 或 `FAILED` |
 | `report` | `--change ID` | `REPORT`（报告路径） |
+| `drafts` | `[--reject KIND/ID --reason TEXT]` | `DRAFTS` 清单或状态为 `rejected` 的草案；`--reason` 只与 `--reject` 同用 |
+| `lessons` | `[--confirm ID \| --retire ID --reason TEXT]` | 经验清单或 `COMMITTED`；确认与退休互斥，退休必须给理由 |
+| `lessons-propose` | `--change ID` | `DONE`、`FAILED`、`SKIPPED_NO_SIGNAL` 或 `SKIPPED_COST_LIMIT` 的复盘结果 |
 
 各命令的用法见 [使用指南](product-iteration-guide.md)。
 
@@ -72,6 +75,9 @@
 | `run.failures[]` 新字段 | `attribution`（`implement/oracle/contract/base/environment`）、`epoch`（判据修复次数）、`mode`、`signature`；功能红层记录同时含各层结果与校验后的 `review`。连续性要求同一 epoch 的实际 `attempt` 相邻，且紧邻将调用的轮次；红层 review 的 `NEEDS_INPUT` 保留该轮证据但打断连续性，交还的轮次不打断，不另存 `progress` 计数 |
 | 变更 `supersedes` | `{change_id, message, reason, blocker, source_branch, design_summary}`，指向旧变更 |
 | 变更与旧运行 `superseded_by` | 新变更 ID；旧变更和运行状态均为 `SUPERSEDED` |
+| `run.lessons_digest` | 合同提交上的 `openspec/lessons/` 树摘要，类型固定为字符串或 `null`；旧运行续跑时补算 |
+| `run.lessons` | 复盘状态对象：`retrospective`、`signals`、`drafts`、`upgrade_suggested`、`error`；无信号、失败或成本上限均不改变 `PASSED` |
+| `run.lessons_recurrence` | 本变更中“经验已提供但随后仍失败”的经验 ID 列表；跨变更次数另存 `.storyloop/state/lessons.json` |
 
 `run --overrule` 必须给非空理由，只允许审查判定的 `ORACLE_DEFECT` 或 `NEEDS_SPEC_FIX`。对应发现改为 `implementation` 并重算归属；混合发现中剩余的判据问题仍会停下。实现前 RED 检查的判据错误不可驳回。
 
@@ -157,6 +163,7 @@
 - `codex` 适配器：把“角色说明 + `Request:` + 请求 JSON”作为提示词交给 `codex exec`；implement、characterize 用 `workspace-write` 沙箱，其他角色 `read-only`。
 - 代理进程只拿到白名单环境变量（`PATH`、`HOME`、`TEMP`、`TMP`、`JAVA_HOME`、`USERPROFILE` 等），名字含 KEY、TOKEN、PASSWORD、SECRET、CREDENTIAL 的一律剔除。
 - `openspec/foundation/README.md` 存在时，除 survey 外每个角色的 payload 自动多一项 `foundation: {version, documents:[path]}`。
+- 合同提交存在且经验层校验通过时，除 survey 和复盘外的角色还会收到 `lessons`：核心层带正文；普通层最多 10 条，只含 `id`、`summary`、`path`、`status`。没有 `openspec/lessons/` 时不注入该字段。
 
 ### 各角色的 payload 与返回
 
@@ -173,6 +180,10 @@
 | `survey` | `{baseline_version, foundation_root, required_documents, module_roots, integration_paths, reason}` | `{documents:[{path,content}]}`：1–40 份 `.md`、每份 ≤512 KB、八份必需文档齐全、不含配置里的密钥值或带口令的 URL |
 
 survey 的说明由 `foundation-survey` 技能包生成：引擎把 SKILL.md 与 references 原文附在角色说明后（优先用项目 `.claude/skills/` 或 `.codex/skills/` 里的副本）。
+
+普通角色返回可选 `lessons_used: [{id, how}]` 与 `errata: [{document, claim, correction, evidence:[path:line]}]`。`how` 最长 200 字符；未提供却声称使用的 ID 会进入诊断和报告，但不拒绝回答。勘误须指向现有 foundation 文档中的原文并给出可验证位置，不合格条目会被丢弃。两个字段进入严格 wire schema；内部业务校验器把它们当通用元数据处理，不要求各角色重复定义业务字段。
+
+复盘调用使用 `review` 角色与 `payload.mode = "retrospective"`，只读执行，返回独立的严格 schema：`lessons`、`errata`、`uncovered_concepts`、`nothing_to_learn`。每次复盘最多接受三条经验提议；失败或达到成本上限只写复盘状态，不改变运行结论。
 
 ### 归属、事实与语义修复
 
@@ -206,7 +217,7 @@ design、implement、review 可选返回 `facts: [{statement, location}]`（缺�
 
 ### 返回结构约束（`response_schema`）
 
-来源 `storyloop/role_schemas.py`，是两个 CLI 都能原生执行的严格子集：每个对象 `additionalProperties:false`、全部属性列入 `required`，引擎视为可选的字段声明为可为 `null`。引擎先丢弃可为 null 字段的 `null` 值再校验，所以省略可选字段同样合法；review 的 finding 允许额外键。
+来源 `storyloop/role_schemas.py`，是两个 CLI 都能原生执行的严格子集：每个对象 `additionalProperties:false`、全部属性列入 `required`，引擎视为可选的字段声明为可为 `null`。引擎先丢弃可为 null 字段的 `null` 值再校验，所以省略可选字段同样合法；review 的 finding 允许额外键。`schema_for` 将 `lessons_used`、`errata` 合并进普通角色的顶层 schema，`wire_schema` 只移除 `x-` 开头的引擎内部约束标记，仍保持对象封闭和字段完整。
 
 适配器应交给 CLI 原生约束（Codex `--output-schema`，Claude `--json-schema`）。不符时 Codex 适配器在同一会话带着具体问题修复（JSON 解析失败与结构不符都算，最多两次），仍不符报 `AGENT_CONTRACT_INVALID`。
 
@@ -217,6 +228,8 @@ design、implement、review 可选返回 `facts: [{statement, location}]`（缺�
 ### 诊断记录
 
 每次调用写 `.storyloop/state/telemetry/calls/<调用 ID>/`：`request.json`（脱敏）、`response.json` 或解析失败时的 `response.txt`、`stderr.log`、`meta.json`（结果、错误码、`schema_errors`、修复次数、会话 ID）。账本条目的 `call` 与 `session` 字段指向它。它们用于排障，不是证据。
+
+账本条目新增 `lessons_provided`、`lessons_claimed`、`lessons_unknown` 三个 ID 列表，各自最多保存 20 项；任一原始列表超过上限时写 `lessons_truncated:true`。完整三项保存在对应调用的 `meta.json`。报告取证会在账本截断时回读并核对该完整记录；缺失或无效时明确标记证据不完整，不把截断摘要当完整事实。
 
 ### 合同的性质字段
 
@@ -274,3 +287,7 @@ review 的新画像协议要求 findings 的 severity（P0/P1/P2/question）、c
 `COST_LIMIT_REACHED` 是可恢复停点：limits 默认 max_calls=80、max_agent_wall_seconds=28800，max_tokens/max_cost_usd 默认为 null；旧配置同样获得默认挂死保护。每次调用前检查累计已用值，失败调用也计算；费用未知不估算，并展示 x/y 覆盖。提高 limits 再 run；已完成实现候选绑定指纹，在审查/复核停点恢复时复用，不重复实现。原始审查在复核费用停止时持久化。
 
 `cross_vendor_review.on_unavailable` 默认 fail_closed：review 不可用停 AGENT_UNAVAILABLE、交还质量轮次；degrade 改用 implement 适配器审查并标记 degraded=cross_vendor。事后比较实际回报 vendor，不同仅代表回报匹配；同厂或缺失标“跨厂商未生效”，不改变证据型门。
+
+设计审批停点之后接受 BASE 更新并合回功能分支时，旧方案的完整 `baseline_digest` 绑定失效；先执行 `replan` 重新生成方案，再 `approve --design`。启动前已冻结的纯经验目录提交可处于旧 BASE 之后，运行中未批准的源分支前进仍会被拒绝。
+
+`approve --draft` 对 config 强度仅拒绝新建及从其他强度转换；允许既有 config 条目退休或保持该强度更新说明，实际配置不会新增或改动。

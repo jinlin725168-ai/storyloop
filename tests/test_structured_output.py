@@ -65,7 +65,7 @@ class CodexStructuredOutputTests(unittest.TestCase):
                     patch("storyloop.project_agents._codex_executable", return_value=["codex"]):
                 result = invoke_project_agent(root, "implement", {"change": {"change_id": "FEAT-9"}})
             self.assertEqual(result, {"summary": "done", "questions": []})  # nullable fields dropped
-            self.assertEqual(seen[0]["required"], ["summary", "questions", "design", "facts"])
+            self.assertEqual(seen[0]["required"], ["summary", "questions", "design", "facts", "lessons_used", "errata"])
             self.assertEqual(list(root.glob(".storyloop/schema-*")), [])
 
     def test_a_legacy_answer_may_omit_nullable_facts(self):

@@ -32,7 +32,8 @@ def merge_facts(project: Path, state: dict, facts: object, role: str) -> None:
         if not (isinstance(statement, str) and statement.strip()
                 and len(statement.strip()) <= MAX_STATEMENT_LENGTH
                 and isinstance(location, str) and path
-                and evidence_location_exists(project, location, contract_commit)):
+                and (valid_location(project, location)
+                     or (contract_commit and evidence_location_exists(project, location, contract_commit)))):
             continue
         key = (statement.strip(), path)
         if key in known:
@@ -49,3 +50,8 @@ def _fact_key(item: dict) -> tuple[str, str] | None:
     if not isinstance(statement, str) or not path:
         return None
     return statement.strip(), path
+
+
+def valid_location(project: Path, location: str) -> bool:
+    """Return whether a location points to a safe existing source line."""
+    return evidence_location_exists(project, location, None)

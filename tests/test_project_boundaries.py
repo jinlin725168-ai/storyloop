@@ -8,6 +8,29 @@ from tests.test_baseline_behavior import git, repository
 
 
 class ProjectBoundaryTests(unittest.TestCase):
+    def test_agent_write_to_lessons_is_a_violation(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            lesson = root / "openspec/lessons/L-0001.md"
+            lesson.parent.mkdir(parents=True)
+            lesson.write_text("agent output\n", encoding="utf-8")
+
+            result = audit_project_changes(root, "FEAT-20260916-001")
+
+            self.assertEqual(result["violations"][0]["category"], "LESSON_PROTECTED")
+
+    def test_lessons_are_always_in_role_forbidden_paths(self):
+        from storyloop.project_boundaries import role_path_boundary
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            boundary = role_path_boundary(root, "implement", {})
+            self.assertIn("openspec/lessons/**", boundary["forbidden_paths"])
+
     def test_allows_new_modules_but_routes_integration_and_base_to_base_change(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

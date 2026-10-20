@@ -13,12 +13,14 @@ from typing import Callable
 from .baseline import _git, load_project_config
 from .boundaries import capture_snapshot, snapshot_changes
 from .models import StoryLoopError, require
+from .errata import defer_errata
 from .project_loop_support import control_digest
 
 
 _VISIBILITY_MESSAGE_LIMIT = 20
 
 
+@defer_errata()
 def write_safely(project: Path, change_id: str, operation: Callable[[], dict]) -> tuple[dict, list]:
     """Run an agent that may write the workspace; the control plane and the index must stay untouched."""
     before = capture_snapshot(project, include_control=True, include_ignored=True)
@@ -37,7 +39,9 @@ def write_safely(project: Path, change_id: str, operation: Callable[[], dict]) -
         require_control_unchanged(_staged_index(project) == staged,
                                   "Implementation agent staged Git changes")
     after = capture_snapshot(project, include_control=True, include_ignored=True)
-    changes = _without_scratch(snapshot_changes(before, after), scratch_paths(project))
+    changes = snapshot_changes(before, after)
+    _require_drafts_unchanged(changes)
+    changes = _without_scratch(changes, scratch_paths(project))
     if failure is not None:
         if changes:
             raise StoryLoopError(
@@ -48,6 +52,7 @@ def write_safely(project: Path, change_id: str, operation: Callable[[], dict]) -
     return response, changes
 
 
+@defer_errata()
 def read_only_call(
     project: Path, change_id: str, operation: Callable[[], object],
     allowed_evidence: str | None = None,
@@ -80,7 +85,9 @@ def require_control_unchanged(condition: bool, message: str) -> None:
 
 def verify_read_only_snapshot(before, after, allowed_path: str | None,
                               scratch: list[str] | None = None) -> None:
-    changes = _without_scratch(snapshot_changes(before, after), scratch or [])
+    changes = snapshot_changes(before, after)
+    _require_drafts_unchanged(changes)
+    changes = _without_scratch(changes, scratch or [])
     unexpected = [item for item in changes
                   if item.path != allowed_path
                   and not _allowed_parent_directory(item.path, allowed_path)]
@@ -167,3 +174,12 @@ def exists_at(project: Path, commit: str, path: str) -> bool:
         return True
     except Exception:  # noqa: BLE001  (git reports a missing object through a non-zero exit)
         return False
+
+
+def _require_drafts_unchanged(changes):
+    # Engine drafts are protected even if a generic scratch name also matches them.
+    require_control_unchanged(
+        not any(item.path.rstrip('/') in {'.storyloop/drafts', '.storyloop/drafts.lock'}
+                or item.path.startswith('.storyloop/drafts/') for item in changes),
+        'Agent modified protected drafts',
+    )

@@ -152,6 +152,14 @@ def _dispatch(request, base, prompt, args, model):
     requested = (request.get('role_profile') or {}).get('subagents') or {}
     if 'role_profile' in request:
         perspectives = requested.get('perspectives', [])
+    if role == 'review' and request.get('payload', {}).get('mode') == 'retrospective':
+        result, telemetry, _ = _run_session(base, prompt, role, args, request.get('project'),
+                                            schema=request.get('response_schema'))
+        if result is None:
+            return 1
+        telemetry.update(profile_telemetry(request, model))
+        telemetry['subagents_applied'] = {'mode': 'sequential', 'perspectives': 0, 'explore': 0, 'lanes': 0}
+        return _emit(result, telemetry, role)
     if role == "review" and perspectives and request.get("payload", {}).get("mode") != "verify":
         return _review_with_perspectives(request, base, args, perspectives)
     lanes = _parse_lanes(args.implement_lanes)
@@ -273,7 +281,7 @@ def _review_with_perspectives(request: dict, base: list[str], args, perspectives
     if "role_profile" not in request and not ({"verdict", "summary", "findings", "questions"} <= set(result)):
         print("claude review: lead result lacks verdict/summary/findings/questions", file=sys.stderr)
         return 1
-    result = {key: result[key] for key in ("verdict", "summary", "findings", "questions", "coverage", "checklist")
+    result = {key: result[key] for key in ("verdict", "summary", "findings", "questions", "coverage", "checklist", "lessons_used", "errata")
               if key in result}
     total["perspectives"] = len(perspectives)
     total.update(profile_telemetry(request, args.profile_model, perspectives=len(perspectives)))

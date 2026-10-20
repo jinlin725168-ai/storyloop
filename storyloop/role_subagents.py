@@ -12,7 +12,7 @@ EXPLORATIONS = ['similar-features', 'call-chain', 'tests-extension']
 def subagents_for(role: str, tier: str, payload: dict, capability: dict) -> dict:
     """Describe requested work; lane names never act as implicit path prefixes."""
     result = {'perspectives': [], 'explore': [], 'lanes': False}
-    if tier == 'light':
+    if tier == 'light' or payload.get('mode') == 'retrospective':
         return result
     if role == 'review':
         result['perspectives'] = PERSPECTIVES[:5 if tier == 'heavy' else 4]

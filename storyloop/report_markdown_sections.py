@@ -35,7 +35,29 @@ def render_reader_section(key: str, section: dict) -> list[str] | None:
         return _focus(items)
     if key == "4":
         return _process(section.get("items") or [])
+    if key == "6":
+        return _memory(section.get("items") or [])
     return None
+
+
+def _memory(entries: list[dict]) -> list[str]:
+    lines = []
+    titles = {"memory": "记忆", "lessons_provided": "经验提供与使用声明",
+              "lessons_summary": "经验摘要", "lesson_signals": "复盘信号",
+              "lessons_skipped": "经验整层跳过"}
+    for entry in entries:
+        identifier = entry.get("id")
+        lines += [f"### {titles.get(identifier, identifier)}", "", *_meta(entry)]
+        if identifier == "lessons_provided" and entry.get("data") is not None:
+            for row in entry["data"]:
+                lines += [f"- 调用：{inline(row.get('call'))}；角色：{inline(row.get('role'))}",
+                          f"  - 提供：{_joined(row.get('provided'))}",
+                          f"  - 代理声称使用：{_joined(row.get('claimed'))}",
+                          f"  - 未提供却声称使用：{_joined(row.get('unknown'))}"]
+        else:
+            lines += _readable(entry.get("data"))
+        lines.append("")
+    return lines
 
 
 def _conclusion(items: dict) -> list[str]:

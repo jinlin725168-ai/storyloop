@@ -60,7 +60,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
                                     "manifest": load_json(suite_root / "manifest.json"),
                                     "failure_evidence": evidence}}
     generated = read_only_call(project, change_id, lambda: services.generate_smoke(project, request))
-    require(isinstance(generated, dict) and set(generated) == {"files", "manifest"},
+    require(isinstance(generated, dict) and {"files", "manifest"} <= set(generated) <= {"files", "manifest", "lessons_used", "errata"},
             "Smoke agent returned an invalid contract")
     files = without_manifest_echo(generated["files"])
     previous = _tracked_under(project, suite_relative(project, change_id))  # replaced files are committed as deletions

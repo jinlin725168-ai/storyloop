@@ -86,6 +86,12 @@ def _invoke_once(project, role, payload, config, settings, degraded):
     foundation = foundation_payload(project) if role != "survey" else None
     if foundation and "foundation" not in payload:
         payload = {**payload, "foundation": foundation}
+    from .lesson_retrieval import lessons_payload
+    lessons_skipped = None
+    if role != 'survey' and payload.get('mode') != 'retrospective' and 'lessons' not in payload:
+        lessons, lessons_skipped = lessons_payload(project, role, payload)
+        if lessons is not None:
+            payload = {**payload, 'lessons': lessons}
     from .role_profiles import enabled
     schema = schema_for(role, {**payload, **({"role_profile": True} if enabled(config) else {})})
     request = {
@@ -96,6 +102,9 @@ def _invoke_once(project, role, payload, config, settings, degraded):
         "response_schema": wire_schema(schema),
     }
     instructions, skill_snapshots = _instruction_bundle(project, role, (config.get('profile') or {}).get('stacks', []))
+    if role == 'review' and payload.get('mode') == 'retrospective':
+        from .role_instructions import RETROSPECTIVE_NOTE
+        instructions = RETROSPECTIVE_NOTE
     from .call_context import capability_for
     capability = capability_for(project, adapter_name)
     profile = build_profile(project, config, role, payload,
@@ -106,6 +115,9 @@ def _invoke_once(project, role, payload, config, settings, degraded):
     _bounded_json(request)
     ledger = FOUNDATION_LEDGER if role == "survey" else _change_id(payload)
     call = open_call(project, role, ledger, adapter_name, request)
+    if lessons_skipped:
+        from .call_log import record_lessons_skipped
+        record_lessons_skipped(project, call, lessons_skipped)
     from .call_context import context_manifest
     from .call_log import record_context
     record_context(project, call, context_manifest(project, payload, skill_snapshots))
@@ -122,7 +134,7 @@ def _execute_call(project, role, payload, schema, request, adapter_config, setti
     adapter, adapter_name = adapter_config.get("kind"), settings["adapter"]
     started = time.monotonic()
     result = None
-    error: StoryLoopError | None = None
+    error: Exception | None = None
     try:
         if adapter == "manual":
             result = _manual(project, request, schema, trace)
@@ -132,9 +144,9 @@ def _execute_call(project, role, payload, schema, request, adapter_config, setti
             require(adapter == "codex", "Unknown project agent adapter")
             result = _codex(project, request, adapter_config, schema, trace)
         return result
-    except StoryLoopError as exc:
+    except Exception as exc:
         error = exc
-        if exc.code == "AGENT_UNAVAILABLE":
+        if isinstance(exc, StoryLoopError) and exc.code == "AGENT_UNAVAILABLE":
             exc.details.setdefault("role", role)
         raise
     finally:
@@ -144,19 +156,50 @@ def _execute_call(project, role, payload, schema, request, adapter_config, setti
         telemetry.pop("skills", None)
         telemetry["skills"] = trace["skills"]
         sessions = trace["sessions"] + _telemetry_sessions(telemetry)
-        waiting = error is not None and adapter == "manual" and error.code == "NEEDS_INPUT"
+        waiting = isinstance(error, StoryLoopError) and adapter == "manual" and error.code == "NEEDS_INPUT"
         # A manual adapter waiting for input is not a failed call; everything else that raised is.
         failed = result is None and not waiting
-        record_call(project, role, ledger, telemetry, wall_ms, failed=failed,
-                    call=call, session=",".join(dict.fromkeys(sessions)),
-                    engine_fields=({"tier_requested": settings["tier"], "adapter": adapter_name,
-                                    **({"degraded": degraded} if degraded else {})}
-                                   if profile is not None else None))
-        close_call(project, call, status="WAITING" if waiting else "FAILED" if failed else "OK",
-                   wall_ms=wall_ms, response=result, raw=trace["raw"], stderr=trace["stderr"],
-                   error=str(error) if error else None, code=error.code if error else None,
-                   sessions=list(dict.fromkeys(sessions)), schema_errors=trace["schema_errors"],
-                   repairs=trace["repairs"], semantic_repair="validation_errors" in payload)
+        evidence = _diagnostic(_record_memory_evidence, project, call, payload, result) or {}
+        try:
+            record_call(project, role, ledger, telemetry, wall_ms, failed=failed,
+                        call=call, session=",".join(dict.fromkeys(sessions)),
+                        engine_fields={**evidence, **({"tier_requested": settings["tier"], "adapter": adapter_name,
+                                        **({"degraded": degraded} if degraded else {})}
+                                       if profile is not None else {})})
+        except Exception:
+            if error is None:
+                raise
+        finally:
+            _diagnostic(close_call, project, call, status="WAITING" if waiting else "FAILED" if failed else "OK",
+                       wall_ms=wall_ms, response=result, raw=trace["raw"], stderr=trace["stderr"],
+                       error=str(error) if error else None, code=getattr(error, "code", None),
+                       sessions=list(dict.fromkeys(sessions)), schema_errors=trace["schema_errors"],
+                       repairs=trace["repairs"], semantic_repair="validation_errors" in payload)
+            if not failed and not waiting and isinstance(result, dict):
+                from .errata import capture_errata
+                _diagnostic(capture_errata, project, result, role, call, _change_id(payload))
+
+
+def _diagnostic(callback, *args, **kwargs):
+    """Attempt each diagnostic independently without replacing the adapter outcome."""
+    try:
+        return callback(*args, **kwargs)
+    except Exception:
+        # Memory evidence and call closure are best-effort diagnostic writes.
+        # Do not expose exception text or let one failure prevent the others.
+        return None
+
+
+def _record_memory_evidence(project, call, payload, result):
+    from .lesson_retrieval import provided_ids, claimed_lessons
+    from .call_log import record_lesson_evidence
+    provided = None if payload.get('mode') == 'retrospective' else payload.get('lessons')
+    claimed, unknown = claimed_lessons(provided, result or {})
+    evidence = dict(zip(('lessons_provided', 'lessons_claimed', 'lessons_unknown'),
+                        (provided_ids(provided), claimed, unknown)))
+    evidence['lessons_truncated'] = any(len(value) > 20 for value in evidence.values())
+    record_lesson_evidence(project, call, evidence)
+    return evidence
 
 
 def _telemetry_sessions(telemetry: object) -> list[str]:

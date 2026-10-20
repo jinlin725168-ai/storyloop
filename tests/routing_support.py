@@ -74,12 +74,33 @@ def readiness_repository(root: Path, **settings) -> None:
         "unit_commands": [["{python}", "-m", "unittest", "discover", "-s", "tests"]],
         "integration_commands": [], "check_commands": [], **settings,
     })
+    local_retrospective_adapter(root)
+
+
+def local_retrospective_adapter(project: Path) -> None:
+    """Keep service-injected fixtures offline without disabling automatic retrospectives."""
+    import sys
+    from storyloop.storage import load_json, write_json
+    path = Path(project) / '.storyloop/config.json'
+    config = load_json(path)
+    # Explicit adapter/profile tests retain their own transport and mocks.
+    if config.get('adapter') != 'codex' or config.get('agent_command') or config.get('adapters') or config.get('roles'):
+        return
+    script = (
+        "import json,sys; request=json.load(sys.stdin); "
+        "assert request['role']=='review' and request['payload'].get('mode')=='retrospective', "
+        "'Fixture only supports retrospective calls'; "
+        "print(json.dumps(dict(lessons=[],errata=[],uncovered_concepts=[],nothing_to_learn='Fixture: nothing reusable')))"
+    )
+    config.update(adapter='command', agent_command=[sys.executable, '-c', script])
+    write_json(path, config)
 
 
 def legacy_create_change(project, *args, **kwargs):
     """Explicit historical fixture: preserve pre-routing scenarios, never a production bypass."""
     from storyloop.changes import create_change
     from storyloop.storage import write_json
+    local_retrospective_adapter(Path(project))
     state = create_change(project, *args, **kwargs)
     state.pop('routing_version')
     state.pop('intake')
@@ -108,6 +129,7 @@ def routed_case(root: Path, tier: str) -> tuple[dict, LoopServices]:
     bootstrap_project(root, {'module_roots': ['app', 'modules'], 'test_roots': ['tests'],
         'unit_commands': [['{python}', '-m', 'unittest', 'discover', '-s', 'tests']],
         'check_commands': [['{python}', '-c', 'pass']]})
+    local_retrospective_adapter(root)
     ready = inspect_readiness(root)
     assert ready['status'] == 'READY'
     assert ready['layers']['unit']['executed'] == ready['layers']['smoke']['executed'] == 1

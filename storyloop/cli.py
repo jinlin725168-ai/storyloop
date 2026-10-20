@@ -5,7 +5,6 @@ import argparse
 import json
 from pathlib import Path
 import sys
-
 from . import __version__
 from .answers import pending_questions, record_answers
 from .approvals import approve_change
@@ -17,7 +16,7 @@ from .system_smoke import apply_smoke_update, propose_smoke_update
 from .change_log import change_log, render_log
 from .changes import create_change, load_change, revise_change
 from .manual_acceptance import record_manual_acceptance
-from .next_steps import draft_next, next_step, supersede_revision_next
+from .next_steps import append_pending_memory, draft_next, next_step, supersede_revision_next
 from .openspec_docs import document_change
 from .models import StoryLoopError, require, validate_product
 from .processutil import redact
@@ -33,6 +32,7 @@ from .run_recovery import reset_run
 from .smoke_runner import run_ci
 from .storage import load_json
 from .telemetry import adopt_pending, summarize
+from .memory_cli import add_memory_arguments, dispatch_memory, render_memory
 
 
 def parser() -> argparse.ArgumentParser:
@@ -61,6 +61,8 @@ def parser() -> argparse.ArgumentParser:
         "smoke-apply": "把审核过的系统冒烟草案安装到 acceptance/smoke/，隔离跑绿后提交；红的草案不会留下任何改动",
         "skills": "把引擎自带的技能（foundation-survey 等）安装或刷新到项目的 .claude/skills 与 .codex/skills；已初始化的项目会自动开 BASE 提案",
         "survey": "底座摸底：代理只读探索仓库，写出 openspec/foundation/ 知识库并开 BASE 提案；提交后 base-update 即受保护",
+        "lessons": "列出、确认或退休仓库经验", "lessons-propose": "复盘已结束的变更并提议经验草案",
+        "drafts": "列出或驳回待批草案",
     }
     for command, help_text in descriptions.items():
         child = sub.add_parser(command, help=help_text)
@@ -68,6 +70,7 @@ def parser() -> argparse.ArgumentParser:
         child.add_argument("--json", action="store_true", help="输出完整 JSON")
         _product_arguments(child, command)
         _maintenance_arguments(child, command)
+        add_memory_arguments(child, command)
     adapters = sub.add_parser("adapters", help="检查角色适配器能力")
     adapter_sub = adapters.add_subparsers(dest="adapter_command", required=True)
     check = adapter_sub.add_parser("check", help="握手并校验角色档次映射")
@@ -98,7 +101,10 @@ def _product_arguments(child, command):
     elif command == "log":
         child.add_argument("--change", dest="change_id", required=True)
     elif command in {"approve", "status", "report", "ci"}:
-        child.add_argument("--change", dest="change_id", required=command == "ci")
+        group = child.add_mutually_exclusive_group() if command == "approve" else child
+        group.add_argument("--change", dest="change_id", required=command == "ci")
+        if command == "approve":
+            group.add_argument("--draft", help="审批经验或勘误草案")
         if command == "approve":
             for flag in ("readiness", "design", "continue-heavy", "option", "reason", "tier"):
                 child.add_argument("--" + flag)
@@ -151,6 +157,8 @@ def dispatch(args) -> dict:
     if args.command == "adapters":
         from .adapter_capabilities import check
         return check(project)
+    if args.command == "approve" and getattr(args, "draft", None):
+        return dispatch_memory(project, args)
     routed = dispatch_routing(project, args)
     if routed is not None:
         return routed
@@ -179,6 +187,9 @@ def dispatch(args) -> dict:
     if args.command == "survey":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return survey_foundation(project, args.reason, from_file=args.from_file)
+    if args.command in {"lessons", "drafts", "lessons-propose"}:
+        require(_is_product_project(project), "Run storyloop init on this Git project first")
+        return dispatch_memory(project, args)
     if args.command == "ci":
         return run_ci(project, args.change_id)
     require(_is_product_project(project), "Run storyloop init on this Git project first")
@@ -340,9 +351,10 @@ def _product_dispatch(project: Path, args) -> dict:
                 "stop": stop_of(project, run) if run else draft_stop(project, change),
                 "routing": report_routing(project, change),
                 "telemetry": summarize(project, change_id),
-                "next": (_draft_result(project, change)["next"] if run is None and change["status"] == "DRAFT"
-                         else (next_step((run or {}).get("status") or change["status"], change_id, project, run)
-                               or ((run or {}).get("stop") or {}).get("resume")))}
+                "next": append_pending_memory(project,
+                    _draft_result(project, change)["next"] if run is None and change["status"] == "DRAFT"
+                    else (next_step((run or {}).get("status") or change["status"], change_id, project, run)
+                          or ((run or {}).get("stop") or {}).get("resume")))}
     if args.command == "log":
         return change_log(project, change_id)
     if args.command == "reset":
@@ -403,6 +415,10 @@ def display(result: dict, complete_json: bool) -> None:
         return
     if result.get("status") == "LOG":
         print(render_log(result))
+        return
+    rendered = render_memory(result)
+    if rendered is not None:
+        print(rendered)
         return
     print(result.get("status", "REPORT"))
     for key in ("change_id", "project", "next", "report", "pending", "accepted", "paths", "written"):

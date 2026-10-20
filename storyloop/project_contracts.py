@@ -8,7 +8,7 @@ from .routing_risks import validate_routing_risks
 
 def validate_agent_summary(value: object) -> None:
     require(isinstance(value, dict) and {"summary", "questions"} <= set(value)
-            and set(value) <= {"summary", "questions", "design", "facts", "routing_risks"},
+            and set(value) <= {"summary", "questions", "design", "facts", "routing_risks", "lessons_used", "errata"},
             "Implementation agent returned an invalid contract")
     validate_routing_risks(value.get("routing_risks"))
     require(isinstance(value["summary"], str), "Implementation summary must be text")
@@ -21,7 +21,7 @@ def validate_agent_summary(value: object) -> None:
 def validate_review(value: object) -> str:
     require(isinstance(value, dict)
             and {"verdict", "summary", "findings", "questions"} <= set(value)
-            and set(value) <= {"verdict", "summary", "findings", "questions", "facts", "routing_risks", "coverage", "checklist"},
+            and set(value) <= {"verdict", "summary", "findings", "questions", "facts", "routing_risks", "coverage", "checklist", "lessons_used", "errata"},
             "Review agent returned an invalid contract")
     require(value["verdict"] in {"pass", "fail", "needs_input"},
             "Invalid review verdict")

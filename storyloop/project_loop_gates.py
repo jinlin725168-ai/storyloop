@@ -7,6 +7,8 @@ old code before anyone changes it.
 
 from __future__ import annotations
 
+from .errata import defer_errata, release_errata
+
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -172,6 +174,7 @@ def _mandatory_locks(change: dict, state: dict, config: dict) -> list[str]:
     return sorted(set(required) | restore_lock_paths(state))
 
 
+@defer_errata(manual=True)
 def characterize_paths(project: Path, change: dict, state: dict, services: LoopServices, config: dict,
                        extend: list[str] | None) -> dict | None:
     change_id = change["change_id"]
@@ -201,6 +204,7 @@ def characterize_paths(project: Path, change: dict, state: dict, services: LoopS
         violations = [{"path": p, "category": "NOT_A_TEST_PATH"} for p in outside]
         return pause(project, state, "BOUNDARY_VIOLATION", violations=violations, base_proposal=None,
                      error="Characterization may only write test files", phase="prepare")
+    release_errata()
     coverage = None
     if state.get('routing', {}).get('version') == 1:
         coverage = routed_coverage(project, state, config, response, changed,

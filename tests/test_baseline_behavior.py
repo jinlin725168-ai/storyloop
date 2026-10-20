@@ -4,8 +4,9 @@ import subprocess
 import tempfile
 import unittest
 
-from storyloop.baseline import bootstrap_project, load_baseline, verify_baseline
+from storyloop.baseline import _sha256, bootstrap_project, load_baseline, verify_baseline
 from storyloop.models import StoryLoopError
+from storyloop.storage import write_json
 
 
 def git(root: Path, *args: str) -> str:
@@ -98,6 +99,42 @@ class BaselineBehaviorTests(unittest.TestCase):
             (root / "tests/test_existing.py").write_text("VALUE = 2\n", encoding="utf-8")
 
             self.assertEqual(verify_baseline(root, resume=True)["status"], "BASELINE_VERIFIED")
+
+    def test_committed_prose_lessons_do_not_require_a_base_iteration(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"module_roots": ["app"], "test_commands": []})
+            lesson = root / "openspec/lessons/L-0001.md"
+            lesson.parent.mkdir(parents=True)
+            lesson.write_text("first\n", encoding="utf-8")
+            git(root, "add", ".")
+            git(root, "commit", "-q", "-m", "create prose lesson")
+            self.assertEqual(verify_baseline(root)["status"], "BASELINE_VERIFIED")
+            lesson.write_text("edited\n", encoding="utf-8")
+            git(root, "add", ".")
+            git(root, "commit", "-q", "-m", "edit prose lesson")
+            self.assertEqual(verify_baseline(root)["status"], "BASELINE_VERIFIED")
+
+    def test_legacy_baseline_lesson_still_checks_file_and_index_safety(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            lesson = root / "openspec/lessons/L-0001.md"
+            lesson.parent.mkdir(parents=True)
+            lesson.write_text("trusted\n", encoding="utf-8")
+            git(root, "add", ".")
+            git(root, "commit", "-q", "-m", "legacy lesson")
+            bootstrap_project(root)
+            baseline = load_baseline(root)
+            baseline["files"]["openspec/lessons/L-0001.md"] = _sha256(lesson)
+            baseline["foundation_paths"].append("openspec/lessons/L-0001.md")
+            write_json(root / ".storyloop/baseline.json", baseline)
+            lesson.write_text("drift\n", encoding="utf-8")
+            git(root, "add", ".")
+            git(root, "commit", "-q", "-m", "drift legacy lesson")
+            with self.assertRaisesRegex(StoryLoopError, "Foundation drift"):
+                verify_baseline(root)
 
 if __name__ == "__main__":
     unittest.main()

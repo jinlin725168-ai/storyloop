@@ -8,6 +8,8 @@ project_loop_finish and the acceptance-repair channel in acceptance_repair.
 
 from __future__ import annotations
 
+from .errata import defer_errata, release_errata
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -242,6 +244,10 @@ def _follow_base_upgrade(project: Path, state: dict) -> None:
     baseline = load_baseline(project)
     if baseline["source_head"] == state["source_head"] or state["status"] in {"MERGED", "FINALIZING"}:
         return
+    # A run may start after legal prose commits; its older BASE is not a new upgrade.
+    if _git(project, "merge-base", baseline["source_head"], state["source_head"]).strip() \
+            == baseline["source_head"]:
+        return
     state.setdefault("base_upgrades", []).append({
         "baseline_version": baseline["baseline_version"], "from": state["source_head"],
         "to": baseline["source_head"]})
@@ -249,6 +255,7 @@ def _follow_base_upgrade(project: Path, state: dict) -> None:
     save_run(project, state)
 
 
+@defer_errata(manual=True)
 def _run_attempt(
     project: Path, change: dict, state: dict,
     services: LoopServices, config: dict,
@@ -286,13 +293,14 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
     merge_facts(project, state, response.get("facts"), "implement")
     if response.get("design"):
         state["design"] = response["design"]
-    if response["questions"]:
-        return pause(project, state, "NEEDS_INPUT", questions=response["questions"])
     boundary = audit_project_changes(project, change_id)
     require_git_visible(touched, boundary)
     enforce_forbidden_paths(state, boundary)
     if boundary["violations"]:
         return record_boundary(project, state, boundary)
+    release_errata()
+    if response["questions"]:
+        return pause(project, state, "NEEDS_INPUT", questions=response["questions"])
     risk_pause = _risk_updates(project, state, response, 'implement')
     if risk_pause is not None:
         return risk_pause

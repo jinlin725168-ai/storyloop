@@ -56,6 +56,7 @@
 | 纠偏 | `test_failure_attribution`、`test_failure_routing`、`test_no_progress`、`test_facts`、`test_stop_report`、`test_supersede`、`test_semantic_repair` |
 | 可观测性 | `test_telemetry`、`test_call_diagnostics`、`test_change_report` |
 | 命令面与技能 | `test_cli`、`test_product_cli`、`test_core`、`test_skills`、`test_foundation_survey` |
+| 分层记忆 | `test_lessons`、`test_lesson_store`、`test_lesson_retrieval`、`test_drafts`、`test_lesson_landing`、`test_errata`、`test_retrospective`、`test_report_memory`；共用经验夹具在 `lesson_support.py` |
 
 ## 二、CI
 

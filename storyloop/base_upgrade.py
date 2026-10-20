@@ -16,6 +16,8 @@ from .project_profile import layer_commands
 from .smoke_runner import run_commands_isolated
 from .system_smoke import adopt_system_smoke, run_system_smoke_isolated
 from .storage import load_json, locked, write_json
+from .lesson_store import load_lessons_at
+from .lessons import scope_matches
 
 
 def propose_base_change(project: Path, paths: list[str], reason: str,
@@ -167,7 +169,7 @@ def _recover_upgrade(
             proposal["status"] = "ACCEPTED"
             proposal["regression"] = receipt["regression"]
             write_json(proposal_path, proposal, max_bytes=4_000_000)
-        return _upgrade_result(receipt)
+        return _upgrade_result(project, receipt)
     _require_recovery_candidate(project, receipt)
     regression = _regression_layers(project, config)
     require(regression["status"] == "PASSED",
@@ -186,7 +188,7 @@ def _recover_upgrade(
     proposal.pop("candidate_baseline", None)
     proposal["regression"] = regression
     write_json(proposal_path, proposal, max_bytes=4_000_000)
-    return _upgrade_result(receipt)
+    return _upgrade_result(project, receipt)
 
 
 def _require_recovery_candidate(project: Path, receipt: dict) -> None:
@@ -287,10 +289,23 @@ def _receipt_path(project: Path, proposal_id: str) -> Path:
     return project / ".storyloop/state/base-upgrades" / f"{proposal_id}.json"
 
 
-def _upgrade_result(receipt: dict) -> dict:
-    return {"status": "BASELINE_UPGRADED", "proposal_id": receipt["proposal_id"],
-            "baseline_version": receipt["new_baseline_version"],
-            "source_head": receipt["source_head"]}
+def _lessons_to_review(project: Path, receipt: dict) -> list[str]:
+    entries = load_lessons_at(project, receipt["source_head"])
+    paths = receipt.get("approved_paths") or []
+    return sorted(entry["id"] for entry in entries if entry["status"] == "active"
+                  and any(scope_matches(entry["scope"], path) for path in paths))
+
+
+def _upgrade_result(project: Path, receipt: dict) -> dict:
+    result = {"status": "BASELINE_UPGRADED", "proposal_id": receipt["proposal_id"],
+              "baseline_version": receipt["new_baseline_version"],
+              "source_head": receipt["source_head"]}
+    try:
+        result["lessons_to_review"] = _lessons_to_review(project, receipt)
+    except Exception as exc:
+        result["lessons_to_review"] = None
+        result["lessons_to_review_error"] = "经验复核列表不可计算：" + str(exc)
+    return result
 
 
 def _regression_layers(project: Path, config: dict) -> dict:

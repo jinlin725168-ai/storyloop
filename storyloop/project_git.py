@@ -29,13 +29,14 @@ def start_feature(project: Path, change_id: str) -> dict:
             "source_head": _git(project, "rev-parse", "HEAD").strip()}
 
 
-def commit_paths(project: Path, paths: list[str], message: str) -> dict:
+def commit_paths(project: Path, paths: list[str], message: str, *, details: bool = True) -> dict:
     """Stage only explicit safe paths and create a hook-free local commit."""
     project = Path(project).resolve()
     require(isinstance(paths, list) and bool(paths), "Commit needs explicit paths")
     normalized = [_safe_path(item) for item in paths]
     require(len(set(normalized)) == len(normalized), "Duplicate commit path")
     message = text(message, "commit message")
+    branch = _git(project, "branch", "--show-current").strip() if details else None
     _git(project, "add", "--", *normalized)
     status = _git(project, "status", "--porcelain=v1", "--untracked-files=all")
     require(bool(status.strip()), "Commit has no changes")
@@ -44,8 +45,10 @@ def commit_paths(project: Path, paths: list[str], message: str) -> dict:
         _git(project, "commit", "--no-verify", "-m", message)
     except StoryLoopError as exc:
         raise StoryLoopError(f"Local Git commit failed: {exc}", code="GIT_BLOCKED") from exc
-    return {"status": "COMMITTED", "commit": _git(project, "rev-parse", "HEAD").strip(),
-            "branch": _git(project, "branch", "--show-current").strip()}
+    if not details:
+        return {"status": "COMMITTED"}
+    commit = _git(project, "rev-parse", "HEAD").strip()
+    return {"status": "COMMITTED", "commit": commit, "branch": branch}
 
 
 def finish_feature(project: Path, feature_branch: str, target_branch: str) -> dict:

@@ -32,7 +32,7 @@ class PresentationTests(unittest.TestCase):
         self.assertNotIn('AGENT OPINION', json.dumps(result['sections']['2']))
         items = {i['id']: i for s in result['sections'].values() for i in s['items']}
         self.assertEqual(items['ci']['availability'], 'NOT_AVAILABLE')
-        self.assertEqual(items['memory']['reason'], 'MEMORY_MODULE_NOT_IMPLEMENTED')
+        self.assertEqual(items['memory']['reason'], 'LESSONS_NOT_CONFIGURED')
         self.assertIsNone(items['cost']['data']['cost_usd'])
         self.assertEqual(items['cost']['data']['known_cost_usd'], .2)
         self.assertEqual(items['facts:0']['source'], 'agent_code')

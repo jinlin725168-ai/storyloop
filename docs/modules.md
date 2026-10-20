@@ -28,6 +28,15 @@
 | | `foundation_survey` | survey 角色摸底，产物校验后写入 `openspec/foundation/` 并开 BASE 提案 | `survey_foundation`、`foundation_payload` |
 | | `call_log` | 每次代理调用的诊断记录（不是证据） | `open_call`、`close_call` |
 | | `telemetry` | 每个变更的调用账本：墙钟、轮数、token、费用 | `record_call`、`summarize` |
+| 记忆 | `lessons` | 经验 Markdown 格式、解析、渲染与字段校验 | `parse_lesson`、`render_lesson`、`validate_lessons` |
+| | `lesson_store` | 从提交读取、校验并冻结经验层，处理确认与退休 | `load_lessons_at`、`lessons_digest`、`confirm_lesson`、`retire_lesson` |
+| | `lesson_retrieval` | 按角色、路径、新鲜度与强度筛选注入经验 | `select_lessons`、`lessons_payload` |
+| | `drafts` | 经验与勘误草案的创建、列出、读取和驳回 | `create_draft`、`list_drafts`、`reject_draft` |
+| | `lesson_landing` | 审批草案，验证 prose/knowledge/check 落点并原子提交 | `approve_draft`、`prove_check` |
+| | `errata` | 校验代理勘误、生成草案并落地 foundation 勘误 | `capture_errata`、`land_errata` |
+| | `retrospective` | 检测问题信号、统计复发并执行只读复盘 | `detect_signals`、`record_recurrence`、`retrospect` |
+| | `report_memory` | 从冻结状态、账本与完整调用记录生成报告第 6 节 | `memory_items` |
+| 命令面 | `memory_cli` | 解析并渲染 lessons、drafts、lessons-propose 的命令结果 | `add_memory_arguments`、`dispatch_memory`、`render_memory` |
 | 验证 | `smoke` | 第 2 层变更验收套件：安装、清单、字节保护 | `install_smoke_suite`、`load_smoke_manifest`、`suite_root` |
 | | `smoke_runner` | 隔离候选副本里跑套件与回归命令（快、重两级），RED 按行类型判定，证据与指纹 | `run_smoke_isolated`、`run_commands_isolated`、`implementation_digest`、`visible_paths`、`run_ci` |
 | | `oracle_counts` | 判据自证：从测试工具输出统计执行数、旧代码基线采样、零执行与下降检查 | `count_tests`、`sample_baseline`、`check_layers` |

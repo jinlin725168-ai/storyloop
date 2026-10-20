@@ -131,6 +131,7 @@ my-project/
 | `change PATH --idea TEXT [--no-interactive]` | 从一句产品意图创建草案；终端里逐条澄清待决问题 |
 | `change PATH --change ID --message TEXT` | 与 AI 继续修订同一变更 |
 | `approve PATH --change ID [--no-interactive]` | 批准并自动跑完后续闭环 |
+| `approve PATH --draft KIND/ID` | 审批 `lesson` 或 `errata` 草案；与 `--change` 互斥 |
 | `run PATH --change ID [--no-interactive]` | 继续一个已批准的变更；终端里遇到 `NEEDS_INPUT` 会直接提问 |
 | `status PATH --change ID --json` | 查看合同和外部 Loop 状态，含下一步命令 `next` |
 | `log PATH --change ID [--json]` | 排障视图：每次代理调用的结果、耗时、费用、会话 ID 与调用记录目录，每轮失败原因，下一步命令 |
@@ -144,6 +145,9 @@ my-project/
 | `acceptance-repair PATH --change ID --reason TEXT` | 变更验收用例本身有缺陷时，让 acceptance 角色修自己的套件并从合同提交重新证明 RED；之前的尝试作废，理由写入 decisions.md（旧名 `smoke-repair`） |
 | `smoke-propose PATH --change ID` | 变更合并后，acceptance 角色提议把哪些核心链路并入或更新项目级系统冒烟，草案写到 `.storyloop/drafts/smoke/<id>/` |
 | `smoke-apply PATH --change ID` | 人审核草案后安装到 `acceptance/smoke/`，隔离跑绿才提交；红的草案不留任何改动 |
+| `drafts PATH [--reject KIND/ID --reason TEXT]` | 列出经验与勘误等草案，或保留草案并标记为已驳回 |
+| `lessons PATH [--confirm ID \| --retire ID --reason TEXT]` | 列出经验及计算出的新鲜度，或确认、退休一条经验 |
+| `lessons-propose PATH --change ID` | 对已结束或停点的变更执行一次只读复盘并提议草案 |
 | `adapters check PATH [--json]` | 检查角色适配器能力与档次映射 |
 | `skills PATH` | 把引擎自带的技能包（`foundation-survey`）安装或刷新到项目的 `.claude/skills/` 与 `.codex/skills/`，Claude Code 与 Codex 都能直接用；已初始化的项目自动开 BASE 提案 |
 | `survey PATH [--reason TEXT] [--from FILE]` | 底座摸底：survey 角色只读探索仓库，写出 `openspec/foundation/` 知识库（模块、架构、扩展机制、接口、能力、积木、测试）并开 BASE 提案；提交后 `base-update` 即受保护，之后每个角色起手先读它。产物校验失败时原始回答保存在 `.storyloop/state/foundation/last-survey.json`，人工修正后用 `--from` 安装，不再调用代理 |
@@ -214,6 +218,29 @@ storyloop init C:\work\my-project --settings C:\work\settings.json
 从源码工作树验收时，CLI 和 command 适配器必须使用同一份引擎。共享 venv 若 editable 安装指向另一工作树，直接执行示例 `.py` 会导入那份代码；请在专用环境安装当前工作树，或显式设置适配器 Python 的模块搜索路径。真实验收使用显式 `sys.path.insert(0, WORKTREE)` 的 `python -c` 包装，并记录 `storyloop.__file__` 与 HEAD；没有把旧安装的结果当成新实现证据。
 
 `COST_LIMIT_REACHED` 在下一次调用前停止；提高 limits 后 `run` 恢复。失败调用也计成本；没有费用回报时只展示已知费用覆盖，不估价、不把未知当作零。无画像的旧配置继续工作，已有报告与回执保持原字节；缺少旧诊断的历史报告不会凭空补齐新状态。
+
+## 经验与勘误
+
+StoryLoop 把仓库经验放在 `openspec/lessons/`，把对底座知识库的更正追加到 `openspec/foundation/errata.md`。代理只能提出草案；人审批后才会落地。一次完整闭环如下，其中 `status` 会在有待批草案时给出 `drafts` 提示：
+
+```bash
+storyloop run PROJECT --change FEAT-20261020-001
+storyloop status PROJECT --change FEAT-20261020-001 --json
+storyloop drafts PROJECT
+storyloop approve PROJECT --draft lesson/D-FEAT-20261020-001-01
+storyloop report PROJECT --change FEAT-20261020-002
+```
+
+若审批的是 `knowledge` 强度经验或 `errata/<id>` 勘误，审批结果会包含 `base_proposal` 和下一步命令；提交已由审批命令创建，随后按返回值升级底座：
+
+```bash
+storyloop approve PROJECT --draft errata/D-FEAT-20261020-001-02
+storyloop base-update PROJECT --proposal BASE-20261020-001
+```
+
+`check` 强度经验只有在命令能证明“来源变更的合同提交上失败、当前 HEAD 上通过”时才会获批，随后写入 `profile.check_commands`；`config` 强度的新建及从其他强度转换仍拒绝，需改成 `prose` 并人工修改配置；既有 config 条目可退休或保持该强度更新说明，实际配置不变。`lessons-propose PROJECT --change ID` 可手动补做只读复盘；失败或达到成本上限不会改变已有 `PASSED` 结论。
+
+下一个相关变更会从其合同提交冻结的经验版本取用；最终报告第 6 节“记忆”列出提供给各次调用的经验和代理声明使用的条目。代理“声称使用”只是回报，不是已经打开并阅读经验正文的机器证明。
 
 ## 许可证
 

@@ -31,16 +31,19 @@ RUN_FIELDS = frozenset({
     "reset", "review", "design", "boundary", "verified", "mode", "candidate_sha256",
     "interrupted_status", "review_disposition",
     "implementation_commit", "integration_commit", "contract_commit", "report_commit",
+    "lessons_digest", "lessons_digest_error",
 })
 ENTRY_FIELDS = frozenset({
     "role", "wall_ms", "at", "failed", "call", "session", "cost_usd", "turns",
     "duration_ms", "input_tokens", "output_tokens", "segments", "lanes", "perspectives",
     "model", "vendor", "tier_applied", "skills", "tier_requested", "adapter",
-    "degraded", "path_guard", "subagents_applied",
+    "degraded", "path_guard", "subagents_applied", "lessons_provided",
+    "lessons_claimed", "lessons_unknown", "lessons_truncated",
 })
 META_FIELDS = frozenset({
     "version", "call", "role", "ledger", "adapter", "started_at", "status", "wall_ms",
-    "sessions", "repairs", "semantic_repair", "error", "code", "schema_errors",
+    "sessions", "repairs", "semantic_repair", "error", "code", "schema_errors", "lessons_skipped",
+    "lessons_provided", "lessons_claimed", "lessons_unknown", "lessons_truncated",
 })
 
 
@@ -187,6 +190,11 @@ def _valid_entry(value):
 
 def _diagnostic_record(value):
     result = dict(value)
+    if "lessons_skipped" in result:
+        reason = result["lessons_skipped"]
+        if not isinstance(reason, str) or not reason.strip():
+            result["lessons_skipped"] = "LESSONS_SKIPPED_INVALID"
+            result["invalid_fields"] = [*result.get("invalid_fields", []), "lessons_skipped"]
     for key in ("call", "role", "ledger", "status"):
         if key in result and result[key] is not None and not _identifier(result[key]):
             result[key] = None

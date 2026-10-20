@@ -150,4 +150,6 @@ def foundation_payload(project: Path) -> dict | None:
     if not (root / "README.md").is_file():
         return None
     documents = sorted(p.relative_to(project).as_posix() for p in root.rglob("*.md") if p.is_file())
+    from .errata import ERRATA_PATH
+    documents.sort(key=lambda path: (path != ERRATA_PATH, path))
     return {"version": load_baseline(project)["baseline_version"], "documents": documents}

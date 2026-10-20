@@ -6,6 +6,8 @@ import sys
 import tempfile
 import unittest
 
+from tests.lesson_support import git_repo, sample
+
 
 def storyloop(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, "-m", "storyloop", *args],
@@ -13,6 +15,36 @@ def storyloop(*args: str) -> subprocess.CompletedProcess:
 
 
 class CliTests(unittest.TestCase):
+    def test_lessons_json_exposes_vector_signal(self):
+        repo = git_repo(lessons=[sample()])
+        self.addCleanup(__import__("shutil").rmtree, repo)
+        baseline = repo / ".storyloop/baseline.json"
+        baseline.parent.mkdir(parents=True, exist_ok=True)
+        baseline.write_text("{}\n", encoding="utf-8")
+
+        result = storyloop("lessons", str(repo), "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("vector_signal", json.loads(result.stdout))
+
+    def test_lessons_text_renders_chinese_status_and_upgrade_advice(self):
+        entry = sample(status="needs-review")
+        repo = git_repo(lessons=[entry])
+        self.addCleanup(__import__("shutil").rmtree, repo)
+        baseline = repo / ".storyloop/baseline.json"
+        baseline.parent.mkdir(parents=True, exist_ok=True)
+        baseline.write_text("{}\n", encoding="utf-8")
+        state = repo / ".storyloop/state/lessons.json"
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(json.dumps({"L-0001": {"recurrences": ["A", "B"]}},
+                                    ensure_ascii=False), encoding="utf-8")
+
+        result = storyloop("lessons", str(repo))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("需复查", result.stdout)
+        self.assertIn("建议升级为检查", result.stdout)
+
     def test_help_lists_the_product_commands_only(self):
         self.assertIsNotNone(importlib.util.find_spec("storyloop.cli"), "CLI must exist")
         result = storyloop("--help")
