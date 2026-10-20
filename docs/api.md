@@ -289,3 +289,5 @@ review 的新画像协议要求 findings 的 severity（P0/P1/P2/question）、c
 `cross_vendor_review.on_unavailable` 默认 fail_closed：review 不可用停 AGENT_UNAVAILABLE、交还质量轮次；degrade 改用 implement 适配器审查并标记 degraded=cross_vendor。事后比较实际回报 vendor，不同仅代表回报匹配；同厂或缺失标“跨厂商未生效”，不改变证据型门。
 
 设计审批停点之后接受 BASE 更新并合回功能分支时，旧方案的完整 `baseline_digest` 绑定失效；先执行 `replan` 重新生成方案，再 `approve --design`。启动前已冻结的纯经验目录提交可处于旧 BASE 之后，运行中未批准的源分支前进仍会被拒绝。
+
+`approve --draft` 对 config 强度仅拒绝新建及从其他强度转换；允许既有 config 条目退休或保持该强度更新说明，实际配置不会新增或改动。

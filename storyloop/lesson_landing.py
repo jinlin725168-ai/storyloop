@@ -66,7 +66,8 @@ def _candidate(project, draft, head):
     elif draft['body'] is not None:
         entry['body'] = draft['body']
     strength = entry.get('strength')
-    if strength == 'config':
+    if strength == 'config' and action != 'retire' and not (
+            action == 'update' and old['strength'] == 'config'):
         raise StoryLoopError('config 强度本期不自动落地：请把草案改为 prose，并手工修改配置', code='LANDING_UNSUPPORTED')
     argv = None
     if strength == 'check' and action != 'retire':

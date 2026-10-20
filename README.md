@@ -238,7 +238,7 @@ storyloop approve PROJECT --draft errata/D-FEAT-20261020-001-02
 storyloop base-update PROJECT --proposal BASE-20261020-001
 ```
 
-`check` 强度经验只有在命令能证明“来源变更的合同提交上失败、当前 HEAD 上通过”时才会获批，随后写入 `profile.check_commands`；`config` 强度一律拒绝，需把草案改成 `prose` 并人工修改配置。`lessons-propose PROJECT --change ID` 可手动补做只读复盘；失败或达到成本上限不会改变已有 `PASSED` 结论。
+`check` 强度经验只有在命令能证明“来源变更的合同提交上失败、当前 HEAD 上通过”时才会获批，随后写入 `profile.check_commands`；`config` 强度的新建及从其他强度转换仍拒绝，需改成 `prose` 并人工修改配置；既有 config 条目可退休或保持该强度更新说明，实际配置不变。`lessons-propose PROJECT --change ID` 可手动补做只读复盘；失败或达到成本上限不会改变已有 `PASSED` 结论。
 
 下一个相关变更会从其合同提交冻结的经验版本取用；最终报告第 6 节“记忆”列出提供给各次调用的经验和代理声明使用的条目。代理“声称使用”只是回报，不是已经打开并阅读经验正文的机器证明。
 

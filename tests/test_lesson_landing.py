@@ -84,14 +84,29 @@ class LandingTests(unittest.TestCase):
         self.assertEqual(_git(self.project, 'show', '--format=', '--name-only', 'HEAD'),
                          'openspec/lessons/L-0001.md')
 
-    def test_retire_config_remains_unsupported(self):
+    def test_retire_and_update_config_preserve_actual_configuration(self):
         from storyloop.lessons import render_lesson
         landing = {'kind': 'check_command', 'argv': [sys.executable, '-c', 'pass']}
         commit_file(self.project, 'openspec/lessons/L-0001.md',
                     render_lesson(sample(strength='config', landings=[landing])))
+        config = (self.project / '.storyloop/config.json').read_bytes()
+        for action in ('update', 'retire'):
+            with self.subTest(action=action):
+                result = approve_draft(self.project, self.draft(
+                    action, 'L-0001', strength='config', landings=[landing], summary='修订说明'))
+                self.assertEqual((self.project / '.storyloop/config.json').read_bytes(), config)
+                entry = load_lessons_at(self.project, 'HEAD')[0]
+                self.assertEqual(entry['strength'], 'config')
+                self.assertEqual(entry['status'], 'retired' if action == 'retire' else 'active')
+                self.assertIsNone(result['base_proposal'])
+                self.assertEqual(_git(self.project, 'show', '--format=', '--name-only', 'HEAD'),
+                                 'openspec/lessons/L-0001.md')
+
+    def test_update_cannot_transition_to_config(self):
+        approve_draft(self.project, self.draft())
         before = self.snapshot()
         with self.assertRaises(StoryLoopError) as caught:
-            approve_draft(self.project, self.draft('retire', 'L-0001'))
+            approve_draft(self.project, self.draft('update', 'L-0001', strength='config'))
         self.assertEqual(caught.exception.code, 'LANDING_UNSUPPORTED')
         self.assertEqual(self.snapshot(), before)
 
