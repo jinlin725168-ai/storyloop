@@ -55,6 +55,7 @@ def _proposal(exit_code: int):
                 "manifest": {"version": 1, "tests": [{"id": "core-orders", "description": "订单主路径",
                                                        "command": ["{python}", f"{SYSTEM_SMOKE_DIR}/core_orders.py"],
                                                        "timeout_seconds": 30}]},
+                "lessons_used": [{"id": "L-0001", "how": "checked"}], "errata": [],
                 "rationale": "订单是核心链路，把变更验收里的主路径并入系统冒烟。"}
     return propose
 

@@ -131,6 +131,7 @@ class ReviewPerspectiveTests(unittest.TestCase):
                 self.assertIn("security", prompt)  # the lead sees every perspective's output
                 self.assertIn("SQL built by string concatenation", prompt)
                 result = {"verdict": "fail", "summary": "security found a real defect",
+                          "lessons_used": [{"id": "L-0001", "how": "checked"}], "errata": [],
                           "findings": [{"perspective": "security", "message": "SQL built by string concatenation"}],
                           "questions": []}
                 return Completed(envelope("success", json.dumps(result), "lead", 0.2, 3))
@@ -153,6 +154,8 @@ class ReviewPerspectiveTests(unittest.TestCase):
         result = json.loads(out.getvalue())
         self.assertEqual(result["verdict"], "fail")
         self.assertEqual(result["findings"][0]["perspective"], "security")
+        self.assertEqual(result["lessons_used"], [{"id": "L-0001", "how": "checked"}])
+        self.assertEqual(result["errata"], [])
         telemetry = result["_telemetry"]
         self.assertEqual(telemetry["perspectives"], 4)
         self.assertAlmostEqual(telemetry["cost_usd"], 0.1 * 4 + 0.2)
@@ -325,7 +328,8 @@ class ClaudeProfileTests(unittest.TestCase):
             result = invoke_project_agent(root, 'implement', {'change_id': 'FEAT-1'})
             self.assertEqual(result, {'summary': 'done', 'questions': []})
             self.assertEqual(set(ledger_entries(root, 'FEAT-1')[0]),
-                             {'role', 'wall_ms', 'at', 'call', 'skills', 'model', 'cost_usd',
+                             {'lessons_provided', 'lessons_claimed', 'lessons_unknown', 'lessons_truncated',
+                              'role', 'wall_ms', 'at', 'call', 'skills', 'model', 'cost_usd',
                               'turns', 'duration_ms', 'input_tokens', 'output_tokens', 'segments'})
             prompt = load_json(root / 'cli-request.json')['prompt']
             self.assertNotIn('role_profile', json.loads(prompt.split('Request:\n')[-1]))

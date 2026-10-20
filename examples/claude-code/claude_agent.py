@@ -268,7 +268,7 @@ def _review_with_perspectives(request: dict, base: list[str], args, perspectives
     if "role_profile" not in request and not ({"verdict", "summary", "findings", "questions"} <= set(result)):
         print("claude review: lead result lacks verdict/summary/findings/questions", file=sys.stderr)
         return 1
-    result = {key: result[key] for key in ("verdict", "summary", "findings", "questions", "coverage", "checklist")
+    result = {key: result[key] for key in ("verdict", "summary", "findings", "questions", "coverage", "checklist", "lessons_used", "errata")
               if key in result}
     total["perspectives"] = len(perspectives)
     total.update(profile_telemetry(request, args.profile_model, perspectives=len(perspectives)))

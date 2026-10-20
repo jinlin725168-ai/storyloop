@@ -54,6 +54,7 @@ class ProjectLoopTests(unittest.TestCase):
     def test_external_loop_proves_red_retries_then_merges_locally(self):
         temporary, root, change_id = self._approved(add_lesson=True)
         attempts = []
+        memory = {'lessons_used': [{'id': 'L-0001', 'how': '按经验处理'}], 'errata': []}
 
         def implement(project, context):
             attempts.append(context["attempt"])
@@ -61,12 +62,12 @@ class ProjectLoopTests(unittest.TestCase):
                 target = project / "modules/orders/service.py"
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text("VALUE = 1\n", encoding="utf-8")
-            return {"summary": "attempted", "questions": []}
+            return {"summary": "attempted", "questions": [], **memory}
 
         services = LoopServices(
-            generate_smoke=lambda project, state: smoke_payload(change_id),
+            generate_smoke=lambda project, state: {**smoke_payload(change_id), **memory},
             implement=implement,
-            review=lambda project, context: {"verdict": "pass", "summary": "ok", "findings": [], "questions": []},
+            review=lambda project, context: {"verdict": "pass", "summary": "ok", "findings": [], "questions": [], **memory},
         )
         try:
             source = git(root, "branch", "--show-current")

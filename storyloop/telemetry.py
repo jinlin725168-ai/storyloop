@@ -53,6 +53,12 @@ def record_call(project: Path, role: str, change_id: str | None, telemetry: obje
             value = engine_fields.get(key)
             if isinstance(value, (str, bool, dict)):
                 entry[key] = value
+        for key in ('lessons_provided', 'lessons_claimed', 'lessons_unknown'):
+            value = engine_fields.get(key)
+            if isinstance(value, list) and all(isinstance(item, str) for item in value):
+                entry[key] = value[:20]
+        if isinstance(engine_fields.get('lessons_truncated'), bool):
+            entry['lessons_truncated'] = engine_fields['lessons_truncated']
     key = change_id or PENDING
     entries = _entries(project, key)
     entries.append(entry)

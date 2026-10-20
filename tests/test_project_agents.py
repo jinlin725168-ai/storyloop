@@ -30,7 +30,7 @@ class ProjectAgentTests(unittest.TestCase):
                              {"protocol", "role", "project", "payload", "response_schema"})
             self.assertNotIn("role_profile", request)
             entry = ledger_entries(root, "pending")[0]
-            self.assertEqual(set(entry) - {"at", "call", "wall_ms"}, {"role", "skills"})
+            self.assertEqual(set(entry) - {"at", "call", "wall_ms"}, {"role", "skills", "lessons_provided", "lessons_claimed", "lessons_unknown", "lessons_truncated"})
     def test_role_adapter_request_contains_profile_and_engine_ledger_fields(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -129,3 +129,69 @@ class ProjectAgentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LessonInjectionTests(unittest.TestCase):
+    def invoke(self, lessons=None, raw=None, extra=None, fail=False):
+        import shutil
+        from tests.lesson_support import git_repo
+        root = git_repo(lessons=lessons, raw_lessons=raw)
+        self.addCleanup(shutil.rmtree, root)
+        bootstrap_project(root)
+        script = root / '.storyloop/replay.json'
+        write_json(script, {'calls': [{'role': 'implement', 'result': {
+            'summary': 'ok', 'questions': [], **(extra or {})},
+            'telemetry': {'lessons_provided': ['spoof']}}]})
+        config = load_project_config(root)
+        adapter = Path(__file__).resolve().parents[1] / 'storyloop/testing/mock_adapter.py'
+        config.update(adapter='command', agent_command=[sys.executable, str(adapter), '--script', str(script)])
+        write_json(root / '.storyloop/config.json', config)
+        if fail:
+            with self.assertRaises(StoryLoopError):
+                invoke_project_agent(root, 'implement', {})
+            result = None
+        else:
+            result = invoke_project_agent(root, 'implement', {})
+        entry = ledger_entries(root, 'pending')[-1]
+        folder = root / '.storyloop/state/telemetry/calls' / entry['call']
+        return root, result, entry, json.loads((folder / 'meta.json').read_text()), json.loads((folder / 'request.json').read_text())
+
+    def test_claims_and_frozen_context_without_profile(self):
+        import hashlib
+        from tests.lesson_support import sample
+        root, result, entry, meta, request = self.invoke([sample()], extra={'lessons_used': [
+            {'id': 'L-0001', 'how': '按经验处理'}, {'id': 'L-0404', 'how': '未知'}]})
+        self.assertEqual(entry['lessons_provided'], ['L-0001'])
+        self.assertEqual(entry['lessons_claimed'], ['L-0001'])
+        self.assertEqual(entry['lessons_unknown'], ['L-0404'])
+        path = 'openspec/lessons/L-0001.md'
+        self.assertEqual(meta['context']['lessons'], [{'path': path, 'sha256': hashlib.sha256((root / path).read_bytes()).hexdigest()}])
+
+    def test_absent_and_invalid(self):
+        *_, request = self.invoke()
+        self.assertNotIn('lessons', request['payload'])
+        _, _, entry, meta, request = self.invoke(raw={'L-0001.md': 'garbage'})
+        self.assertNotIn('lessons', request['payload'])
+        self.assertIn('LESSON_INVALID', meta['lessons_skipped'])
+
+    def test_complete_evidence_bounded_projection(self):
+        from tests.lesson_support import sample
+        entries = [sample(id=f'L-{i:04d}', tier='core', body='x') for i in range(1, 24)]
+        claims = [{'id': item['id'], 'how': 'checked'} for item in entries]
+        claims += [{'id': f'L-{i:04d}', 'how': 'unknown'} for i in range(101, 124)]
+        _, _, entry, meta, request = self.invoke(entries, extra={'lessons_used': claims})
+        self.assertEqual(len(request['payload']['lessons']['core']), 23)
+        self.assertEqual(len(entry['lessons_provided']), 20)
+        self.assertTrue(entry['lessons_truncated'])
+        for key in ('lessons_provided', 'lessons_claimed', 'lessons_unknown'):
+            self.assertEqual(len(meta[key]), 23)
+            self.assertEqual(len(entry[key]), 20)
+
+    def test_failed_call_has_provided_but_no_claims(self):
+        from tests.lesson_support import sample
+        _, _, entry, meta, _ = self.invoke([sample()], extra={'summary': 7}, fail=True)
+        self.assertTrue(entry['failed'])
+        self.assertEqual(entry['lessons_provided'], ['L-0001'])
+        self.assertEqual(entry['lessons_claimed'], [])
+        self.assertEqual(entry['lessons_unknown'], [])
+        self.assertEqual(meta['status'], 'FAILED')

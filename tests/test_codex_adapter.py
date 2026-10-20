@@ -69,7 +69,8 @@ class CodexAdapterTests(unittest.TestCase):
             self.assertNotIn('adapters', config)
             self.assertNotIn('roles', config)
             self.assertEqual(set(ledger_entries(root, 'FEAT-1')[0]),
-                             {'role', 'wall_ms', 'at', 'call', 'session', 'skills',
+                             {'lessons_provided', 'lessons_claimed', 'lessons_unknown', 'lessons_truncated',
+                              'role', 'wall_ms', 'at', 'call', 'session', 'skills',
                               'turns', 'input_tokens', 'output_tokens', 'segments'})
 
 

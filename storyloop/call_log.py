@@ -93,3 +93,16 @@ def record_context(project: Path, call_id: str, context: dict) -> None:
     meta = json.loads(path.read_text(encoding='utf-8'))
     meta['context'] = _redacted(context)
     write_json(path, meta)
+
+
+def record_lessons_skipped(project: Path, call_id: str, reason: str) -> None:
+    """Record why the entire lesson layer was omitted."""
+    record_lesson_evidence(project, call_id, {'lessons_skipped': reason})
+
+
+def record_lesson_evidence(project: Path, call_id: str, evidence: dict) -> None:
+    """Preserve complete engine-owned evidence; ledger arrays are bounded projections."""
+    path = call_folder(project, call_id) / 'meta.json'
+    meta = json.loads(path.read_text(encoding='utf-8'))
+    meta.update(_redacted(evidence))
+    write_json(path, meta)

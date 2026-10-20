@@ -145,8 +145,8 @@ def stale_ids(project: Path, entries: list[dict], commit: str) -> set[str]:
         roots = ([] if "**" in entry["scope"] else
                  [forbidden_path_root(scope) for scope in entry["scope"]])
         arguments = ["log", "--format=%H", f"{baseline}..{resolved}"]
-        if roots:
-            arguments.extend(["--", *roots])
+        # Human confirmation changes the lesson itself, not the evidence it describes.
+        arguments.extend(["--", *(roots or ["."]), ":(exclude)openspec/lessons/**"])
         if _git(project, *arguments).strip():
             stale.add(entry["id"])
     return stale

@@ -32,7 +32,7 @@ def _prepare_acceptance(
         load_smoke_manifest(project, change_id)
     else:
         def validate(answer: object) -> None:
-            require(isinstance(answer, dict) and set(answer) == {"files", "manifest"},
+            require(isinstance(answer, dict) and {"files", "manifest"} <= set(answer) <= {"files", "manifest", "lessons_used", "errata"},
                     "Smoke agent returned an invalid contract")
             validate_suite(change, answer["files"], answer["manifest"])
 

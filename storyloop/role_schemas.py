@@ -177,6 +177,19 @@ def _profiled_review(schema):
 
 
 def schema_for(role: str, payload: dict) -> dict:
+    """Add optional memory metadata to every ordinary call, including special modes."""
+    schema = copy.deepcopy(_selected_schema(role, payload))
+    if role != 'survey' and payload.get('mode') != 'retrospective':
+        schema['properties'].update(
+            lessons_used=_nullable({'type': 'array', 'items': _obj({
+                'id': STRING, 'how': {'type': 'string', 'x-maxLength': 200}})}),
+            errata=_nullable({'type': 'array', 'items': _obj({
+                'document': STRING, 'claim': STRING, 'correction': STRING, 'evidence': STRINGS})}))
+        schema['required'] = list(schema['properties'])
+    return schema
+
+
+def _selected_schema(role: str, payload: dict) -> dict:
     """The engine-side schema of one call (acceptance changes shape in smoke-maintenance mode)."""
     if role == "review" and payload.get("mode") == "verify":
         return VERIFY
@@ -240,6 +253,8 @@ def _check(value: object, schema: dict, path: str, errors: list[str]) -> None:
         return
     if type(value) in (int, float) and (value < schema.get("minimum", value) or value > schema.get("maximum", value)):
         errors.append(f"{path}: number outside allowed range")
+    if isinstance(value, str) and len(value) > schema.get('x-maxLength', len(value)):
+        errors.append(f"{path}: text exceeds allowed length")
     if "enum" in schema and value not in schema["enum"]:
         allowed = ", ".join(repr(item) for item in schema["enum"] if item is not None)
         errors.append(f"{path}: must be one of {allowed}")

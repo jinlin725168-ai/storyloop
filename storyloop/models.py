@@ -128,7 +128,7 @@ def validate_product(value: object) -> dict:
     """Validate stories, business outcomes, global IDs, ordered dependencies and the nature blocks."""
     fields(value, {"version", "goal", "non_goals", "questions", "stories"},
            {"capability", "clarifications", "nature", "defect", "refactor", "consumers",
-            "coverage_exemptions", "test_removals", "assessment"})
+            "coverage_exemptions", "test_removals", "assessment", "lessons_used", "errata"})
     require(value["version"] == 1, "Unsupported product version")
     text(value["goal"], "goal")
     strings(value["non_goals"], "non_goals")

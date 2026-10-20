@@ -59,7 +59,7 @@ class RoleSchemaTests(unittest.TestCase):
         test = schema["properties"]["manifest"]["properties"]["tests"]["items"]
         self.assertIn("description", test["properties"])
         self.assertNotIn("criteria", test["properties"])
-        self.assertIs(schema_for("acceptance", {}), SCHEMAS["acceptance"])
+        self.assertEqual(schema_for("acceptance", {})["properties"]["manifest"], SCHEMAS["acceptance"]["properties"]["manifest"])
 
 
 class FindingTargetTests(unittest.TestCase):

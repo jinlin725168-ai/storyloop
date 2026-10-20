@@ -247,3 +247,31 @@ class LessonStoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FreshnessMetadataTests(unittest.TestCase):
+    def test_confirmation_and_metadata_do_not_stale_but_code_does(self):
+        from storyloop.lesson_store import confirm_lesson
+        from tests.lesson_support import commit_file
+        repo = git_repo(lessons=[sample(tier='core')])
+        self.addCleanup(shutil.rmtree, repo)
+        confirm_lesson(repo, 'L-0001')
+        entries = load_lessons_at(repo, head(repo))
+        self.assertEqual(stale_ids(repo, entries, head(repo)), set())
+        commit_file(repo, 'openspec/lessons/L-0001.md',
+                    (repo / 'openspec/lessons/L-0001.md').read_text() + '\nmetadata only\n')
+        self.assertEqual(stale_ids(repo, entries, head(repo)), set())
+        commit_file(repo, 'app/code.py', 'changed')
+        self.assertEqual(stale_ids(repo, entries, head(repo)), {'L-0001'})
+
+    def test_explicit_lessons_scope_ignores_metadata(self):
+        from tests.lesson_support import commit_file
+        repo = git_repo(lessons=[sample(scope=['openspec/**'])])
+        self.addCleanup(shutil.rmtree, repo)
+        entries = load_lessons_at(repo, head(repo))
+        entries[0]['baseline_commit'] = head(repo)
+        commit_file(repo, 'openspec/lessons/L-0001.md',
+                    (repo / 'openspec/lessons/L-0001.md').read_text() + '\nmetadata only\n')
+        self.assertEqual(stale_ids(repo, entries, head(repo)), set())
+        commit_file(repo, 'openspec/specs/new.md', 'real contract change')
+        self.assertEqual(stale_ids(repo, entries, head(repo)), {'L-0001'})
