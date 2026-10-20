@@ -38,7 +38,7 @@ def _validate_context(project: Path, change: dict, state: dict) -> None:
     require(current_branch(project) == state['feature_branch'], 'Resume the saved StoryLoop branch')
     verify_baseline(project, resume=True)
     require(_git(project, 'rev-parse', state['source_branch']).strip()
-            == load_baseline(project)['source_head'], 'Saved source branch moved outside a base upgrade')
+            == state['source_head'], 'Saved source branch moved outside a base upgrade')
     require(_git(project, 'merge-base', state['contract_commit'], 'HEAD').strip()
             == state['contract_commit'], 'Contract source is no longer an ancestor')
     require(digest(state['routing']['policy']) == state['routing']['policy_digest'],

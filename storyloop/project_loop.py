@@ -244,6 +244,10 @@ def _follow_base_upgrade(project: Path, state: dict) -> None:
     baseline = load_baseline(project)
     if baseline["source_head"] == state["source_head"] or state["status"] in {"MERGED", "FINALIZING"}:
         return
+    # A run may start after legal prose commits; its older BASE is not a new upgrade.
+    if _git(project, "merge-base", baseline["source_head"], state["source_head"]).strip() \
+            == baseline["source_head"]:
+        return
     state.setdefault("base_upgrades", []).append({
         "baseline_version": baseline["baseline_version"], "from": state["source_head"],
         "to": baseline["source_head"]})
