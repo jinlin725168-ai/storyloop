@@ -159,20 +159,30 @@ def _execute_call(project, role, payload, schema, request, adapter_config, setti
         waiting = error is not None and adapter == "manual" and error.code == "NEEDS_INPUT"
         # A manual adapter waiting for input is not a failed call; everything else that raised is.
         failed = result is None and not waiting
-        evidence = _record_memory_evidence(project, call, payload, result)
-        record_call(project, role, ledger, telemetry, wall_ms, failed=failed,
+        evidence = _diagnostic(_record_memory_evidence, project, call, payload, result) or {}
+        _diagnostic(record_call, project, role, ledger, telemetry, wall_ms, failed=failed,
                     call=call, session=",".join(dict.fromkeys(sessions)),
                     engine_fields={**evidence, **({"tier_requested": settings["tier"], "adapter": adapter_name,
                                     **({"degraded": degraded} if degraded else {})}
                                    if profile is not None else {})})
-        close_call(project, call, status="WAITING" if waiting else "FAILED" if failed else "OK",
+        _diagnostic(close_call, project, call, status="WAITING" if waiting else "FAILED" if failed else "OK",
                    wall_ms=wall_ms, response=result, raw=trace["raw"], stderr=trace["stderr"],
                    error=str(error) if error else None, code=error.code if error else None,
                    sessions=list(dict.fromkeys(sessions)), schema_errors=trace["schema_errors"],
                    repairs=trace["repairs"], semantic_repair="validation_errors" in payload)
         if not failed and not waiting and isinstance(result, dict):
             from .errata import capture_errata
-            capture_errata(project, result, role, call, _change_id(payload))
+            _diagnostic(capture_errata, project, result, role, call, _change_id(payload))
+
+
+def _diagnostic(callback, *args, **kwargs):
+    """Attempt each diagnostic independently without replacing the adapter outcome."""
+    try:
+        return callback(*args, **kwargs)
+    except Exception:
+        # Evidence, ledger and call closure are separate best-effort diagnostic writes.
+        # Do not expose exception text or let one failure prevent the others.
+        return None
 
 
 def _record_memory_evidence(project, call, payload, result):
