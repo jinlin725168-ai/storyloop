@@ -11,7 +11,8 @@ from storyloop.lessons import render_lesson
 
 def _git(project: Path, *args: str) -> str:
     result = subprocess.run(
-        ["git", *args], cwd=project, capture_output=True, text=True, check=False,
+        ["git", *args], cwd=project, capture_output=True, text=True, encoding="utf-8",
+        check=False,
     )
     if result.returncode:
         raise AssertionError(result.stderr)
@@ -40,6 +41,7 @@ def git_repo(
     _git(project, "init", "-q")
     _git(project, "config", "user.email", "storyloop@example.invalid")
     _git(project, "config", "user.name", "StoryLoop Test")
+    (project / ".git/info/exclude").write_text(".storyloop/\n", encoding="utf-8")
     for relative, content in (files or {"README.md": "repo\n"}).items():
         target = project / relative
         target.parent.mkdir(parents=True, exist_ok=True)

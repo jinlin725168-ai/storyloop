@@ -2,9 +2,11 @@ from pathlib import Path
 import shutil
 import subprocess
 import unittest
+from unittest.mock import patch
 
 from storyloop.lesson_store import (
-    effective_status, lesson_source_commit, lessons_digest, load_lessons_at, stale_ids,
+    confirm_lesson, effective_status, lesson_source_commit, lessons_digest, list_lessons,
+    load_lessons_at, retire_lesson, stale_ids,
 )
 from storyloop.models import StoryLoopError
 from storyloop.storage import write_json
@@ -12,6 +14,115 @@ from tests.lesson_support import commit_all, commit_file, git_repo, head, sample
 
 
 class LessonStoreTests(unittest.TestCase):
+    def test_list_marks_stale_and_reads_recurrences(self):
+        repo = git_repo(files={"app/x.py": "old"})
+        self.addCleanup(shutil.rmtree, repo)
+        entry = sample(scope=["app/**"], baseline_commit=head(repo))
+        write_lesson(repo, entry)
+        commit_all(repo, "add lesson")
+        commit_file(repo, "app/x.py", "changed")
+        write_json(repo / ".storyloop/state/lessons.json", {
+            "L-0001": {"recurrences": ["FEAT-1", "FEAT-2"]},
+        })
+
+        result = list_lessons(repo)
+
+        self.assertEqual(result["lessons"][0]["effective_status"], "needs-review")
+        self.assertEqual(result["lessons"][0]["recurrences"], 2)
+
+    def test_vector_rate_uses_latest_thirty_change_records_and_strict_boundaries(self):
+        repo = git_repo(lessons=[sample()])
+        self.addCleanup(shutil.rmtree, repo)
+        runs = repo / ".storyloop/state/runs"
+        for index in range(31):
+            write_json(runs / f"FEAT-{index:02d}.json", {
+                "change_id": f"FEAT-{index:02d}",
+                "failures": ([{"attempt": 1}] if index < 10 else []),
+            })
+            write_json(repo / f".storyloop/state/telemetry/FEAT-{index:02d}.json", {
+                "version": 1, "change_id": f"FEAT-{index:02d}",
+                "entries": [{"role": "implement", "lessons_provided": ["L-0001"]}],
+            })
+
+        signal = list_lessons(repo)["vector_signal"]
+
+        self.assertEqual(signal["recurrence_rate"], 9 / 30)
+        self.assertFalse(signal["reevaluate"])
+        write_json(runs / "FEAT-30.json", {
+            "change_id": "FEAT-30", "failures": [{"attempt": 1}],
+        })
+        self.assertTrue(list_lessons(repo)["vector_signal"]["reevaluate"])
+
+    def test_vector_rate_is_none_without_provided_lesson_records(self):
+        repo = git_repo(lessons=[sample()])
+        self.addCleanup(shutil.rmtree, repo)
+        write_json(repo / ".storyloop/state/runs/FEAT-1.json", {"failures": [{}]})
+        write_json(repo / ".storyloop/state/telemetry/FEAT-1.json", {
+            "version": 1, "change_id": "FEAT-1", "entries": [{"role": "implement"}],
+        })
+        self.assertIsNone(list_lessons(repo)["vector_signal"]["recurrence_rate"])
+
+    def test_vector_signal_count_must_exceed_two_hundred(self):
+        repo = git_repo()
+        self.addCleanup(shutil.rmtree, repo)
+        entries = [sample(id=f"L-{index:04d}") for index in range(1, 202)]
+        with patch("storyloop.lesson_store.load_lessons_at", return_value=entries[:200]), \
+                patch("storyloop.lesson_store.stale_ids", return_value=set()):
+            self.assertFalse(list_lessons(repo)["vector_signal"]["reevaluate"])
+        with patch("storyloop.lesson_store.load_lessons_at", return_value=entries), \
+                patch("storyloop.lesson_store.stale_ids", return_value=set()):
+            self.assertTrue(list_lessons(repo)["vector_signal"]["reevaluate"])
+
+    def test_confirm_moves_baseline_and_commits(self):
+        repo = git_repo(lessons=[sample()])
+        self.addCleanup(shutil.rmtree, repo)
+        before = head(repo)
+
+        result = confirm_lesson(repo, "L-0001")
+
+        entry = load_lessons_at(repo, head(repo))[0]
+        self.assertEqual(entry["baseline_commit"], before)
+        self.assertEqual(entry["status"], "active")
+        self.assertEqual(result["commit"], head(repo))
+        self.assertEqual(
+            subprocess.run(["git", "log", "-1", "--format=%s"], cwd=repo,
+                           capture_output=True, text=True, encoding="utf-8", check=True).stdout.strip(),
+            "chore(lessons): 确认 L-0001 仍然有效",
+        )
+
+    def test_retire_requires_reason_and_appends_it(self):
+        repo = git_repo(lessons=[sample(body="保留正文\n")])
+        self.addCleanup(shutil.rmtree, repo)
+        with self.assertRaises(StoryLoopError):
+            retire_lesson(repo, "L-0001", "")
+
+        retire_lesson(repo, "L-0001", "接口已删除")
+
+        entry = load_lessons_at(repo, head(repo))[0]
+        self.assertEqual(entry["status"], "retired")
+        self.assertIn("\n\n退休：", entry["body"])
+        self.assertIn("接口已删除", entry["body"])
+
+    def test_mutations_refuse_feature_dirty_and_active_run(self):
+        cases = ("feature", "dirty", "active")
+        for case in cases:
+            with self.subTest(case=case):
+                repo = git_repo(lessons=[sample()])
+                self.addCleanup(shutil.rmtree, repo)
+                if case == "feature":
+                    subprocess.run(["git", "switch", "-q", "-c", "feature/FEAT-1"],
+                                   cwd=repo, check=True)
+                    expected = "feature/"
+                elif case == "dirty":
+                    (repo / "README.md").write_text("dirty\n", encoding="utf-8")
+                    expected = "干净"
+                else:
+                    write_json(repo / ".storyloop/state/runs/FEAT-1.json",
+                               {"status": "IMPLEMENTING"})
+                    expected = "进行中"
+                with self.assertRaisesRegex(StoryLoopError, expected):
+                    confirm_lesson(repo, "L-0001")
+
     def test_missing_directory_is_empty(self):
         repo = git_repo()
         self.addCleanup(shutil.rmtree, repo)

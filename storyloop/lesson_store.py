@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path, PurePosixPath
 
 from .baseline import _git
 from .lessons import LESSONS_ROOT, parse_lesson, validate_lessons
-from .models import StoryLoopError, identifier
+from .models import StoryLoopError, identifier, require, text
 from .path_security import forbidden_path_root
-from .storage import load_json
+from .project_git import commit_paths, current_branch
+from .storage import load_json, locked, write_bytes_atomic, write_text_atomic
 
 
 def _invalid(reason: str) -> StoryLoopError:
@@ -155,3 +157,115 @@ def effective_status(entry: dict, stale: set[str]) -> str:
     if entry["status"] == "active" and entry["id"] in stale:
         return "needs-review"
     return entry["status"]
+
+
+def _recurrence_count(value: object) -> int:
+    recurrences = value.get("recurrences", []) if isinstance(value, dict) else []
+    return len(recurrences) if isinstance(recurrences, list) else 0
+
+
+def _recent_recurrence_rate(project: Path) -> float | None:
+    from .telemetry import ledger_entries
+
+    runs = project / ".storyloop/state/runs"
+    eligible = []
+    for path in sorted(runs.glob("*.json"), reverse=True) if runs.is_dir() else []:
+        state = load_json(path)
+        entries = ledger_entries(project, path.stem)
+        provided = any(isinstance(entry.get("lessons_provided"), list)
+                       and bool(entry["lessons_provided"]) for entry in entries)
+        if provided:
+            eligible.append(state)
+            if len(eligible) == 30:
+                break
+    if not eligible:
+        return None
+    return sum(bool(state.get("failures")) for state in eligible) / len(eligible)
+
+
+def list_lessons(project: Path) -> dict:
+    """List HEAD lessons with computed freshness and vector-search signals."""
+    project = Path(project).resolve()
+    commit = _git(project, "rev-parse", "HEAD").strip()
+    entries = load_lessons_at(project, commit)
+    stale = stale_ids(project, entries, commit)
+    state_path = project / ".storyloop/state/lessons.json"
+    recurrence_state = load_json(state_path) if state_path.is_file() else {}
+    rows = [{
+        "id": entry["id"], "summary": entry["summary"], "tier": entry["tier"],
+        "strength": entry["strength"], "status": entry["status"],
+        "effective_status": effective_status(entry, stale),
+        "recurrences": _recurrence_count(recurrence_state.get(entry["id"])),
+    } for entry in entries]
+    rate = _recent_recurrence_rate(project)
+    signal = {"count": len(rows), "recurrence_rate": rate,
+              "reevaluate": len(rows) > 200 or (rate is not None and rate > 0.3)}
+    return {"lessons": rows, "count": len(rows), "vector_signal": signal}
+
+
+def require_idle_source(project: Path) -> None:
+    """Require a clean non-feature source branch with no active run."""
+    branch = current_branch(project)
+    require(branch and not branch.startswith("feature/"), "不能在 feature/ 分支修改经验")
+    require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
+            "修改经验前工作区必须干净")
+    runs = project / ".storyloop/state/runs"
+    for path in sorted(runs.glob("*.json")) if runs.is_dir() else []:
+        if load_json(path).get("status") not in {"PASSED", "SUPERSEDED"}:
+            raise StoryLoopError(f"存在进行中的运行：{path.stem}")
+
+
+def _mutated_entries(entries: list[dict], lesson_id: str, updates: dict) -> tuple[list[dict], dict]:
+    lesson_id = text(lesson_id, "lesson id")
+    require(any(entry["id"] == lesson_id for entry in entries), f"经验不存在：{lesson_id}")
+    changed = [{**entry, **updates} if entry["id"] == lesson_id else entry for entry in entries]
+    from .project_agents import ROLES
+    validate_lessons(changed, set(ROLES))
+    return changed, next(entry for entry in changed if entry["id"] == lesson_id)
+
+
+def _commit_lesson(project: Path, entry: dict, message: str, original_head: str) -> dict:
+    relative = f"{LESSONS_ROOT}/{entry['id']}.md"
+    target = project / relative
+    original = target.read_bytes()
+    from .lessons import render_lesson
+    try:
+        write_text_atomic(target, render_lesson(entry))
+        return commit_paths(project, [relative], message)
+    except Exception:
+        if _git(project, "rev-parse", "HEAD").strip() == original_head:
+            write_bytes_atomic(target, original)
+            _git(project, "reset", "--", relative)
+        raise
+
+
+def confirm_lesson(project: Path, lesson_id: str) -> dict:
+    """Confirm one lesson against current HEAD and commit the human mutation."""
+    project = Path(project).resolve()
+    with locked(project):
+        require_idle_source(project)
+        commit = _git(project, "rev-parse", "HEAD").strip()
+        entries = load_lessons_at(project, commit)
+        _, entry = _mutated_entries(entries, lesson_id, {
+            "baseline_commit": commit, "status": "active", "updated_at": date.today().isoformat(),
+        })
+        return _commit_lesson(
+            project, entry, f"chore(lessons): 确认 {entry['id']} 仍然有效", commit,
+        )
+
+
+def retire_lesson(project: Path, lesson_id: str, reason: str) -> dict:
+    """Retire one lesson with a dated reason and commit the human mutation."""
+    project = Path(project).resolve()
+    reason = text(reason, "retirement reason")
+    with locked(project):
+        require_idle_source(project)
+        commit = _git(project, "rev-parse", "HEAD").strip()
+        entries = load_lessons_at(project, commit)
+        current = next((entry for entry in entries if entry["id"] == lesson_id), None)
+        require(current is not None, f"经验不存在：{lesson_id}")
+        body = current["body"] + f"\n\n退休：{date.today().isoformat()} {reason}\n"
+        _, entry = _mutated_entries(entries, lesson_id, {
+            "status": "retired", "updated_at": date.today().isoformat(), "body": body,
+        })
+        return _commit_lesson(project, entry, f"chore(lessons): 退休 {entry['id']}", commit)
