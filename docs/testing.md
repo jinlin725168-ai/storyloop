@@ -25,7 +25,7 @@
 
 | 套件 | 内容 | 什么时候跑 |
 |---|---|---|
-| `core` | 主流程端到端（`test_product_e2e`、`test_nature_e2e`、`test_reports_e2e`、`test_roles_e2e`、`test_project_loop`）、安全边界、命令行，以及每个都在几秒内跑完的纯逻辑模块 | 每个 PR、每次 push 到 main；Linux 4 路并行约 1 分钟 |
+| `core` | 主流程端到端（`test_product_e2e`、`test_nature_e2e`、`test_reports_e2e`、`test_roles_e2e`、`test_project_loop`）、安全边界、命令行、跨平台回归（短路径、autocrlf、UTF-8 管道），以及每个都在几秒内跑完的纯逻辑模块 | 每个 PR、每次 push 到 main；Linux 4 路并行约 1 分钟 |
 | `full` | `tests/test_*.py` 全部模块 | CI 每天定时一次、手动触发；本地合并前、按计划实现时 |
 
 新增的测试模块默认只在 `full` 里；作者认为它守护的是主流程或安全边界时，在 `suites.py` 对应分组里加上它，`test_suites` 会检查名单里的模块都存在。分流、设计批准等重型流程的模块（单个就要几分钟）只在 `full` 里，它们的回归最晚在第二天的定时全量里暴露。

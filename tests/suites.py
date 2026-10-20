@@ -41,7 +41,13 @@ SAFETY = [
 # The command line users type.
 COMMAND_LINE = ["tests.test_cli", "tests.test_product_cli"]
 
+# Cross-platform regressions: 8.3 short paths, core.autocrlf checkouts, UTF-8 pipes (all under 1 s).
+PLATFORM = [
+    "tests.test_characterization_baseline", "tests.test_claude_adapter_encoding",
+    "tests.test_evidence_root_spelling", "tests.test_line_endings",
+]
+
 # The suite runner and this list.
 RUNNER = ["tests.test_suites"]
 
-CORE = sorted(set(FAST + END_TO_END + SAFETY + COMMAND_LINE + RUNNER))
+CORE = sorted(set(FAST + END_TO_END + SAFETY + COMMAND_LINE + PLATFORM + RUNNER))
