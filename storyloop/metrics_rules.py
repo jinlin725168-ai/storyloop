@@ -204,9 +204,12 @@ def _r7(metrics: dict, limits: dict) -> list[dict]:
     layers = value.get("by")
     if not isinstance(layers, dict):
         return [_unavailable("R7", "CI_LAYER_EVIDENCE_NOT_RECORDED")]
-    result[0]["layers"] = [name for name, count in sorted(
-        layers.items(), key=lambda item: (-item[1], item[0]))
-        if isinstance(name, str) and _nonnegative(count) and count > 0]
+    valid = [(name, count) for name, count in layers.items()
+             if isinstance(name, str) and name and _nonnegative(count) and count > 0]
+    if not valid:
+        return [_unavailable("R7", "CI_LAYER_EVIDENCE_NOT_RECORDED")]
+    result[0]["layers"] = [name for name, _ in sorted(
+        valid, key=lambda item: (-item[1], item[0]))]
     return result
 
 

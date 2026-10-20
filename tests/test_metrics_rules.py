@@ -199,6 +199,17 @@ class SuggestionTests(unittest.TestCase):
 
         self.assertEqual(row["layers"], ["smoke", "acceptance", "checks"])
 
+    def test_r7_requires_at_least_one_valid_positive_failed_layer_count(self):
+        for counts in ({}, {"smoke": 0}, {"smoke": "unknown"}, {"": 2}):
+            with self.subTest(counts=counts):
+                m = metrics_for("R7", 0.2, 10)
+                m["M6"]["by"] = counts
+
+                row = next(item for item in suggest(m, DEFAULTS) if item["rule"] == "R7")
+
+                self.assertEqual(row,
+                                 {"rule": "R7", "unavailable": "CI_LAYER_EVIDENCE_NOT_RECORDED"})
+
     def test_r8_low_branch_and_r12_unclaimed_submetric_fire(self):
         low = metrics_for("R8", 0.1, 10)
         row = next(item for item in suggest(low, DEFAULTS) if "text" in item)
