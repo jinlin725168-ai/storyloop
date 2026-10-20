@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from suites import CORE  # noqa: E402  (tests/ is not a package root when run as a script)
 
 RAN = re.compile(r"^Ran (\d+) tests? in", re.MULTILINE)
+SKIPPED = re.compile(r"(?:^|[,(]\s*)skipped=(\d+)", re.MULTILINE)
 
 
 def modules(root: Path, suite: str) -> list[str]:
@@ -34,8 +35,10 @@ def run_module(root: Path, module: str) -> dict:
     done = subprocess.run([sys.executable, "-m", "unittest", module], cwd=root, capture_output=True)
     output = done.stderr.decode("utf-8", "replace") + done.stdout.decode("utf-8", "replace")
     ran = RAN.search(output)
+    skipped = SKIPPED.search(output)
     return {"module": module, "ok": done.returncode == 0, "seconds": time.monotonic() - start,
-            "tests": int(ran.group(1)) if ran else 0, "output": output}
+            "tests": int(ran.group(1)) if ran else 0,
+            "skipped": int(skipped.group(1)) if skipped else 0, "output": output}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -51,19 +54,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.list:
         print("\n".join(names))
         return 0
-    started, failed, total = time.monotonic(), [], 0
+    started, failed, total, skipped = time.monotonic(), [], 0, 0
     with ThreadPoolExecutor(max(1, args.workers)) as pool:
         futures = [pool.submit(run_module, args.root, name) for name in names]
         for future in as_completed(futures):
             result = future.result()
             total += result["tests"]
+            skipped += result["skipped"]
             print(f"{'ok  ' if result['ok'] else 'FAIL'} {result['seconds']:7.1f}s  {result['module']}", flush=True)
             if not result["ok"]:
                 failed.append(result)
     for result in failed:
         print(f"\n===== {result['module']} =====\n{result['output']}", flush=True)
     status = f"失败 {len(failed)} 个模块" if failed else "全部通过"
-    print(f"\n{args.suite}: {len(names)} 个模块，{total} 个测试，{status}，"
+    print(f"\n{args.suite}: {len(names)} 个模块，{total} 个测试，跳过 {skipped} 个，{status}，"
           f"用时 {time.monotonic() - started:.0f}s（{args.workers} 路并行）")
     return 1 if failed else 0
 

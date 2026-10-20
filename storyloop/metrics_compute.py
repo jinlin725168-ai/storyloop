@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import math
 from pathlib import Path
 
 from . import baseline
@@ -30,6 +31,7 @@ from .metrics_compute_support import (
     metric,
 )
 from .models import StoryLoopError
+from .report_evidence import MAX_RUN_BYTES, _read_object
 
 def first_pass(records: list[dict]) -> dict:
     """M1: passed changes without any recorded correction failure."""
@@ -304,3 +306,165 @@ def interventions(records: list[dict]) -> dict:
     return {"id": "M10", "value": value, "numerator": sum(counts.values()),
             "denominator": len(records), "n": len(records), "changes": _unique(changes),
             "missing": missing, "coverage": dict(coverage)}
+
+
+def cost(records: list[dict]) -> dict:
+    """M11: known call cost and raw wall time by role and applied tier."""
+    rows: dict[str, dict] = {}
+    changes, missing = [], []
+    for record in records:
+        ledger = record.get("ledger")
+        if not isinstance(ledger, list):
+            _miss(missing, record, _gap(record, "ledger"))
+            continue
+        if ledger:
+            changes.append(_id(record))
+        for entry in ledger:
+            if not isinstance(entry, dict):
+                _miss(missing, record, "UNREADABLE")
+                continue
+            role = _label(entry.get("role"))
+            tier = _label(entry.get("tier_applied"))
+            row = rows.setdefault(f"{role}|{tier}", {
+                "calls": 0, "agent_ms": 0, "cost_usd": 0.0, "known_cost_calls": 0,
+            })
+            _add_call(row, entry)
+    by = {key: _cost_row(value) for key, value in sorted(rows.items())}
+    calls = sum(row["calls"] for row in by.values())
+    known = sum(rows[key]["known_cost_calls"] for key in rows)
+    known_cost = round(sum(row["cost_usd"] for row in by.values()), 4)
+    return {"id": "M11", "value": known_cost, "numerator": known_cost,
+            "denominator": calls, "n": calls, "changes": _unique(changes),
+            "missing": missing, "calls": calls,
+            "agent_ms": sum(row["agent_ms"] for row in by.values()),
+            "cost_coverage": _ratio(known, calls), "by": by}
+
+
+def lessons(project: Path, records: list[dict]) -> dict:
+    """M12: recurrence among provided changes and unclaimed provided entries."""
+    root = Path(project).resolve()
+    lessons_root = root / "openspec/lessons"
+    if not _configured_lessons(root, lessons_root):
+        return {"id": "M12", "recurrence_rate": _not_configured_metric(),
+                "unclaimed_rate": _not_configured_metric()}
+    provided_by_change, provided_count, unclaimed, unclaimed_changes, missing = _lesson_usage(records)
+    recurrence_state = _recurrence_state(root)
+    if recurrence_state is None:
+        recurrence_missing = [{"change_id": change_id, "reason": "UNREADABLE"}
+                              for change_id in provided_by_change]
+        recurrence = metric("M12", 0, 0, [], recurrence_missing)
+    else:
+        relevant_lessons = {item for items in provided_by_change.values() for item in items}
+        cohort = set(provided_by_change)
+        recurred = sorted({change_id for lesson_id in relevant_lessons
+                           for change_id in _recurrences(recurrence_state.get(lesson_id))
+                           if change_id in cohort})
+        recurrence = metric("M12", len(recurred), len(cohort), recurred)
+    return {"id": "M12", "recurrence_rate": recurrence,
+            "unclaimed_rate": metric("M12", unclaimed, provided_count,
+                                     unclaimed_changes, missing)}
+
+
+def local_green_ci_red(results: dict[str, dict] | None, records: list[dict]) -> dict:
+    """M6: CI failures among locally passed changes that have a valid CI result."""
+    if results is None:
+        value = metric("M6", 0, 0, [])
+        value.update({"reason": "CI_RESULTS_NOT_PROVIDED", "by": {}})
+        return value
+    eligible, failed, layers = [], [], Counter()
+    for record in records:
+        change_id = _id(record)
+        result = results.get(change_id)
+        if record.get("status") != "PASSED" or not isinstance(result, dict):
+            continue
+        eligible.append(change_id)
+        if result.get("status") != "FAILED":
+            continue
+        failed.append(change_id)
+        for layer, status in (result.get("layers") or {}).items():
+            if isinstance(layer, str) and status == "FAILED":
+                layers[layer] += 1
+    return metric("M6", len(failed), len(eligible), failed, by=_counts(layers))
+
+
+def _add_call(row: dict, entry: dict) -> None:
+    row["calls"] += 1
+    wall_ms = entry.get("wall_ms")
+    if _finite_nonnegative(wall_ms):
+        row["agent_ms"] += wall_ms
+    value = entry.get("cost_usd")
+    if _finite_nonnegative(value):
+        row["cost_usd"] += value
+        row["known_cost_calls"] += 1
+
+
+def _cost_row(row: dict) -> dict:
+    return {"calls": row["calls"], "agent_ms": row["agent_ms"],
+            "cost_usd": round(row["cost_usd"], 4),
+            "cost_coverage": _ratio(row["known_cost_calls"], row["calls"])}
+
+
+def _label(value: object) -> str:
+    return value if isinstance(value, str) and value else UNRECORDED
+
+
+def _finite_nonnegative(value: object) -> bool:
+    return type(value) in (int, float) and math.isfinite(value) and value >= 0
+
+
+def _configured_lessons(root: Path, folder: Path) -> bool:
+    try:
+        return (not folder.is_symlink() and folder.is_dir()
+                and folder.resolve().is_relative_to(root))
+    except OSError:
+        return False
+
+
+def _lesson_usage(records: list[dict]) -> tuple[dict, int, int, list[str], list[dict]]:
+    provided_by_change: dict[str, set[str]] = {}
+    provided_count = unclaimed = 0
+    unclaimed_changes, missing = [], []
+    for record in records:
+        ledger = record.get("ledger")
+        if not isinstance(ledger, list):
+            _miss(missing, record, _gap(record, "ledger"))
+            continue
+        for entry in ledger:
+            if not isinstance(entry, dict):
+                _miss(missing, record, "UNREADABLE")
+                continue
+            provided = entry.get("lessons_provided", [])
+            claimed = entry.get("lessons_claimed", [])
+            if not _string_list(provided) or not _string_list(claimed):
+                _miss(missing, record, "UNREADABLE")
+                continue
+            provided_by_change.setdefault(_id(record), set()).update(provided)
+            provided_count += len(provided)
+            count = sum(item not in claimed for item in provided)
+            unclaimed += count
+            if count:
+                unclaimed_changes.append(_id(record))
+    return ({key: value for key, value in provided_by_change.items() if value},
+            provided_count, unclaimed, _unique(unclaimed_changes), missing)
+
+
+def _recurrence_state(root: Path) -> dict | None:
+    path = root / ".storyloop/state/lessons.json"
+    if not path.exists() and not path.is_symlink():
+        return {}
+    return _read_object(root, path, MAX_RUN_BYTES)
+
+
+def _recurrences(value: object) -> list[str]:
+    items = value.get("recurrences") if isinstance(value, dict) else None
+    return items if _string_list(items) else []
+
+
+def _string_list(value: object) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) and item for item in value)
+
+
+def _not_configured_metric() -> dict:
+    result = metric("M12", 0, 0, [])
+    result["reason"] = "LESSONS_NOT_CONFIGURED"
+    return result

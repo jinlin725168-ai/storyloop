@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+import tempfile
 import unittest
 
 from storyloop.metrics_compute import (
     attempts,
     contract_ratio,
+    cost,
     escapes,
     first_pass,
     forced_heavy,
     interventions,
+    lessons,
     metric,
     overrule_rate,
     rework,
@@ -350,6 +354,58 @@ class ComputeTests(unittest.TestCase):
         ])
         self.assertEqual(result["value"]["answers"], 4)
         self.assertIn({"change_id": "C", "reason": "UNREADABLE"}, result["missing"])
+
+    def test_cost_uses_raw_wall_time_and_reports_coverage_without_estimating(self):
+        records = [rec("A", ledger=[
+            {"role": "review", "tier_applied": "strong", "cost_usd": 0.5,
+             "wall_ms": 10},
+            {"role": "review", "tier_applied": "strong", "wall_ms": 20},
+            {"role": "implement", "cost_usd": 0.25, "wall_ms": 5},
+        ])]
+
+        result = cost(records)
+
+        row = result["by"]["review|strong"]
+        self.assertEqual((row["calls"], row["agent_ms"], row["cost_usd"],
+                          row["cost_coverage"]), (2, 30, 0.5, 0.5))
+        self.assertEqual(result["by"]["implement|未记录"]["cost_usd"], 0.25)
+        self.assertEqual((result["value"], result["calls"], result["cost_coverage"]),
+                         (0.75, 3, 0.6667))
+
+    def test_lessons_not_configured(self):
+        with tempfile.TemporaryDirectory() as folder:
+            result = lessons(Path(folder), [rec("A")])
+
+        self.assertEqual(result["recurrence_rate"]["reason"], "LESSONS_NOT_CONFIGURED")
+        self.assertEqual(result["unclaimed_rate"]["reason"], "LESSONS_NOT_CONFIGURED")
+
+    def test_lessons_use_bare_recurrence_mapping_and_cohort_ids(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = Path(folder)
+            (project / "openspec/lessons").mkdir(parents=True)
+            state = project / ".storyloop/state/lessons.json"
+            state.parent.mkdir(parents=True)
+            state.write_text(json.dumps({
+                "L-1": {"recurrences": ["B", "B", "OUTSIDE"]},
+                "L-2": {"recurrences": ["B"]},
+            }), encoding="utf-8")
+            records = [
+                rec("A", ledger=[{"lessons_provided": ["L-1", "L-2"],
+                                  "lessons_claimed": ["L-1"]}]),
+                rec("B", ledger=[{"lessons_provided": ["L-2"],
+                                  "lessons_claimed": ["L-2"]}]),
+            ]
+
+            result = lessons(project, records)
+
+        self.assertEqual((result["recurrence_rate"]["numerator"],
+                          result["recurrence_rate"]["denominator"],
+                          result["recurrence_rate"]["value"]), (1, 2, 0.5))
+        self.assertEqual(result["recurrence_rate"]["changes"], ["B"])
+        self.assertEqual((result["unclaimed_rate"]["numerator"],
+                          result["unclaimed_rate"]["denominator"],
+                          result["unclaimed_rate"]["value"]), (1, 3, 0.3333))
+        self.assertEqual(result["unclaimed_rate"]["changes"], ["A"])
 
 
 if __name__ == "__main__":

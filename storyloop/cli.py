@@ -29,7 +29,7 @@ from .routing_cli import dispatch_routing, BLOCKED
 from .routing_report import draft_stop, report_routing
 from .requirement_checklist import blocking_items, evaluate_checklist
 from .run_recovery import reset_run
-from .smoke_runner import run_ci
+from .ci_command import run_ci_command
 from .storage import load_json
 from .telemetry import adopt_pending, summarize
 from .memory_cli import add_memory_arguments, dispatch_memory, render_memory
@@ -103,9 +103,10 @@ def _product_arguments(child, command):
     elif command in {"approve", "status", "report", "ci"}:
         group = child.add_mutually_exclusive_group() if command == "approve" else child
         group.add_argument("--change", dest="change_id", required=command == "ci")
+        if command == "ci":
+            child.add_argument("--record", type=Path)
         if command == "approve":
             group.add_argument("--draft", help="审批经验或勘误草案")
-        if command == "approve":
             for flag in ("readiness", "design", "continue-heavy", "option", "reason", "tier"):
                 child.add_argument("--" + flag)
             child.add_argument("--no-interactive", action="store_true",
@@ -191,7 +192,7 @@ def dispatch(args) -> dict:
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return dispatch_memory(project, args)
     if args.command == "ci":
-        return run_ci(project, args.change_id)
+        return run_ci_command(project, args.change_id, args.record)
     require(_is_product_project(project), "Run storyloop init on this Git project first")
     return _product_dispatch(project, args)
 
