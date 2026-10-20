@@ -28,8 +28,11 @@ def change_paths(project: Path, change_id: str | None) -> list[str]:
     scope = routing.get('scope') or (routing.get('assessment') or {}).get('scope') or {}
     paths = list(scope.get('touched', [])) + list(scope.get('creates', []))
     if state.get('source_head') and state.get('feature_branch'):
-        paths.extend(filter(None, _git(project, 'diff', '--name-only', '-z',
-                          f"{state['source_head']}...{state['feature_branch']}", '--').split('\0')))
+        branch = f"refs/heads/{state['feature_branch']}"
+        refs = _git(project, 'for-each-ref', '--format=%(refname)', branch).splitlines()
+        if branch in refs:
+            paths.extend(filter(None, _git(project, 'diff', '--name-only', '-z',
+                              f"{state['source_head']}...{branch}", '--').split('\0')))
     return list(dict.fromkeys(paths))
 
 
@@ -63,6 +66,8 @@ def lessons_payload(project: Path, role: str, payload: dict) -> tuple[dict | Non
         return select_lessons(entries, role, change_paths(project, change_id(payload)),
                               stale_ids(project, entries, source)), None
     except StoryLoopError as exc:
+        if exc.code != 'LESSON_INVALID':
+            raise
         return None, f'LESSON_INVALID: {exc}'
 
 

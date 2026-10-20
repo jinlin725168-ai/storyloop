@@ -70,6 +70,41 @@ class MemoryCompatibilityTests(unittest.TestCase):
             'core': [], 'relevant': [{'path': path}]}}, [])
         self.assertEqual(manifest['lessons'][0]['sha256'], hashlib.sha256(frozen).hexdigest())
 
+    def test_missing_feature_branch_uses_assessment_scope_without_skipping_lessons(self):
+        import shutil
+        from tests.lesson_support import git_repo, head, _git
+        from storyloop.storage import write_json
+        from storyloop.lesson_retrieval import lessons_payload
+        root = git_repo(lessons=[sample(scope=['app/**'])])
+        self.addCleanup(shutil.rmtree, root)
+        # A descendant ref must not be mistaken for the absent exact branch.
+        _git(root, 'branch', 'feature/missing/child')
+        write_json(root / '.storyloop/state/runs/FEAT-1.json', {
+            'source_head': head(root), 'contract_commit': head(root),
+            'feature_branch': 'feature/missing',
+            'routing': {'assessment': {'scope': {'touched': ['app/old.py'], 'creates': ['app/new.py']}}}})
+        self.assertEqual(change_paths(root, 'FEAT-1'), ['app/old.py', 'app/new.py'])
+        payload, reason = lessons_payload(root, 'implement', {'change_id': 'FEAT-1'})
+        self.assertIsNone(reason)
+        self.assertEqual([row['id'] for row in payload['relevant']], ['L-0001'])
+
+    def test_git_failure_in_change_paths_is_not_misreported_as_invalid_lessons(self):
+        import shutil
+        from unittest.mock import patch
+        from tests.lesson_support import git_repo, head
+        from storyloop.storage import write_json
+        from storyloop.lesson_retrieval import lessons_payload
+        from storyloop.models import StoryLoopError
+        root = git_repo(lessons=[sample()])
+        self.addCleanup(shutil.rmtree, root)
+        write_json(root / '.storyloop/state/runs/FEAT-1.json', {
+            'source_head': head(root), 'contract_commit': head(root), 'feature_branch': 'feature/test'})
+        failure = StoryLoopError('Git failed safely', code='GIT_BLOCKED')
+        with patch('storyloop.lesson_retrieval._git', side_effect=failure):
+            with self.assertRaises(StoryLoopError) as raised:
+                lessons_payload(root, 'implement', {'change_id': 'FEAT-1'})
+        self.assertIs(raised.exception, failure)
+
     def test_product_entrypoint_accepts_memory_metadata(self):
         from storyloop.models import validate_product
         from tests.support import product
