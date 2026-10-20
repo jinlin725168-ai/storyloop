@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import shlex
 from pathlib import Path
 import tempfile
 import unittest
@@ -100,7 +101,9 @@ class LogAndNextStepTests(unittest.TestCase):
             result = run_change(root, change_id, services)
             self.assertEqual(result["status"], "NO_PROGRESS")
             # The engine names the resolved project path (on Windows the temp dir may be an 8.3 short name).
-            self.assertIn(f"storyloop run {root.resolve()} --change {change_id}", result["next"])
+            # Hints are shell-quoted, so a Windows path (backslashes) appears in single quotes.
+            self.assertIn(f"storyloop run {shlex.quote(str(root.resolve()))} --change {change_id}",
+                          result["next"])
             # A started run's contract cannot be revised, so the hint must not suggest it.
             self.assertNotIn("修订合同", result["next"])
             self.assertTrue(result["next"])

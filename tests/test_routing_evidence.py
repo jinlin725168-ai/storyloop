@@ -181,6 +181,7 @@ class EvidenceTests(unittest.TestCase):
             git(self.root, "worktree", "add", "-q", "--detach", str(linked), self.head)
             self.assertEqual(reference_count(linked, self.head, "serve"), 1)
 
+    @unittest.skipUnless(os.name == "posix", "Windows file names are UTF-16 and cannot hold invalid UTF-8")
     def test_invalid_utf8_git_path_makes_path_evidence_unavailable(self):
         raw = os.fsencode(self.root / "app") + b"/invalid-\xff.py"
         descriptor = os.open(raw, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)

@@ -20,7 +20,7 @@ from tests.test_baseline_behavior import repository
 class ReportCallProvenanceTests(unittest.TestCase):
     def test_snapshot_freezes_exact_text_version_path_and_hash(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            root = Path(folder).resolve()  # the engine reads resolved paths (8.3 temp names on Windows)
             skill = root / ".codex/skills/oracle-craft/SKILL.md"
             skill.parent.mkdir(parents=True)
             skill.write_text("---\nname: oracle-craft\nversion: 1.2\n---\nfirst\n", encoding="utf-8")
@@ -39,7 +39,7 @@ class ReportCallProvenanceTests(unittest.TestCase):
 
     def test_snapshot_version_is_parsed_from_the_same_frozen_read_as_hash(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            root = Path(folder).resolve()  # the engine reads resolved paths (8.3 temp names on Windows)
             skill = root / ".codex/skills/oracle-craft/SKILL.md"
             skill.parent.mkdir(parents=True)
             skill.write_text("placeholder", encoding="utf-8")
