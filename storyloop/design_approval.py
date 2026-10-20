@@ -37,12 +37,24 @@ def _validate_context(project: Path, change: dict, state: dict) -> None:
             == state['contract_digest'], 'Approved contract changed')
     require(current_branch(project) == state['feature_branch'], 'Resume the saved StoryLoop branch')
     verify_baseline(project, resume=True)
-    require(_git(project, 'rev-parse', state['source_branch']).strip()
-            == state['source_head'], 'Saved source branch moved outside a base upgrade')
+    source = _git(project, 'rev-parse', state['source_branch']).strip()
+    baseline = load_baseline(project)['source_head']
+    require(source == baseline or _frozen_lesson_source(project, state, baseline, source),
+            'Saved source branch moved outside a base upgrade')
     require(_git(project, 'merge-base', state['contract_commit'], 'HEAD').strip()
             == state['contract_commit'], 'Contract source is no longer an ancestor')
     require(digest(state['routing']['policy']) == state['routing']['policy_digest'],
             'Frozen routing policy changed')
+
+
+def _frozen_lesson_source(project: Path, state: dict, baseline: str, source: str) -> bool:
+    """Permit only lesson commits frozen before this run, never later source movement."""
+    if source != state['source_head']:
+        return False
+    if _git(project, 'merge-base', baseline, source).strip() != baseline:
+        return False
+    paths = _git(project, 'diff', '--name-only', '-z', baseline, source).split('\0')
+    return all(path.startswith('openspec/lessons/') for path in paths if path)
 
 
 def current_binding(project: Path, change: dict, state: dict) -> dict:
