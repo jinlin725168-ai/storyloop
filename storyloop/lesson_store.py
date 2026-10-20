@@ -248,6 +248,9 @@ def confirm_lesson(project: Path, lesson_id: str) -> dict:
         require_idle_source(project)
         commit = _git(project, "rev-parse", "HEAD").strip()
         entries = load_lessons_at(project, commit)
+        current = next((entry for entry in entries if entry["id"] == lesson_id), None)
+        require(current is not None, f"经验不存在：{lesson_id}")
+        require(current["status"] != "retired", "不能确认 retired 经验")
         _, entry = _mutated_entries(entries, lesson_id, {
             "baseline_commit": commit, "status": "active", "updated_at": date.today().isoformat(),
         })

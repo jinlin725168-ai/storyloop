@@ -91,6 +91,18 @@ class LessonStoreTests(unittest.TestCase):
             "chore(lessons): 确认 L-0001 仍然有效",
         )
 
+    def test_confirm_refuses_retired_without_writes(self):
+        repo = git_repo(lessons=[sample(status='retired')])
+        self.addCleanup(shutil.rmtree, repo)
+        before = head(repo)
+        target = repo / 'openspec/lessons/L-0001.md'
+        original = target.read_bytes()
+        with self.assertRaisesRegex(StoryLoopError, 'retired'):
+            confirm_lesson(repo, 'L-0001')
+        self.assertEqual(head(repo), before)
+        self.assertEqual(target.read_bytes(), original)
+        self.assertEqual(real_git(repo, 'status', '--porcelain'), '')
+
     def test_confirm_has_no_fallible_enrichment_after_commit(self):
         repo = git_repo(lessons=[sample()])
         self.addCleanup(shutil.rmtree, repo)
