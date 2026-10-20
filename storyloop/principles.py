@@ -73,12 +73,3 @@ def validate_principles(value: dict) -> dict:
         require(identity == item['id'] and identity not in seen, 'Duplicate or noncanonical principle id')
         seen.add(identity)
     return {'version': version, 'changelog': changelog}
-
-
-def principles_meta(project: Path) -> dict:
-    """Read metadata only from the verified, frozen baseline principle source."""
-    source = load_principles(project)
-    if source['status'] == 'NOT_CONFIGURED':
-        return {'version': '0.0.0', 'changelog': []}
-    commit = load_baseline(project)['source_head']
-    return validate_principles(json.loads(_git(project, 'show', commit + ':' + PRINCIPLES_PATH)))

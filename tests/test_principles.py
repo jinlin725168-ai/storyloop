@@ -1,6 +1,7 @@
 import shutil
 import unittest
-from storyloop.principles import principles_meta, validate_principles, load_principles
+from storyloop.principles import validate_principles, load_principles
+from storyloop.storage import load_json
 from storyloop.base_upgrade import upgrade_baseline
 from storyloop.lesson_landing import approve_draft
 from storyloop.models import StoryLoopError
@@ -12,7 +13,8 @@ class PrinciplesTests(unittest.TestCase):
     def test_defaults_and_legacy(self):
         project = initialized_project()
         self.addCleanup(shutil.rmtree, project)
-        self.assertEqual(principles_meta(project), {'version': '0.0.0', 'changelog': []})
+        self.assertEqual(load_principles(project)['status'], 'NOT_CONFIGURED')
+        self.assertEqual(validate_principles({'principles': []}), {'version': '0.0.0', 'changelog': []})
         self.assertEqual(validate_principles({'version': 1, 'principles': []})['version'], '0.0.0')
 
     def test_principles_landing_and_frozen_read(self):
@@ -25,8 +27,8 @@ class PrinciplesTests(unittest.TestCase):
         with self.assertRaises(StoryLoopError):
             load_principles(project)
         upgrade_baseline(project, result['base_proposal'])
-        self.assertEqual(principles_meta(project)['version'], '0.0.1')
-        self.assertEqual(principles_meta(project)['changelog'][0]['source'], 'manual')
+        self.assertEqual(validate_principles(load_json(project / 'openspec/principles.json'))['version'], '0.0.1')
+        self.assertEqual(validate_principles(load_json(project / 'openspec/principles.json'))['changelog'][0]['source'], 'manual')
 
     def test_legacy_file_loads_from_baseline(self):
         from storyloop.baseline import bootstrap_project
@@ -35,7 +37,7 @@ class PrinciplesTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, project)
         bootstrap_project(project)
         self.assertEqual(load_principles(project)['principles'][0]['text'], 'old')
-        self.assertEqual(principles_meta(project)['version'], '0.0.0')
+        self.assertEqual(validate_principles(load_json(project / 'openspec/principles.json'))['version'], '0.0.0')
 
     def test_invalid_versions_rejected(self):
         for version in (True, 2, '1.2', '01.2.3', None):
@@ -50,5 +52,5 @@ class PrinciplesTests(unittest.TestCase):
             landing = {'kind': 'principles', 'principle': {'id': 'P1', 'text': value}, 'change': value}
             result = approve_draft(helper.project, helper.draft(strength='knowledge', landing=landing))
             upgrade_baseline(helper.project, result['base_proposal'])
-            self.assertEqual(principles_meta(helper.project)['version'], f'0.0.{number}')
+            self.assertEqual(validate_principles(load_json(helper.project / 'openspec/principles.json'))['version'], f'0.0.{number}')
             self.assertEqual(load_principles(helper.project)['principles'], [landing['principle']])

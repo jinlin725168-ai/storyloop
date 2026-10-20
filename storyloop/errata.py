@@ -8,6 +8,7 @@ from .drafts import create_draft
 from .facts import valid_location
 from .models import StoryLoopError, require
 from .path_security import repository_relative, safe_target
+from .call_log import call_folder
 from .storage import load_json, write_json
 
 ERRATA_PATH = 'openspec/foundation/errata.md'
@@ -27,9 +28,6 @@ def defer_errata(*, manual=False):
     token = _PENDING.set(current)
     try:
         yield
-    except BaseException:
-        raise
-    else:
         if current['accepted']:
             if parent is not None:
                 parent['callbacks'].extend(current['callbacks'])
@@ -69,7 +67,7 @@ def _validate(project, item):
 def _meta_path(project, call_id):
     require(isinstance(call_id, str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', call_id),
             '无效 call_id')
-    return safe_target(project, f'.storyloop/state/telemetry/calls/{call_id}/meta.json', 'errata call')
+    return safe_target(project, (call_folder(project, call_id) / 'meta.json').relative_to(project).as_posix(), 'errata call')
 
 
 def _record(project, call_id, result):

@@ -10,6 +10,7 @@ from .lesson_store import lessons_digest
 from .path_security import safe_target
 from .report_items import item
 from .retrospective import detect_signals
+from .call_log import call_folder
 from .storage import load_json
 
 
@@ -72,7 +73,7 @@ def _complete_meta(project: Path, call: object) -> dict | None:
     if not isinstance(call, str) or _CALL.fullmatch(call) is None:
         return None
     try:
-        path = safe_target(project, f".storyloop/state/telemetry/calls/{call}/meta.json", "call evidence")
+        path = safe_target(project, (call_folder(project, call) / 'meta.json').relative_to(project).as_posix(), 'call evidence')
         if path.is_symlink() or not path.is_file():
             return None
         value = load_json(path)

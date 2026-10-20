@@ -18,6 +18,7 @@ from .project_agents import invoke_project_agent, ROLES
 from .project_loop_guards import read_only_call
 from .project_loop_support import save_run
 from .stop_report import STOP_STATUSES
+from .call_log import call_folder
 from .storage import load_json, locked, write_json
 from .telemetry import ledger_entries
 
@@ -25,7 +26,7 @@ from .telemetry import ledger_entries
 def _meta_path(project, call):
     require(isinstance(call, str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', call),
             '调用证据 call_id 无效')
-    return safe_target(project, f'.storyloop/state/telemetry/calls/{call}/meta.json', 'call evidence')
+    return safe_target(project, (call_folder(project, call) / 'meta.json').relative_to(project).as_posix(), 'call evidence')
 
 
 def _provided(project, change_id):
