@@ -146,6 +146,11 @@ def _r3(metrics: dict, limits: dict) -> list[dict]:
     output = []
     for name, row in sorted(groups.items()):
         result = _simple_high("R3", row, limits, group=name)
+        for item in result:
+            if "text" in item:
+                item["rule_ids"] = _most_frequent(row.get("upgrade_rules"))
+                if not item["rule_ids"]:
+                    item["rules_unavailable"] = "UPGRADE_RULE_EVIDENCE_NOT_RECORDED"
         output.extend(result)
     return output
 
@@ -178,10 +183,11 @@ def _r5(metrics: dict, limits: dict) -> list[dict]:
         return [_unavailable("R5", "ADAPTER_EVIDENCE_NOT_RECORDED")]
     adapter, count = max(known, key=lambda item: (item[1], item[0])) if known else (None, 0)
     share = count / total
-    if share <= 0.7:
-        return []
-    return [_fired("R5", share, 0.7, n, value.get("agent_failure_changes"),
-                   TEXTS["R5"], group=adapter)]
+    if share > 0.7:
+        return [_fired("R5", share, 0.7, n, value.get("agent_failure_changes"),
+                       TEXTS["R5"], group=adapter)]
+    return ([_unavailable("R5", "ADAPTER_EVIDENCE_NOT_RECORDED")]
+            if counts.get(_UNRECORDED, 0) else [])
 
 
 def _r6(metrics: dict, limits: dict) -> list[dict]:
@@ -191,7 +197,17 @@ def _r6(metrics: dict, limits: dict) -> list[dict]:
 
 
 def _r7(metrics: dict, limits: dict) -> list[dict]:
-    return _simple_high("R7", metrics.get("M6"), limits)
+    value = metrics.get("M6")
+    result = _simple_high("R7", value, limits)
+    if not result or "text" not in result[0] or not isinstance(value, dict):
+        return result
+    layers = value.get("by")
+    if not isinstance(layers, dict):
+        return [_unavailable("R7", "CI_LAYER_EVIDENCE_NOT_RECORDED")]
+    result[0]["layers"] = [name for name, count in sorted(
+        layers.items(), key=lambda item: (-item[1], item[0]))
+        if isinstance(name, str) and _nonnegative(count) and count > 0]
+    return result
 
 
 def _r8(metrics: dict, limits: dict) -> list[dict]:
@@ -208,7 +224,7 @@ def _r8(metrics: dict, limits: dict) -> list[dict]:
                        evidence, TEXTS["R8"])]
     if ratio < limits["R8"]["low"]:
         return [_fired("R8", ratio, limits["R8"]["low"], n,
-                       evidence, _R8_LOW_TEXT, direction="low")]
+                       value.get("changes"), _R8_LOW_TEXT, direction="low")]
     return []
 
 
@@ -230,7 +246,10 @@ def _r11(metrics: dict, limits: dict) -> list[dict]:
     coverage = _finite(value.get("cost_coverage"))
     if calls is None or coverage is None or not 0 <= coverage <= 1:
         return [_unavailable("R11", "COST_COVERAGE_NOT_RECORDED")]
-    n = round(calls * coverage)
+    known = value.get("known_cost_calls")
+    n = known if type(known) is int and 0 <= known <= calls else _legacy_known_calls(calls, coverage)
+    if n is None:
+        return [_unavailable("R11", "KNOWN_COST_CALLS_NOT_RECORDED")]
     pending = _precheck("R11", n, 0.0, limits)
     if pending:
         return pending
@@ -315,6 +334,23 @@ def _role_costs(value: object) -> tuple[dict[str, float], dict[str, set[str]]]:
         roles[role] = roles.get(role, 0.0) + amount
         tiers.setdefault(role, set()).add(tier)
     return roles, tiers
+
+
+def _most_frequent(value: object) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    counts = {key: count for key, count in value.items()
+              if isinstance(key, str) and key and _nonnegative(count)}
+    highest = max(counts.values(), default=0)
+    return sorted(key for key, count in counts.items() if count == highest and count > 0)
+
+
+def _legacy_known_calls(calls: int, coverage: float) -> int | None:
+    """Support small pre-count fixtures where rounded coverage remains unambiguous."""
+    if calls > 100:
+        return None
+    estimate = round(calls * coverage)
+    return estimate if abs(estimate / calls - coverage) <= 0.00005 else None
 
 
 def deferred_signals(records: list[dict]) -> list[dict]:

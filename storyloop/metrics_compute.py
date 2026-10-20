@@ -27,6 +27,7 @@ from .metrics_compute_support import (
     _ratio,
     _supersede_links,
     _unique,
+    _upgrade_rule_ids,
     _upgraded,
     metric,
 )
@@ -87,7 +88,7 @@ def attempts(records: list[dict]) -> dict:
 
 def upgrades(records: list[dict]) -> dict:
     """M2: changes whose routing tier increased after execution began."""
-    eligible: list[tuple[str, str, bool]] = []
+    eligible: list[tuple[str, str, bool, list[str]]] = []
     missing: list[dict] = []
     for record in records:
         history, tier = record.get("routing_history"), record.get("tier_initial")
@@ -101,15 +102,19 @@ def upgrades(records: list[dict]) -> dict:
         if upgraded is None:
             _miss(missing, record, "NO_ROUTING")
             continue
-        eligible.append((_id(record), tier, upgraded))
-    changes = [change_id for change_id, _, upgraded in eligible if upgraded]
-    by = {
-        tier: metric("M2", sum(item[2] for item in rows), len(rows),
-                     [item[0] for item in rows if item[2]])
-        for tier in TIER_ORDER
-        if (rows := [item for item in eligible if item[1] == tier])
-    }
+        eligible.append((_id(record), tier, upgraded,
+                         _upgrade_rule_ids(history) if upgraded else []))
+    changes = [item[0] for item in eligible if item[2]]
+    by = {tier: _upgrade_group([item for item in eligible if item[1] == tier])
+          for tier in TIER_ORDER if any(item[1] == tier for item in eligible)}
     return metric("M2", len(changes), len(eligible), changes, missing, by)
+
+
+def _upgrade_group(rows: list[tuple[str, str, bool, list[str]]]) -> dict:
+    result = metric("M2", sum(item[2] for item in rows), len(rows),
+                    [item[0] for item in rows if item[2]])
+    result["upgrade_rules"] = _counts(Counter(rule for item in rows for rule in item[3]))
+    return result
 
 
 def rework(records: list[dict]) -> dict:

@@ -84,6 +84,23 @@ def _upgraded(history: list) -> bool | None:
     return None if malformed else False
 
 
+def _upgrade_rule_ids(history: list) -> list[str]:
+    """Return persisted rule IDs only from actual in-run upward transitions."""
+    identifiers = []
+    for item in history:
+        if not isinstance(item, dict) or not _nonnegative_int(item.get("attempt")):
+            continue
+        source, target = item.get("from_tier"), item.get("to_tier")
+        if item["attempt"] <= 0 or source not in TIER_ORDER or target not in TIER_ORDER:
+            continue
+        if TIER_ORDER[target] <= TIER_ORDER[source] or not isinstance(item.get("reason"), list):
+            continue
+        identifiers.extend(reason["rule_id"] for reason in item["reason"]
+                           if isinstance(reason, dict)
+                           and isinstance(reason.get("rule_id"), str) and reason["rule_id"])
+    return identifiers
+
+
 def _last_signatures(failures: object) -> tuple[str, str] | None:
     if not isinstance(failures, list) or len(failures) < 2:
         return None

@@ -152,7 +152,8 @@ class ComputeTests(unittest.TestCase):
     def test_upgrade_only_counts_in_run_increases(self):
         history = [
             {"attempt": 0, "from_tier": "light", "to_tier": "standard"},
-            {"attempt": 2, "from_tier": "standard", "to_tier": "heavy"},
+            {"attempt": 2, "from_tier": "standard", "to_tier": "heavy",
+             "reason": [{"rule_id": "scope"}, {"rule_id": "verification"}]},
         ]
 
         result = upgrades([
@@ -163,6 +164,8 @@ class ComputeTests(unittest.TestCase):
         self.assertEqual(result["value"], 0.5)
         self.assertEqual(result["changes"], ["A"])
         self.assertEqual(result["by"]["light"]["value"], 0.5)
+        self.assertEqual(result["by"]["light"]["upgrade_rules"],
+                         {"scope": 1, "verification": 1})
 
     def test_no_routing_is_missing_not_zero(self):
         result = upgrades([rec("OLD", tier_initial=None, routing_history=None)])
@@ -371,6 +374,17 @@ class ComputeTests(unittest.TestCase):
         self.assertEqual(result["by"]["implement|未记录"]["cost_usd"], 0.25)
         self.assertEqual((result["value"], result["calls"], result["cost_coverage"]),
                          (0.75, 3, 0.6667))
+        self.assertEqual(result["known_cost_calls"], 2)
+        self.assertEqual(row["known_cost_calls"], 1)
+
+    def test_cost_preserves_exact_known_call_count_for_large_report_summary(self):
+        result = cost([rec("A", ledger=None, by_role={"review": {
+            "calls": 30_000, "agent_ms": 1, "known_cost_usd": 0.5,
+            "coverage": {"cost_usd": {"known": 5, "total": 30_000}},
+        }})])
+
+        self.assertEqual(result["known_cost_calls"], 5)
+        self.assertEqual(result["by"]["review|未记录"]["known_cost_calls"], 5)
 
     def test_cost_uses_report_role_summary_without_guessing_tier_allocation(self):
         records = [rec("A", ledger=None, by_role={
@@ -388,7 +402,8 @@ class ComputeTests(unittest.TestCase):
 
         self.assertEqual(result["by"], {
             "review|未记录": {
-                "calls": 2, "agent_ms": 30, "cost_usd": 0.5, "cost_coverage": 0.5,
+                "calls": 2, "agent_ms": 30, "cost_usd": 0.5,
+                "known_cost_calls": 1, "cost_coverage": 0.5,
             },
         })
         self.assertEqual((result["value"], result["calls"]), (0.5, 2))

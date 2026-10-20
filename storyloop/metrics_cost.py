@@ -81,7 +81,7 @@ def _result(rows: dict[str, dict], changes: list[str], missing: list[dict]) -> d
               "numerator": known_cost, "denominator": calls, "n": calls,
               "changes": _unique(changes), "missing": missing, "calls": calls,
               "agent_ms": sum(row["agent_ms"] for row in by.values()),
-              "cost_coverage": _ratio(known, calls), "by": by}
+              "known_cost_calls": known, "cost_coverage": _ratio(known, calls), "by": by}
     if not calls:
         result["reason"] = "NO_SAMPLE"
     return result
@@ -104,6 +104,7 @@ def _merge_row(target: dict, source: dict) -> None:
 def _public_row(row: dict) -> dict:
     return {"calls": row["calls"], "agent_ms": row["agent_ms"],
             "cost_usd": round(row["cost_usd"], 4),
+            "known_cost_calls": row["known_cost_calls"],
             "cost_coverage": _ratio(row["known_cost_calls"], row["calls"])}
 
 

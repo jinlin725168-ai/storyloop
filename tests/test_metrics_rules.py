@@ -43,7 +43,7 @@ def metrics_for(rule: str, value: float, n: int) -> dict:
     if rule == "R6":
         return {"M5": {"by": {"light": metric(value, n, changes)}}}
     if rule == "R7":
-        return {"M6": metric(value, n, changes)}
+        return {"M6": {**metric(value, n, changes), "by": {"smoke": 2, "acceptance": 1}}}
     if rule == "R8":
         return {"M7": {**metric(value, n, changes), "failure_changes": changes[:round(value * n)]}}
     if rule == "R9":
@@ -51,11 +51,14 @@ def metrics_for(rule: str, value: float, n: int) -> dict:
     if rule == "R10":
         return {"M9": {"by": {"light": metric(value, n, changes)}}}
     if rule == "R11":
-        return {"M11": {"n": n, "calls": n, "cost_coverage": 1.0, "changes": changes,
+        return {"M11": {"n": n, "calls": n, "known_cost_calls": n,
+                         "cost_coverage": 1.0, "changes": changes,
                          "by": {"review|strong": {"calls": n // 2, "cost_usd": value,
+                                                    "known_cost_calls": n // 2,
                                                     "cost_coverage": 1.0},
                                 "implement|standard": {"calls": n - n // 2,
                                                         "cost_usd": 1 - value,
+                                                        "known_cost_calls": n - n // 2,
                                                         "cost_coverage": 1.0}}}}
     if rule == "R12":
         return {"M12": {"recurrence_rate": metric(value, n, changes),
@@ -172,11 +175,39 @@ class SuggestionTests(unittest.TestCase):
     def test_r5_does_not_treat_unknown_adapter_as_concentration(self):
         m = metrics_for("R5", 0.1, 10)
         m["M4"]["agent_failures"] = {"未记录": 9, "codex": 1}
-        self.assertFalse(any("text" in item for item in suggest(m, DEFAULTS)))
+        row = next(item for item in suggest(m, DEFAULTS) if item["rule"] == "R5")
+        self.assertEqual(row["unavailable"], "ADAPTER_EVIDENCE_NOT_RECORDED")
+
+        m["M4"]["agent_failures"] = {"未记录": 2, "codex": 8}
+        self.assertTrue(any("text" in item for item in suggest(m, DEFAULTS)))
+
+    def test_r3_lists_most_frequent_upgrade_rule_ids_with_deterministic_ties(self):
+        m = metrics_for("R3", 0.4, 10)
+        m["M2"]["by"]["light"]["upgrade_rules"] = {
+            "scope": 3, "verification": 3, "size": 1,
+        }
+
+        row = next(item for item in suggest(m, DEFAULTS) if item["rule"] == "R3")
+
+        self.assertEqual(row["rule_ids"], ["scope", "verification"])
+
+    def test_r7_lists_failed_ci_layers_in_count_then_name_order(self):
+        m = metrics_for("R7", 0.2, 10)
+        m["M6"]["by"] = {"smoke": 2, "checks": 1, "acceptance": 1}
+
+        row = next(item for item in suggest(m, DEFAULTS) if item["rule"] == "R7")
+
+        self.assertEqual(row["layers"], ["smoke", "acceptance", "checks"])
 
     def test_r8_low_branch_and_r12_unclaimed_submetric_fire(self):
-        r8 = suggest(metrics_for("R8", 0.1, 5), DEFAULTS)
-        self.assertEqual(next(item for item in r8 if "text" in item)["threshold"], 0.2)
+        low = metrics_for("R8", 0.1, 10)
+        row = next(item for item in suggest(low, DEFAULTS) if "text" in item)
+        self.assertEqual((row["threshold"], row["evidence"]),
+                         (0.2, [f"C-{i}" for i in range(10)]))
+
+        zero = metrics_for("R8", 0.0, 5)
+        row = next(item for item in suggest(zero, DEFAULTS) if "text" in item)
+        self.assertEqual(row["evidence"], [f"C-{i}" for i in range(5)])
 
         m12 = metrics_for("R12", 0.0, 10)
         m12["M12"]["unclaimed_rate"] = metric(0.8, 10)
@@ -186,12 +217,23 @@ class SuggestionTests(unittest.TestCase):
 
     def test_r11_uses_known_cost_calls_as_sample(self):
         m = metrics_for("R11", 0.8, 10)
+        m["M11"].pop("known_cost_calls")
         m["M11"]["cost_coverage"] = 0.4
         for row in m["M11"]["by"].values():
             row["cost_coverage"] = 0.4
         result = suggest(m, DEFAULTS)
         self.assertEqual(next(item for item in result if item["rule"] == "R11")["insufficient"],
                          "4/5")
+
+    def test_r11_uses_exact_known_call_count_instead_of_inverting_rounded_coverage(self):
+        m = metrics_for("R11", 0.8, 30_000)
+        m["M11"].update(known_cost_calls=5, cost_coverage=0.0002)
+        limits = deepcopy(DEFAULTS)
+        limits["R11"]["min_sample"] = 6
+
+        row = next(item for item in suggest(m, limits) if item["rule"] == "R11")
+
+        self.assertEqual(row["insufficient"], "5/6")
 
     def test_evidence_is_capped_and_texts_contain_no_numbers(self):
         m = metrics_for("R9", 0.75, 12)
