@@ -137,8 +137,16 @@ class SmokeRepairTests(unittest.TestCase):
             def repaired_smoke(project, change):
                 seen["repair"] = change.get("repair")
                 payload = good_payload(change_id)
+                payload.update(lessons_used=[], errata=[])
                 payload["files"].append({"path": "manifest.json", "content": "{}"})  # echoed back; must be ignored
                 return payload
+
+            for invalid in ({**good_payload(change_id), "unexpected": []},
+                            {"files": [], "lessons_used": []}):
+                with self.subTest(keys=sorted(invalid)):
+                    with self.assertRaisesRegex(StoryLoopError, "invalid contract"):
+                        repair_smoke(root, change_id, "invalid response",
+                                     services(change_id, lambda p, s: invalid))
 
             result = repair_smoke(root, change_id, "loading-mask locator is a test defect",
                                   services(change_id, repaired_smoke), now=lambda: NOW)
