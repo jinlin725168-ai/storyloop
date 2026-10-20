@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .call_log import call_folder, load_meta
 from .changes import load_change
-from .next_steps import next_step
+from .next_steps import append_pending_memory, next_step
 from .stop_report import failure_view, render_stop, stop_of
 from .storage import load_json
 from .telemetry import ledger_entries, summarize
@@ -34,7 +34,8 @@ def change_log(project: Path, change_id: str) -> dict:
         "stop": stop_of(project, run),
         "error": (run or {}).get("error"),
         "telemetry": summarize(project, change_id),
-        "next": next_step(status, change_id, project, run or {}),
+        "lessons": (run or {}).get("lessons"),
+        "next": append_pending_memory(project, next_step(status, change_id, project, run or {})),
     }
 
 
@@ -49,6 +50,13 @@ def _call_view(project: Path, entry: dict) -> dict:
         for key in ("status", "code", "error", "schema_errors", "repairs", "semantic_repair"):
             if meta.get(key):
                 view[key] = meta[key]
+        try:
+            request = load_json(call_folder(project, call) / "request.json")
+            payload = request.get("payload") if isinstance(request, dict) else None
+            if isinstance(payload, dict) and payload.get("mode") == "retrospective":
+                view["mode"] = "retrospective"
+        except (OSError, ValueError, TypeError):
+            pass
     return view
 
 
@@ -67,6 +75,8 @@ def render_log(result: dict) -> str:
         lines.append(f"  {call.get('at', '?')}  {call['role']:<12} {state:<7} "
                      f"{call.get('wall_ms', 0) / 1000:>7.1f}s{cost}"
                      + (f"  会话 {call['session']}" if call.get("session") else ""))
+        if call.get("mode"):
+            lines.append(f"      模式: {call['mode']}")
         if call.get("repairs"):
             lines.append(f"      修复重试 {call['repairs']} 次")
         if call.get("semantic_repair"):
@@ -98,6 +108,10 @@ def render_log(result: dict) -> str:
     cost = f"，费用 ${total['cost_usd']:.2f}" if isinstance(total.get("cost_usd"), (int, float)) else ""
     lines.append("")
     lines.append(f"合计 {total.get('calls', 0)} 次调用，代理耗时 {total.get('agent_ms', 0) / 60000:.1f} 分钟{cost}")
+    lessons = result.get("lessons")
+    if isinstance(lessons, dict):
+        lines.append(f"经验复盘：{lessons.get('retrospective', '未知')}；草案 {len(lessons.get('drafts') or [])} 个；"
+                     f"建议复核 {len(lessons.get('upgrade_suggested') or [])} 条")
     if result.get("next"):
         lines.append(f"下一步: {result['next']}")
     return "\n".join(lines)

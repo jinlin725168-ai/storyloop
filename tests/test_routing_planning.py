@@ -13,6 +13,7 @@ from storyloop.models import StoryLoopError
 from storyloop.planning import ensure_routing_plan, required_locks, validate_plan
 from storyloop.routing_policy import DEFAULT_POLICY
 from storyloop.routing_state import open_routing, run_config
+from storyloop.storage import write_json
 from tests.routing_support import readiness_repository
 from tests.test_baseline_behavior import git
 from tests.test_intake import assessed_product
@@ -251,6 +252,10 @@ class PlanningTests(unittest.TestCase):
     def test_native_l3_request_explains_every_option_scope_and_names_repair_gap(self):
         from storyloop.project_agents import invoke_project_agent
         from tests.test_codex_adapter import FakeCodex
+        config = load_project_config(self.root)
+        config['adapter'] = 'codex'
+        config.pop('agent_command', None)
+        write_json(self.root / '.storyloop/config.json', config)
         self.state['routing'].update(initial_tier='heavy', effective_tier='heavy')
         self.state['planning'] = {
             'origin': 'L3', 'phase': 'REPLAN',

@@ -5,7 +5,6 @@ import argparse
 import json
 from pathlib import Path
 import sys
-
 from . import __version__
 from .answers import pending_questions, record_answers
 from .approvals import approve_change
@@ -17,7 +16,7 @@ from .system_smoke import apply_smoke_update, propose_smoke_update
 from .change_log import change_log, render_log
 from .changes import create_change, load_change, revise_change
 from .manual_acceptance import record_manual_acceptance
-from .next_steps import draft_next, next_step, supersede_revision_next
+from .next_steps import append_pending_memory, draft_next, next_step, supersede_revision_next
 from .openspec_docs import document_change
 from .models import StoryLoopError, require, validate_product
 from .processutil import redact
@@ -352,9 +351,10 @@ def _product_dispatch(project: Path, args) -> dict:
                 "stop": stop_of(project, run) if run else draft_stop(project, change),
                 "routing": report_routing(project, change),
                 "telemetry": summarize(project, change_id),
-                "next": (_draft_result(project, change)["next"] if run is None and change["status"] == "DRAFT"
-                         else (next_step((run or {}).get("status") or change["status"], change_id, project, run)
-                               or ((run or {}).get("stop") or {}).get("resume")))}
+                "next": append_pending_memory(project,
+                    _draft_result(project, change)["next"] if run is None and change["status"] == "DRAFT"
+                    else (next_step((run or {}).get("status") or change["status"], change_id, project, run)
+                          or ((run or {}).get("stop") or {}).get("resume")))}
     if args.command == "log":
         return change_log(project, change_id)
     if args.command == "reset":

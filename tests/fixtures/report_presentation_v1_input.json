@@ -396,7 +396,7 @@
             "source": "machine",
             "availability": "NOT_AVAILABLE",
             "data": null,
-            "reason": "MEMORY_MODULE_NOT_IMPLEMENTED"
+            "reason": "LESSONS_NOT_CONFIGURED"
           }
         ]
       }

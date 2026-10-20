@@ -7,6 +7,17 @@ import shlex
 from .routing_report import routing_options
 
 
+def append_pending_memory(project: Path | str, value: str | None) -> str | None:
+    """Append a draft hint while preserving the existing stop/next wording byte-for-byte."""
+    from .drafts import list_drafts
+    pending = [item for item in list_drafts(Path(project))
+               if item.get("kind") in {"lesson", "errata"} and item.get("status") == "pending"]
+    if not pending:
+        return value
+    hint = f"有 {len(pending)} 个待批经验或勘误草案：storyloop drafts {shlex.quote(str(project))}"
+    return f"{value}\n{hint}" if value else hint
+
+
 def next_step(status: str | None, change_id: str | None, project: Path | str = "<project>",
               details: dict | None = None) -> str | None:
     """A copy-pasteable next action for a run status or error code; None when nothing is pending."""

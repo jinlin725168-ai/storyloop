@@ -305,10 +305,9 @@ python 'a b.py'
 
 ## 6. 记忆
 
-### memory
+### 记忆
 
-- 来源：🔧 机器
-- 可用性：`NOT_AVAILABLE`
-- 说明：`MEMORY_MODULE_NOT_IMPLEMENTED`
+来源：🔧 机器；可用性：`NOT_AVAILABLE`
+说明：`LESSONS_NOT_CONFIGURED`
 
 未提供

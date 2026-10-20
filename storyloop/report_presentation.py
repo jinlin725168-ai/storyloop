@@ -7,6 +7,7 @@ from .report_roles import conclusion_items, cost_items
 from .report_items import effective_tier, item
 from .report_reconciliation import reconcile
 from .report_sections import conclusion, header, process, proof
+from .report_memory import memory_items
 
 
 TITLES = ('头部', '结论', '审查重点', '证据', '过程', '成本', '记忆')
@@ -19,7 +20,7 @@ def build_presentation(project: Path, change: dict, report: dict) -> dict:
     groups = [header(change, report, evidence), conclusion(change, report, reconciliation),
               build_focus(change, report, evidence), proof(report, evidence),
               process(change, report, evidence), [item('cost', evidence.get('telemetry')), *cost_items(evidence)],
-              [item('memory', reason='MEMORY_MODULE_NOT_IMPLEMENTED')]]
+              memory_items(project, change, report, evidence)]
     groups[1].extend(conclusion_items(evidence))
     sections = {str(index): {'title': title, 'items': items}
                 for index, (title, items) in enumerate(zip(TITLES, groups))}
