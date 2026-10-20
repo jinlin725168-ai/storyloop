@@ -74,6 +74,18 @@ class MetricsCommandTests(unittest.TestCase):
             "M7", "M8", "M9", "M10", "M11", "M12",
         })
 
+    def test_invalid_project_errors_are_in_chinese(self):
+        missing = metrics_project() / "不存在"
+        message = "metrics 项目必须是已存在的目录"
+        operations = (
+            ("build", lambda: build_metrics(missing, None, None)),
+            ("save", lambda: save_metrics(
+                missing, {"generated_at": "2026-10-20T00:00:00+00:00"})),
+        )
+        for name, operation in operations:
+            with self.subTest(name=name), self.assertRaisesRegex(StoryLoopError, message):
+                operation()
+
     def test_cli_json_and_text(self):
         project = project_with_records(3)
         code, text, error = run_cli("metrics", project)

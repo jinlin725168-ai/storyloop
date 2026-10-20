@@ -35,7 +35,7 @@ MAX_CONFIG_BYTES = 2_000_000
 def build_metrics(project: Path, since: date | None, ci_results: Path | None) -> dict:
     """Build one evidence-bound metrics snapshot without changing the project."""
     root = Path(project).resolve()
-    require(root.is_dir(), "Metrics project must be an existing directory")
+    require(root.is_dir(), "metrics 项目必须是已存在的目录")
     collected = collect(root, since)
     records = collected["changes"]
     ci_values, ci_missing = _ci_values(root, ci_results, records)
@@ -89,7 +89,7 @@ def _metrics_config(root: Path) -> dict:
 def save_metrics(project: Path, result: dict) -> list[str]:
     """Atomically overwrite the two dated report files inside the project."""
     root = Path(project).resolve()
-    require(root.is_dir(), "Metrics project must be an existing directory")
+    require(root.is_dir(), "metrics 项目必须是已存在的目录")
     stamp = _utc_date(result.get("generated_at"))
     folder = root / "reports/storyloop/metrics"
     markdown = folder / f"{stamp}.md"
