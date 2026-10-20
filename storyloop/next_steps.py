@@ -10,12 +10,17 @@ from .routing_report import routing_options
 def append_pending_memory(project: Path | str, value: str | None) -> str | None:
     """Append a draft hint while preserving the existing stop/next wording byte-for-byte."""
     from .drafts import list_drafts
-    pending = [item for item in list_drafts(Path(project))
+    drafts = list_drafts(Path(project))
+    pending = [item for item in drafts
                if item.get("kind") in {"lesson", "errata"} and item.get("status") == "pending"]
-    if not pending:
-        return value
-    hint = f"有 {len(pending)} 个待批经验或勘误草案：storyloop drafts {shlex.quote(str(project))}"
-    return f"{value}\n{hint}" if value else hint
+    invalid = [item for item in drafts if item.get("status") == "invalid"]
+    hints = [value] if value else []
+    command = f"storyloop drafts {shlex.quote(str(project))}"
+    if pending:
+        hints.append(f"有 {len(pending)} 个待批经验或勘误草案：{command}")
+    if invalid:
+        hints.append(f"已跳过 {len(invalid)} 个损坏草案：{command}")
+    return "\n".join(hints) if hints else value
 
 
 def next_step(status: str | None, change_id: str | None, project: Path | str = "<project>",

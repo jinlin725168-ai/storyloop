@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import re
 
-from .models import require
+from .models import StoryLoopError, require
 from .path_security import safe_target
 from .storage import load_json, locked_file, write_json, write_text_atomic
 
@@ -138,7 +138,14 @@ def _memory_drafts(project: Path, root: Path) -> list[dict]:
             continue
         for directory in kind_root.iterdir():
             if directory.is_dir():
-                draft = load_draft(project, f"{kind}/{directory.name}")
+                try:
+                    draft = load_draft(project, f"{kind}/{directory.name}")
+                    require(isinstance(draft.get("status"), str) and draft["status"] in _STATUSES
+                            and isinstance(draft.get("created_at"), str), "Invalid draft metadata")
+                except (StoryLoopError, OSError, UnicodeError):
+                    items.append({"id": directory.name, "kind": kind, "created_at": "",
+                                  "status": "invalid", "failure": "DRAFT_INVALID"})
+                    continue
                 if draft.get("status") == "pending":
                     items.append(draft)
     return items

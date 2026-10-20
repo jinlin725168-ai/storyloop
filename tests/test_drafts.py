@@ -1,6 +1,7 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from storyloop.drafts import create_draft, list_drafts, load_draft, reject_draft
 from storyloop.models import StoryLoopError
@@ -58,6 +59,52 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(kinds, ["change", "lesson", "smoke"])
         self.assertEqual(list(change.iterdir()), [])
         self.assertEqual(list(smoke.iterdir()), [])
+
+    def test_corrupt_entries_are_isolated_with_safe_diagnostics(self):
+        good = create_draft(self.project, 'lesson', 'FEAT-1', None, {}, '正文')
+        bad = create_draft(self.project, 'lesson', 'FEAT-2', None, {}, None)
+        for raw in ('{SECRET-CONTENT', '[]', '{"kind":"lesson"}'):
+            with self.subTest(raw=raw):
+                path = self.project / '.storyloop/drafts/lesson' / bad / 'draft.json'
+                path.write_text(raw, encoding='utf-8')
+                listed = list_drafts(self.project)
+                self.assertIn(good, [row['id'] for row in listed])
+                broken = next(row for row in listed if row['id'] == bad)
+                self.assertEqual(broken['status'], 'invalid')
+                self.assertEqual(broken['failure'], 'DRAFT_INVALID')
+                self.assertNotIn('SECRET-CONTENT', str(listed))
+                from storyloop.next_steps import append_pending_memory
+                self.assertIn('损坏', append_pending_memory(self.project, '原说明'))
+
+    def test_status_and_log_survive_invalid_draft(self):
+        from storyloop.baseline import bootstrap_project
+        from storyloop.cli import dispatch, parser
+        from tests.routing_support import legacy_create_change
+        from tests.test_baseline_behavior import repository
+        from tests.test_product_spec import rich_product
+        repository(self.project)
+        bootstrap_project(self.project)
+        identifier = legacy_create_change(self.project, 'orders', rich_product())['change_id']
+        bad = create_draft(self.project, 'lesson', identifier, None, {}, None)
+        path = self.project / '.storyloop/drafts/lesson' / bad / 'draft.json'
+        path.write_text('[]', encoding='utf-8')
+        for command in ('status', 'log'):
+            result = dispatch(parser().parse_args([command, str(self.project), '--change', identifier]))
+            self.assertIn('损坏', result['next'])
+
+    def test_unreadable_body_is_isolated_but_directory_failure_propagates(self):
+        bad = create_draft(self.project, 'lesson', 'FEAT-1', None, {}, None)
+        body = self.project / '.storyloop/drafts/lesson' / bad / 'body.md'
+        body.write_bytes(b'\xff')
+        self.assertEqual(list_drafts(self.project)[0]['status'], 'invalid')
+        original = Path.iterdir
+        def fail_directory(path):
+            if path.name == 'lesson':
+                raise PermissionError('directory unavailable')
+            return original(path)
+        with patch.object(Path, 'iterdir', fail_directory):
+            with self.assertRaises(PermissionError):
+                list_drafts(self.project)
 
     def test_reject_keeps_draft_and_body(self):
         ref_id = create_draft(self.project, "lesson", "FEAT-1", None, {}, "人工正文")
