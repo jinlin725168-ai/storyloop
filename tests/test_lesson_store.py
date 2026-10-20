@@ -66,6 +66,20 @@ class LessonStoreTests(unittest.TestCase):
         commit_file(repo, "backend/a.py", "2")
         self.assertEqual(stale_ids(repo, [entry], head(repo)), {"L-0001"})
 
+    def test_global_scope_is_not_narrowed_by_an_additional_scope(self):
+        repo = git_repo(files={"backend/a.py": "1"})
+        self.addCleanup(shutil.rmtree, repo)
+        entry = sample(scope=["**", "backend/**"], baseline_commit=head(repo))
+        commit_file(repo, "frontend/b.js", "changed")
+        self.assertEqual(stale_ids(repo, [entry], head(repo)), {"L-0001"})
+
+    def test_backslash_scope_is_normalized_before_git_matching(self):
+        repo = git_repo(files={"backend/a.py": "1"})
+        self.addCleanup(shutil.rmtree, repo)
+        entry = sample(scope=["backend\\**"], baseline_commit=head(repo))
+        commit_file(repo, "backend/a.py", "2")
+        self.assertEqual(stale_ids(repo, [entry], head(repo)), {"L-0001"})
+
     def test_unreachable_or_non_ancestor_baseline_is_stale(self):
         repo = git_repo()
         self.addCleanup(shutil.rmtree, repo)

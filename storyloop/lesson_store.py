@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 from .baseline import _git
 from .lessons import LESSONS_ROOT, parse_lesson, validate_lessons
 from .models import StoryLoopError, identifier
+from .path_security import forbidden_path_root
 from .storage import load_json
 
 
@@ -139,7 +140,8 @@ def stale_ids(project: Path, entries: list[dict], commit: str) -> set[str]:
         if baseline not in ancestors:
             stale.add(entry["id"])
             continue
-        roots = [scope.removesuffix("/**") for scope in entry["scope"] if scope != "**"]
+        roots = ([] if "**" in entry["scope"] else
+                 [forbidden_path_root(scope) for scope in entry["scope"]])
         arguments = ["log", "--format=%H", f"{baseline}..{resolved}"]
         if roots:
             arguments.extend(["--", *roots])
