@@ -41,10 +41,12 @@ class RoutingCliTests(unittest.TestCase):
         self.assertIsNone(dispatch_routing(Path('/tmp/project'), args))
 
     def test_entry_stop_has_no_fictional_run(self):
-        stop = build_entry_stop(Path('/tmp/a b'), 'READINESS_APPROVAL_REQUIRED', {'digest': 'abc'})
+        project = Path('/tmp/a b')
+        stop = build_entry_stop(project, 'READINESS_APPROVAL_REQUIRED', {'digest': 'abc'})
         self.assertFalse({'change_id', 'run', 'attempt', 'attempts'} & stop.keys())
+        # str(project) is native: '\\tmp\\a b' on Windows.
         self.assertEqual(shlex.split(stop['resume'])[:5],
-                         ['storyloop', 'approve', '/tmp/a b', '--readiness', 'abc'])
+                         ['storyloop', 'approve', str(project), '--readiness', 'abc'])
 
     def test_design_selection_split_is_returned_without_running(self):
         args = parser().parse_args(['approve', '/tmp/a b', '--change', 'ID', '--design', 'P', '--option', 'B'])

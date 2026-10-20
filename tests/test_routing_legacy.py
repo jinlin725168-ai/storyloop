@@ -58,7 +58,9 @@ class LegacyCompatibilityTests(unittest.TestCase):
         self.assertNotIn('routing', after)
         for path, content in original.items():
             self.assertEqual(self.artifacts(identifier)[path], content)
-            self.assertEqual((self.root / 'openspec/changes' / identifier / path).read_bytes(), content)
+            # A core.autocrlf checkout differs from the blob only in line endings.
+            checkout = (self.root / 'openspec/changes' / identifier / path).read_bytes()
+            self.assertEqual(checkout.replace(b'\r\n', b'\n'), content)
         self.assertEqual(run_change(self.root, identifier, services)['status'], 'PASSED')
         self.assertEqual(load_run_state(self.root, identifier), after)
 

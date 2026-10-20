@@ -13,7 +13,8 @@ def fingerprint(project: Path, relative: str) -> dict:
     if not path.exists():
         return {'blob': None, 'mode': None}
     require(path.is_file() and not path.is_symlink(), 'Unsafe restore path')
-    return {'blob': _git(project, 'hash-object', '--no-filters', '--', relative).strip(),
+    # Hash as Git would store it so a core.autocrlf checkout of the contract blob matches it.
+    return {'blob': _git(project, 'hash-object', '--', relative).strip(),
             'mode': '100755' if path.stat().st_mode & 0o111 else '100644'}
 
 

@@ -1,4 +1,6 @@
 import json
+import os
+from pathlib import Path
 import subprocess
 import sys
 from unittest.mock import patch
@@ -40,7 +42,9 @@ class FinalFixTests(unittest.TestCase):
             self.assertIn('SNAPSHOT_TRUNCATED', text.split('### ' + title)[1].split('###')[0])
 
     def test_i2_git_paths_preserve_nul_separated_names(self):
-        names = ['中文.py', 'space name.py', 'tab\tname.py', 'line\nname.py']
+        names = ['中文.py', 'space name.py']
+        if os.name != 'nt':  # Windows file names cannot contain control characters
+            names += ['tab\tname.py', 'line\nname.py']
         for name in names:
             (self.root / name).write_text('VALUE = 1\n')
         (self.root / 'tracked.py').write_text('UNIQUE_RENAME = 37\n')
@@ -113,7 +117,8 @@ class FinalFixTests(unittest.TestCase):
         presentation = build_presentation(self.root, self.change, report)
         commands = next(i for i in presentation['sections']['2']['items'] if i['id'] == 'verification')['data']
         self.assertEqual(commands[0]['argv'][0], sys.executable)
-        self.assertEqual(commands[0]['cwd'], str(self.root))
+        # The engine reports the resolved project (a Windows temp folder may be an 8.3 short name).
+        self.assertEqual(Path(commands[0]['cwd']).resolve(), self.root.resolve())
         executed = subprocess.run(commands[0]['argv'], cwd=commands[0]['cwd'], capture_output=True, check=True)
         self.assertIn(b'OK', executed.stdout)
 
@@ -170,16 +175,17 @@ class FinalFixTests(unittest.TestCase):
         from storyloop.report_commands import execution_commands
         path = self.root / '.storyloop/evidence/FEAT-1/acceptance-result.json'
         (self.root / 'script space.py').write_text('print("replayed")')
-        argv = [sys.executable, '/removed/candidate/script space.py']
-        write_json(path, {'results': [{'id': 'T', 'status': 'PASS', 'command': argv, 'cwd': '/removed/candidate'}]})
+        candidate = str(Path(self.root.anchor) / 'removed' / 'candidate')  # native absolute path
+        argv = [sys.executable, str(Path(candidate) / 'script space.py')]
+        write_json(path, {'results': [{'id': 'T', 'status': 'PASS', 'command': argv, 'cwd': candidate}]})
         from storyloop.report_evidence import _read_object
         commands = execution_commands(self.root, 'FEAT-1', _read_object, 100000)
         self.assertEqual(commands[0]['executed_argv'], argv)
         self.assertEqual(commands[0]['argv_projection'], 'CANDIDATE_ROOT_TO_PROJECT')
         result = subprocess.run(commands[0]['argv'], cwd=commands[0]['cwd'], capture_output=True, check=True)
         self.assertIn(b'replayed', result.stdout)
-        argv[-1] = '--file=/removed/candidate/script space.py'
-        write_json(path, {'results': [{'id': 'T', 'status': 'PASS', 'command': argv, 'cwd': '/removed/candidate'}]})
+        argv[-1] = '--file=' + str(Path(candidate) / 'script space.py')
+        write_json(path, {'results': [{'id': 'T', 'status': 'PASS', 'command': argv, 'cwd': candidate}]})
         self.assertIsNone(execution_commands(self.root, 'FEAT-1', _read_object, 100000))
 
     def test_i6_every_numeric_dimension_handles_invalid_and_overflow(self):

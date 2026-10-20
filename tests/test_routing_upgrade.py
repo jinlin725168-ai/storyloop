@@ -233,7 +233,7 @@ class L3IntegrationTests(unittest.TestCase):
         self.assertEqual(state['attempt'], 2)
         self.assertEqual(state['failures'], [])
         self.assertEqual(len(calls), 2)
-        self.assertEqual((self.root / 'app/extra.py').read_bytes(), b'EXTRA = True\n')
+        self.assertEqual((self.root / 'app/extra.py').read_text(), 'EXTRA = True\n')
         self.assertEqual(len([h for h in state['routing']['history'] if h['stage'] == 'L3']), 1)
 
 

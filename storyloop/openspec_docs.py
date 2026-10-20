@@ -79,7 +79,8 @@ def validate_with_cli(project: Path, kind: str, identifier_: str) -> dict:
         return {"status": "skipped", "reason": "openspec CLI not installed"}
     command = [executable, "validate", identifier_, "--json"] if kind == "change" else \
         [executable, "spec", "validate", identifier_, "--json"]
-    completed = subprocess.run(command, cwd=project, capture_output=True, text=True)
+    completed = subprocess.run(command, cwd=project, capture_output=True, text=True,
+                               encoding="utf-8", errors="replace")
     try:
         payload = json.loads(completed.stdout[completed.stdout.index("{"):])
     except (ValueError, IndexError):

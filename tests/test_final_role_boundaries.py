@@ -68,10 +68,11 @@ class PermissionBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='python path ') as folder:
             executable = Path(folder) / 'python'
             executable.write_text('placeholder', encoding='utf-8')
-            values.append((str(executable), executable.as_posix()))
-            for value, expected in values:
+            # The real file is resolved by the engine (a Windows temp folder may be an 8.3 short name).
+            values.append((str(executable), executable.resolve().as_posix()))
+            for index, (value, expected) in enumerate(values):
                 with self.subTest(value=value):
-                    if value.startswith('C:'):
+                    if index < 2:
                         # Pure path encoding only: native filesystem checks need Windows CI.
                         rule = _executable_token(PureWindowsPath(value)) + ' -m unittest:*'
                     else:
@@ -113,7 +114,7 @@ class PermissionBoundaryTests(unittest.TestCase):
                 base = profile_command('claude', request, 80, [], 'opus')
                 lane = lane_command(base, request, 'src')
                 readonly = readonly_command(base, request)
-            expected = 'Bash(' + shlex.quote(executable.as_posix()) + ' -m unittest:*)'
+            expected = 'Bash(' + shlex.quote(executable.resolve().as_posix()) + ' -m unittest:*)'
             self.assertIn(expected, lane)
             self.assertIn(expected, readonly)
             self.assertNotIn('Edit(/src/**)', readonly)
@@ -150,7 +151,7 @@ class MockCreatesBoundaryTests(unittest.TestCase):
         import stat
         from types import SimpleNamespace
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            root = Path(folder).resolve()  # lstat sees resolved paths (Windows temp may be an 8.3 name)
             (root / 'junction').mkdir()
             original = os.lstat
 

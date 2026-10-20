@@ -82,6 +82,10 @@ LEAD_RULES = (
 )
 
 def main() -> int:
+    # The engine and the claude CLI both speak UTF-8; Windows would otherwise use the locale code page.
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     return main_with_args(None)
 
 
@@ -194,7 +198,8 @@ def _run_session(base: list[str], prompt: str, role: str, args, cwd,
     structured = ["--json-schema", json.dumps(schema, ensure_ascii=False)] if schema else []
     for segment in range(1, args.max_segments + 1):
         command = base + structured + (["--resume", session] if session else [])
-        completed = subprocess.run(command, input=next_prompt, capture_output=True, text=True, cwd=cwd)
+        completed = subprocess.run(command, input=next_prompt, capture_output=True, text=True,
+                                   encoding="utf-8", errors="replace", cwd=cwd)
         next_prompt = RESUME_PROMPT
         # claude exits 1 on error_max_turns but still prints the JSON envelope on stdout, so the
         # envelope is authoritative and the exit code only matters when there is no envelope.

@@ -22,7 +22,9 @@ def load_principles(project: Path) -> dict:
         return {'status': 'NOT_CONFIGURED', 'digest': None, 'principles': []}
     require(entry.split(None, 1)[0] == '100644', 'Principles must be a regular committed JSON file')
     raw = _git(project, 'show', source + ':' + PRINCIPLES_PATH)
-    require(path.is_file() and path.read_bytes() == raw.encode('utf-8'), 'Principles source changed')
+    # Compare as Git does (clean conversion such as core.autocrlf), not raw checkout bytes.
+    require(path.is_file() and _git(project, 'hash-object', '--', PRINCIPLES_PATH).strip()
+            == entry.split(None, 3)[2], 'Principles source changed')
     require(not _git(project, 'diff', '--cached', '--', PRINCIPLES_PATH).strip(), 'Principles are staged')
     try:
         value = json.loads(raw)

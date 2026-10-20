@@ -215,6 +215,7 @@ class IntakeTests(unittest.TestCase):
         script.write_text('#!/bin/sh\nexit 0\n')
         script.chmod(0o755)
         git(self.root, 'add', 'scripts/check.sh')
+        git(self.root, 'update-index', '--chmod=+x', 'scripts/check.sh')  # chmod is a no-op on Windows
         git(self.root, 'commit', '-qm', 'add local oracle')
         self.commit = git(self.root, 'rev-parse', 'HEAD').strip()
         item['assessment']['criteria'][0]['method']['commands'] = [['./scripts/check.sh']]

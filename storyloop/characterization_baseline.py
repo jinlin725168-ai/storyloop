@@ -49,7 +49,10 @@ def run_characterization_baseline(project, commands, timeout, pending):
 
 def _baseline(project, candidate, commit):
     # Archive attributes may drop tests or substitute bytes; read raw tree/blob objects.
-    tree = subprocess.run(['git', 'ls-tree', '-rz', '--full-tree', commit], cwd=project,
+    # safe_target resolves its root, so compare against the resolved spelling too
+    # (Windows temp folders are often 8.3 short names such as RUNNER~1).
+    candidate = Path(candidate).resolve()
+    tree =subprocess.run(['git', 'ls-tree', '-rz', '--full-tree', commit], cwd=project,
                           capture_output=True, check=True).stdout
     paths = set()
     for entry in tree.split(b'\0'):

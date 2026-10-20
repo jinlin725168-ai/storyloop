@@ -116,7 +116,9 @@ def _scan_once(root: Path, max_files: int, ignored: set[str],
             entries.append((relative, _directory_fingerprint(current)))
         for name in sorted(files):
             path = current / name
-            if path.relative_to(root).as_posix() == ".storyloop/run.lock":
+            # Identify the lock by location, not by its path relative to the scan root: the
+            # control directory is also scanned on its own, and Windows locks are unreadable.
+            if name == "run.lock" and current.name == ".storyloop":
                 continue
             if path.relative_to(root).as_posix() not in allowed:
                 _reject_sensitive(path)

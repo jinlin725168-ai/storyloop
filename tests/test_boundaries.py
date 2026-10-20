@@ -20,6 +20,7 @@ from storyloop.boundaries import (
     snapshot_changes,
 )
 from storyloop.models import StoryLoopError
+from storyloop.storage import locked
 
 
 class BoundaryTests(unittest.TestCase):
@@ -58,6 +59,23 @@ class BoundaryTests(unittest.TestCase):
             ("service/business/新增.py", "added"),
         ])
         self.assertTrue(all("\\" not in item.path for item in changes))
+
+    def test_run_lock_is_skipped_when_scanning_the_control_directory_itself(self):
+        control = self.root / ".storyloop"
+        self.write(".storyloop/config.json", "{}")
+        self.write(".storyloop/run.lock", "0")
+        before = capture_snapshot(control, include_control=True, include_ignored=True)
+        self.write(".storyloop/run.lock", "1")
+
+        after = capture_snapshot(control, include_control=True, include_ignored=True)
+
+        self.assertEqual(snapshot_changes(before, after), [])
+
+    def test_control_snapshot_succeeds_while_the_project_lock_is_held(self):
+        # Windows byte-range locks make the held lock unreadable even to its owner.
+        self.write(".storyloop/config.json", "{}")
+        with locked(self.root):
+            capture_snapshot(self.root / ".storyloop", include_control=True, include_ignored=True)
 
     def test_ignores_fixed_build_cache_directories(self):
         before = capture_snapshot(self.root)

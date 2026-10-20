@@ -78,7 +78,7 @@ def _identifier(value: object) -> str | None:
 def _safe_file(root: Path, path: Path, limit: int) -> bool:
     try:
         return (not path.is_symlink() and path.is_file() and path.stat().st_size <= limit
-                and path.resolve().is_relative_to(root))
+                and path.resolve().is_relative_to(root.resolve()))  # both sides resolved (8.3 names)
     except OSError:
         return False
 
