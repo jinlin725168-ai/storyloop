@@ -36,7 +36,8 @@ def approve_draft(project: Path, ref: str) -> dict:
         try:
             require_idle_source(project)
             if draft['kind'] == 'errata':
-                raise StoryLoopError('勘误落地尚未实现', code='LANDING_UNSUPPORTED')
+                from .errata import land_errata
+                return land_errata(project, draft)
             return _approve_lesson(project, ref, draft)
         except Exception as exc:
             set_draft_status(project, ref, 'pending', str(exc))
@@ -230,13 +231,23 @@ def _approve_lesson(project, ref, draft):
         entry, writes, check_argv = _candidate(project, draft, parent)
     except (ValueError, TypeError, KeyError) as exc:
         raise StoryLoopError('草案元数据或落点结构无效', code='LESSON_INVALID') from exc
+    return land_transaction(project, ref, writes,
+                            'chore(lessons): ' + entry['summary'],
+                            {'lesson_id': entry['id']}, parent=parent, check_argv=check_argv,
+                            base_reason=draft['payload']['why_needed'] if len(writes) > 1 else None)
+
+
+def land_transaction(project, ref, writes, message, result_ids,
+                     *, parent, check_argv=None, base_reason=None):
+    """Commit validated memory writes with Task 6's scoped compare-and-swap rollback."""
+    require(_git(project, 'rev-parse', 'HEAD').strip() == parent, '校验期间 HEAD 已推进')
     originals = _snapshot(project, writes, include_config=check_argv is not None)
     proposal, own, tree = None, None, None
     # Match Git's trailing ASCII-whitespace cleanup before binding commit identity.
-    message = ('chore(lessons): ' + entry['summary']).rstrip(' \t\r\n\v\f')
+    message = message.rstrip(' \t\r\n\v\f')
     try:
-        if len(writes) > 1:
-            proposal = propose_base_change(project, _proposal_paths(project, writes), draft['payload']['why_needed'])
+        if base_reason is not None:
+            proposal = propose_base_change(project, _proposal_paths(project, writes), base_reason)
         for relative, content in writes.items():
             write_bytes_atomic(safe_target(project, relative, 'lesson landing'), content)
         _git(project, 'add', '--', *writes)
@@ -251,7 +262,7 @@ def _approve_lesson(project, ref, draft):
         own = own or _own_commit(project, parent, tree, message)
         _restore(project, originals, parent, own, proposal)
         raise
-    return dict(status='APPLIED', lesson_id=entry['id'], commit=own,
+    return dict(status='APPLIED', **result_ids, commit=own,
                 base_proposal=proposal['change_id'] if proposal else None,
                 next=proposal['next'] if proposal else '经验已落地')
 

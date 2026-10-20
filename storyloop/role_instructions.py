@@ -7,6 +7,9 @@ FOUNDATION_NOTE = (
     "(modules, architecture, extension mechanism, API surface, capabilities, building blocks, testing). "
     "Read the documents relevant to your role before anything else and treat them as the authority on "
     "what the base already provides and how it is extended. "
+    " When openspec/foundation/errata.md is present it overrides the documents it corrects. "
+    "If you find a foundation statement that contradicts the code, report it in errata "
+    "with the exact quoted claim and path:line evidence."
 )
 
 FACTS_NOTE = (
@@ -255,7 +258,9 @@ INSTRUCTIONS = {
         "its StoryLoop-engine mode: read-only, no questions, and the final answer is only one JSON object "
         "{documents:[{path,content}]} with `path` relative to payload.foundation_root covering every name in "
         "payload.required_documents. payload.module_roots is the mutable area and payload.integration_paths "
-        "the build integration points; everything else is protected foundation."
+        "the build integration points; everything else is protected foundation. "
+        "You may also report errata:[{document,claim,correction,evidence}] for existing foundation "
+        "documents, quoting the exact claim and citing real path:line evidence."
     ),
 }
 

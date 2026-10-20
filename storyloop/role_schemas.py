@@ -183,7 +183,9 @@ def schema_for(role: str, payload: dict) -> dict:
         schema['properties'].update(
             lessons_used=_nullable({'type': 'array', 'items': _obj({
                 'id': STRING, 'how': {'type': 'string', 'x-maxLength': 200}})}),
-            errata=_nullable({'type': 'array', 'items': _obj({
+        )
+    if payload.get('mode') != 'retrospective':
+        schema['properties'].update(errata=_nullable({'type': 'array', 'items': _obj({
                 'document': STRING, 'claim': STRING, 'correction': STRING, 'evidence': STRINGS})}))
         schema['required'] = list(schema['properties'])
     return schema

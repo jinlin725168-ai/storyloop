@@ -173,6 +173,9 @@ def _execute_call(project, role, payload, schema, request, adapter_config, setti
                    error=str(error) if error else None, code=error.code if error else None,
                    sessions=list(dict.fromkeys(sessions)), schema_errors=trace["schema_errors"],
                    repairs=trace["repairs"], semantic_repair="validation_errors" in payload)
+        if not failed and not waiting and isinstance(result, dict):
+            from .errata import capture_errata
+            capture_errata(project, result, role, call, _change_id(payload))
 
 
 def _telemetry_sessions(telemetry: object) -> list[str]:
