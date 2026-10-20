@@ -9,6 +9,7 @@ from storyloop.lesson_store import (
     load_lessons_at, retire_lesson, stale_ids,
 )
 from storyloop.models import StoryLoopError
+from storyloop.baseline import _git as real_git
 from storyloop.storage import write_json
 from tests.lesson_support import commit_all, commit_file, git_repo, head, sample, write_lesson
 
@@ -83,12 +84,30 @@ class LessonStoreTests(unittest.TestCase):
         entry = load_lessons_at(repo, head(repo))[0]
         self.assertEqual(entry["baseline_commit"], before)
         self.assertEqual(entry["status"], "active")
-        self.assertEqual(result["commit"], head(repo))
+        self.assertEqual(result["status"], "COMMITTED")
         self.assertEqual(
             subprocess.run(["git", "log", "-1", "--format=%s"], cwd=repo,
                            capture_output=True, text=True, encoding="utf-8", check=True).stdout.strip(),
             "chore(lessons): 确认 L-0001 仍然有效",
         )
+
+    def test_confirm_has_no_fallible_enrichment_after_commit(self):
+        repo = git_repo(lessons=[sample()])
+        self.addCleanup(shutil.rmtree, repo)
+        before = head(repo)
+
+        def fail_query_after_commit(project, *args):
+            enrichment = args == ("branch", "--show-current") or args == ("rev-parse", "HEAD")
+            if enrichment and real_git(project, "rev-parse", "HEAD").strip() != before:
+                raise StoryLoopError("simulated post-commit query failure")
+            return real_git(project, *args)
+
+        with patch("storyloop.project_git._git", side_effect=fail_query_after_commit):
+            result = confirm_lesson(repo, "L-0001")
+
+        self.assertEqual(result["status"], "COMMITTED")
+        self.assertNotEqual(head(repo), before)
+        self.assertEqual(load_lessons_at(repo, head(repo))[0]["baseline_commit"], before)
 
     def test_retire_requires_reason_and_appends_it(self):
         repo = git_repo(lessons=[sample(body="保留正文\n")])

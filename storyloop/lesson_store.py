@@ -231,7 +231,7 @@ def _commit_lesson(project: Path, entry: dict, message: str, original_head: str)
     from .lessons import render_lesson
     try:
         write_text_atomic(target, render_lesson(entry))
-        return commit_paths(project, [relative], message)
+        return commit_paths(project, [relative], message, details=False)
     except Exception:
         if _git(project, "rev-parse", "HEAD").strip() == original_head:
             write_bytes_atomic(target, original)
