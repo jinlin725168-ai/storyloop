@@ -2,17 +2,29 @@
 from datetime import date
 import json
 from pathlib import Path
+import tempfile
 
 from .baseline import _git, load_baseline
 from .base_upgrade import propose_base_change
 from .drafts import load_draft, set_draft_status
 from .lessons import next_lesson_id, parse_lesson, render_lesson, validate_lessons
-from .lesson_store import load_lessons_at, require_idle_source, _validate_landings_at
-from .models import StoryLoopError, require, text
+from .lesson_store import (
+    _resolve_commit, _validate_landings_at, load_lessons_at, require_idle_source,
+)
+from .models import StoryLoopError, identifier, require, text
 from .path_security import safe_target, repository_relative
 from .principles import validate_principles
+from .processutil import run_process
+from .project_profile import validate_project_settings
 from .project_git import commit_paths
-from .storage import locked, write_bytes_atomic
+from .storage import load_json, locked, write_bytes_atomic, write_json
+
+
+PROFILE_SETTING_KEYS = {
+    'test_commands', 'unit_commands', 'integration_commands', 'check_commands',
+    'test_roots', 'module_roots', 'integration_paths', 'candidate_allow',
+    'scratch_paths', 'test_count_patterns', 'stacks',
+}
 
 
 def approve_draft(project: Path, ref: str) -> dict:
@@ -56,7 +68,8 @@ def _candidate(project, draft, head):
     if strength == 'config':
         raise StoryLoopError('config 强度本期不自动落地：请把草案改为 prose，并手工修改配置', code='LANDING_UNSUPPORTED')
     if strength == 'check':
-        raise StoryLoopError('check 强度落地尚未实现', code='LANDING_UNSUPPORTED')
+        argv = _check_argv(project, draft, head)
+        entry['landings'] = [{'kind': 'check_command', 'argv': argv}]
     writes = land_knowledge(project, draft, entry) if strength == 'knowledge' and action != 'retire' else land_prose(entry)
     relative = f"openspec/lessons/{entry['id']}.md"
     entry = parse_lesson(render_lesson(entry), relative)
@@ -66,7 +79,62 @@ def _candidate(project, draft, head):
                    if landing.get('path', 'openspec/principles.json') not in writes]
     _validate_landings_at(project, head, [{**entry, 'landings': frozen_refs}])
     writes[relative] = render_lesson(entry).encode('utf-8')
-    return entry, writes
+    return entry, writes, argv if strength == 'check' else None
+
+
+def _check_argv(project: Path, draft: dict, green_commit: str) -> list[str]:
+    landing = draft['payload'].get('landing')
+    require(isinstance(landing, dict) and landing.get('kind') == 'check_command',
+            'check 落点必须是 check_command')
+    argv = landing.get('argv')
+    validated = validate_project_settings(project, {'check_commands': [argv]})
+    source = draft.get('source')
+    if source == 'manual':
+        raise StoryLoopError('无法找到证明会红的提交', code='CHECK_NOT_PROVEN')
+    source = identifier(source, 'draft source')
+    run_path = project / '.storyloop/state/runs' / f'{source}.json'
+    state = load_json(run_path) if run_path.is_file() else {}
+    red_commit = state.get('contract_commit')
+    if not isinstance(red_commit, str) or not red_commit:
+        raise StoryLoopError('无法找到证明会红的提交', code='CHECK_NOT_PROVEN')
+    prove_check(project, validated['check_commands'][0], red_commit, green_commit)
+    return validated['check_commands'][0]
+
+
+def _run_check_at(project: Path, argv: list[str], commit: str, timeout: int) -> dict:
+    with tempfile.TemporaryDirectory(prefix='storyloop-check-') as temporary:
+        checkout = Path(temporary) / 'checkout'
+        added = False
+        try:
+            _git(project, 'worktree', 'add', '--detach', str(checkout), commit)
+            added = True
+            return run_process(argv, checkout, timeout)
+        finally:
+            if added:
+                _git(project, 'worktree', 'remove', '--force', str(checkout))
+
+
+def prove_check(project: Path, argv: list[str], red_commit: str,
+                green_commit: str, timeout: int = 600) -> dict:
+    """Prove an argv check fails before the change and passes at current code."""
+    project = Path(project).resolve()
+    argv = validate_project_settings(project, {'check_commands': [argv]})['check_commands'][0]
+    red_commit = _resolve_commit(project, red_commit)
+    green_commit = _resolve_commit(project, green_commit)
+    red = _run_check_at(project, argv, red_commit, timeout)
+    green = _run_check_at(project, argv, green_commit, timeout)
+    invalid = lambda value: (
+        value.get('contained') is not True or value.get('timed_out')
+        or value.get('truncated') or value.get('error')
+        or not isinstance(value.get('returncode'), int)
+    )
+    if invalid(red) or invalid(green) or red['returncode'] == 0 or green['returncode'] != 0:
+        raise StoryLoopError('check 未能证明在合同提交上为红、当前提交上为绿',
+                             code='CHECK_NOT_PROVEN')
+    return {
+        'red': {'commit': red_commit, 'exit_code': red['returncode']},
+        'green': {'commit': green_commit, 'exit_code': green['returncode']},
+    }
 
 
 def land_prose(entry: dict) -> dict:
@@ -113,11 +181,13 @@ def _proposal_paths(project, writes):
     return sorted(changed | set(writes))
 
 
-def _snapshot(project, writes):
+def _snapshot(project, writes, include_config=False):
     index = Path(_git(project, 'rev-parse', '--git-path', 'index').strip())
     if not index.is_absolute():
         index = project / index
     originals = {safe_target(project, p, 'lesson landing'): None for p in writes}
+    if include_config:
+        originals[safe_target(project, '.storyloop/config.json', 'project config')] = None
     originals[index] = None
     for path in originals:
         originals[path] = path.read_bytes() if path.exists() else None
@@ -152,10 +222,10 @@ def _restore(project, originals, parent, own, proposal):
 def _approve_lesson(project, ref, draft):
     parent = _git(project, 'rev-parse', 'HEAD').strip()
     try:
-        entry, writes = _candidate(project, draft, parent)
+        entry, writes, check_argv = _candidate(project, draft, parent)
     except (ValueError, TypeError, KeyError) as exc:
         raise StoryLoopError('草案元数据或落点结构无效', code='LESSON_INVALID') from exc
-    originals = _snapshot(project, writes)
+    originals = _snapshot(project, writes, include_config=check_argv is not None)
     proposal, own, tree = None, None, None
     # Match Git's trailing ASCII-whitespace cleanup before binding commit identity.
     message = ('chore(lessons): ' + entry['summary']).rstrip(' \t\r\n\v\f')
@@ -169,6 +239,8 @@ def _approve_lesson(project, ref, draft):
         commit_paths(project, list(writes), message)
         own = _own_commit(project, parent, tree, message)
         require(own is not None, '提交身份无法确认')
+        if check_argv is not None:
+            _land_check_config(project, check_argv)
         set_draft_status(project, ref, 'approved')
     except Exception:
         own = own or _own_commit(project, parent, tree, message)
@@ -177,3 +249,18 @@ def _approve_lesson(project, ref, draft):
     return dict(status='APPLIED', lesson_id=entry['id'], commit=own,
                 base_proposal=proposal['change_id'] if proposal else None,
                 next=proposal['next'] if proposal else '经验已落地')
+
+
+def _land_check_config(project: Path, argv: list[str]) -> None:
+    path = safe_target(project, '.storyloop/config.json', 'project config')
+    config = load_json(path)
+    profile = config.get('profile')
+    require(isinstance(profile, dict), '项目 profile 无效')
+    commands = list(profile.get('check_commands') or [])
+    if argv not in commands:
+        commands.append(argv)
+    settings = {key: profile[key] for key in PROFILE_SETTING_KEYS if key in profile}
+    settings['check_commands'] = commands
+    validated = validate_project_settings(project, settings)
+    profile['check_commands'] = validated['check_commands']
+    write_json(path, config, max_bytes=512_000)

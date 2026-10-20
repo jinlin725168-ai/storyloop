@@ -1,4 +1,5 @@
 import shutil
+import sys
 import unittest
 from unittest import mock
 
@@ -16,13 +17,23 @@ class LandingTests(unittest.TestCase):
         self.project = initialized_project()
         self.addCleanup(shutil.rmtree, self.project)
 
-    def draft(self, action='create', target=None, landing=None, **overrides):
+    def draft(self, action='create', target=None, landing=None, source='manual', **overrides):
         entry = sample(**overrides)
         entry.pop('id')
         body = entry.pop('body')
         payload = dict(action=action, target=target, entry=entry, why_needed='需要',
                        evidence=['人工确认'], landing=landing)
-        return 'lesson/' + create_draft(self.project, 'lesson', 'manual', None, payload, body)
+        return 'lesson/' + create_draft(self.project, 'lesson', source, None, payload, body)
+
+    def passed_change(self, bug_file='app/clock.py'):
+        change_id = 'FEAT-20261019-007'
+        commit_file(self.project, 'app/__init__.py', '')
+        contract_commit = commit_file(self.project, bug_file, 'SYNCED = False\n')
+        commit_file(self.project, bug_file, 'SYNCED = True\n')
+        write_json(self.project / f'.storyloop/state/runs/{change_id}.json', {
+            'status': 'PASSED', 'contract_commit': contract_commit,
+        })
+        return change_id
 
     def snapshot(self):
         p = self.project
@@ -66,6 +77,55 @@ class LandingTests(unittest.TestCase):
         with self.assertRaises(StoryLoopError) as caught:
             approve_draft(self.project, self.draft(strength='config'))
         self.assertEqual(caught.exception.code, 'LANDING_UNSUPPORTED')
+
+    def test_check_proven_red_then_green_lands_in_config(self):
+        change_id = self.passed_change()
+        argv = [sys.executable, '-c',
+                'import app.clock, sys; sys.exit(0 if app.clock.SYNCED else 1)']
+        result = approve_draft(self.project, self.draft(
+            source=change_id, strength='check',
+            landing={'kind': 'check_command', 'argv': argv},
+        ))
+        config = load_json(self.project / '.storyloop/config.json')
+        self.assertIn(argv, config['profile']['check_commands'])
+        self.assertIsNone(result['base_proposal'])
+
+    def test_check_that_is_green_on_contract_commit_is_rejected(self):
+        change_id = self.passed_change()
+        before = self.snapshot()
+        with self.assertRaises(StoryLoopError) as caught:
+            approve_draft(self.project, self.draft(
+                source=change_id, strength='check',
+                landing={'kind': 'check_command',
+                         'argv': [sys.executable, '-c', 'pass']},
+            ))
+        self.assertEqual(caught.exception.code, 'CHECK_NOT_PROVEN')
+        self.assertEqual(self.snapshot(), before)
+        worktrees = _git(self.project, 'worktree', 'list', '--porcelain')
+        self.assertEqual(worktrees.count('worktree '), 1)
+
+    def test_manual_source_cannot_prove_red(self):
+        landing = {'kind': 'check_command', 'argv': [sys.executable, '-c', 'pass']}
+        with self.assertRaisesRegex(StoryLoopError, '证明会红'):
+            approve_draft(self.project, self.draft(strength='check', landing=landing))
+
+    def test_check_config_write_failure_restores_commit_config_and_index(self):
+        change_id = self.passed_change()
+        argv = [sys.executable, '-c',
+                'import app.clock, sys; sys.exit(0 if app.clock.SYNCED else 1)']
+        ref = self.draft(source=change_id, strength='check',
+                         landing={'kind': 'check_command', 'argv': argv})
+        before = self.snapshot()
+
+        def write_then_fail(path, value, max_bytes=None):
+            write_json(path, value, max_bytes=max_bytes)
+            raise OSError('config write failure')
+
+        with mock.patch('storyloop.lesson_landing.write_json', side_effect=write_then_fail):
+            with self.assertRaisesRegex(OSError, 'config write failure'):
+                approve_draft(self.project, ref)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(load_draft(self.project, ref)['status'], 'pending')
 
     def test_invalid_draft_no_trace(self):
         ref = self.draft(tier='legendary')
