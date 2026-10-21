@@ -40,6 +40,23 @@ class HarnessProtocolTests(unittest.TestCase):
                 self.assertEqual(result["status"], expected)
                 self.assertEqual(result["command"][1:], ["legacy.py", str(code)])
 
+    def test_existing_vendored_harness_executes_only_the_requested_case(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            shutil.copyfile(Path(__file__).resolve().parents[1] / "examples/tools/smoke_harness.py",
+                            root / "smoke_harness.py")
+            (root / "legacy.py").write_text('''from pathlib import Path
+import sys
+from smoke_harness import run_python_cases
+raise SystemExit(run_python_cases(sys.argv[1:], Path.cwd(), {}))
+''')
+            for case, expected in (("a.py", "PASS"), ("b.py", "FAIL")):
+                result = run_commands(root, [["{python}", "legacy.py", "cases/" + case]], 5)
+                self.assertEqual(result["results"][0]["status"], expected, result)
+                self.assertEqual(result["results"][0]["counts"]["executed"], 1, result)
+
     def test_malformed_external_runner_result_is_an_environment_error(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -126,15 +143,33 @@ def run(context):
     return run_hooks(context, run_case=run_case)
 ''')
             (root / "cases/business.py").write_text('''import subprocess, sys, unittest
+from storyloop.testing.smoke_harness.v1 import HarnessError
 class Case(unittest.TestCase):
     def test_business(self):
         result = subprocess.run([sys.executable, "app.py"], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0)
+        if result.returncode != 0:
+            raise HarnessError("Business process unavailable")
         self.assertEqual(result.stdout.strip(), "real public behavior")
 ''')
             result = invoke(root, "cases/business.py")
             self.assertEqual(result["returncode"], 0, result)
             self.assertEqual(result["counts"]["executed"], 1)
+
+    def test_business_exit_or_forged_protocol_cannot_supply_test_counts(self):
+        from tests.onboarding_acceptance import case_source
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            for child in ("import os; os._exit(0)", "raise SystemExit(1)",
+                          "print('STORYLOOP_HARNESS_V1={fake}')",
+                          "print('{\"executed\":1,\"failed\":0,\"errors\":0,\"code\":0}')"):
+                with self.subTest(child=child):
+                    source = case_source(repr(["PLACEHOLDER", "-c", child]))
+                    source = source.replace("'PLACEHOLDER'", "sys.executable")
+                    (root / "cases/business.py").write_text(source)
+                    result = invoke(root, "cases/business.py")
+                    self.assertEqual(result["returncode"], 2, result)
+                    self.assertEqual(result["counts"]["errors"], 1)
 
     def test_direct_api_freezes_relative_import_roots_before_changing_cwd(self):
         import subprocess
