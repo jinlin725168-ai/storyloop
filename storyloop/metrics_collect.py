@@ -6,6 +6,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from .path_security import safe_target
+from .models import StoryLoopError
 from .report_evidence import IDENTIFIER, MAX_LEDGER_BYTES, _read_object
 from .stop_report import STOP_STATUSES
 
@@ -244,7 +246,12 @@ def _aux_list(root: Path, path: Path, change_id: str, field: str) -> list | obje
 
 def _ledger(root: Path, change_id: str) -> list | None:
     path = root / ".storyloop/state/telemetry" / f"{change_id}.json"
-    if not _present(path):
+    try:
+        safe_target(root, path.relative_to(root).as_posix(), "telemetry path")
+        path.stat()
+    except FileNotFoundError:
+        return []
+    except (OSError, StoryLoopError):
         return None
     value = _read_object(root, path, MAX_LEDGER_BYTES)
     if (value is None or value.get("version") != 1 or value.get("change_id") != change_id

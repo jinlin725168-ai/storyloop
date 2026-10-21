@@ -88,3 +88,20 @@ class MetricsReviewTests(unittest.TestCase):
                 self.assertEqual(value['missing'], [
                     {'change_id': 'A', 'reason': 'CI_RESULT_ABSENT'}])
                 self.assertEqual(value['n'], 0)
+
+    def test_absent_ledger_is_empty_but_corrupt_ledger_is_unknown(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            (root / 'openspec/lessons').mkdir(parents=True)
+            write_change(root, 'A')
+            write_change(root, 'B')
+            write_ledger(root, 'A', [{'lessons_provided': ['L-1'], 'lessons_claimed': []}])
+            collected = metrics_collect.collect(root)
+            result = lessons(root, collected['changes'])['recurrence_rate']
+            self.assertEqual((result['value'], result['n'], result['missing']), (0, 1, []))
+            self.assertEqual(metrics_collect._ledger(root, 'B'), [])
+            (root / '.storyloop/state/telemetry/B.json').write_text('{broken', encoding='utf-8')
+            collected = metrics_collect.collect(root)
+            result = lessons(root, collected['changes'])['recurrence_rate']
+            self.assertIsNone(result['value'])
+            self.assertIn({'change_id': 'B', 'reason': 'UNREADABLE'}, result['missing'])
