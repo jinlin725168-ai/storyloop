@@ -187,6 +187,18 @@ settings 只接受这些键，未知键会报错：`unit_commands`（旧名 `tes
 storyloop init C:\work\my-project --settings C:\work\settings.json
 ```
 
+## 外环指标
+
+`metrics` 只读取已有变更、验收报告、运行状态和账本，汇总 M1–M12、调整建议及延后项信号；它不调用代理，也不要求工作区干净：
+
+```bash
+storyloop metrics PATH
+storyloop metrics PATH --since 2026-10-01 --ci-results artifacts/ci --json
+storyloop metrics PATH --save
+```
+
+默认输出中文 Markdown。`--json` 返回完整分子、分母、样本、证据和缺失原因；`--save` 只覆盖 `reports/storyloop/metrics/<UTC 日期>.md` 与 `.json`，不会提交。CI 可用 `storyloop ci PATH --change ID --record artifacts/ci/ci-ID.json` 保存 M6 所需结果，再把产物目录交给 `--ci-results`。阈值默认值内置，可在 `.storyloop/config.json` 的 `metrics.thresholds` 按规则 ID 覆盖；建议始终由人决定是否采纳。完整字段见 [接口与配置](docs/api.md#外环指标-json)。
+
 ## 开发与验证
 
 项目仅使用 Python 标准库：

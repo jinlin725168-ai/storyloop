@@ -9,8 +9,15 @@
 | 层 | 模块 | 职责 | 对外提供 |
 |---|---|---|---|
 | 命令面 | `cli` | 解析参数、分发命令、终端澄清与问答、诚实退出码 | `main`、`dispatch`、`clarify_interactively`、`run_with_answers` |
+| | `cli_output` | CLI 文本/完整 JSON 展示；按状态选择日志、记忆、指标或停点渲染器 | `display` |
 | | `next_steps` | 每个停点与错误码对应的可复制下一步命令 | `next_step` |
 | | `change_log` | `storyloop log`：从已有状态拼出一个变更的全过程 | `change_log`、`render_log` |
+| 外环指标 | `metrics` | 只读编排 M1–M12、规则和延后信号；显式 `--save` 时安全写两份日期报告 | `build_metrics`、`save_metrics` |
+| | `metrics_render` | 完整渲染指标分子/分母、建议证据、样本不足、不可用与缺失汇总 | `render_metrics` |
+| | `metrics_collect` | 有界读取报告、运行状态、变更、辅助状态与账本；报告优先并记录差异 | `collect` |
+| | `metrics_compute` / `metrics_compute_support` / `metrics_cost` | 计算 M1–M12；通用指标结构、Git 行数口径和 M11 成本来源拆在小模块 | 各指标纯函数、`cost` |
+| | `metrics_rules` | R1–R12 默认阈值与项目覆盖、建议、可计算及人工延后项 | `thresholds`、`suggest`、`deferred_signals` |
+| | `ci_results` | 记录和有界读取 CI 产物，校验时间、提交祖先关系与 UTF-8 管道 | `record_ci_result`、`load_ci_results` |
 | 编排 | `project_loop` | 外部闭环状态机：从运行状态恢复、物化合同与证明 RED（含 `EXISTING_GREEN` 停点）、实现—边界审计—分层验证—审查循环、人工验收停点 | `run_change`、`LoopServices`、`layers_green`、`load_run_state` |
 | | `project_loop_gates` | RED 与第一轮实现之间的两道门：design 方案、特征化（含红了之后就地修正再续跑） | `ensure_design`、`ensure_characterization`、`characterize_paths`、`resume_characterization` |
 | | `project_loop_guards` | 每次代理调用的护栏：写入型调用不能动控制面与暂存区，只读调用不能改树 | `write_safely`、`read_only_call`、`scratch_paths` |
@@ -65,13 +72,16 @@
 
 ```mermaid
 flowchart TD
-    CLI[命令面<br/>cli next_steps change_log] --> ORCH[编排<br/>project_loop 及 gates guards finish support<br/>acceptance_repair base_upgrade change_report<br/>project_receipt run_recovery]
+    CLI[命令面<br/>cli cli_output next_steps change_log] --> MET[外环指标<br/>metrics collect compute rules render<br/>cost ci_results]
+    CLI --> ORCH[编排<br/>project_loop 及 gates guards finish support<br/>acceptance_repair base_upgrade change_report<br/>project_receipt run_recovery]
     CLI --> AGT
     CLI --> CON
     ORCH --> AGT[代理<br/>project_agents role_schemas skills<br/>foundation_survey call_log telemetry]
     ORCH --> VER[验证<br/>smoke smoke_runner system_smoke]
     ORCH --> CON[合同<br/>changes approvals openspec_docs<br/>answers manual_acceptance]
     VER --> BASE[工程与底座<br/>baseline project_profile<br/>project_boundaries project_git]
+    MET --> BASE
+    MET --> FND
     CON --> BASE
     AGT --> BASE
     BASE --> FND[基础<br/>models storage path_security<br/>processutil boundaries]

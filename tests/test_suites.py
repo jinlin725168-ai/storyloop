@@ -46,6 +46,14 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("2 个模块，2 个测试", result.stdout)
 
+    def test_all_green_reports_skipped_tests(self):
+        root = self._project({"test_a": "self.skipTest('not available')"})
+
+        result = _run("--suite", "full", root=root)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("1 个测试，跳过 1 个", result.stdout)
+
     def test_one_failing_module_fails_the_run_and_shows_its_output(self):
         root = self._project({"test_a": "pass", "test_b": "self.assertEqual(1, 2)"})
         result = _run("--suite", "full", "--workers", "2", root=root)
