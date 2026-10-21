@@ -44,6 +44,15 @@ class RetrospectiveTests(unittest.TestCase):
         draft = load_json(self.project / '.storyloop/drafts' / result['drafts'][0] / 'draft.json')
         self.assertNotIn('id', draft['payload']['entry'])
 
+    def test_invalid_enum_proposal_is_dropped_but_valid_sibling_is_kept(self):
+        self.state['failures'] = [{}]
+        invalid = {**self.proposal(), 'entry': {**self.proposal()['entry'], 'tier': 'urgent'}}
+        self.run_retro({**NOTHING, 'lessons': [invalid, self.proposal()]})
+        result = self.state['lessons']
+        self.assertEqual(len(result['drafts']), 1)
+        self.assertEqual(len(result['dropped']), 1)
+        self.assertIn('tier', result['dropped'][0]['reason'])
+
     def test_retrospective_failure_keeps_passed(self):
         self.state['failures'] = [{}]
         with patch('storyloop.retrospective.invoke_project_agent', side_effect=RuntimeError('unavailable')):
@@ -181,6 +190,29 @@ class RetrospectiveTests(unittest.TestCase):
         from storyloop.telemetry import ledger_entries
         rows = ledger_entries(self.project, 'FEAT-1')
         self.assertEqual(rows[-1]['lessons_provided'], [])
+        lesson = next(item for item in self.state['lessons']['drafts'] if item.startswith('lesson/'))
+        draft = load_json(self.project / '.storyloop/drafts' / lesson / 'draft.json')
+        self.assertEqual(draft['proposer'], rows[-1]['call'])
+
+    def test_proposer_ignores_failed_cross_vendor_attempts(self):
+        self.state['failures'] = [{}]
+        def degraded(*args):
+            self.ledger('FEAT-1', [], failed=True)
+            path = self.project / '.storyloop/state/telemetry/FEAT-1.json'
+            data = load_json(path)
+            data['entries'].extend([
+                {'role': 'review', 'failed': True},
+                {'role': 'review', 'call': 'successful-fallback', 'degraded': 'cross_vendor'},
+            ])
+            write_json(path, data)
+            write_json(self.project / '.storyloop/state/telemetry/calls/successful-fallback/meta.json', {})
+            return {**NOTHING, 'lessons': [self.proposal()]}
+        with patch('storyloop.retrospective.invoke_project_agent', side_effect=degraded):
+            retrospect_after_pass(self.project, self.change, self.state)
+        result = self.state['lessons']
+        self.assertEqual(result['retrospective'], 'DONE', result)
+        draft = load_json(self.project / '.storyloop/drafts' / result['drafts'][0] / 'draft.json')
+        self.assertEqual(draft['proposer'], 'successful-fallback')
 
     def test_cli_requires_change(self):
         from storyloop.cli import parser
@@ -261,6 +293,27 @@ class RetrospectiveTests(unittest.TestCase):
         self.assertTrue(schema_errors({**NOTHING, 'lessons': 'invalid'}, schema))
         self.assertTrue(schema_errors({**NOTHING, 'unexpected': True}, schema))
         self.assertTrue(schema_errors({'verdict': 1}, schema_for('review', {})))
+
+    def test_retrospective_schema_enums_share_runtime_constants(self):
+        from storyloop.adapter_capabilities import ROLES
+        from storyloop.lessons import ACTIONS, LANDING_KINDS, STATUSES, STRENGTHS, TIERS
+        from storyloop.role_schemas import RETROSPECTIVE
+        proposal = RETROSPECTIVE['properties']['lessons']['items']['properties']
+        entry = proposal['entry']['properties']
+        self.assertEqual(proposal['action']['enum'], list(ACTIONS))
+        self.assertEqual(entry['tier']['enum'], list(TIERS))
+        self.assertEqual(entry['roles']['items']['enum'], list(ROLES))
+        self.assertEqual(entry['strength']['enum'], list(STRENGTHS))
+        self.assertEqual(entry['status']['enum'], list(STATUSES))
+        self.assertEqual(proposal['landing']['properties']['kind']['enum'], list(LANDING_KINDS))
+
+    def test_retrospective_instructions_name_enums_and_evidence_rules(self):
+        from storyloop.role_instructions import RETROSPECTIVE_NOTE
+        for value in ('create/update/retire', 'core/normal', 'prose/knowledge/check/config',
+                      'active/needs-review/retired', 'foundation/check_command/principles'):
+            self.assertIn(value, RETROSPECTIVE_NOTE)
+        self.assertIn('path:line', RETROSPECTIVE_NOTE)
+        self.assertIn('exact quote', RETROSPECTIVE_NOTE)
 
     def test_command_adapter_drops_unknown_original_entry_body(self):
         import json, sys

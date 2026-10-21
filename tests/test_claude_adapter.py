@@ -54,6 +54,9 @@ class ClaudeAdapterTests(unittest.TestCase):
             self.assertEqual(adapter.main_with_args([]), 0)
         self.assertEqual(len(calls), 1)
         self.assertEqual(json.loads(calls[0][calls[0].index('--json-schema') + 1]), schema)
+        passed_schema = json.loads(calls[0][calls[0].index('--json-schema') + 1])
+        action = passed_schema['properties']['lessons']['items']['properties']['action']
+        self.assertEqual(action['enum'], ['create', 'update', 'retire'])
         result = json.loads(out.getvalue().strip().splitlines()[-1])
         self.assertEqual(result['nothing_to_learn'], 'none')
         self.assertEqual(result['_telemetry']['subagents_applied']['perspectives'], 0)

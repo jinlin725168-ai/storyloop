@@ -1,0 +1,392 @@
+{
+  "version": 1,
+  "code_revision": "d66c353",
+  "core_suite_revision": "1c90257",
+  "boundary": "Public synthetic first-run history; executed red/green tests; two real retrospective calls and two real implement role calls; no full StoryLoop product-loop or verified-reading claim.",
+  "prior_failure_evidence": "2026-10-20-子项目5-真实验收.md#10-t2复盘格式修复后的真实调用2026-10-20本地时区",
+  "attempts": {
+    "retrospective": {
+      "codex": 1,
+      "claude": 1
+    },
+    "followup_implement": {
+      "codex": 1,
+      "claude": 1
+    },
+    "schema_repairs": 0,
+    "manual_response_normalizations": 0,
+    "preparation_failure": "First followup approval rejected missing readiness; collected passing unit/check evidence, approved only missing smoke, added full intake and revised drafts."
+  },
+  "public_fixture_files": {
+    ".gitignore": ".storyloop/\n__pycache__/\n",
+    "README.md": "# Public title comparison calibration fixture\n\nThe initial implementation incorrectly used lower() and failed tests/test_titles.py.\nThe fix uses NFKC, casefold and collapsed whitespace only for comparisons.\nDisplay titles and item order must remain intact. Café and cafe remain distinct.\nStoryLoop run metadata in this fixture is simulated; the red/green tests actually run.\n",
+    "app/__init__.py": "",
+    "app/store.py": "import unicodedata\n\n\ndef _title_key(value):\n    return ' '.join(unicodedata.normalize('NFKC', value).casefold().split())\n\n\ndef find_by_title(items, title):\n    key = _title_key(title)\n    return [item for item in items if _title_key(item['title']) == key]\n",
+    "tests/test_titles.py": "import copy\nimport unittest\nfrom app.store import find_by_title\n\n\nclass TitleTests(unittest.TestCase):\n    def test_matching_preserves_display_order_and_data(self):\n        items = [{'title': 'Ｆｏｏ'}, {'title': 'Straße'}, {'title': '  Buy   milk  '},\n                 {'title': 'foo'}, {'title': 'café'}]\n        before = copy.deepcopy(items)\n        self.assertEqual(find_by_title(items, 'foo'), [items[0], items[3]])\n        self.assertEqual(find_by_title(items, 'STRASSE'), [items[1]])\n        self.assertEqual(find_by_title(items, 'buy milk'), [items[2]])\n        self.assertEqual(find_by_title(items, 'cafe'), [])\n        self.assertEqual(find_by_title(items, 'fo'), [])\n        self.assertEqual(items, before)\n"
+  },
+  "red_store_source": "def find_by_title(items, title):\n    return [item for item in items if item['title'].lower() == title.lower()]\n",
+  "vendors": {
+    "codex": {
+      "fixture": {
+        "red_commit": "78848fa6881940794cb9f44347d68852406b1a5d",
+        "green_commit": "d8c3bc3a4df8979e1db466c2e637418eca83b525",
+        "files": {
+          ".gitignore": "a1d580c91d010e4058141cb03415c9f851564defe00646c15a1899c48d0b6dd5",
+          "README.md": "d0b39bb00e55c69ebb77fbf42882ea5ba6fc8261812122958907a8bda4fed33b",
+          "app/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "app/store.py": "13ccc136d440654ad0ad20313ab6bf5be7bce8835d291a1a381869028d193fb4",
+          "tests/test_titles.py": "ce81ca9d4176fc7e0f89f0a4e6ef0a7d9f26ef35b6c6127890165eb9f4ce5629"
+        }
+      },
+      "retrospective": {
+        "role": "review",
+        "call": "20261021T070109-review-0581fa",
+        "at": "2026-10-21T07:02:19+00:00",
+        "model": "gpt-6-astra",
+        "vendor": "openai",
+        "wall_ms": 69350,
+        "lessons_provided": [],
+        "lessons_claimed": [],
+        "lessons_unknown": [],
+        "status": "OK",
+        "repairs": 0,
+        "context_lessons": [],
+        "response_schema_sha256": "e2cfe6fab7a8e4b21ba1388a59da63a3bd22bf94a9f6b1d89d3c56e7c18bb432",
+        "normalized_response_sha256": "a815a994623b7a5e59a1509686e76b58157789e60193c9bb6f997501de61c8e0"
+      },
+      "result": {
+        "status": "DONE",
+        "change_id": "FEAT-20261021-001",
+        "retrospective": "DONE",
+        "signals": [
+          {
+            "kind": "failed_then_fixed",
+            "where": "failures"
+          }
+        ],
+        "drafts": [
+          "lesson/D-FEAT-20261021-001-01"
+        ],
+        "upgrade_suggested": [],
+        "error": null,
+        "dropped": []
+      },
+      "approved_draft": {
+        "kind": "lesson",
+        "created_at": "2026-10-21T07:02:19+00:00",
+        "source": "FEAT-20261021-001",
+        "proposer": "20261021T070109-review-0581fa",
+        "payload": {
+          "action": "create",
+          "target": null,
+          "entry": {
+            "summary": "标题等价比较必须覆盖 Unicode 归一化，同时保留原始数据、顺序和精确匹配边界",
+            "tier": "normal",
+            "scope": [
+              "app/store.py",
+              "tests/test_titles.py"
+            ],
+            "roles": [
+              "implement",
+              "review"
+            ],
+            "strength": "check",
+            "source": "FEAT-20261021-001",
+            "baseline_commit": "d8c3bc3a4df8979e1db466c2e637418eca83b525",
+            "status": "active",
+            "updated_at": "2026-10-21",
+            "supersedes": [],
+            "landings": [
+              {
+                "kind": "check_command",
+                "argv": [
+                  "python",
+                  "-B",
+                  "-m",
+                  "unittest",
+                  "discover",
+                  "-s",
+                  "tests",
+                  "-p",
+                  "test_titles.py"
+                ],
+                "name": "标题比较回归检查"
+              }
+            ]
+          },
+          "why_needed": "没有这条检查经验，下一位 AI 可能将标题查询误判为普通大小写不敏感查找，认为 lower() 足够，或将归一化直接应用于展示数据；这会重新引入全角字符漏匹配或输入数据被修改的问题。",
+          "evidence": [
+            "app/store.py:5",
+            "app/store.py:10",
+            "tests/test_titles.py:11",
+            "tests/test_titles.py:12",
+            "tests/test_titles.py:13",
+            "tests/test_titles.py:14",
+            "tests/test_titles.py:15",
+            "tests/test_titles.py:16",
+            ".storyloop/drafts/FEAT-20261021-001/specs/feat-20261021-001/spec.md:11"
+          ],
+          "landing": {
+            "kind": "check_command",
+            "argv": [
+              "python",
+              "-B",
+              "-m",
+              "unittest",
+              "discover",
+              "-s",
+              "tests",
+              "-p",
+              "test_titles.py"
+            ]
+          }
+        },
+        "status": "approved",
+        "failure": null,
+        "id": "D-FEAT-20261021-001-01",
+        "body": "将现有标题测试作为回归检查：比较键依次执行 NFKC、casefold 和空白折叠；返回全部匹配项并保留原始标题及顺序，不修改输入。café 与 cafe 不等价，fo 不匹配 foo。已只读加载契约提交 78848fa6881940794cb9f44347d68852406b1a5d 的源码和测试，在内存中复现全角标题漏匹配；当前 HEAD 运行所列命令通过。使用 -B 避免生成字节码文件。"
+      },
+      "model_content_unchanged": true,
+      "summary_characters": 41,
+      "approval": {
+        "status": "APPLIED",
+        "lesson_id": "L-0001",
+        "commit": "ae9c6798699ba3705fa446478d1b128d688e871d",
+        "base_proposal": null,
+        "next": "经验已落地"
+      },
+      "exact_learned_check_proof": {
+        "red": {
+          "commit": "78848fa6881940794cb9f44347d68852406b1a5d",
+          "exit_code": 1
+        },
+        "green": {
+          "commit": "ae9c6798699ba3705fa446478d1b128d688e871d",
+          "exit_code": 0
+        }
+      },
+      "followup": {
+        "role": "implement",
+        "call": "20261021T070521-implement-e34b35",
+        "at": "2026-10-21T07:06:25+00:00",
+        "model": "gpt-6-astra",
+        "vendor": "openai",
+        "wall_ms": 63861,
+        "lessons_provided": [
+          "L-0001"
+        ],
+        "lessons_claimed": [
+          "L-0001"
+        ],
+        "lessons_unknown": [],
+        "status": "OK",
+        "repairs": 0,
+        "context_lessons": [
+          {
+            "path": "openspec/lessons/L-0001.md",
+            "sha256": "79df563bf51cc19dccca9533b8fa4e1e59496bbd3e36ca5ca349be74e9384ba7"
+          }
+        ],
+        "response_schema_sha256": "4c37d383936f4b22d46debc55720866d4b940ea29c5ad39390e999e5ca2e2373",
+        "normalized_response_sha256": "6e6aea67bb822f414d4c1cac78b34dbcbb5e99949654f672139efc71feb06278"
+      },
+      "followup_scope": "Approved related change with real implement role and actual checks; no full-loop claim",
+      "followup_checks": {
+        "unit_exit": 0,
+        "unit_output": "...\n----------------------------------------------------------------------\nRan 3 tests in 0.000s\n\nOK\n",
+        "independent_exit": 0,
+        "audit_status": "ALLOWED",
+        "changed_paths": [
+          "app/store.py",
+          "tests/test_titles.py"
+        ]
+      },
+      "followup_lessons_used": [
+        {
+          "id": "L-0001",
+          "how": "复用标题归一化规则，并验证 Unicode 等价、精确匹配边界及原始数据保留。"
+        }
+      ]
+    },
+    "claude": {
+      "fixture": {
+        "red_commit": "8b124f20e961d65d7ccf56f6f14202e450425f62",
+        "green_commit": "0ab39f5c5ca1c5bcadb103065a7f844a18898c2b",
+        "files": {
+          ".gitignore": "a1d580c91d010e4058141cb03415c9f851564defe00646c15a1899c48d0b6dd5",
+          "README.md": "d0b39bb00e55c69ebb77fbf42882ea5ba6fc8261812122958907a8bda4fed33b",
+          "app/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "app/store.py": "13ccc136d440654ad0ad20313ab6bf5be7bce8835d291a1a381869028d193fb4",
+          "tests/test_titles.py": "ce81ca9d4176fc7e0f89f0a4e6ef0a7d9f26ef35b6c6127890165eb9f4ce5629"
+        }
+      },
+      "retrospective": {
+        "role": "review",
+        "call": "20261021T070111-review-0c9c45",
+        "at": "2026-10-21T07:01:39+00:00",
+        "model": "claude-opus-5-5",
+        "vendor": "anthropic",
+        "wall_ms": 27665,
+        "cost_usd": 0.20081,
+        "lessons_provided": [],
+        "lessons_claimed": [],
+        "lessons_unknown": [],
+        "status": "OK",
+        "repairs": 0,
+        "context_lessons": [],
+        "response_schema_sha256": "e2cfe6fab7a8e4b21ba1388a59da63a3bd22bf94a9f6b1d89d3c56e7c18bb432",
+        "normalized_response_sha256": "8c8576d7f8d3e00db6a2d8e2c2b6702e66856bd4a702a6b7b670f8fb0d0ad21f"
+      },
+      "result": {
+        "status": "DONE",
+        "change_id": "FEAT-20261021-001",
+        "retrospective": "DONE",
+        "signals": [
+          {
+            "kind": "failed_then_fixed",
+            "where": "failures"
+          }
+        ],
+        "drafts": [
+          "lesson/D-FEAT-20261021-001-01"
+        ],
+        "upgrade_suggested": [],
+        "error": null,
+        "dropped": []
+      },
+      "approved_draft": {
+        "kind": "lesson",
+        "created_at": "2026-10-21T07:01:39+00:00",
+        "source": "FEAT-20261021-001",
+        "proposer": "20261021T070111-review-0c9c45",
+        "payload": {
+          "action": "create",
+          "target": null,
+          "entry": {
+            "summary": "Title matching compares NFKC+casefold+collapsed-whitespace keys only; stored titles, order, and accents stay intact",
+            "tier": "normal",
+            "scope": [
+              "app/store.py",
+              "tests/test_titles.py"
+            ],
+            "roles": [
+              "implement",
+              "review"
+            ],
+            "strength": "check",
+            "source": "FEAT-20261021-001",
+            "baseline_commit": "0ab39f5c5ca1c5bcadb103065a7f844a18898c2b",
+            "status": "active",
+            "updated_at": "2026-10-21",
+            "supersedes": [],
+            "landings": [
+              {
+                "kind": "check_command",
+                "argv": [
+                  "python3",
+                  "-B",
+                  "-m",
+                  "unittest",
+                  "tests.test_titles"
+                ],
+                "name": "title-comparison-normalization"
+              }
+            ]
+          },
+          "why_needed": "An AI reading the code cold could think the NFKC/casefold steps are over-engineering and go back to the simpler lower(), which breaks fullwidth and ß matching. Or it could 'improve' matching by stripping accents, or by normalizing stored titles in place, which wrongly makes café match cafe or changes display data.",
+          "evidence": [
+            "app/store.py:4",
+            "app/store.py:5",
+            "app/store.py:10",
+            "tests/test_titles.py:11",
+            "tests/test_titles.py:12",
+            "tests/test_titles.py:14",
+            "tests/test_titles.py:16"
+          ],
+          "landing": {
+            "kind": "check_command",
+            "argv": [
+              "python3",
+              "-B",
+              "-m",
+              "unittest",
+              "tests.test_titles"
+            ]
+          }
+        },
+        "status": "approved",
+        "failure": null,
+        "id": "D-FEAT-20261021-001-01",
+        "body": "find_by_title in app/store.py matches by a comparison-only key from _title_key: unicodedata.normalize('NFKC', s).casefold() and then whitespace collapsed with ' '.join(s.split()). The first implementation used str.lower(). That fails for fullwidth text ('Ｆｏｏ' stays fullwidth under lower()) and for German sharp s ('Straße'.lower() never equals 'strasse'). Invariants: (1) normalize only the comparison keys and never write back to item['title'], because the test checks that items are deep-equal before and after; (2) return matches in input order; (3) do not strip accents: 'café' and 'cafe' must stay distinct, so NFKD plus combining-mark removal is wrong; (4) matching is exact on the key, not prefix or substring ('fo' matches nothing). Use `python3 -B` so no __pycache__ is written into the snapshotted tree. The check fails at 8b124f2 (lower()) and passes at 0ab39f5. That was worked out by reading the code; it was not run in this retrospective because Bash test execution was denied."
+      },
+      "model_content_unchanged": true,
+      "summary_characters": 115,
+      "approval": {
+        "status": "APPLIED",
+        "lesson_id": "L-0001",
+        "commit": "05186d31718a1fd1f8c96d1c69953fa82dfeec36",
+        "base_proposal": null,
+        "next": "经验已落地"
+      },
+      "exact_learned_check_proof": {
+        "red": {
+          "commit": "8b124f20e961d65d7ccf56f6f14202e450425f62",
+          "exit_code": 1
+        },
+        "green": {
+          "commit": "05186d31718a1fd1f8c96d1c69953fa82dfeec36",
+          "exit_code": 0
+        }
+      },
+      "followup": {
+        "role": "implement",
+        "call": "20261021T070523-implement-07330d",
+        "at": "2026-10-21T07:06:00+00:00",
+        "model": "claude-opus-5-5",
+        "vendor": "anthropic",
+        "wall_ms": 37041,
+        "cost_usd": 0.271416,
+        "lessons_provided": [
+          "L-0001"
+        ],
+        "lessons_claimed": [
+          "L-0001"
+        ],
+        "lessons_unknown": [],
+        "status": "OK",
+        "repairs": 0,
+        "context_lessons": [
+          {
+            "path": "openspec/lessons/L-0001.md",
+            "sha256": "28d16d5c50dc95ffaf2654aa597d71cea8de6230e321cf32ecd6eefb84db1b61"
+          }
+        ],
+        "response_schema_sha256": "4c37d383936f4b22d46debc55720866d4b940ea29c5ad39390e999e5ca2e2373",
+        "normalized_response_sha256": "16a530f31cf5abb2af214b6a458a3a12ea3d66ac89ea513a5e49f170f77cf537"
+      },
+      "followup_scope": "Approved related change with real implement role and actual checks; no full-loop claim",
+      "followup_checks": {
+        "unit_exit": 0,
+        "unit_output": "..\n----------------------------------------------------------------------\nRan 2 tests in 0.000s\n\nOK\n",
+        "independent_exit": 0,
+        "audit_status": "ALLOWED",
+        "changed_paths": [
+          "app/store.py",
+          "tests/test_titles.py"
+        ]
+      },
+      "followup_lessons_used": [
+        {
+          "id": "L-0001",
+          "how": "Reused the existing comparison key, wrote nothing back to item['title'], and tested that accents stay distinct, exact matching, data preservation, and that tests run with python3 -B."
+        }
+      ]
+    }
+  },
+  "engine_module_sha256": {
+    "storyloop/lessons.py": "6279bd6316e965fef93845c7f0942ccfda2d2107b3e3591d25fae164debf9519",
+    "storyloop/retrospective.py": "c8afe28a359c073b7d705c7915041973feefef7da3e8a5cda20034a247a40ac2",
+    "storyloop/role_schemas.py": "2509ae7bd22732b3d594d842e56c6df2af463c5f7d4f64fc38f72afa55093dde",
+    "storyloop/role_instructions.py": "31e8a6a0c0baa0ad77601a8768cb1b9d4f386d433d2b456ac1594f69760c2e58"
+  }
+}
