@@ -44,6 +44,8 @@ storyloop status C:\work\my-project --change FEAT-20260916-001 --json
 storyloop report C:\work\my-project --change FEAT-20260916-001
 ```
 
+首次接入可先 `storyloop init PATH --scaffold --stack python`（支持 Maven、Node、Python 及混合栈；未知/Gradle 仅 generic），补齐并提交后再执行原 init。契约与可运行薄执行器例子见[版本化冒烟执行器](docs/smoke-harness.md)。
+
 新人从 [定位与概念手册](docs/concepts.md) 和 [入门教程](docs/tutorial.md) 开始；完整说明见 [使用指南](docs/product-iteration-guide.md)，接入自己的仓库见 [接入手册](docs/onboarding-a-repository.md)。`docs/` 是本项目的知识库，入口是 [docs/README.md](docs/README.md)：使用文档之外，按模块、架构、扩展、接口、能力、积木、测试组织了给贡献者和代理读的工程文档。
 
 新协议按 light / standard / heavy 分流，重档先审核方案再实现；完整命令、预算与恢复见 [分流指南](docs/routing-guide.md)。最终报告按读者分成 0–6 节，并在每条信息旁保留来源与可用性。
@@ -128,6 +130,7 @@ my-project/
 | 命令 | 作用 |
 |---|---|
 | `init PATH [--settings FILE]` | 探测通用工程并锁定底座；可用 JSON 显式配置安全 argv |
+| `init PATH --scaffold [--stack STACK …]` | 生成待人工补全的接入草案；不初始化、不构建、不提交 |
 | `change PATH --idea TEXT [--no-interactive]` | 从一句产品意图创建草案；终端里逐条澄清待决问题 |
 | `change PATH --change ID --message TEXT` | 与 AI 继续修订同一变更 |
 | `approve PATH --change ID [--no-interactive]` | 批准并自动跑完后续闭环 |

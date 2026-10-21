@@ -7,6 +7,7 @@
 | 能力 | 入口 | 实现 | 决策 | 测试 |
 |---|---|---|---|---|
 | 技术栈中立的工程探测（根目录与一级子目录的 Maven、Gradle、Node、Python） | `init` | `project_profile.detect_project` | — | `test_project_profile*`、`test_monorepo_detection` |
+| 两阶段接入草案与版本化可信冒烟 helper | `init --scaffold --stack` | `onboarding.scaffold_project`、`testing.smoke_harness.v1` | — | `test_onboarding*`、`test_smoke_harness*` |
 | 锁定逻辑底座：已跟踪文件指纹、可变区、集成点、CI 保护 | `init [--settings]` | `baseline.bootstrap_project` | [0004](decisions/0004-foundation-vs-mutable-area.md) | `test_baseline_*` |
 | 底座漂移检查（文件指纹、索引标志、跟踪范围） | 每次 `run` 开始 | `baseline.verify_baseline` | [0004](decisions/0004-foundation-vs-mutable-area.md) | `test_project_security_gates` |
 | BASE 提案与回归门控升级（含上游同步、CI 由人纳入） | `base-propose`、`base-update` | `base_upgrade` | [0003](decisions/0003-single-repo-with-subtree.md)、[0004](decisions/0004-foundation-vs-mutable-area.md) | `test_base_propose`、`test_base_upgrade`、`test_resume_after_base_upgrade` |

@@ -9,6 +9,7 @@
 | 命令 | 参数 | 返回状态 |
 |---|---|---|
 | `init` | `[--settings FILE]` | `BASELINE_LOCKED` |
+| `init --scaffold` | `[--stack maven\|node\|python\|generic …]`；不得合用 --settings | `SCAFFOLD_CREATED` / `SCAFFOLD_UNCHANGED`（0），`SCAFFOLD_SELECTION_REQUIRED`（2）；均未初始化 |
 | `adapters check` | `[--json]` | 能力握手结果 |
 | `skills` | — | `SKILLS_INSTALLED` |
 | `survey` | `[--reason TEXT] [--from FILE]` | `SURVEYED` |
@@ -33,7 +34,7 @@
 | `lessons` | `[--confirm ID \| --retire ID --reason TEXT]` | 经验清单或 `COMMITTED`；确认与退休互斥，退休必须给理由 |
 | `lessons-propose` | `--change ID` | `DONE`、`FAILED`、`SKIPPED_NO_SIGNAL` 或 `SKIPPED_COST_LIMIT` 的复盘结果 |
 
-各命令的用法见 [使用指南](product-iteration-guide.md)。
+各命令的用法见 [使用指南](product-iteration-guide.md)。两阶段接入、onboarding.json、`{storyloop_harness}` argv、可信 case 及公开 helper API 见[版本化冒烟执行器](smoke-harness.md)。scaffold 幂等只接受未改草案；人工补齐后按干净提交执行原 init。init 失败按写入内容归属回滚，不覆盖并发修改。
 
 ### 外环指标 JSON
 

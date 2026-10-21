@@ -9,7 +9,7 @@
 | 你是 | 先读 | 再读 |
 |---|---|---|
 | 第一次接触的人 | [concepts.md](concepts.md) | [tutorial.md](tutorial.md) |
-| 要把自己的仓库接进来 | [onboarding-a-repository.md](onboarding-a-repository.md) | [api.md](api.md) 的配置一节、[faq.md](faq.md) |
+| 要把自己的仓库接进来 | [onboarding-a-repository.md](onboarding-a-repository.md) | [smoke-harness.md](smoke-harness.md)、[api.md](api.md) 的配置一节、[faq.md](faq.md) |
 | 日常使用者 | [product-iteration-guide.md](product-iteration-guide.md) | [faq.md](faq.md)（按停点组织） |
 | 写适配器或接 CI | [api.md](api.md) | [roles.md](roles.md) |
 | 改引擎的人或代理 | [modules.md](modules.md) | [extension.md](extension.md)、[building-blocks.md](building-blocks.md)、[testing.md](testing.md)、[contributing.md](contributing.md) |
@@ -25,6 +25,7 @@
 | [tutorial.md](tutorial.md) | 用 `examples/todo-demo/` 在 30 分钟内跑完一次闭环 |
 | [product-iteration-guide.md](product-iteration-guide.md) | 每个命令、每个停点、每个产物的完整说明 |
 | [roles.md](roles.md) | 七个角色：权限、输入、输出、是否是门 |
+| [smoke-harness.md](smoke-harness.md) | 两阶段草案、可信 case/业务子进程、严格计数与 helper API |
 | [onboarding-a-repository.md](onboarding-a-repository.md) | 接入新仓库：settings、冒烟执行器、代理规范、CI、自检清单 |
 | [faq.md](faq.md) | 按停点和现象组织的排障 |
 | [case-studies.md](case-studies.md) | RuoYi 底座上的真实成本与教训（历史数据） |
