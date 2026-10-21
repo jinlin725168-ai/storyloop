@@ -13,7 +13,7 @@ from __future__ import annotations
 import copy
 
 from .adapter_capabilities import ROLES
-from .lessons import ACTIONS, LANDING_KINDS, STATUSES, STRENGTHS, TIERS
+from .lessons import ACTIONS, LANDING_KINDS, MAX_SUMMARY, STATUSES, STRENGTHS, TIERS
 
 MAX_ERRORS = 12
 
@@ -35,6 +35,8 @@ def _nullable(schema: dict) -> dict:
     value["type"] = [*kind, "null"] if isinstance(kind, list) else [kind, "null"]
     if "enum" in value:
         value["enum"] = [*value["enum"], None]
+    if 'anyOf' in value:
+        value['anyOf'].append({'type': 'null'})
     return value
 
 
@@ -179,23 +181,53 @@ def _profiled_review(schema):
     return schema
 
 
-RETROSPECTIVE_LANDING = _obj({'kind': {'type': 'string', 'enum': list(LANDING_KINDS)},
-    'path': _nullable(STRING),
-    'append': _nullable(STRING), 'argv': _nullable(STRINGS), 'anchor': _nullable(STRING),
-    'name': _nullable(STRING), 'change': _nullable(STRING),
-    'principle': _nullable(_obj({'id': STRING, 'text': STRING}))}, open_=True)
+def _retrospective_landing(write: bool) -> dict:
+    """Keep references separate from writes; unused strict-wire fields must be null."""
+    fields = {'path': STRING, 'argv': STRINGS}
+    if write:
+        fields.update(append=STRING, change=STRING, principle=_obj({'id': STRING, 'text': STRING}))
+        variants = {'foundation': {'path', 'append'}, 'check_command': {'argv'},
+                    'principles': {'principle', 'change'}}
+        optional = set()
+    else:
+        fields.update(anchor=STRING, name=STRING)
+        variants = {'foundation': {'path', 'anchor'}, 'check_command': {'argv', 'name'}, 'principles': set()}
+        optional = {'anchor', 'name'}
+    schema = _obj({'kind': {'type': 'string', 'enum': list(LANDING_KINDS)},
+                   **{key: _nullable(value) for key, value in fields.items()}})
+    schema['anyOf'] = [_obj({'kind': {'type': 'string', 'enum': [kind]}, **{
+        key: (_nullable(value) if key in optional else value) if key in allowed else {'type': 'null'}
+        for key, value in fields.items()}}) for kind, allowed in variants.items()]
+    return schema
+
+
+RETROSPECTIVE_REFERENCE = _retrospective_landing(write=False)
+RETROSPECTIVE_LANDING = _retrospective_landing(write=True)
 RETROSPECTIVE_ENTRY = _obj({
-    'summary': STRING, 'tier': {'type': 'string', 'enum': list(TIERS)}, 'scope': STRINGS,
+    'summary': {'type': 'string', 'minLength': 1, 'maxLength': MAX_SUMMARY,
+                'description': 'Nonempty single-line summary, at most 120 Unicode characters. Put details in body.'},
+    'tier': {'type': 'string', 'enum': list(TIERS)}, 'scope': STRINGS,
     'roles': {'type': 'array', 'items': {'type': 'string', 'enum': list(ROLES)}},
     'strength': {'type': 'string', 'enum': list(STRENGTHS)},
     'source': STRING, 'baseline_commit': STRING,
     'status': {'type': 'string', 'enum': list(STATUSES)}, 'updated_at': STRING,
-    'supersedes': STRINGS, 'landings': {'type': 'array', 'items': RETROSPECTIVE_LANDING}})
+    'supersedes': STRINGS, 'landings': {'type': 'array', 'items': RETROSPECTIVE_REFERENCE,
+        'description': 'References, not write instructions. Required for every non-prose strength.'}})
+# Native generation enforces the same non-prose reference requirement as parse_lesson.
+# Keep properties available for normalization and deferred exact-field validation.
+_prose_entry = copy.deepcopy(RETROSPECTIVE_ENTRY)
+_prose_entry['properties']['strength']['enum'] = ['prose']
+_landed_entry = copy.deepcopy(RETROSPECTIVE_ENTRY)
+_landed_entry['properties']['strength']['enum'] = [item for item in STRENGTHS if item != 'prose']
+_landed_entry['properties']['landings']['minItems'] = 1
+RETROSPECTIVE_ENTRY['anyOf'] = [_prose_entry, _landed_entry]
 RETROSPECTIVE = _obj({
     'lessons': {'type': 'array', 'items': _obj({
         'action': {'type': 'string', 'enum': list(ACTIONS)}, 'target': _nullable(STRING),
         'entry': RETROSPECTIVE_ENTRY, 'body': STRING, 'why_needed': STRING, 'evidence': STRINGS,
-        'landing': _nullable(RETROSPECTIVE_LANDING)})},
+        'landing': {**_nullable(RETROSPECTIVE_LANDING), 'description':
+            'Write instruction, distinct from entry.landings references. For knowledge use foundation or principles; '
+            'for check use check_command. For prose use null. Unused fields must be null.'}})},
     'errata': {'type': 'array', 'items': _obj({'document': STRING, 'claim': STRING,
         'correction': STRING, 'evidence': STRINGS})},
     'uncovered_concepts': {'type': 'array', 'items': _obj({'concept': STRING, 'evidence': STRINGS,
@@ -287,10 +319,18 @@ def _check(value: object, schema: dict, path: str, errors: list[str]) -> None:
     if not _type_matches(value, schema["type"]):
         errors.append(f"{path}: expected {_type_name(schema['type'])}, got {_type_name(_json_type(value))}")
         return
+    if 'anyOf' in schema and not any(
+            not schema_errors(value, branch, path) for branch in schema['anyOf']):
+        errors.append(f"{path}: does not match any allowed variant")
+        return
     if type(value) in (int, float) and (value < schema.get("minimum", value) or value > schema.get("maximum", value)):
         errors.append(f"{path}: number outside allowed range")
-    if isinstance(value, str) and len(value) > schema.get('x-maxLength', len(value)):
-        errors.append(f"{path}: text exceeds allowed length")
+    if isinstance(value, str):
+        limit = min(schema.get('maxLength', len(value)), schema.get('x-maxLength', len(value)))
+        if len(value) > limit or len(value) < schema.get('minLength', 0):
+            errors.append(f"{path}: text outside allowed length")
+    if isinstance(value, list) and len(value) < schema.get('minItems', 0):
+        errors.append(f"{path}: too few items")
     if "enum" in schema and value not in schema["enum"]:
         allowed = ", ".join(repr(item) for item in schema["enum"] if item is not None)
         errors.append(f"{path}: must be one of {allowed}")
