@@ -5,10 +5,13 @@ import json
 import os
 import tempfile
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Iterator
 from .models import StoryLoopError
 from .path_security import safe_absolute_target
+
+_write_observer = ContextVar("storyloop_control_write_observer", default=None)
 
 IGNORED = {".git", "__pycache__", ".venv", "venv", "node_modules", ".pytest_cache", "target", ".mypy_cache"}
 
@@ -44,6 +47,9 @@ def write_bytes_atomic(path: Path, content: bytes) -> None:
     """Atomically write bytes without following a pre-created temporary link."""
     path = Path(path).absolute()
     safe_absolute_target(path, "controlled write path")
+    observer = _write_observer.get()
+    if observer is not None:
+        observer(path, content)
     path.parent.mkdir(parents=True, exist_ok=True)
     safe_absolute_target(path, "controlled write path")
     descriptor, name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)

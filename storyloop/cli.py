@@ -9,7 +9,8 @@ import sys
 from . import __version__
 from .answers import pending_questions, record_answers
 from .approvals import approve_change
-from .baseline import BASELINE_PATH, bootstrap_project
+from .baseline import BASELINE_PATH
+from .onboarding_cli import initialize, add_init_arguments
 from .base_upgrade import propose_base_change, upgrade_baseline
 from .foundation_survey import survey_foundation
 from .skills import install_skills
@@ -86,10 +87,7 @@ def _product_arguments(child, command):
     if command == "readiness":
         child.add_argument("--change", dest="change_id")
     elif command == "init":
-        child.add_argument("--settings", type=Path,
-                           help="可选 JSON 工程画像：unit_commands（旧名 test_commands）、integration_commands、"
-                                "check_commands、test_roots、module_roots、integration_paths、"
-                                "candidate_allow、scratch_paths")
+        add_init_arguments(child)
     elif command == "change":
         child.add_argument("--idea")
         child.add_argument("--change", dest="change_id")
@@ -181,9 +179,7 @@ def dispatch(args) -> dict:
     if routed is not None:
         return routed
     if args.command == "init":
-        require((project / ".git").exists(), "storyloop init needs an existing Git repository (git init first)")
-        settings = load_json(args.settings.resolve()) if args.settings else None
-        return bootstrap_project(project, settings)
+        return initialize(project, args)
     if args.command == "change":
         return _change(project, args)
     if args.command == "base-propose":
@@ -474,7 +470,7 @@ def main(argv: list[str] | None = None) -> int:
             "UNSAFE_CONTAINMENT", "WORKSPACE_TAINTED",
             "BUDGET_EXHAUSTED", "BASE_CHANGE_REQUIRED",
             "BOUNDARY_VIOLATION", "ERROR", "CHARACTERIZATION_FAILED",
-            "SMOKE_UPDATE_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_SPEC_FIX", "NO_PROGRESS",
+            "SCAFFOLD_SELECTION_REQUIRED", "SMOKE_UPDATE_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_SPEC_FIX", "NO_PROGRESS",
         }
         return 2 if result.get("status") in failures | BLOCKED else 0
     except StoryLoopError as exc:

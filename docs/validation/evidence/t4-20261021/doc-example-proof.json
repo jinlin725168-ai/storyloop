@@ -1,0 +1,73 @@
+{
+  "scope": "Executed literal Python blocks from docs/smoke-harness.md; public fixture, no external dependency",
+  "scaffold_status": "SCAFFOLD_CREATED",
+  "init_status": "BASELINE_LOCKED",
+  "checks": {
+    "green": {
+      "status": "PASSED",
+      "returncode": 0,
+      "counts": {
+        "executed": 1,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "code": 0,
+        "diagnostics": [],
+        "parser": "storyloop_harness_v1"
+      }
+    },
+    "assertion_red": {
+      "status": "FAILED",
+      "returncode": 1,
+      "counts": {
+        "executed": 1,
+        "failed": 1,
+        "errors": 0,
+        "skipped": 0,
+        "code": 1,
+        "diagnostics": [],
+        "parser": "storyloop_harness_v1"
+      }
+    },
+    "bad_value_type": {
+      "status": "FAILED",
+      "returncode": 2,
+      "counts": {
+        "executed": 1,
+        "failed": 0,
+        "errors": 1,
+        "skipped": 0,
+        "code": 2,
+        "diagnostics": [],
+        "parser": "storyloop_harness_v1"
+      }
+    },
+    "premature_exit": {
+      "status": "FAILED",
+      "returncode": 2,
+      "counts": {
+        "executed": 1,
+        "failed": 0,
+        "errors": 1,
+        "skipped": 0,
+        "code": 2,
+        "diagnostics": [],
+        "parser": "storyloop_harness_v1"
+      }
+    },
+    "forged_judge_stdout": {
+      "status": "FAILED",
+      "returncode": 2,
+      "counts": {
+        "executed": 1,
+        "failed": 0,
+        "errors": 1,
+        "skipped": 0,
+        "code": 2,
+        "diagnostics": [],
+        "parser": "storyloop_harness_v1"
+      }
+    }
+  },
+  "not_production_human_signoff": true
+}

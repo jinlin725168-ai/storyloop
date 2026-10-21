@@ -4,6 +4,10 @@ import re
 import time
 import subprocess
 import threading
+import os
+import tempfile
+
+from .processutil import _start_process, _cleanup_process, _environment
 
 
 MAX_GIT_SECONDS = 10
@@ -63,43 +67,60 @@ def _commit(git, value):
 
 
 def _git(root, deadline, limit, *args):
+    return _capture(root, deadline, limit, ['git', '--no-pager', *args])
+
+
+def _capture(root, deadline, limit, command):
     remaining = deadline - time.monotonic()
     empty = {'stdout': '', 'returncode': None, 'limited': True}
     if remaining <= 0:
         return empty
     try:
-        with subprocess.Popen(['git', '--no-pager', *args], cwd=root, stdin=subprocess.DEVNULL,
-                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as process:
+        with tempfile.TemporaryFile() as source, open(os.devnull, 'wb') as error:
+            call = _CaptureProcess(command, root, source, error)
             expired = threading.Event()
-            timer = threading.Timer(remaining, _expire, args=(process, expired))
-            timer.start()
+            timer, started = None, False
             try:
-                # The pipe applies backpressure: retain at most limit+1 bytes, never
-                # collect arbitrary output to memory or an unbounded temporary file.
-                output = process.stdout.read(limit + 1)
+                timer = threading.Timer(max(0, deadline-time.monotonic()), _expire, args=(call, expired))
+                timer.start()
+                started = True
+                # Keep pipe backpressure and the exact limit+1 read budget. Killing
+                # only git.exe can leave its real Git child holding a Windows cwd.
+                output = call.process.stdout.read(limit + 1)
                 limited = len(output) > limit
                 if limited:
-                    _kill(process)
-                process.wait(timeout=max(0.01, deadline - time.monotonic()))
-                text = output[:limit].decode('utf-8')
-                return {'stdout': text, 'returncode': process.returncode,
-                        'limited': limited or expired.is_set()}
+                    call.finish()
+                call.process.wait(timeout=max(.01, deadline-time.monotonic()))
+                result = {'stdout': output[:limit].decode('utf-8'),
+                          'returncode': call.process.returncode,
+                          'limited': limited or expired.is_set()}
             finally:
-                timer.cancel()
-                _kill(process)
-                timer.join()
-    except (OSError, UnicodeError, subprocess.TimeoutExpired):
+                if timer is not None:
+                    timer.cancel()
+                stopped = call.finish()
+                if started:
+                    timer.join()
+                call.process.stdout.close()
+            return result if stopped else empty
+    except (OSError, UnicodeError, RuntimeError, subprocess.TimeoutExpired):
         return empty
 
 
-def _kill(process):
-    try:
-        if process.poll() is None:
-            process.kill()
-    except ProcessLookupError:
-        pass
+class _CaptureProcess:
+    """Own the Git tree; deadline and output-budget cleanup share one finalizer."""
+    def __init__(self, command, root, source, error):
+        self._lock = threading.Lock()
+        self._stopped = None
+        self.process, self.job, self.feeder = _start_process(
+            command, root, _environment(None, None), source, subprocess.PIPE, error)
+
+    def finish(self):
+        with self._lock:
+            if self._stopped is None:
+                self._stopped, _ = _cleanup_process(self.process, self.job, self.feeder)
+            return self._stopped
 
 
-def _expire(process, expired):
+def _expire(call, expired):
     expired.set()
-    _kill(process)
+    call.finish()

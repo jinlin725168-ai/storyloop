@@ -11,15 +11,51 @@ from .models import StoryLoopError, require
 from .path_security import safe_target
 from .processutil import run_process
 from .project_profile import GENERATED_PATHS, matches_test_root, validate_project_settings
-from .storage import load_json, write_json
+from .storage import load_json, write_json, write_text_atomic
 
 BASELINE_PATH = Path(".storyloop/baseline.json")
 CONFIG_PATH = Path(".storyloop/config.json")
 
 
 def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
-    """Capture a clean repository as the immutable logical foundation."""
+    """Capture a clean repository atomically; restore only this attempt's control writes."""
+    from .initialization_transaction import initialization_transaction
+    from .onboarding_manifest import validate_onboarding
     project = Path(project).resolve()
+    _require_initializable(project)
+    original_head = _git(project, "rev-parse", "HEAD").strip()
+    original_branch = _git(project, "branch", "--show-current").strip()
+    settings, budget, role_config = _bootstrap_settings(overrides)
+    profile = validate_project_settings(project, settings)
+    validate_onboarding(project, profile)
+    baseline = _initial_baseline(project, profile)
+    require(baseline["source_head"] == original_head and baseline["source_branch"] == original_branch,
+            "Repository HEAD or branch changed during initialization validation")
+    config = _initial_config(profile, budget, role_config)
+    _preflight_system_smoke(project)
+    with initialization_transaction(project):
+        _require_initializable(project)
+        require(_git(project, "rev-parse", "HEAD").strip() == original_head
+                and _git(project, "branch", "--show-current").strip() == original_branch,
+                "Repository HEAD changed during initialization")
+        _verify_foundation_files(project, baseline)
+        _exclude_control_plane(project)
+        write_json(project / CONFIG_PATH, config, max_bytes=512_000)
+        write_json(project / BASELINE_PATH, baseline, max_bytes=8_000_000)
+        from .system_smoke import adopt_system_smoke
+        adopt_system_smoke(project)
+        if config.get("adapters") or config.get("roles"):
+            from .adapter_capabilities import check
+            check(project)
+        require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
+                "StoryLoop control files must stay outside Git changes")
+        require(_git(project, "rev-parse", "HEAD").strip() == original_head
+                and _git(project, "branch", "--show-current").strip() == original_branch,
+                "Repository HEAD changed during initialization")
+    return _bootstrap_result(project, baseline, profile)
+
+
+def _require_initializable(project: Path) -> None:
     require(project.is_dir(), "Git project must be an existing directory")
     require(not (project / BASELINE_PATH).exists(), "StoryLoop baseline already exists")
     top = Path(_git(project, "rev-parse", "--show-toplevel").strip()).resolve()
@@ -27,48 +63,37 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
             "Project must be the Git repository root")
     require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
             "Git worktree must be clean before initialization")
-    settings, budget, role_config = _bootstrap_settings(overrides)
-    profile = validate_project_settings(project, settings)
+    require(bool(_git(project, "branch", "--show-current").strip()),
+            "Git repository must be on a named branch")
+
+
+def _initial_baseline(project: Path, profile: dict) -> dict:
     tracked = _tracked_files(project)
-    files = {relative: _sha256(project / relative) for relative in tracked}
-    source_head = _git(project, "rev-parse", "HEAD").strip()
-    source_branch = _git(project, "branch", "--show-current").strip()
-    require(bool(source_branch), "Git repository must be on a named branch")
     protected = _foundation_paths(tracked, profile)
-    _exclude_control_plane(project)
-    config = {
-        "version": 1,
-        "mode": "product-iteration",
-        "adapter": "codex",
-        "agent_command": [],
-        "agent_timeout_seconds": 14400,  # liveness guard only; the budget is max_attempts
-        "check_timeout_seconds": 300,
-        "design_min_stories": 2,  # the architect step runs for changes with at least this many stories
-        "profile": profile,
-        **budget,
-        **role_config,
-    }
-    baseline = {
-        "version": 1,
-        "baseline_version": "1.0.0",
-        "source_head": source_head,
-        "source_branch": source_branch,
-        "files": files,
-        "foundation_paths": protected,
-        "module_roots": profile["module_roots"],
+    return {
+        "version": 1, "baseline_version": "1.0.0",
+        "source_head": _git(project, "rev-parse", "HEAD").strip(),
+        "source_branch": _git(project, "branch", "--show-current").strip(),
+        "files": {relative: _sha256(project / relative) for relative in tracked},
+        "foundation_paths": protected, "module_roots": profile["module_roots"],
         "integration_paths": profile["integration_paths"],
         "protected_paths": sorted(set(protected) | set(profile["protected_paths"])),
     }
-    write_json(project / CONFIG_PATH, config, max_bytes=512_000)
-    write_json(project / BASELINE_PATH, baseline, max_bytes=8_000_000)
-    from .system_smoke import adopt_system_smoke  # a committed system suite of a clean tree is trusted at init
-    adopt_system_smoke(project)
-    if config.get("adapters") or config.get("roles"):
-        from .adapter_capabilities import check
-        check(project)
-    require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
-            "StoryLoop control files must stay outside Git changes")
-    return _bootstrap_result(project, baseline, profile)
+
+
+def _initial_config(profile: dict, budget: dict, role_config: dict) -> dict:
+    return {
+        "version": 1, "mode": "product-iteration", "adapter": "codex", "agent_command": [],
+        "agent_timeout_seconds": 14400, "check_timeout_seconds": 300,
+        "design_min_stories": 2, "profile": profile, **budget, **role_config,
+    }
+
+
+def _preflight_system_smoke(project: Path) -> None:
+    from .system_smoke import SYSTEM_SMOKE_DIR, validate_manifest
+    path = safe_target(project, SYSTEM_SMOKE_DIR + "/manifest.json", "system smoke manifest")
+    if path.is_file():
+        validate_manifest(load_json(path))
 
 
 def _bootstrap_settings(overrides: dict | None) -> tuple[dict, dict, dict]:
@@ -215,7 +240,7 @@ def _exclude_control_plane(project: Path) -> None:
         prefix = current
         if prefix and not prefix.endswith("\n"):
             prefix += "\n"
-        exclude.write_text(prefix + ".storyloop/\n", encoding="utf-8", newline="\n")
+        write_text_atomic(exclude, prefix + ".storyloop/\n")
 
 
 # The home variables let git read the user's global config (identity, safe.directory) as it would

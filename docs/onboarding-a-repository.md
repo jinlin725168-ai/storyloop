@@ -13,6 +13,12 @@ flowchart LR
 
 先按 **init → readiness → 补基础或确认缺口 → change → 产品批准 → 重档方案批准 → run** 接入。详见 [分流、审批与恢复](routing-guide.md)，其中说明 0/未知执行数、人工缺口、预算及适配器新字段。
 
+## 0. 可选的两阶段草案
+
+新仓库先 `storyloop init PATH --scaffold --stack python --json`；Maven+Node 重复 `--stack maven --stack node`。无歧义探测可省栈，否则明确选择。生成三类产物及受保护 onboarding.json，只生成草案，不改控制面或执行命令。补齐 hook、settings 与规范，审阅提交，再按原 `init --settings` 锁定；未完成返回 2。旧仓库仍可用 vendored 执行器。完整参数、版本与可信 case/业务子进程例子见[版本化冒烟执行器](smoke-harness.md)。
+
+下文 RuoYi 是历史项目的手工接入参考；模板不搬运其数据库、鉴权或登录实现，也不自动执行任何数据操作。
+
 ## 1. 仓库准备
 
 - 单一 Git 根目录，工作树干净，处在有名字的本地分支。多个上游用 `git subtree add --squash` 引进来（`backend/`、`frontend/`），上游同步就是一次 BASE 迭代。
@@ -79,6 +85,8 @@ flowchart LR
 - 用 `--dry-run` 看适配器实际拼出的 `claude` argv。
 
 ## 4. 验收执行器
+
+新 helper 使用 `["{storyloop_harness}", "acceptance/tools/<stack>_smoke.py", ...case_paths]`，由引擎解析并在隔离解释器内运行。可信 case 持有计数，业务在独立子进程；详情见[新契约](smoke-harness.md)。下面 `{python}` 与 RuoYi 段落描述兼容的旧 vendored 路线。
 
 acceptance 角色写的变更验收 manifest 命令形如：
 

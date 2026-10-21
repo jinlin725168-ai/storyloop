@@ -4,7 +4,7 @@
 
 ## 一、单元与端到端测试
 
-- 框架：标准库 `unittest`，不依赖第三方包、模型账号或网络。
+- 框架：标准库 `unittest`，不依赖第三方包或模型账号；健康探针专项仅在本机回环启动临时服务，不访问外网。
 - 位置：`tests/`；文件与用例数量随开发变化，以全量运行输出为准。本机（WSL2）全量通常超过 10 分钟。
 - 原理：每个测试在临时目录建一个真实 Git 仓库，`init` 锁底座，用脚本化的 `LoopServices`（Python 函数代替代理）或假的 `codex` / `claude` 可执行文件驱动闭环，断言状态、文件和 Git 历史。
 
@@ -40,6 +40,10 @@
 | `repository(root)`、`git(root, ...)` | `tests/test_baseline_behavior.py` | 建带 CI 文件的临时 Git 仓库、跑 git 命令 |
 | `smoke_payload(...)` | `tests/test_project_loop.py` | 一个能在候选副本里跑的变更验收套件 |
 
+
+### 接入模板与 helper 验证
+
+`test_onboarding*` 验证栈矩阵、幂等/冲突、独占事务/故障回滚、精确保护、BASE 迁移及 wheel 安装；`test_smoke_harness*` 验证严格 0/1/2、可信计数、路径与私有 scratch、健康/服务回收、候选导入和结果伪造拒绝。均使用公开临时夹具，不能证明真实 RuoYi 接入或工时收益。[T4 验收](validation/2026-10-21-接入模板化-验收.md)分别记录固定 revision 的 full 和后续限定回归。
 
 ### 测试地图
 

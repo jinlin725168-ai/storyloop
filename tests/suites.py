@@ -19,11 +19,13 @@ FAST = [
     "tests.test_metrics_rules", "tests.test_metrics_compute",
     "tests.test_product_spec", "tests.test_project_agents", "tests.test_project_git_lifecycle",
     "tests.test_project_profile", "tests.test_project_profile_behavior", "tests.test_report_call_provenance",
-    "tests.test_report_evidence", "tests.test_report_final_fixes", "tests.test_report_focus",
+    "tests.test_report_evidence", "tests.test_report_final_fixes", "tests.test_report_git_process", "tests.test_report_focus",
     "tests.test_report_presentation", "tests.test_report_rendering", "tests.test_role_context_integration",
     "tests.test_role_profiles", "tests.test_role_schemas", "tests.test_role_subagents",
     "tests.test_routing_policy", "tests.test_routing_risks", "tests.test_skill_selection",
     "tests.test_skills", "tests.test_smoke", "tests.test_stop_report",
+    "tests.test_onboarding", "tests.test_onboarding_lock", "tests.test_smoke_harness",
+    "tests.test_smoke_harness_protocol", "tests.test_smoke_harness_scratch",
 ]
 
 # The main flow end to end: contract, RED, implementation, review, report, merge.
@@ -37,7 +39,9 @@ SAFETY = [
     "tests.test_boundaries", "tests.test_project_boundaries", "tests.test_project_security_gates",
     "tests.test_project_loop_tampering", "tests.test_process_containment", "tests.test_workspace_scratch",
     "tests.test_ci_path_safety", "tests.test_windows_path_guards", "tests.test_oracle_protection",
-    "tests.test_retrospective_protocol",
+    "tests.test_retrospective_protocol", "tests.test_onboarding_transactions",
+    "tests.test_onboarding_safety", "tests.test_onboarding_migration", "tests.test_smoke_harness_lifecycle",
+    "tests.test_onboarding_acceptance",
 ]
 
 # The command line users type.

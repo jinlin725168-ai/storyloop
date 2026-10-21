@@ -1,0 +1,18 @@
+{
+  "run": "39569485567",
+  "sha": "9f0a30befe2f0e6b0c15e91054af3eb2914d955f",
+  "url": "https://github.com/jinlin725168-ai/storyloop/actions/runs/39569485567",
+  "linux": "PASS",
+  "windows": "FAIL",
+  "failed_modules": [
+    "tests.test_onboarding",
+    "tests.test_onboarding_safety",
+    "tests.test_onboarding_transactions",
+    "tests.test_report_final_fixes",
+    "tests.test_smoke_harness_scratch"
+  ],
+  "new_failures_fix": "9648763",
+  "report_occupying_pid_unknown": true,
+  "parent_only_kill_descendant_leak_separately_reproduced": true,
+  "no_successful_windows_claim_at_this_revision": true
+}

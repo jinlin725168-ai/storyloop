@@ -1,0 +1,129 @@
+{
+  "samples": [
+    {
+      "sample": "independent-python",
+      "scaffold": "SCAFFOLD_CREATED",
+      "pending_exit": 2,
+      "init": "BASELINE_LOCKED",
+      "smoke": "PASSED",
+      "results": [
+        {
+          "id": "python",
+          "status": "PASS",
+          "returncode": 0,
+          "counts": {
+            "executed": 1,
+            "failed": 0,
+            "errors": 0,
+            "skipped": 0,
+            "code": 0,
+            "diagnostics": [],
+            "parser": "storyloop_harness_v1"
+          }
+        }
+      ],
+      "readiness": "READY",
+      "readiness_layers": {
+        "unit": {
+          "status": "PASSED",
+          "executed": 1,
+          "failed": 0
+        },
+        "integration": {
+          "status": "MISSING",
+          "executed": null,
+          "failed": null
+        },
+        "checks": {
+          "status": "PASSED",
+          "executed": null,
+          "failed": null
+        },
+        "smoke": {
+          "status": "PASSED",
+          "executed": 1,
+          "failed": 0
+        }
+      },
+      "wall_seconds": 2.882,
+      "real_tools": [
+        "python"
+      ],
+      "simulated_hooks": [],
+      "external_dependencies": [],
+      "maven_plugin_build": "NOT_RUN"
+    },
+    {
+      "sample": "maven-node-shape",
+      "scaffold": "SCAFFOLD_CREATED",
+      "pending_exit": 2,
+      "init": "BASELINE_LOCKED",
+      "smoke": "PASSED",
+      "results": [
+        {
+          "id": "maven",
+          "status": "PASS",
+          "returncode": 0,
+          "counts": {
+            "executed": 1,
+            "failed": 0,
+            "errors": 0,
+            "skipped": 0,
+            "code": 0,
+            "diagnostics": [],
+            "parser": "storyloop_harness_v1"
+          }
+        },
+        {
+          "id": "node",
+          "status": "PASS",
+          "returncode": 0,
+          "counts": {
+            "executed": 1,
+            "failed": 0,
+            "errors": 0,
+            "skipped": 0,
+            "code": 0,
+            "diagnostics": [],
+            "parser": "storyloop_harness_v1"
+          }
+        }
+      ],
+      "readiness": "READY",
+      "readiness_layers": {
+        "unit": {
+          "status": "PASSED",
+          "executed": 1,
+          "failed": 0
+        },
+        "integration": {
+          "status": "MISSING",
+          "executed": null,
+          "failed": null
+        },
+        "checks": {
+          "status": "PASSED",
+          "executed": null,
+          "failed": null
+        },
+        "smoke": {
+          "status": "PASSED",
+          "executed": 2,
+          "failed": 0
+        }
+      },
+      "wall_seconds": 3.947,
+      "real_tools": [
+        "javac",
+        "java",
+        "node"
+      ],
+      "simulated_hooks": [],
+      "external_dependencies": [],
+      "maven_plugin_build": "NOT_RUN"
+    }
+  ],
+  "human_effective_hours": null,
+  "wait_seconds_separately_measured": false,
+  "limitation": "Synthetic offline fixtures; no actual RuoYi or universal half-day claim"
+}

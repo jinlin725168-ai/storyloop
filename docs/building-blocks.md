@@ -2,6 +2,8 @@
 
 对应引擎版本：0.1.0，核对日期 2026-10-11。改引擎之前先查这里：下面每一项都已经处理过安全、跨平台和崩溃恢复的细节，重写一遍通常会丢掉其中一项。
 
+新项目的版本化 helper 在 `storyloop.testing.smoke_harness.v1`，包括明确 case、可信计数、内容同步、私有 scratch、受控构建与进程清理。入口和业务子进程示例见[新执行器契约](smoke-harness.md)；`examples/tools/smoke_harness.py` 保留为旧 vendored 路线，其历史行为不代表新 API。
+
 ## 一、引擎内部
 
 | 积木 | 路径 | 用途 | 典型调用 |

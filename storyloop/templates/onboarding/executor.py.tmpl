@@ -1,0 +1,38 @@
+"""__STACK__ 接入草案：未初始化，需人工补全；经受信 launcher 运行。
+
+构建/启动必须离线；仅同步清单中 source_files，不扫描目录或读取凭证。
+业务依赖在独立子进程中加载。不要在此解释器中导入候选业务包或修改 sys.path。
+每个不需要的阶段须在 onboarding.json 中填写 not_applicable 和 reason。
+"""
+
+
+def build(context):
+    raise RuntimeError("Configure build hook")
+
+
+def start(context):
+    raise RuntimeError("Configure start hook")
+
+
+def ready(context):
+    raise RuntimeError("Configure ready hook")
+
+
+def run_case(context, case):
+    raise RuntimeError("Configure run_case hook")
+
+
+def cleanup(context):
+    raise RuntimeError("Configure cleanup hook")
+
+
+def run(context):
+    from storyloop.testing.smoke_harness.v1 import run_hooks
+    return run_hooks(context, build=build, start=start, ready=ready,
+                     run_case=run_case, cleanup=cleanup)
+
+
+if __name__ == "__main__":
+    import sys
+    print("未初始化、需人工补全；请通过同版本 StoryLoop 的受信 launcher 运行。")
+    sys.exit(2)

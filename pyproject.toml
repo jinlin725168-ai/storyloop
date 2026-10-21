@@ -17,4 +17,4 @@ storyloop = "storyloop.cli:main"
 include = ["storyloop*"]
 
 [tool.setuptools.package-data]
-storyloop = ["skills/**/*.md"]
+storyloop = ["skills/**/*.md", "templates/onboarding/*"]

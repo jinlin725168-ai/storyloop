@@ -54,6 +54,10 @@
 | | `openspec_docs` | 增量规格、活规格并入与取代、decisions.md、`openspec validate` 门、`document` | `render_delta_spec`、`merge_into_main_spec`、`document_change` |
 | | `answers` | NEEDS_INPUT 问答账本 | `record_answers`、`pending_questions` |
 | | `manual_acceptance` | 人工验收记录，绑定实现指纹 | `record_manual_acceptance`、`pending_manual_criteria` |
+| 接入 | `onboarding` / `onboarding_cli` / `onboarding_discovery` | 两阶段草案入口、安全检测与 CLI 分发 | `scaffold_project` |
+| | `onboarding_templates` / `onboarding_install` / `onboarding_manifest` | 包资源、分阶段安装、完整性/版本/保护校验 | `render`、`validate_onboarding` |
+| | `initialization_transaction` | 独占初始化锁与按内容归属回滚 | `initialization_transaction` |
+| | `harness_command` / `testing.smoke_harness` | 首 argv 展开、可信 launcher/case、私有 scratch 与进程生命周期 | `testing.smoke_harness.v1` |
 | 工程与底座 | `baseline` | `init`：锁定底座、写控制面配置；底座漂移检查 | `bootstrap_project`、`verify_baseline`、`load_project_config` |
 | | `project_profile` | 技术栈中立的工程探测、settings 校验、测试分层命令 | `detect_project`、`validate_project_settings`、`layer_commands`、`matches_test_root` |
 | | `project_boundaries` | 把每个 Git 可见改动分类为可变区 / 集成点 / 底座 / CI / 违规 | `audit_project_changes` |
