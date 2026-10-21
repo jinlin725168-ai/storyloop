@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 import unittest
 from unittest import mock
 
@@ -329,7 +330,7 @@ class LandingTests(unittest.TestCase):
         from storyloop.lesson_landing import write_bytes_atomic
         failed = []
         def fail_once(path, content):
-            if 'openspec/foundation' in str(path) and not failed:
+            if 'openspec/foundation' in Path(path).as_posix() and not failed:  # Windows paths use backslashes
                 failed.append(True)
                 raise OSError('write failure')
             return write_bytes_atomic(path, content)
