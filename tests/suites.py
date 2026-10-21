@@ -24,6 +24,8 @@ FAST = [
     "tests.test_role_profiles", "tests.test_role_schemas", "tests.test_role_subagents",
     "tests.test_routing_policy", "tests.test_routing_risks", "tests.test_skill_selection",
     "tests.test_skills", "tests.test_smoke", "tests.test_stop_report",
+    "tests.test_onboarding", "tests.test_onboarding_lock", "tests.test_smoke_harness",
+    "tests.test_smoke_harness_protocol", "tests.test_smoke_harness_scratch",
 ]
 
 # The main flow end to end: contract, RED, implementation, review, report, merge.
@@ -37,7 +39,8 @@ SAFETY = [
     "tests.test_boundaries", "tests.test_project_boundaries", "tests.test_project_security_gates",
     "tests.test_project_loop_tampering", "tests.test_process_containment", "tests.test_workspace_scratch",
     "tests.test_ci_path_safety", "tests.test_windows_path_guards", "tests.test_oracle_protection",
-    "tests.test_retrospective_protocol",
+    "tests.test_retrospective_protocol", "tests.test_onboarding_transactions",
+    "tests.test_onboarding_safety", "tests.test_smoke_harness_lifecycle",
 ]
 
 # The command line users type.

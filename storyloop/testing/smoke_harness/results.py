@@ -1,24 +1,33 @@
 """Strict execution evidence; unknown outcomes never prove RED or GREEN."""
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 import json
+import re
 
 from ...models import require
 
 PREFIX = "STORYLOOP_HARNESS_V1="
+COUNTS = ("executed", "failed", "errors", "skipped")
+STAGES = {"launch", "input", "source_sync", "dependency_cache", "build", "start", "ready",
+          "run_case", "runner", "import", "timeout", "cleanup", "service_exit", "service_cleanup"}
 
 
 @dataclass(frozen=True)
 class Result:
-    """Actual test counts; errors dominate assertion failures and zero execution."""
+    """Actual counts and sanitized stage identifiers; errors dominate all failures."""
     executed: int = 0
     failed: int = 0
     errors: int = 0
     skipped: int = 0
+    diagnostics: tuple[str, ...] = ()
 
     def __post_init__(self):
-        require(all(type(value) is int and value >= 0 for value in asdict(self).values()),
+        require(all(type(getattr(self, key)) is int and getattr(self, key) >= 0 for key in COUNTS),
                 "Invalid harness counts")
         require(self.failed <= self.executed, "Failures exceed executed tests")
+        require(isinstance(self.diagnostics, tuple) and len(self.diagnostics) <= 20 and all(
+            isinstance(item, str) and (item in STAGES or re.fullmatch(
+                r"scratch_cleanup(?::storyloop-[0-9a-f]+-[A-Za-z0-9_-]+)?", item))
+            for item in self.diagnostics), "Invalid diagnostic stage")
 
     @property
     def code(self) -> int:
@@ -27,18 +36,20 @@ class Result:
 
     def __add__(self, other):
         require(isinstance(other, Result), "Unrecognized runner result")
-        return Result(*(getattr(self, key) + getattr(other, key) for key in asdict(self)))
+        return Result(**{key: getattr(self, key) + getattr(other, key) for key in COUNTS},
+                      diagnostics=tuple(dict.fromkeys((*self.diagnostics, *other.diagnostics)))[:20])
 
     def document(self) -> dict:
-        """Stable machine evidence, including the exit code implied by the counts."""
-        return {**asdict(self), "code": self.code}
+        """Stable machine evidence; diagnostics never contain project exception text."""
+        return {**{key: getattr(self, key) for key in COUNTS}, "code": self.code,
+                "diagnostics": list(self.diagnostics)}
 
 
 def decode(value: object) -> Result:
-    """Validate an entire worker evidence object rather than trusting an arbitrary code."""
-    require(isinstance(value, dict) and set(value) ==
-            {"executed", "failed", "errors", "skipped", "code"}, "Invalid harness result")
-    result = Result(**{key: value[key] for key in ("executed", "failed", "errors", "skipped")})
+    """Validate an entire launcher record rather than trusting an arbitrary code."""
+    require(isinstance(value, dict) and set(value) == {*COUNTS, "code", "diagnostics"}
+            and isinstance(value["diagnostics"], list), "Invalid harness result")
+    result = Result(**{key: value[key] for key in COUNTS}, diagnostics=tuple(value["diagnostics"]))
     require(type(value["code"]) is int and value["code"] == result.code, "Inconsistent harness result")
     return result
 
@@ -52,4 +63,4 @@ def evidence(stdout: str, returncode: int | None) -> Result:
         require(returncode == result.code, "Harness exit disagrees with evidence")
         return result
     except (ValueError, IndexError, TypeError):
-        return Result(errors=1)
+        return Result(errors=1, diagnostics=("runner",))

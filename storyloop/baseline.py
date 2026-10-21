@@ -23,16 +23,22 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
     from .onboarding_manifest import validate_onboarding
     project = Path(project).resolve()
     _require_initializable(project)
+    original_head = _git(project, "rev-parse", "HEAD").strip()
+    original_branch = _git(project, "branch", "--show-current").strip()
     settings, budget, role_config = _bootstrap_settings(overrides)
     profile = validate_project_settings(project, settings)
     validate_onboarding(project, profile)
     baseline = _initial_baseline(project, profile)
+    require(baseline["source_head"] == original_head and baseline["source_branch"] == original_branch,
+            "Repository HEAD or branch changed during initialization validation")
     config = _initial_config(profile, budget, role_config)
     _preflight_system_smoke(project)
     with initialization_transaction(project):
         _require_initializable(project)
-        require(_git(project, "rev-parse", "HEAD").strip() == baseline["source_head"],
+        require(_git(project, "rev-parse", "HEAD").strip() == original_head
+                and _git(project, "branch", "--show-current").strip() == original_branch,
                 "Repository HEAD changed during initialization")
+        _verify_foundation_files(project, baseline)
         _exclude_control_plane(project)
         write_json(project / CONFIG_PATH, config, max_bytes=512_000)
         write_json(project / BASELINE_PATH, baseline, max_bytes=8_000_000)
@@ -43,7 +49,8 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
             check(project)
         require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
                 "StoryLoop control files must stay outside Git changes")
-        require(_git(project, "rev-parse", "HEAD").strip() == baseline["source_head"],
+        require(_git(project, "rev-parse", "HEAD").strip() == original_head
+                and _git(project, "branch", "--show-current").strip() == original_branch,
                 "Repository HEAD changed during initialization")
     return _bootstrap_result(project, baseline, profile)
 

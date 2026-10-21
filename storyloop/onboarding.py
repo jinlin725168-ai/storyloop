@@ -7,7 +7,7 @@ from .onboarding_templates import HINTS, MANIFEST, render
 from .onboarding_manifest import validate_onboarding
 from .onboarding_install import install as _install
 from .path_security import safe_target
-from .project_profile import detect_project
+from .onboarding_discovery import safe_discovery
 
 
 def scaffold_project(project: Path, stacks: list[str] | None = None) -> dict:
@@ -15,7 +15,8 @@ def scaffold_project(project: Path, stacks: list[str] | None = None) -> dict:
     project = Path(project).resolve()
     _check_repository(project)
     head = _git(project, "rev-parse", "HEAD").strip()
-    detected = detect_project(project)
+    branch = _git(project, "branch", "--show-current").strip()
+    detected = safe_discovery(project)
     suggestions = sorted({kind if kind in HINTS else "generic" for kind in detected["kinds"]})
     if stacks is None and (len(suggestions) != 1 or suggestions == ["generic"]):
         return {"status": "SCAFFOLD_SELECTION_REQUIRED", "initialized": False,
@@ -27,11 +28,13 @@ def scaffold_project(project: Path, stacks: list[str] | None = None) -> dict:
     require(_git(project, "rev-parse", "HEAD").strip() == head, "Repository HEAD changed during scaffold")
     if (project / MANIFEST).exists():
         _unchanged(project, artifacts)
+        from .onboarding_install import require_draft_state
+        require_draft_state(project, head, branch, set(artifacts))
         status = "SCAFFOLD_UNCHANGED"
     else:
         require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
                 "Git worktree must be clean before scaffold")
-        _install(project, artifacts)
+        _install(project, artifacts, head, branch)
         status = "SCAFFOLD_CREATED"
     return {"status": status, "initialized": False, "project": str(project),
             "stacks": selected, "suggested_stacks": suggestions, "files": list(artifacts),

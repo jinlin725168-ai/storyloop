@@ -16,7 +16,8 @@ def load_manifest(project: Path) -> dict:
     path = safe_target(project, MANIFEST, "onboarding manifest")
     require(path.is_file() and path.stat().st_size <= 512_000, "Missing or oversized onboarding manifest")
     value = load_json(path)
-    require(value.get("version") == 1 and value.get("template_version") == 1,
+    require(type(value.get("version")) is int and value["version"] == 1
+            and type(value.get("template_version")) is int and value["template_version"] == 1,
             "Unsupported onboarding template version")
     require(value.get("engine_version") == __version__ and type(value.get("helper_api")) is int
             and value["helper_api"] == 1, "Unsupported helper version; install the pinned engine offline")
@@ -26,8 +27,12 @@ def load_manifest(project: Path) -> dict:
     require(isinstance(value.get("executors"), dict) and set(value["executors"]) ==
             {f"acceptance/tools/{stack}_smoke.py" for stack in stacks}, "Invalid protected executors")
     require(isinstance(value.get("case_roots"), list) and value["case_roots"], "Explicit case roots required")
+    protected = {GUIDE, SETTINGS, MANIFEST, *value["executors"]}
     for root in value["case_roots"]:
-        safe_target(project, root, "case root", target_directory=True)
+        normalized = repository_relative(root, "case root")
+        require(not any(_overlap(path, normalized) for path in protected),
+                "Case roots cannot overlap protected onboarding artifacts")
+        safe_target(project, normalized, "case root", target_directory=True)
     return value
 
 
@@ -52,7 +57,9 @@ def validate_onboarding(project: Path, profile: dict) -> dict | None:
     if not (project / MANIFEST).exists() and not (project / MANIFEST).is_symlink():
         return None
     value = load_manifest(project)
-    require(value.get("reviewed") == {"settings": True, "guide": True}, "Onboarding review is incomplete")
+    review = value.get("reviewed")
+    require(isinstance(review, dict) and set(review) == {"settings", "guide"}
+            and all(item is True for item in review.values()), "Onboarding review is incomplete")
     expected = {GUIDE, SETTINGS, *value["executors"]}
     digests = value.get("generated")
     require(isinstance(digests, dict) and set(digests) == expected and all(
@@ -68,6 +75,8 @@ def validate_onboarding(project: Path, profile: dict) -> dict | None:
             "Onboarding requires complete unit/check commands and module/test roots")
     for relative, executor in value["executors"].items():
         validate_hooks(executor)
+        from .testing.smoke_harness.sources import source_list
+        source_list(project, executor["source_files"])
         _implemented_functions(project, relative, executor)
     profile["protected_paths"] = sorted(set(profile["protected_paths"]) | expected | {MANIFEST})
     return value

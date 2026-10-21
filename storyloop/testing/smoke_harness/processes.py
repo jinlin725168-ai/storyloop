@@ -8,7 +8,7 @@ import time
 
 from ...models import StoryLoopError, require
 from ...processutil import _cleanup_process, _environment, _start_process, run_process
-from .python_runner import ENVIRONMENT
+ENVIRONMENT = ["PATH", "SYSTEMROOT", "TEMP", "TMP", "PYTHONDONTWRITEBYTECODE"]
 
 SHELLS = {"sh", "bash", "dash", "zsh", "ksh", "fish", "cmd", "powershell", "pwsh", "env"}
 
@@ -65,6 +65,11 @@ class Service:
         while not ready.exists() and self.process.poll() is None and time.monotonic() < deadline:
             time.sleep(.01)
         require(ready.exists(), "Service startup handshake failed")
+
+    def check(self) -> None:
+        """A managed service must remain alive until the owner starts cleanup."""
+        require(not self._closed and self.process.poll() is None,
+                "Managed service exited unexpectedly")
 
     def close(self) -> None:
         """Reclaim the entire process tree, including children that outlive their parent."""

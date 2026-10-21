@@ -109,3 +109,45 @@ def run(context):
             service.close()
             self.assertIsNotNone(service.process.poll())
             self.assertTrue(service.contained)
+
+    def test_unexpected_service_exit_is_environment_error_even_if_cases_pass(self):
+        import time
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            executor = json.loads((root / "acceptance/onboarding.json").read_text())["executors"]["acceptance/tools/python_smoke.py"]
+            def no_op(context):
+                return None
+            def start(context):
+                context.start_service([sys.executable, "-c", "raise SystemExit(2)"], root)
+                time.sleep(.2)
+            def case(context, path):
+                return v1.python_cases(root, [path])
+            result = v1.run_hooks(v1.Context(root, ["cases/a.py"], executor), build=no_op,
+                                  start=start, ready=no_op, run_case=case, cleanup=no_op)
+            self.assertEqual(result.code, 2)
+
+    def test_cleanup_failure_reports_only_sanitized_stage_and_lease_hint(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            script = root / "acceptance/tools/python_smoke.py"
+            script.write_text('''from storyloop.testing.smoke_harness.v1 import python_cases, run_hooks
+
+def phase(context):
+    return None
+
+def run_case(context, case):
+    return python_cases(context.project, [case])
+
+def cleanup(context):
+    raise RuntimeError("password=synthetic-should-not-appear")
+
+def run(context):
+    return run_hooks(context, build=phase, start=phase, ready=phase,
+                     run_case=run_case, cleanup=cleanup)
+''')
+            result = invoke(root, "cases/a.py")
+            self.assertEqual(result["returncode"], 2)
+            self.assertIn("cleanup", result["counts"].get("diagnostics", []))
+            self.assertNotIn("synthetic-should-not-appear", str(result))

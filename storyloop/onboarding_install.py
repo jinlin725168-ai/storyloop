@@ -4,12 +4,13 @@ import json
 from pathlib import Path
 import tempfile
 
+from .baseline import _git
 from .initialization_transaction import WriteJournal
 from .models import StoryLoopError, require
 from .path_security import safe_target
 
 
-def install(project: Path, artifacts: dict[str, bytes]) -> None:
+def install(project: Path, artifacts: dict[str, bytes], head: str, branch: str) -> None:
     """Never overwrite targets; failure preserves independently modified installed files."""
     targets = [safe_target(project, relative, "scaffold target") for relative in artifacts]
     for path in targets:
@@ -17,14 +18,18 @@ def install(project: Path, artifacts: dict[str, bytes]) -> None:
     journal = WriteJournal(targets)
     with tempfile.TemporaryDirectory(prefix="storyloop-scaffold-") as folder:
         staged = _stage(Path(folder), artifacts)
+        installed = set()
         try:
             for relative, source in staged.items():
+                require_draft_state(project, head, branch, installed)
                 target = safe_target(project, relative, "scaffold target")
                 content = source.read_bytes()
                 journal.observe(target, content)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with target.open("xb") as handle:
                     handle.write(content)
+                installed.add(relative)
+            require_draft_state(project, head, branch, installed)
         except BaseException as error:
             conflicts = journal.rollback()
             if conflicts:
@@ -45,3 +50,14 @@ def _stage(root: Path, artifacts: dict[str, bytes]) -> dict[str, Path]:
         target.write_bytes(content)
         result[relative] = target
     return result
+
+
+def require_draft_state(project: Path, head: str, branch: str, installed: set[str]) -> None:
+    """Recheck HEAD, branch and dirty paths immediately before each installation write."""
+    require(_git(project, "rev-parse", "HEAD").strip() == head
+            and _git(project, "branch", "--show-current").strip() == branch,
+            "Repository HEAD or branch changed during scaffold")
+    status = _git(project, "status", "--porcelain=v1", "--untracked-files=all", "-z")
+    changed = [record[3:] for record in status.split("\0") if record]
+    require(all(relative in installed for relative in changed),
+            "Git worktree changed outside scaffold drafts; clean the worktree first")

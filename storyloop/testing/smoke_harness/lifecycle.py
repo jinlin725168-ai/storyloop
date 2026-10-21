@@ -6,6 +6,7 @@ from ...models import require
 from ...onboarding_manifest import validate_hooks
 from .cases import validate_cases
 from .processes import Service
+from .protected_cases import protected_cases
 from .results import Result
 from .scratch import Scratch
 
@@ -28,8 +29,17 @@ class Context:
 
 def run_hooks(context: Context, **hooks) -> Result:
     """Validate before build, run selected cases, and make cleanup failures dominate RED."""
+    try:
+        with protected_cases(context.project, context.cases):
+            return _run_hooks(context, hooks)
+    except BaseException:
+        return Result(errors=1)
+
+
+def _run_hooks(context: Context, hooks: dict) -> Result:
     result = Result()
     active = None
+    stage = "input"
     try:
         validate_hooks(context.executor)
         cases = validate_cases(context.project, context.cases)
@@ -37,16 +47,22 @@ def run_hooks(context: Context, **hooks) -> Result:
                     if item["status"] == "implemented"}
         require(all(callable(hooks.get(name)) for name in required), "Required hook is unimplemented")
         active = replace(context, cases=cases, scratch=Scratch(context.project), services=[])
+        stage = "source_sync"
         _prepare(active)
         for stage in ("build", "start", "ready"):
             if stage in required:
                 require(hooks[stage](active) is None, "Infrastructure hook must succeed or raise")
+        stage = "service_exit"
+        _check_services(active)
         for case in cases:
+            stage = "run_case"
             item = hooks["run_case"](active, case)
             require(isinstance(item, Result), "Unrecognized case runner evidence")
             result += item if item.executed else item + Result(errors=1)
+            stage = "service_exit"
+            _check_services(active)
     except BaseException:
-        result += Result(errors=1)
+        result += Result(errors=1, diagnostics=(stage,))
     finally:
         if active is not None:
             result += _cleanup(active, hooks)
@@ -64,19 +80,28 @@ def _prepare(context: Context) -> None:
 
 
 def _cleanup(context: Context, hooks: dict) -> Result:
-    errors = 0
+    diagnostics = []
+    try:
+        _check_services(context)
+    except BaseException:
+        diagnostics.append("service_exit")
     if context.executor["hooks"]["cleanup"]["status"] == "implemented":
         try:
             require(hooks["cleanup"](context) is None, "Cleanup hook must succeed or raise")
         except BaseException:
-            errors += 1
+            diagnostics.append("cleanup")
     for service in reversed(context.services):
         try:
             service.close()
         except BaseException:
-            errors += 1
+            diagnostics.append("service_cleanup")
     try:
         context.scratch.close()
     except BaseException:
-        errors += 1
-    return Result(errors=errors)
+        diagnostics.append("scratch_cleanup:" + context.scratch.root.name)
+    return Result(errors=len(diagnostics), diagnostics=tuple(dict.fromkeys(diagnostics)))
+
+
+def _check_services(context: Context) -> None:
+    for service in context.services:
+        service.check()

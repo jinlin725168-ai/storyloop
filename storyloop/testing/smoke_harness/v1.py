@@ -1,7 +1,7 @@
 """Supported helper API v1; onboarding.json additionally pins the exact engine version.
 
 validate_cases(project: Path, cases: list[str], roots: list[str] | None = None) -> list[str]
-python_cases(project: Path, cases: list[str], timeout: float = 60) -> Result
+python_cases(project: Path, cases: list[str], timeout: float = 60, *, cwd: Path | None = None) -> Result
 Result(executed=0, failed=0, errors=0, skipped=0): immutable counts; .code is strict 0/1/2.
 Context(project: Path, cases: list[str], executor: dict): protected invocation inputs.
   .start_service(argv: list[str], cwd: Path) -> Service registers automatic tree cleanup.
@@ -16,7 +16,9 @@ wait_http(url: str, expected_status: int = 200, timeout: float = 5) -> None is a
 free_port() -> int is advisory; a binding race is a start error.
 
 Project executors export run(context: Context) -> Result. They must not put candidate
-paths in the helper interpreter's sys.path; business imports belong in python_cases.
+paths in the helper interpreter's sys.path; business code must execute in a separate subprocess, never be imported in the judge.
+python_cases loads only protected unittest files without adding candidate paths to sys.path.
+Its timeout is cooperative; the manifest supplies the hard process deadline.
 Infrastructure hooks return None on success or raise; run_case returns measured Result.
 Only unittest Python case files are built in. Other runners need an explicit protected
 adapter that separates actual executions, assertion failures and environment errors;
