@@ -8,6 +8,7 @@ from typing import Any
 
 from .path_security import safe_target
 from .models import StoryLoopError
+from .metrics_compute_support import _add_missing
 from .report_evidence import IDENTIFIER, MAX_LEDGER_BYTES, _read_object
 from .stop_report import STOP_STATUSES
 
@@ -371,12 +372,6 @@ def _present(path: Path) -> bool:
         return path.exists() or path.is_symlink()
     except OSError:
         return False
-
-
-def _add_missing(missing: list[dict], change_id: str, reason: str) -> None:
-    item = {"change_id": change_id, "reason": reason}
-    if item not in missing:
-        missing.append(item)
 
 
 def _as_date(value: object) -> date | None:

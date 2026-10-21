@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import math
 
-from .metrics_compute_support import UNRECORDED, _gap, _id, _miss, _ratio, _unique
+from .metrics_compute_support import (
+    UNRECORDED, _add_missing, _gap, _id, _nonnegative_int, _ratio, _unique,
+)
 
 
 def cost(records: list[dict]) -> dict:
@@ -29,7 +31,7 @@ def cost(records: list[dict]) -> dict:
                     record_calls += row["calls"]
         for entry in entries:
             if not isinstance(entry, dict):
-                _miss(missing, record, "UNREADABLE")
+                _add_missing(missing, _id(record), "UNREADABLE")
                 continue
             role = _label(entry.get("role"))
             if role in summarized:
@@ -40,7 +42,7 @@ def cost(records: list[dict]) -> dict:
         if record_calls:
             changes.append(_id(record))
         elif not isinstance(summaries, dict) and not isinstance(ledger, list):
-            _miss(missing, record, _gap(record, "ledger"))
+            _add_missing(missing, _id(record), _gap(record, "ledger"))
     return _result(rows, changes, missing)
 
 
@@ -118,7 +120,3 @@ def _label(value: object) -> str:
 
 def _finite_nonnegative(value: object) -> bool:
     return type(value) in (int, float) and math.isfinite(value) and value >= 0
-
-
-def _nonnegative_int(value: object) -> bool:
-    return type(value) is int and value >= 0

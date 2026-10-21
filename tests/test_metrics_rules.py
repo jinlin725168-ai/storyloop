@@ -229,7 +229,7 @@ class SuggestionTests(unittest.TestCase):
 
     def test_r11_uses_known_cost_calls_as_sample(self):
         m = metrics_for("R11", 0.8, 10)
-        m["M11"].pop("known_cost_calls")
+        m["M11"]["known_cost_calls"] = 4
         m["M11"]["cost_coverage"] = 0.4
         for row in m["M11"]["by"].values():
             row["cost_coverage"] = 0.4

@@ -97,8 +97,6 @@ def save_metrics(project: Path, result: dict) -> list[str]:
     for target in (markdown, json_path):
         safe_absolute_target(target, "metrics report path")
     folder.mkdir(parents=True, exist_ok=True)
-    for target in (markdown, json_path):
-        safe_absolute_target(target, "metrics report path")
     relative = [markdown.relative_to(root).as_posix(), json_path.relative_to(root).as_posix()]
     from .metrics_render import render_metrics
     write_text_atomic(markdown, render_metrics(result) + "\n")

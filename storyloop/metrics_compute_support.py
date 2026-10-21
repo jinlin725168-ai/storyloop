@@ -44,15 +44,15 @@ def _forced_summary(id: str, records: list[dict], missing: list[dict]) -> dict:
             if status in FAILED_OUTCOMES:
                 failures.append(_id(record))
         elif isinstance(status, str):
-            _miss(missing, record, "NO_SAMPLE")
+            _add_missing(missing, _id(record), "NO_SAMPLE")
         else:
-            _miss(missing, record, _gap(record, "status"))
+            _add_missing(missing, _id(record), _gap(record, "status"))
         value = record.get("attempts")
         if _nonnegative_int(value):
             attempt_values.append(value)
             attempt_ids.append(_id(record))
         else:
-            _miss(missing, record, _gap(record, "attempts"))
+            _add_missing(missing, _id(record), _gap(record, "attempts"))
     result = metric(id, len(failures), len(known), known, missing)
     result.update({"outcomes": _counts(outcomes), "failure_changes": failures,
                    "mean_attempts": _mean(attempt_values),
@@ -152,7 +152,7 @@ def _count_integer_fields(record, counts, coverage, missing) -> None:
             counts[name] += value
             coverage[name] += 1
         else:
-            _miss(missing, record, _gap(record, name))
+            _add_missing(missing, _id(record), _gap(record, name))
 
 
 def _count_list_field(record, name, counts, coverage, missing) -> None:
@@ -161,7 +161,7 @@ def _count_list_field(record, name, counts, coverage, missing) -> None:
         counts[name] += len(value)
         coverage[name] += 1
     else:
-        _miss(missing, record, _gap(record, name))
+        _add_missing(missing, _id(record), _gap(record, name))
 
 
 def _count_decision(record, source, result, counts, coverage, missing) -> None:
@@ -170,7 +170,7 @@ def _count_decision(record, source, result, counts, coverage, missing) -> None:
         counts[result] += int(value)
         coverage[result] += 1
     else:
-        _miss(missing, record, _gap(record, source))
+        _add_missing(missing, _id(record), _gap(record, source))
 
 
 def _supersede_links(record: dict, links: set[tuple[str, str]]) -> None:
@@ -192,8 +192,8 @@ def _gap(record: dict, field: str) -> str:
     return reason if reason in {"NO_ROUTING", "NO_TIER_RECORDED", "UNREADABLE"} else "UNREADABLE"
 
 
-def _miss(missing: list[dict], record: dict, reason: str) -> None:
-    item = {"change_id": _id(record), "reason": reason}
+def _add_missing(missing: list[dict], change_id: str, reason: str) -> None:
+    item = {"change_id": change_id, "reason": reason}
     if item not in missing:
         missing.append(item)
 

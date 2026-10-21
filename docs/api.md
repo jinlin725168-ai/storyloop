@@ -62,7 +62,7 @@
 
 M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate` 两个同形子指标。M11 另给 `calls`、`agent_ms`、`known_cost_calls`、`cost_coverage` 和按 `角色|实际档次` 的 `by`，未知费用不估价。建议项保留规则 ID、触发值、阈值、样本、至多十个证据变更及剩余数量；R3、R7、R11 还分别保留升档规则 ID、CI 失败层、角色和实际档次。样本不足的项用 `insufficient`，证据不足的项用 `unavailable`，不会混成未触发。
 
-指标缺失原因码为 `NO_SAMPLE`、`CI_RESULTS_NOT_PROVIDED`、`LESSONS_NOT_CONFIGURED`、`UNKNOWN_REPORT_VERSION`、`NO_ROUTING`、`NO_TIER_RECORDED`、`UNREADABLE`。CI 文件提交与变更合并提交无祖先关系时另记 `CI_COMMIT_UNRELATED`。`discrepancies` 的每项为 `{change_id, field, report, run}`，报告快照优先，运行状态只补报告没有的字段。
+指标缺失原因码为 `NO_SAMPLE`、`CI_RESULTS_NOT_PROVIDED`、`LESSONS_NOT_CONFIGURED`、`UNKNOWN_REPORT_VERSION`、`NO_ROUTING`、`NO_TIER_RECORDED`、`UNREADABLE`。本地 PASSED 缺有效 CI 结果时 M6 记 `CI_RESULT_ABSENT`；CI 文件匹配变更但无合并提交时记 `CI_MERGE_COMMIT_ABSENT`。CI 文件提交与变更合并提交无祖先关系时另记 `CI_COMMIT_UNRELATED`。`discrepancies` 的每项为 `{change_id, field, report, run}`，报告快照优先，运行状态只补报告没有的字段。
 
 `storyloop ci PATH --change ID --record FILE` 在正常运行两层 CI 后写出版本 1 的有界 JSON：`change_id`、总 `status`、当前 `commit`、带时区的 `recorded_at`，以及 `layers.acceptance/smoke`。`metrics --ci-results DIR` 只读 `ci-*.json`，同一变更取真实 UTC 时间最新且提交相关的一份；文本子进程显式使用 UTF-8。
 

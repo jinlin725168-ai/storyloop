@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .baseline import _git
 from .models import StoryLoopError, require
+from .metrics_compute_support import _add_missing
 from .report_evidence import _read_object
 from .storage import write_json
 
@@ -55,16 +56,16 @@ def load_ci_results(
             continue
         timestamp = _valid_result(value)
         if timestamp is None:
-            _missing(missing, change_id, "UNREADABLE")
+            _add_missing(missing, change_id, "UNREADABLE")
             continue
         if not merges[change_id]:
-            _missing(missing, change_id, "CI_MERGE_COMMIT_ABSENT")
+            _add_missing(missing, change_id, "CI_MERGE_COMMIT_ABSENT")
             continue
         related = _related(project, merges[change_id], value["commit"])
         if related is None:
-            _missing(missing, change_id, "UNREADABLE")
+            _add_missing(missing, change_id, "UNREADABLE")
         elif not related:
-            _missing(missing, change_id, "CI_COMMIT_UNRELATED")
+            _add_missing(missing, change_id, "CI_COMMIT_UNRELATED")
         elif change_id not in selected or timestamp > selected[change_id][0]:
             selected[change_id] = (timestamp, value)
     return {change_id: item[1] for change_id, item in selected.items()}, missing
@@ -123,9 +124,3 @@ def _merge_commit(record: dict) -> str | None:
     commits = record.get("commits")
     value = commits.get("merge_commit") if isinstance(commits, dict) else None
     return value if isinstance(value, str) else None
-
-
-def _missing(missing: list[dict], change_id: str, reason: str) -> None:
-    item = {"change_id": change_id, "reason": reason}
-    if item not in missing:
-        missing.append(item)

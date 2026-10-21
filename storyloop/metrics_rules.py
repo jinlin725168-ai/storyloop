@@ -254,7 +254,7 @@ def _r11(metrics: dict, limits: dict) -> list[dict]:
     if calls is None or coverage is None or not 0 <= coverage <= 1:
         return [_unavailable("R11", "COST_COVERAGE_NOT_RECORDED")]
     known = value.get("known_cost_calls")
-    n = known if type(known) is int and 0 <= known <= calls else _legacy_known_calls(calls, coverage)
+    n = known if type(known) is int and 0 <= known <= calls else None
     if n is None:
         return [_unavailable("R11", "KNOWN_COST_CALLS_NOT_RECORDED")]
     pending = _precheck("R11", n, 0.0, limits)
@@ -350,14 +350,6 @@ def _most_frequent(value: object) -> list[str]:
               if isinstance(key, str) and key and _nonnegative(count)}
     highest = max(counts.values(), default=0)
     return sorted(key for key, count in counts.items() if count == highest and count > 0)
-
-
-def _legacy_known_calls(calls: int, coverage: float) -> int | None:
-    """Support small pre-count fixtures where rounded coverage remains unambiguous."""
-    if calls > 100:
-        return None
-    estimate = round(calls * coverage)
-    return estimate if abs(estimate / calls - coverage) <= 0.00005 else None
 
 
 def deferred_signals(records: list[dict]) -> list[dict]:

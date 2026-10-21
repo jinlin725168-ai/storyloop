@@ -116,3 +116,33 @@ class MetricsReviewTests(unittest.TestCase):
             'source_head': implementation, 'contract_commit': source,
             'implementation_commit': contract})])
         self.assertEqual((result['value'], result['n']), (3, 1))
+
+    def test_save_checks_each_output_once_and_keeps_storage_guards(self):
+        from storyloop import metrics
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            value = metrics.build_metrics(root, None, None)
+            with patch('storyloop.metrics.safe_absolute_target',
+                       wraps=metrics.safe_absolute_target) as guard:
+                written = metrics.save_metrics(root, value)
+            self.assertEqual(guard.call_count, 2)
+            self.assertTrue(all((root / name).is_file() for name in written))
+
+    def test_metrics_share_validation_and_missing_helpers(self):
+        from storyloop import metrics_compute_support as support, metrics_cost, metrics_rules
+        self.assertIs(metrics_cost._nonnegative_int, support._nonnegative_int)
+        self.assertIs(metrics_collect._add_missing, support._add_missing)
+        self.assertIs(ci_results._add_missing, support._add_missing)
+        missing = []
+        support._add_missing(missing, 'A', 'UNREADABLE')
+        support._add_missing(missing, 'A', 'UNREADABLE')
+        self.assertEqual(len(missing), 1)
+        self.assertFalse(hasattr(metrics_rules, '_legacy_known_calls'))
+
+    def test_r11_does_not_infer_missing_exact_counts_from_coverage(self):
+        from tests.test_metrics_rules import metrics_for
+        from storyloop.metrics_rules import suggest, DEFAULTS
+        value = metrics_for("R11", 0.8, 10)
+        value["M11"].pop("known_cost_calls")
+        result = next(row for row in suggest(value, DEFAULTS) if row["rule"] == "R11")
+        self.assertEqual(result.get("unavailable"), "KNOWN_COST_CALLS_NOT_RECORDED")

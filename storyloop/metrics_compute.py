@@ -21,7 +21,7 @@ from .metrics_compute_support import (
     _implement_tier,
     _last_signatures,
     _median_result,
-    _miss,
+    _add_missing,
     _nonnegative_int,
     _numstat,
     _ratio,
@@ -40,11 +40,11 @@ def first_pass(records: list[dict]) -> dict:
     for record in records:
         if record.get("status") != "PASSED":
             if not isinstance(record.get("status"), str):
-                _miss(missing, record, _gap(record, "status"))
+                _add_missing(missing, _id(record), _gap(record, "status"))
             continue
         failures = record.get("failures")
         if not isinstance(failures, list):
-            _miss(missing, record, _gap(record, "failures"))
+            _add_missing(missing, _id(record), _gap(record, "failures"))
             continue
         passed.append(_id(record))
         if not failures:
@@ -61,13 +61,13 @@ def attempts(records: list[dict]) -> dict:
             valid.append(_id(record))
             total += value
         else:
-            _miss(missing, record, _gap(record, "attempts"))
+            _add_missing(missing, _id(record), _gap(record, "attempts"))
         if not _has_stop(record, "BUDGET_EXHAUSTED"):
             continue
         budget.append(_id(record))
         signatures = _last_signatures(record.get("failures"))
         if signatures is None:
-            _miss(missing, record, _gap(record, "failures"))
+            _add_missing(missing, _id(record), _gap(record, "failures"))
             continue
         progress_n += 1
         if signatures[0] != signatures[1]:
@@ -93,14 +93,14 @@ def upgrades(records: list[dict]) -> dict:
     for record in records:
         history, tier = record.get("routing_history"), record.get("tier_initial")
         if not isinstance(history, list):
-            _miss(missing, record, "NO_ROUTING")
+            _add_missing(missing, _id(record), "NO_ROUTING")
             continue
         if tier not in TIER_ORDER:
-            _miss(missing, record, "NO_TIER_RECORDED")
+            _add_missing(missing, _id(record), "NO_TIER_RECORDED")
             continue
         upgraded = _upgraded(history)
         if upgraded is None:
-            _miss(missing, record, "NO_ROUTING")
+            _add_missing(missing, _id(record), "NO_ROUTING")
             continue
         eligible.append((_id(record), tier, upgraded,
                          _upgrade_rule_ids(history) if upgraded else []))
@@ -124,7 +124,7 @@ def rework(records: list[dict]) -> dict:
     for record in records:
         failures, stops = record.get("failures"), record.get("stops")
         if not isinstance(failures, list) and not isinstance(stops, (list, set, tuple)):
-            _miss(missing, record, _gap(record, "failures"))
+            _add_missing(missing, _id(record), _gap(record, "failures"))
             continue
         valid.append(_id(record))
         known_failures = failures if isinstance(failures, list) else []
@@ -154,10 +154,10 @@ def stuck(records: list[dict]) -> dict:
             if _has_stop(record, "NO_PROGRESS"):
                 no_progress.append(_id(record))
         else:
-            _miss(missing, record, _gap(record, "status"))
+            _add_missing(missing, _id(record), _gap(record, "status"))
         failures = record.get("agent_failures")
         if not isinstance(failures, list):
-            _miss(missing, record, _gap(record, "agent_failures"))
+            _add_missing(missing, _id(record), _gap(record, "agent_failures"))
             continue
         agent_n += 1
         if failures:
@@ -185,7 +185,7 @@ def escapes(records: list[dict]) -> dict:
     for record in records:
         status = record.get("status")
         if not isinstance(status, str):
-            _miss(missing, record, _gap(record, "status"))
+            _add_missing(missing, _id(record), _gap(record, "status"))
             continue
         if status != "PASSED":
             continue
@@ -196,7 +196,7 @@ def escapes(records: list[dict]) -> dict:
             escaped.append(change_id)
         tier = record.get("tier_effective")
         if tier not in TIER_ORDER:
-            _miss(missing, record, "NO_TIER_RECORDED")
+            _add_missing(missing, _id(record), "NO_TIER_RECORDED")
         else:
             by_rows.setdefault(tier, []).append((change_id, is_escape))
     by = {tier: metric("M5", sum(flag for _, flag in rows), len(rows),
@@ -213,13 +213,13 @@ def forced_heavy(records: list[dict]) -> dict:
         if decision is True:
             cohort.append(record)
         elif decision is not False:
-            _miss(missing, record, _gap(record, "continue_heavy"))
+            _add_missing(missing, _id(record), _gap(record, "continue_heavy"))
     result = _forced_summary("M7", cohort, missing)
     groups: dict[str, list[dict]] = {}
     for record in cohort:
         tier = _implement_tier(record)
         if tier is None:
-            _miss(result["missing"], record, "NO_TIER_RECORDED")
+            _add_missing(result["missing"], _id(record), "NO_TIER_RECORDED")
         else:
             groups.setdefault(tier, []).append(record)
     result["by"] = {tier: _forced_summary("M7", rows, [])
@@ -234,7 +234,7 @@ def overrule_rate(records: list[dict]) -> dict:
         overrules = record.get("overrules")
         stop_findings = record.get("review_stop_findings")
         if not isinstance(overrules, list) or not _nonnegative_int(stop_findings):
-            _miss(missing, record, _gap(record, "review_stop_findings"))
+            _add_missing(missing, _id(record), _gap(record, "review_stop_findings"))
             continue
         historical = 0
         valid = True
@@ -245,7 +245,7 @@ def overrule_rate(records: list[dict]) -> dict:
                 break
             historical += len(findings)
         if not valid:
-            _miss(missing, record, _gap(record, "overrules"))
+            _add_missing(missing, _id(record), _gap(record, "overrules"))
             continue
         numerator += len(overrules)
         denominator += stop_findings + historical
@@ -264,7 +264,7 @@ def contract_ratio(project: Path, records: list[dict]) -> dict:
             commits.get("implementation_commit"),
         )
         if not all(isinstance(item, str) and item for item in (source, contract, implementation)):
-            _miss(missing, record, "UNREADABLE")
+            _add_missing(missing, _id(record), "UNREADABLE")
             continue
         try:
             contract_lines = _numstat(baseline._git(project, "diff", "--numstat", source, contract))
@@ -273,7 +273,7 @@ def contract_ratio(project: Path, records: list[dict]) -> dict:
         except (StoryLoopError, OSError, ValueError):
             contract_lines = implementation_lines = None
         if contract_lines is None or implementation_lines in (None, 0):
-            _miss(missing, record, "UNREADABLE")
+            _add_missing(missing, _id(record), "UNREADABLE")
             continue
         rows.append({"change_id": _id(record), "contract": contract_lines,
                      "implementation": implementation_lines,
@@ -286,7 +286,7 @@ def contract_ratio(project: Path, records: list[dict]) -> dict:
                     for tier in known_tiers}
     for row in rows:
         if row["tier"] not in TIER_ORDER:
-            _miss(result["missing"], {"change_id": row["change_id"]}, "NO_TIER_RECORDED")
+            _add_missing(result["missing"], row["change_id"], "NO_TIER_RECORDED")
     return result
 
 
@@ -329,7 +329,7 @@ def lessons(project: Path, records: list[dict]) -> dict:
     recurred = []
     if recurrence_state is None:
         for change_id in provided_by_change:
-            _miss(recurrence_missing, {"change_id": change_id}, "UNREADABLE")
+            _add_missing(recurrence_missing, change_id, "UNREADABLE")
     else:
         relevant_lessons = {item for items in provided_by_change.values() for item in items}
         cohort = {_id(record) for record in records if _id(record)}
@@ -351,7 +351,7 @@ def local_green_ci_red(results: dict[str, dict] | None, records: list[dict]) -> 
     missing = []
     for record in records:
         if record.get("status") == "PASSED" and not isinstance((results or {}).get(_id(record)), dict):
-            _miss(missing, record, "CI_RESULT_ABSENT")
+            _add_missing(missing, _id(record), "CI_RESULT_ABSENT")
     if results is None:
         value = metric("M6", 0, 0, [], missing)
         value.update({"reason": "CI_RESULTS_NOT_PROVIDED", "by": {}})
@@ -387,16 +387,16 @@ def _lesson_usage(records: list[dict]) -> tuple[dict, int, int, list[str], list[
     for record in records:
         ledger = record.get("ledger")
         if not isinstance(ledger, list):
-            _miss(missing, record, _gap(record, "ledger"))
+            _add_missing(missing, _id(record), _gap(record, "ledger"))
             continue
         for entry in ledger:
             if not isinstance(entry, dict):
-                _miss(missing, record, "UNREADABLE")
+                _add_missing(missing, _id(record), "UNREADABLE")
                 continue
             provided = entry.get("lessons_provided", [])
             claimed = entry.get("lessons_claimed", [])
             if not _string_list(provided) or not _string_list(claimed):
-                _miss(missing, record, "UNREADABLE")
+                _add_missing(missing, _id(record), "UNREADABLE")
                 continue
             provided_by_change.setdefault(_id(record), set()).update(provided)
             provided_count += len(provided)
