@@ -22,10 +22,10 @@ class PackagedSkillTests(unittest.TestCase):
         skills = packaged_skills()
         self.assertIn("foundation-survey", skills)
         skill = skills["foundation-survey"]
-        self.assertEqual(skill["version"], "1.0.1")
+        self.assertEqual(skill["version"], "1.1.0")
         self.assertTrue(skill["description"])
         names = {Path(p).name for p in skill["files"]}
-        self.assertEqual(names, {"SKILL.md", "doc-templates.md", "survey-checklist.md"})
+        self.assertEqual(names, {"SKILL.md", "doc-templates.md", "survey-checklist.md", "source-and-sampling.md"})
 
     def test_install_writes_claude_and_codex_copies_and_is_idempotent(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -41,8 +41,8 @@ class PackagedSkillTests(unittest.TestCase):
             second = install_skills(root)
             self.assertEqual(second["written"], [])
             status = skill_status(root)
-            self.assertEqual(status["foundation-survey"]["packaged"], "1.0.1")
-            self.assertEqual(status["foundation-survey"]["installed"], {t: "1.0.1" for t in SKILL_TARGETS})
+            self.assertEqual(status["foundation-survey"]["packaged"], "1.1.0")
+            self.assertEqual(status["foundation-survey"]["installed"], {t: "1.1.0" for t in SKILL_TARGETS})
 
     def test_install_on_an_initialized_project_opens_a_base_proposal(self):
         with tempfile.TemporaryDirectory() as folder:
