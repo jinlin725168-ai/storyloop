@@ -365,7 +365,7 @@ def local_green_ci_red(results: dict[str, dict] | None, records: list[dict]) -> 
             continue
         failed.append(change_id)
         for layer, status in (result.get("layers") or {}).items():
-            if isinstance(layer, str) and status == "FAILED":
+            if isinstance(layer, str) and status in ("FAILED", "ERROR"):
                 layers[layer] += 1
     return metric("M6", len(failed), len(eligible), failed, by=_counts(layers))
 

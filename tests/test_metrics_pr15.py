@@ -30,3 +30,11 @@ class MetricsReviewTests(unittest.TestCase):
             'source_head': source, 'contract_commit': contract,
             'implementation_commit': implementation})])
         self.assertEqual((result['value'], result['n']), (0.5, 1))
+
+    def test_ci_error_layers_count_as_failures(self):
+        result = local_green_ci_red({'A': {'status': 'FAILED', 'layers': {
+            'acceptance': 'ERROR', 'smoke': 'FAILED'}},
+            'B': {'status': 'FAILED', 'layers': {'acceptance': 'PASSED', 'smoke': 'ERROR'}}},
+            [rec('A'), rec('B')])
+        self.assertEqual(result['by'], {'smoke': 2, 'acceptance': 1})
+        self.assertEqual(result['value'], 1.0)
