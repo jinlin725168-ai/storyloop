@@ -350,8 +350,12 @@ def lessons(project: Path, records: list[dict]) -> dict:
 
 def local_green_ci_red(results: dict[str, dict] | None, records: list[dict]) -> dict:
     """M6: CI failures among locally passed changes that have a valid CI result."""
+    missing = []
+    for record in records:
+        if record.get("status") == "PASSED" and not isinstance((results or {}).get(_id(record)), dict):
+            _miss(missing, record, "CI_RESULT_ABSENT")
     if results is None:
-        value = metric("M6", 0, 0, [])
+        value = metric("M6", 0, 0, [], missing)
         value.update({"reason": "CI_RESULTS_NOT_PROVIDED", "by": {}})
         return value
     eligible, failed, layers = [], [], Counter()
@@ -367,7 +371,7 @@ def local_green_ci_red(results: dict[str, dict] | None, records: list[dict]) -> 
         for layer, status in (result.get("layers") or {}).items():
             if isinstance(layer, str) and status in ("FAILED", "ERROR"):
                 layers[layer] += 1
-    return metric("M6", len(failed), len(eligible), failed, by=_counts(layers))
+    return metric("M6", len(failed), len(eligible), failed, missing, by=_counts(layers))
 
 
 def _configured_lessons(root: Path, folder: Path) -> bool:

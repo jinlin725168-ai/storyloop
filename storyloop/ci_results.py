@@ -54,8 +54,11 @@ def load_ci_results(
         if not isinstance(change_id, str) or change_id not in merges:
             continue
         timestamp = _valid_result(value)
-        if timestamp is None or not merges[change_id]:
+        if timestamp is None:
             _missing(missing, change_id, "UNREADABLE")
+            continue
+        if not merges[change_id]:
+            _missing(missing, change_id, "CI_MERGE_COMMIT_ABSENT")
             continue
         related = _related(project, merges[change_id], value["commit"])
         if related is None:

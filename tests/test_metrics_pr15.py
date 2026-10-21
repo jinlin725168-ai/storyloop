@@ -70,3 +70,21 @@ class MetricsReviewTests(unittest.TestCase):
             with patch('storyloop.metrics_collect._read_object', side_effect=replace_after_read):
                 self.assertEqual(metrics_collect._ledger(root, 'A'),
                                  [{'role': 'implement', 'cost_usd': 1}])
+
+    def test_ci_without_merge_has_an_explicit_reason(self):
+        from tests.test_ci_results import _write_ci
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            _write_ci(root, 'ci-a.json', change='A', status='PASSED',
+                      commit='a' * 40, at='2026-10-20T00:00:00+00:00')
+            values, missing = ci_results.load_ci_results(root, root, [rec('A')])
+            self.assertEqual(values, {})
+            self.assertEqual(missing, [{'change_id': 'A', 'reason': 'CI_MERGE_COMMIT_ABSENT'}])
+
+    def test_m6_reports_locally_passed_changes_without_ci(self):
+        for results in ({}, None):
+            with self.subTest(results=results):
+                value = local_green_ci_red(results, [rec('A'), rec('B', status='FAILED')])
+                self.assertEqual(value['missing'], [
+                    {'change_id': 'A', 'reason': 'CI_RESULT_ABSENT'}])
+                self.assertEqual(value['n'], 0)
