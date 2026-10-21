@@ -11,16 +11,6 @@
     "exit_code": 0,
     "log_note": "Final summary and process exit authoritative; earlier lines had duplicate-writer gaps"
   },
-  "final_core": {
-    "revision": "e52c121",
-    "modules": 80,
-    "tests": 524,
-    "skipped": 4,
-    "failures": 0,
-    "wall_seconds": 64,
-    "workers": 8,
-    "exit_code": 0
-  },
   "limited_security": {
     "revision": "a887495",
     "tests": 36,
@@ -46,5 +36,41 @@
     "wall_seconds": 2.263,
     "existing_setuptools": "79; no new dependency installed"
   },
-  "boundaries": "Full is not final revision. Later product changes separately verified by targeted checks, independent review and final core. No model or production execution."
+  "boundaries": "Full is not final revision. Later product changes separately verified by targeted checks, independent review and final core. No model or production execution.",
+  "pre_windows_core": {
+    "revision": "e52c121",
+    "modules": 80,
+    "tests": 524,
+    "skipped": 4,
+    "failures": 0,
+    "wall_seconds": 64,
+    "workers": 8,
+    "exit_code": 0
+  },
+  "platform_final_core": {
+    "revision": "154a5e883b3cf14b38c220b9613035cfb3bb12ed",
+    "modules": 81,
+    "tests": 532,
+    "skipped": 4,
+    "failures": 0,
+    "wall_seconds": 56,
+    "workers": 8,
+    "exit_code": 0
+  },
+  "platform_fix": {
+    "revision": "9648763",
+    "affected_tests": 23,
+    "compatibility_tests": 20,
+    "failures": 0,
+    "no_added_windows_skip": true
+  },
+  "report_tree_fix": {
+    "revision": "154a5e8",
+    "related_tests": 49,
+    "failures": 0,
+    "wall_seconds": 5.923,
+    "independent_tests": 5,
+    "independent_wall_seconds": 1.586,
+    "scope": "Proven descendant leak fixed; original Windows occupying PID was not observed"
+  }
 }
