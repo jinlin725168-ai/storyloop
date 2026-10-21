@@ -19,7 +19,7 @@ FAST = [
     "tests.test_metrics_rules", "tests.test_metrics_compute",
     "tests.test_product_spec", "tests.test_project_agents", "tests.test_project_git_lifecycle",
     "tests.test_project_profile", "tests.test_project_profile_behavior", "tests.test_report_call_provenance",
-    "tests.test_report_evidence", "tests.test_report_final_fixes", "tests.test_report_focus",
+    "tests.test_report_evidence", "tests.test_report_final_fixes", "tests.test_report_git_process", "tests.test_report_focus",
     "tests.test_report_presentation", "tests.test_report_rendering", "tests.test_role_context_integration",
     "tests.test_role_profiles", "tests.test_role_schemas", "tests.test_role_subagents",
     "tests.test_routing_policy", "tests.test_routing_risks", "tests.test_skill_selection",
