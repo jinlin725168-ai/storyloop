@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import re
 from pathlib import Path
-import subprocess
 
 from .baseline import _git
 from .models import StoryLoopError, require
@@ -103,18 +102,13 @@ def _related(project: Path, merge: str, commit: str) -> bool | None:
     if COMMIT.fullmatch(merge) is None:
         return None
     try:
-        result = subprocess.run(
-            ["git", "merge-base", "--is-ancestor", merge, commit],
-            cwd=Path(project).resolve(), capture_output=True, text=True,
-            encoding="utf-8", errors="replace", check=False,
-        )
-    except OSError:
+        # A merge is an ancestor exactly when no commit reachable from it is
+        # excluded from the candidate's history. This query returns at most one
+        # commit and keeps unrelated histories distinct from Git process errors.
+        return not _git(Path(project).resolve(), "rev-list", "--max-count=1",
+                        merge, "--not", commit).strip()
+    except (StoryLoopError, OSError):
         return None
-    if result.returncode == 0:
-        return True
-    if result.returncode == 1 and not result.stderr.strip():
-        return False
-    return None
 
 
 def _change_id(record: dict) -> str:

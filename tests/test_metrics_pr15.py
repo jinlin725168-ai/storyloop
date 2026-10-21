@@ -38,3 +38,11 @@ class MetricsReviewTests(unittest.TestCase):
             [rec('A'), rec('B')])
         self.assertEqual(result['by'], {'smoke': 2, 'acceptance': 1})
         self.assertEqual(result['value'], 1.0)
+
+    def test_ci_ancestry_honors_git_timeout_and_containment(self):
+        root = git_repo()
+        self.addCleanup(cleanup_repo, root)
+        commit = head(root)
+        for result in ({'contained': False}, {'contained': True, 'timed_out': True}):
+            with self.subTest(result=result), patch('storyloop.baseline.run_process', return_value=result):
+                self.assertIsNone(ci_results._related(root, commit, commit))
