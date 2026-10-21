@@ -55,4 +55,3 @@ def _unchanged(project: Path, artifacts: dict[str, bytes]) -> None:
         target = safe_target(project, relative, "scaffold target")
         require(target.is_file() and target.read_bytes().replace(b"\r\n", b"\n") == content,
                 f"Scaffold conflict; preserve manual changes: {relative}")
-
