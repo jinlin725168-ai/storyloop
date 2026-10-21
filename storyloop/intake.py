@@ -136,18 +136,24 @@ def _role_evidence(assessment: dict, commit: str) -> list[dict]:
 def _validate_locations(project: Path, commit: str, assessment: dict) -> None:
     proofs = [item['evidence'] for item in assessment['risks'].values()]
     proofs.extend(item['evidence'] for item in assessment['criteria'])
+    # All locations share one commit: verify it once and read each path once (3 git
+    # processes per location made intake the slowest gate of every change/approve/run).
+    lines: dict[str, int] = {}
     for proof in proofs:
         for location in proof['locations']:
             match = re.fullmatch(r'(.+):([1-9][0-9]*)', location)
             require(match is not None, 'Evidence location must be path:line')
             path = repository_relative(match[1], 'evidence path')
-            content = _evidence_content(project, commit, path)
-            require(int(match[2]) <= len(content.splitlines()), 'Evidence line absent at source commit')
+            if path not in lines:
+                content = _evidence_content(project, commit, path, verify_commit=not lines)
+                lines[path] = len(content.splitlines())
+            require(int(match[2]) <= lines[path], 'Evidence line absent at source commit')
 
 
-def _evidence_content(project: Path, commit: str, path: str) -> str:
+def _evidence_content(project: Path, commit: str, path: str, verify_commit: bool = True) -> str:
     """Read evidence only from a valid source commit; a missing path is role-repairable."""
-    _git(project, 'cat-file', '-e', f'{commit}^{{commit}}')
+    if verify_commit:
+        _git(project, 'cat-file', '-e', f'{commit}^{{commit}}')
     visible = _git(project, 'ls-tree', '-z', '--name-only', commit, '--', path).split('\0')
     require(path in visible, f'Evidence path absent at source commit {commit}: {path}')
     return _git(project, 'show', f'{commit}:{path}')
