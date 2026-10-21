@@ -135,3 +135,30 @@ class Case(unittest.TestCase):
             result = invoke(root, "cases/business.py")
             self.assertEqual(result["returncode"], 0, result)
             self.assertEqual(result["counts"]["executed"], 1)
+
+    def test_direct_api_freezes_relative_import_roots_before_changing_cwd(self):
+        import subprocess
+        import sys
+        for location in ("project", "mirror"):
+            with self.subTest(location=location), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                fixture(root)
+                business = root if location == "project" else root / "mirror"
+                business.mkdir(exist_ok=True)
+                (business / "evil.py").write_text(
+                    "import unittest\nunittest.TestResult.addFailure = lambda *args: None\n")
+                (root / "cases/import_attack.py").write_text('''import unittest, evil
+class Protected(unittest.TestCase):
+    def test_must_fail(self):
+        self.fail("cannot suppress this assertion")
+''')
+                code = '''import json, sys
+from pathlib import Path
+from storyloop.testing.smoke_harness.v1 import python_cases
+result = python_cases(Path(sys.argv[1]), ["cases/import_attack.py"], cwd=Path(sys.argv[2]))
+print(json.dumps(result.document()))
+'''
+                process = subprocess.run([sys.executable, "-c", code, str(root), str(business)],
+                                         cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True)
+                self.assertEqual(process.returncode, 0, process.stderr)
+                self.assertEqual(json.loads(process.stdout)["code"], 2, process.stdout)

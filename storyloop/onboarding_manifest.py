@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from . import __version__
-from .models import require
+from .models import StoryLoopError, require
 from .onboarding_templates import GUIDE, HINTS, HOOKS, MANIFEST, SETTINGS
 from .path_security import repository_relative, safe_target
 from .project_profile import GENERATED_PATHS, matches_test_root, validate_project_settings
@@ -98,7 +98,10 @@ def _overlap(path: str, root: str) -> bool:
 
 
 def _implemented_functions(project: Path, relative: str, executor: dict) -> None:
-    tree = ast.parse(safe_target(project, relative).read_text(encoding="utf-8-sig"))
+    try:
+        tree = ast.parse(safe_target(project, relative).read_text(encoding="utf-8-sig"))
+    except SyntaxError as exc:
+        raise StoryLoopError(f"Invalid executor syntax at line {exc.lineno}") from None
     functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
     required = {name for name, hook in executor["hooks"].items() if hook["status"] == "implemented"} | {"run"}
     for name in required:

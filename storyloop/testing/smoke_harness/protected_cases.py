@@ -21,6 +21,18 @@ def _trusted_imports(project: Path) -> None:
 
 @contextmanager
 def protected_cases(project: Path, cases: list[str]):
+    """Freeze relative import roots before any hook or case can change the cwd."""
+    previous = list(sys.path)
+    sys.path[:] = [str(Path(entry or os.getcwd()).absolute()) for entry in previous]
+    try:
+        with _pin_cases(project, cases):
+            yield
+    finally:
+        sys.path[:] = previous
+
+
+@contextmanager
+def _pin_cases(project: Path, cases: list[str]):
     """Nested invocations may only select the same already-pinned project and cases."""
     project = Path(project).resolve()
     _trusted_imports(project)

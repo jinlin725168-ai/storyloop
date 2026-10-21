@@ -142,6 +142,9 @@ def _changed_since(project: Path, source_head: str) -> set[str]:
 def _next_baseline(
     project: Path, baseline: dict, profile: dict, head: str, version: str,
 ) -> dict:
+    from .onboarding_manifest import validate_onboarding
+    profile = dict(profile)
+    validate_onboarding(project, profile)
     tracked = _tracked_files(project)
     files = {relative: _sha256(project / relative) for relative in tracked}
     protected = _foundation_paths(tracked, profile)

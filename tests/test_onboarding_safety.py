@@ -13,6 +13,21 @@ from tests.test_onboarding_lock import complete
 
 
 class OnboardingSafetyTests(unittest.TestCase):
+    def test_invalid_executor_syntax_is_environment_error_without_control_state(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            complete(root)
+            (root / "acceptance/tools/python_smoke.py").write_text("def run(:\n")
+            commit(root)
+            code, output = cli("init", root, "--settings", root / "acceptance/storyloop-settings.json")
+            self.assertEqual(code, 2, output)
+            raw = json.dumps(output)
+            self.assertIn("syntax", raw.lower())
+            self.assertNotIn("Traceback", raw)
+            self.assertNotIn("def run(:", raw)
+            self.assertFalse((root / ".storyloop").exists())
+
     def test_linked_detection_marker_is_rejected_before_reading_it(self):
         if os.name == "nt":
             self.skipTest("symlink setup requires local developer privilege")

@@ -40,7 +40,7 @@ SAFETY = [
     "tests.test_project_loop_tampering", "tests.test_process_containment", "tests.test_workspace_scratch",
     "tests.test_ci_path_safety", "tests.test_windows_path_guards", "tests.test_oracle_protection",
     "tests.test_retrospective_protocol", "tests.test_onboarding_transactions",
-    "tests.test_onboarding_safety", "tests.test_smoke_harness_lifecycle",
+    "tests.test_onboarding_safety", "tests.test_onboarding_migration", "tests.test_smoke_harness_lifecycle",
 ]
 
 # The command line users type.
