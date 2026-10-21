@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import copy
 
+from .adapter_capabilities import ROLES
+from .lessons import ACTIONS, LANDING_KINDS, STATUSES, STRENGTHS, TIERS
+
 MAX_ERRORS = 12
 
 STRING = {"type": "string"}
@@ -176,16 +179,21 @@ def _profiled_review(schema):
     return schema
 
 
-RETROSPECTIVE_LANDING = _obj({'kind': STRING, 'path': _nullable(STRING),
+RETROSPECTIVE_LANDING = _obj({'kind': {'type': 'string', 'enum': list(LANDING_KINDS)},
+    'path': _nullable(STRING),
     'append': _nullable(STRING), 'argv': _nullable(STRINGS), 'anchor': _nullable(STRING),
     'name': _nullable(STRING), 'change': _nullable(STRING),
     'principle': _nullable(_obj({'id': STRING, 'text': STRING}))}, open_=True)
 RETROSPECTIVE_ENTRY = _obj({
-    'summary': STRING, 'tier': STRING, 'scope': STRINGS, 'roles': STRINGS, 'strength': STRING,
-    'source': STRING, 'baseline_commit': STRING, 'status': STRING, 'updated_at': STRING,
+    'summary': STRING, 'tier': {'type': 'string', 'enum': list(TIERS)}, 'scope': STRINGS,
+    'roles': {'type': 'array', 'items': {'type': 'string', 'enum': list(ROLES)}},
+    'strength': {'type': 'string', 'enum': list(STRENGTHS)},
+    'source': STRING, 'baseline_commit': STRING,
+    'status': {'type': 'string', 'enum': list(STATUSES)}, 'updated_at': STRING,
     'supersedes': STRINGS, 'landings': {'type': 'array', 'items': RETROSPECTIVE_LANDING}})
 RETROSPECTIVE = _obj({
-    'lessons': {'type': 'array', 'items': _obj({'action': STRING, 'target': _nullable(STRING),
+    'lessons': {'type': 'array', 'items': _obj({
+        'action': {'type': 'string', 'enum': list(ACTIONS)}, 'target': _nullable(STRING),
         'entry': RETROSPECTIVE_ENTRY, 'body': STRING, 'why_needed': STRING, 'evidence': STRINGS,
         'landing': _nullable(RETROSPECTIVE_LANDING)})},
     'errata': {'type': 'array', 'items': _obj({'document': STRING, 'claim': STRING,

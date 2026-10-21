@@ -11,7 +11,7 @@ from .drafts import create_draft
 from .facts import valid_location
 from .failure_attribution import _review_identity
 from .lesson_store import load_lessons_at, stale_ids, effective_status
-from .lessons import parse_lesson, render_lesson
+from .lessons import ACTIONS, LANDING_KINDS, parse_lesson, render_lesson
 from .models import StoryLoopError, identifier, require
 from .path_security import safe_target, repository_relative
 from .project_agents import invoke_project_agent, ROLES
@@ -125,7 +125,7 @@ def _validate_proposal(project, proposal, known):
     required = {'action', 'entry', 'body', 'why_needed', 'evidence'}
     require(required <= proposal.keys() <= required | {'target', 'landing'}, '经验提议字段缺失或未知')
     action, target = proposal.get('action'), proposal.get('target')
-    require(action in {'create', 'update', 'retire'}, 'action 无效')
+    require(action in ACTIONS, 'action 无效')
     require(target is None if action == 'create' else target in known, 'target 无效')
     why = proposal.get('why_needed')
     require(isinstance(why, str) and bool(why.strip()), 'why_needed 不能为空')
@@ -151,7 +151,7 @@ def _validate_landing(landing):
     kind = landing.get('kind')
     fields = {'foundation': {'kind', 'path', 'append'},
               'check_command': {'kind', 'argv'}, 'principles': {'kind', 'principle', 'change'}}
-    require(isinstance(kind, str) and kind in fields, 'landing.kind 无效')
+    require(isinstance(kind, str) and kind in LANDING_KINDS and kind in fields, 'landing.kind 无效')
     require(set(landing) == fields[kind], 'landing 字段缺失或未知')
     if kind == 'foundation':
         path = repository_relative(landing['path'], 'landing.path')
@@ -185,7 +185,7 @@ def _concept(item, change_id, commit):
                       'landings': [{'kind': 'foundation', 'path': path}]}}
 
 
-def _drafts(project, change_id, response, payload, result):
+def _drafts(project, change_id, response, payload, result, proposer=None):
     known = {entry['id'] for entry in payload['lessons']}
     proposals = [(False, item) for item in response.get('lessons', [])]
     proposals += [(True, item) for item in response.get('uncovered_concepts', [])]
@@ -196,10 +196,16 @@ def _drafts(project, change_id, response, payload, result):
             if concept:
                 proposal = _concept(proposal, change_id, commit)
             metadata, body = _validate_proposal(project, proposal, known)
-            draft = create_draft(project, 'lesson', change_id, None, metadata, body)
+            draft = create_draft(project, 'lesson', change_id, proposer, metadata, body)
             result['drafts'].append('lesson/' + draft)
         except (StoryLoopError, ValueError, TypeError, OSError) as exc:
             result.setdefault('dropped', []).append({'index': index, 'reason': str(exc)})
+
+
+def _successful_calls(before, rows):
+    """Return calls created and completed successfully by this invocation."""
+    return [row for row in rows if isinstance(row.get('call'), str)
+            and row['call'] not in before and not row.get('failed')]
 
 
 def _perform(project, change, state, manual=False):
@@ -215,14 +221,16 @@ def _perform(project, change, state, manual=False):
         before = {row.get('call') for row in ledger_entries(project, change['change_id'])}
         response = read_only_call(project, change['change_id'],
                                   lambda: invoke_project_agent(project, 'review', payload))
-        _drafts(project, change['change_id'], response, payload, result)
+        rows = ledger_entries(project, change['change_id'])
+        calls = _successful_calls(before, rows)
+        proposer = calls[-1]['call'] if calls else None
+        _drafts(project, change['change_id'], response, payload, result, proposer)
         # Errata are already captured exactly once by invoke, after the guard succeeded.
-        for row in ledger_entries(project, change['change_id']):
-            if row.get('call') not in before:
-                meta = load_json(_meta_path(project, row.get('call')))
-                errata = meta.get('errata') or {}
-                result['drafts'].extend('errata/' + ref for ref in errata.get('drafts', []))
-                result.setdefault('dropped', []).extend(errata.get('dropped', []))
+        for row in calls:
+            meta = load_json(_meta_path(project, row['call']))
+            errata = meta.get('errata') or {}
+            result['drafts'].extend('errata/' + ref for ref in errata.get('drafts', []))
+            result.setdefault('dropped', []).extend(errata.get('dropped', []))
         result['retrospective'] = 'DONE'
     except Exception as exc:
         result['retrospective'] = ('SKIPPED_COST_LIMIT' if isinstance(exc, StoryLoopError)

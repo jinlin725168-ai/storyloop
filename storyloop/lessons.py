@@ -17,6 +17,8 @@ MAX_CORE_BODY = 4096
 STRENGTHS = ("prose", "knowledge", "check", "config")
 TIERS = ("core", "normal")
 STATUSES = ("active", "needs-review", "retired")
+ACTIONS = ("create", "update", "retire")
+LANDING_KINDS = ("foundation", "check_command", "principles")
 
 _FIELDS = (
     "id",
