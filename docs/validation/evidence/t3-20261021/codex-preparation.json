@@ -1,0 +1,45 @@
+{
+  "vendor": "codex",
+  "engine_revision": "bce1a8661b0ebbf7e100d3a782883993d103b368",
+  "fixture_revision": "f65e8f7901dd1da578a72ce8a9aadb9f2a284dfa",
+  "skill": {
+    "name": "foundation-survey",
+    "path": ".claude/skills/foundation-survey/SKILL.md",
+    "version": "1.1.0",
+    "sha256": "2d2e25d3e5128f44cddbac16d12523329385db40a0d74f79f1f1fc8e1efc8cb6"
+  },
+  "skill_sha256": "2d2e25d3e5128f44cddbac16d12523329385db40a0d74f79f1f1fc8e1efc8cb6",
+  "capabilities": {
+    "status": "ADAPTERS_CHECKED",
+    "version": 1,
+    "config_sha256": "c83b70398a45dac4d2dc10e28b4f9cc3335fd7b8f5b47681f5f50060455c83ee",
+    "argv_sha256": "12f621f2558d6be5ac0421769a7c799e41eb8267992ab523c959b0799d86491f",
+    "adapters": {
+      "codex": {
+        "known": true,
+        "tiers": [
+          "strong",
+          "standard"
+        ],
+        "vendor": "openai",
+        "subagents": false,
+        "path_guard": false,
+        "fast_checks": false,
+        "modes": [
+          "*"
+        ]
+      }
+    }
+  },
+  "source_files": [
+    ".gitignore",
+    "README.md",
+    "app/__init__.py",
+    "app/catalog.py",
+    "openspec/specs/search/spec.md",
+    "pyproject.toml",
+    "tests/__init__.py",
+    "tests/test_catalog.py"
+  ],
+  "scope": "Public fixture only, one survey invocation, no behavioral retry"
+}

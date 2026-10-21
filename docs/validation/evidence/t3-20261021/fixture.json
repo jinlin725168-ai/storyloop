@@ -1,0 +1,38 @@
+{
+  "revision": "f65e8f7901dd1da578a72ce8a9aadb9f2a284dfa",
+  "scope": "New synthetic public fixture; no external private repository",
+  "files": {
+    "README.md": {
+      "content": "# Public Catalog Library\n\nA tiny Python library with no frontend or service process.\nSearch should support prefixes according to openspec/specs/search/spec.md.\nA historical manual is referenced at docs/retired-runtime.md but is not available.\n",
+      "sha256": "5dc9d2b1fd6b9e3aefcda0c9379584241e10fccf466cb87dc664a0506d432c10"
+    },
+    "pyproject.toml": {
+      "content": "[project]\nname = \"public-catalog\"\nversion = \"0.0.1\"\nrequires-python = \">=3.11\"\n",
+      "sha256": "0c7e3074fc90eafddf82db19036fbf891af564707c67c2c5df97d3c307c439fe"
+    },
+    "app/__init__.py": {
+      "content": "",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "app/catalog.py": {
+      "content": "def lookup(items, name):\n    \"\"\"Return exact names, preserving input order and values.\"\"\"\n    return [item for item in items if item[\"name\"] == name]\n",
+      "sha256": "12922ed0cff920db17d5554c77d01b0204547409ce3920cf1a07b32ba062dabd"
+    },
+    "tests/__init__.py": {
+      "content": "",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "tests/test_catalog.py": {
+      "content": "import unittest\nfrom app.catalog import lookup\n\nclass CatalogTests(unittest.TestCase):\n    def test_exact_search(self):\n        rows = [{\"name\": \"alpha\"}, {\"name\": \"alpine\"}]\n        self.assertEqual(lookup(rows, \"al\"), [])\n        self.assertEqual(lookup(rows, \"alpha\"), [rows[0]])\n",
+      "sha256": "cf9ab970537abb6323672b50fae45c08a73bfec8c30e1633ccdac8725a3f1a5e"
+    },
+    "openspec/specs/search/spec.md": {
+      "content": "# Search capability\n\n## Requirement: prefix search\nLookup SHOULD return names starting with the query.\n",
+      "sha256": "a8863e1c73679a69ad549890349b504fce0c82c0e8321605dd1d341376fb60d9"
+    },
+    ".gitignore": {
+      "content": ".storyloop/\n__pycache__/\n",
+      "sha256": "a1d580c91d010e4058141cb03415c9f851564defe00646c15a1899c48d0b6dd5"
+    }
+  }
+}

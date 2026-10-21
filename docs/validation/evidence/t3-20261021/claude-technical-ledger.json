@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "change_id": "foundation",
+  "entries": [
+    {
+      "role": "survey",
+      "wall_ms": 139754,
+      "at": "2026-10-21T07:53:21+00:00",
+      "call": "20261021T075101-survey-4a85d8",
+      "session": "e116baeb-93fb-4105-b112-9338e571cfd2",
+      "path_guard": "enforced",
+      "subagents_applied": {
+        "mode": "sequential",
+        "perspectives": 0,
+        "explore": 0,
+        "lanes": 0
+      },
+      "turns": 7,
+      "input_tokens": 188723,
+      "output_tokens": 17829,
+      "segments": 1,
+      "model": "claude-sonnet-5-5",
+      "vendor": "anthropic",
+      "tier_applied": "standard",
+      "skills": [
+        {
+          "name": "foundation-survey",
+          "path": ".claude/skills/foundation-survey/SKILL.md",
+          "version": "1.1.0",
+          "sha256": "2d2e25d3e5128f44cddbac16d12523329385db40a0d74f79f1f1fc8e1efc8cb6"
+        }
+      ],
+      "tier_requested": "standard",
+      "adapter": "claude"
+    }
+  ]
+}

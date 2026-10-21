@@ -1,0 +1,28 @@
+{
+  "scope": "Offline actual public install/snapshot APIs; no model call",
+  "status": {
+    "packaged": "1.1.0",
+    "installed": {
+      ".claude/skills": "1.1.0",
+      ".codex/skills": "1.1.0"
+    }
+  },
+  "files_per_client": 4,
+  "custom_project_copy_before": {
+    "name": "foundation-survey",
+    "path": ".claude/skills/foundation-survey/SKILL.md",
+    "version": "1.1.0",
+    "sha256": "ca3d0117ead0c01fe297c972d34d87c5f9434c0385954cb8dad8671a994737a6"
+  },
+  "packaged_replacement_after": {
+    "name": "foundation-survey",
+    "path": ".claude/skills/foundation-survey/SKILL.md",
+    "version": "1.1.0",
+    "sha256": "5a864734fcdcd504782913be7e03c080df296f1c912c5174cb45bfb04cd6a97c"
+  },
+  "custom_diff_before_install_detected": true,
+  "install_overwrites_custom_copy": true,
+  "both_clients_match_package": true,
+  "reinstall_proposal": "BASE-20261021-002",
+  "actual_real_call_snapshot_is_recorded_separately": true
+}

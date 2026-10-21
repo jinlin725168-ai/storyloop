@@ -1,0 +1,22 @@
+{
+  "started_at": "2026-10-21T07:51:01.962557+00:00",
+  "vendor": "claude",
+  "result": {
+    "status": "SURVEYED",
+    "paths": [
+      "openspec/foundation/README.md",
+      "openspec/foundation/api.md",
+      "openspec/foundation/architecture.md",
+      "openspec/foundation/building-blocks.md",
+      "openspec/foundation/capabilities.md",
+      "openspec/foundation/extension.md",
+      "openspec/foundation/modules.md",
+      "openspec/foundation/testing.md"
+    ],
+    "proposal": "/tmp/storyloop-t3-public-20261021/claude/.storyloop/base-proposals/BASE-20261021-002.json",
+    "change_id": "BASE-20261021-002",
+    "next": "commit exactly these paths on main, then storyloop base-update <project> --proposal BASE-20261021-002"
+  },
+  "outcome": "SURVEYED",
+  "finished_at": "2026-10-21T07:53:21.803787+00:00"
+}
