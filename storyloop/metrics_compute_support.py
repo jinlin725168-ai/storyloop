@@ -137,6 +137,8 @@ def _numstat(output: str) -> int | None:
         if not line:
             continue
         fields = line.split("\t", 2)
+        if len(fields) == 3 and fields[:2] == ["-", "-"]:
+            continue
         if len(fields) != 3 or not fields[0].isdigit() or not fields[1].isdigit():
             return None
         total += int(fields[0]) + int(fields[1])
