@@ -32,7 +32,7 @@ product：capabilities；implement：extension/building-blocks；smoke：testing
 # 模块组成
 ## 模块清单：路径、职责、对外提供、依赖
 ## 依赖方向：Mermaid 与已有边界证据
-## 可变区、底座与集成点：module_roots、integration_paths
+## 可变区、底座与集成点：module_roots、integration_paths、test_roots、实际保护路径及来源冲突
 ## 所有运行单元：入口、职责、启动定义、依赖、测试入口、枚举范围
 ## 前端结构：有则列职责，无则解释不适用
 ```

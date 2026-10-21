@@ -1,6 +1,9 @@
 """Execute the packaged survey's sampling recipe against independent vectors."""
 from pathlib import Path
+import json
 import re
+import subprocess
+import sys
 import unittest
 
 from storyloop.skills import SKILLS_ROOT
@@ -84,6 +87,14 @@ class FoundationSamplingTests(unittest.TestCase):
         for seed in ('', '0' * 31, '0' * 33, 'G' * 32, 'A' * 32):
             with self.subTest(seed=seed), self.assertRaises(ValueError):
                 self.sample(self.candidates(7), seed)
+
+    def test_recipe_runs_in_memory_with_json_stdin_without_a_script_file(self):
+        reference = SKILLS_ROOT / 'foundation-survey/references/source-and-sampling.md'
+        code = re.findall(r'```python\n(.*?)\n```', reference.read_text(encoding='utf-8'), re.S)[0]
+        request = {'candidates': self.candidates(7), 'seed': SEED}
+        result = subprocess.run([sys.executable, '-I', '-c', code],
+                                input=json.dumps(request), capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(result.stdout), self.sample(self.candidates(7)))
 
 
 if __name__ == '__main__':

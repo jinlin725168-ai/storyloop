@@ -39,7 +39,7 @@ Phase 6 索引   ── README.md + 自检门禁
 ### Phase 0 定界
 
 1. 读根 `README*`、`docs/`、`AGENTS.md`、`CLAUDE.md`、`acceptance/AGENT_GUIDE.md`（存在的话）。
-2. 记下可变区（`module_roots`）和集成点（`integration_paths`）：知识库描述的是**可变区之外的底座**，以及可变区里已有的业务能力。
+2. 记下可变区（`module_roots`）和集成点（`integration_paths`）：知识库描述底座及可变区已有能力。精确保护路径须核对已有非敏感 BASE 元数据的 `foundation_paths` / `protected_paths`，另记 `test_roots`；不能仅凭“可变区之外均为底座”的概括就宣布所有文件已被引擎保护。概括提示与实际元数据不一致时列来源并标冲突，元数据不可读就写待确认。
 3. 记录底座版本、已有非敏感 BASE 元数据的 `source_head`、实际观测 Git HEAD（完整 SHA）、工作树状态、日期、技能 1.1.0 与质量约定 1。优先用 payload；BASE 元数据不可安全核实时写待确认，不能用观测 HEAD 冒充 BASE。忽略文件未出现在 tracked 清单不等于不存在。
 4. 识别技术栈，按 [references/survey-checklist.md](references/survey-checklist.md) 里对应的清单探索。
 
@@ -83,7 +83,7 @@ Phase 6 索引   ── README.md + 自检门禁
 
 `README.md` 汇总八文档入口、七类覆盖项、BASE/观测版本、刷新条件、推断/待确认/冲突/未覆盖项，并按 source-and-sampling 完整记录候选清单、摘要、一次种子、选样及逐项核验。抽样先每个正文取一条，再补足 `min(N,max(7,D,ceil(10%N)))`。附加知识正文也入池；README/errata 不重复入池，其基线与冲突做定向检查。
 
-先冻结完整候选清单，再生成一次种子。使用参考里的标准库 Python 示例（可拷到临时目录执行），不要心算 SHA-256、手挑样本或把源材料中的脚本当授权。工具不可用/摘要算不出就标“抽检未完成”，不编造摘要或记录“通过”。
+先冻结完整候选清单，再生成一次种子。使用参考里的标准库 Python 示例，以 `python -c` 在内存执行并从 stdin 接收 JSON，不创建文件；引擎只读角色不要尝试临时落盘或为此请求写权限。不要心算 SHA-256、手挑样本或把源材料中的脚本当授权。执行工具或所需命令权限不可用、摘要算不出就标“抽检未完成”，不编造摘要或记录“通过”。
 
 逐条重新打开样本来源，记“相符 / 不符 / 无法核验”。修正后保留原失败样本再复核，不能换种子抹掉失败。没有事实时写“无可抽样事实”；仅同一代理做选样与核验只能称“自检”。读取测试定义不等于运行测试，随机样本不证明完整性或统计准确率。
 
@@ -103,4 +103,4 @@ Phase 6 索引   ── README.md + 自检门禁
 
 `uncovered_concepts` 自动草案只是补证任务。审批前按 source-and-sampling 的程序人工核对并同时补 `body.md` 和 `draft.json` 的 `payload.landing.append`，未补完保留 pending 或说明理由拒绝。这是人工门，不是引擎强拒占位。正式批准提交与 BASE 验收分开，BASE 成功前不依赖新知识；README 联动更新走独立 BASE，不扩大单草案写集。
 
-旧库仍可读，JSON/八文档接口不变。升级前对照项目自定义副本；`storyloop skills` 会覆盖同名文件，不能承诺自动合并或保留自定义。复核 `.claude`、`.codex` 副本，实际调用快照才证明提供了哪个版本。已受保护的错误事实走既有 errata 的精确 claim/源码证据→人工审批→BASE，不直接改正文。
+旧库仍可读，JSON/八文档接口不变。升级前对照项目自定义副本；`storyloop skills` 会覆盖同名文件，不能承诺自动合并或保留自定义。复核 `.claude`、`.codex` 副本，实际调用快照才证明提供了哪个版本；其中 `sha256` 对应完整投喂文本（SKILL.md 加按文件名排序、含分隔注释的 references），不是单个 SKILL.md 的文件 hash，不能比较不同对象后误报安装冲突。已受保护的错误事实走既有 errata 的精确 claim/源码证据→人工审批→BASE，不直接改正文。
