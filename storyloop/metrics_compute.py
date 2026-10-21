@@ -255,7 +255,7 @@ def overrule_rate(records: list[dict]) -> dict:
 
 
 def contract_ratio(project: Path, records: list[dict]) -> dict:
-    """M9: median contract-to-implementation line ratio from valid Git lineages."""
+    """M9: median contract-to-implementation line ratio from Git diffs."""
     rows, missing = [], []
     for record in records:
         commits = record.get("commits") if isinstance(record.get("commits"), dict) else {}
@@ -267,8 +267,6 @@ def contract_ratio(project: Path, records: list[dict]) -> dict:
             _miss(missing, record, "UNREADABLE")
             continue
         try:
-            baseline._git(project, "merge-base", "--is-ancestor", source, contract)
-            baseline._git(project, "merge-base", "--is-ancestor", contract, implementation)
             contract_lines = _numstat(baseline._git(project, "diff", "--numstat", source, contract))
             implementation_lines = _numstat(
                 baseline._git(project, "diff", "--numstat", contract, implementation))

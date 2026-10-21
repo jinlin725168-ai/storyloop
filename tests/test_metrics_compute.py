@@ -310,7 +310,7 @@ class ComputeTests(unittest.TestCase):
         self.assertEqual(result["by"]["light"]["value"], 0.5)
         self.assertEqual(result["by"]["standard"]["value"], 1.5)
 
-    def test_contract_ratio_rejects_missing_wrong_order_empty_and_binary_evidence(self):
+    def test_contract_ratio_rejects_missing_unreachable_empty_and_binary_evidence(self):
         project = git_repo()
         self.addCleanup(cleanup_repo, project)
         source = head(project)
@@ -323,7 +323,7 @@ class ComputeTests(unittest.TestCase):
         records = [
             rec("MISSING", commits={"source_head": source, "contract_commit": contract,
                                     "implementation_commit": None}),
-            rec("ORDER", commits={"source_head": implementation, "contract_commit": source,
+            rec("UNREACHABLE", commits={"source_head": "f" * 40, "contract_commit": source,
                                   "implementation_commit": contract}),
             rec("EMPTY", commits={"source_head": contract, "contract_commit": implementation,
                                   "implementation_commit": empty_implementation}),
@@ -338,7 +338,7 @@ class ComputeTests(unittest.TestCase):
         self.assertEqual(result["n"], 0)
         self.assertEqual(result["missing"], [
             {"change_id": "MISSING", "reason": "UNREADABLE"},
-            {"change_id": "ORDER", "reason": "UNREADABLE"},
+            {"change_id": "UNREACHABLE", "reason": "UNREADABLE"},
             {"change_id": "EMPTY", "reason": "UNREADABLE"},
             {"change_id": "BINARY", "reason": "UNREADABLE"},
         ])

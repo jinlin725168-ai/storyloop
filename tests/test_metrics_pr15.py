@@ -105,3 +105,14 @@ class MetricsReviewTests(unittest.TestCase):
             result = lessons(root, collected['changes'])['recurrence_rate']
             self.assertIsNone(result['value'])
             self.assertIn({'change_id': 'B', 'reason': 'UNREADABLE'}, result['missing'])
+
+    def test_contract_ratio_needs_only_diffable_commits(self):
+        root = git_repo()
+        self.addCleanup(cleanup_repo, root)
+        source = head(root)
+        contract = commit_file(root, 'contract.md', 'contract\n')
+        implementation = commit_file(root, 'app.py', 'one\ntwo\n')
+        result = contract_ratio(root, [rec('A', commits={
+            'source_head': implementation, 'contract_commit': source,
+            'implementation_commit': contract})])
+        self.assertEqual((result['value'], result['n']), (3, 1))
