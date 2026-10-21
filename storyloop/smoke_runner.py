@@ -17,6 +17,7 @@ from .baseline import _git, load_project_config
 from .boundaries import capture_snapshot, snapshot_changes
 from .changes import load_change
 from .models import StoryLoopError, criterion_expects_red, require
+from .harness_command import expand_command, harness_counts
 from .oracle_counts import count_tests, project_patterns
 from .path_security import safe_target
 from .project_profile import GENERATED_PATHS
@@ -343,7 +344,7 @@ def _files_digest(root: Path, paths: list[str]) -> str:
 
 
 def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> dict:
-    argv = [_expand(item) for item in test["command"]]
+    argv = expand_command(test["command"])
     executable = argv[0] if Path(argv[0]).is_absolute() else shutil.which(argv[0])
     require(bool(executable), "Smoke executable is unavailable")
     require(Path(executable).suffix.lower() not in {".cmd", ".bat", ".ps1"},
@@ -359,6 +360,8 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> 
                                "PYTHONDONTWRITEBYTECODE"],
         source_environment=environment,
     )
+    counts = (harness_counts(outcome) if test["command"][0] == "{storyloop_harness}" else
+              count_tests(argv, str(outcome.get("stdout", "")) + "\n" + str(outcome.get("stderr", "")), patterns))
     if (outcome.get("contained") is not True or outcome.get("timed_out")
             or outcome.get("truncated") or outcome.get("error")):
         status = "ERROR"
@@ -376,8 +379,7 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> 
         "status": status,
         "returncode": outcome.get("returncode"),
         "timed_out": bool(outcome.get("timed_out")),
-        "counts": count_tests(argv, str(outcome.get("stdout", "")) + "\n" + str(outcome.get("stderr", "")),
-                              patterns),
+        "counts": counts,
         "stdout": redact(str(outcome.get("stdout", "")))[:100_000],
         "stderr": redact(str(outcome.get("stderr", "")))[:100_000],
     }

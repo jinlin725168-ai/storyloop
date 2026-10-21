@@ -1,1 +1,1 @@
-"""Offline, deterministic adapter support for integration tests."""
+"""Versioned utilities for protected project test executors."""

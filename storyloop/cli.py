@@ -86,6 +86,8 @@ def _product_arguments(child, command):
     if command == "readiness":
         child.add_argument("--change", dest="change_id")
     elif command == "init":
+        child.add_argument("--scaffold", action="store_true", help="只生成待人工补全的接入草案")
+        child.add_argument("--stack", action="append", choices=["maven", "node", "python", "generic"])
         child.add_argument("--settings", type=Path,
                            help="可选 JSON 工程画像：unit_commands（旧名 test_commands）、integration_commands、"
                                 "check_commands、test_roots、module_roots、integration_paths、"
@@ -182,6 +184,11 @@ def dispatch(args) -> dict:
         return routed
     if args.command == "init":
         require((project / ".git").exists(), "storyloop init needs an existing Git repository (git init first)")
+        if args.scaffold:
+            from .onboarding import scaffold_project
+            require(args.settings is None, "--scaffold cannot be combined with --settings")
+            return scaffold_project(project, args.stack)
+        require(args.stack is None, "--stack requires --scaffold")
         settings = load_json(args.settings.resolve()) if args.settings else None
         return bootstrap_project(project, settings)
     if args.command == "change":
@@ -474,7 +481,7 @@ def main(argv: list[str] | None = None) -> int:
             "UNSAFE_CONTAINMENT", "WORKSPACE_TAINTED",
             "BUDGET_EXHAUSTED", "BASE_CHANGE_REQUIRED",
             "BOUNDARY_VIOLATION", "ERROR", "CHARACTERIZATION_FAILED",
-            "SMOKE_UPDATE_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_SPEC_FIX", "NO_PROGRESS",
+            "SCAFFOLD_SELECTION_REQUIRED", "SMOKE_UPDATE_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_SPEC_FIX", "NO_PROGRESS",
         }
         return 2 if result.get("status") in failures | BLOCKED else 0
     except StoryLoopError as exc:
