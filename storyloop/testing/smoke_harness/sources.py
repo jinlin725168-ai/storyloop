@@ -22,7 +22,9 @@ def source_path(project: Path, relative: str) -> Path:
 
 
 def source_list(project: Path, values: list[str]) -> list[str]:
+    """Use safe_target's canonical root spelling, including Windows 8.3 aliases."""
     require(isinstance(values, list) and len(values) <= 10000, "Explicit bounded source file list required")
+    project = Path(project).resolve()
     result = []
     for value in values:
         path = source_path(project, value)

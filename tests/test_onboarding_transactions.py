@@ -86,11 +86,13 @@ class ScaffoldTransactionTests(unittest.TestCase):
         from storyloop.onboarding import scaffold_project
         for concurrent in (False, True):
             with self.subTest(concurrent=concurrent), tempfile.TemporaryDirectory() as folder:
-                root = Path(folder)
+                base = Path(folder)
+                (base / "spelling").mkdir()
+                root = base / "spelling/.."  # Different spelling, like Windows 8.3 temp paths.
                 repository(root)
                 original = Path.open
                 def fail_second(path, mode="r", *args, **kwargs):
-                    if mode == "xb" and path == root / "acceptance/AGENT_GUIDE.md":
+                    if mode == "xb" and path.resolve() == (root / "acceptance/AGENT_GUIDE.md").resolve():
                         if concurrent:
                             (root / "acceptance/tools/python_smoke.py").write_text("manual")
                         raise OSError("injected second install failure")

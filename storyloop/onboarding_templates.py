@@ -27,7 +27,7 @@ def render(stacks: list[str]) -> dict[str, bytes]:
     template = resources.joinpath("executor.py.tmpl").read_text(encoding="utf-8")
     artifacts = {f"acceptance/tools/{stack}_smoke.py":
                  template.replace("__STACK__", stack).encode("utf-8") for stack in stacks}
-    artifacts[GUIDE] = resources.joinpath("AGENT_GUIDE.md").read_bytes()
+    artifacts[GUIDE] = resources.joinpath("AGENT_GUIDE.md").read_text(encoding="utf-8").encode("utf-8")
     artifacts[SETTINGS] = json_bytes({
         "unit_commands": [], "integration_commands": [], "check_commands": [],
         "module_roots": [], "test_roots": [], "integration_paths": [],

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tests.onboarding_support import cli, repository
 from tests.test_baseline_behavior import git
@@ -39,6 +40,33 @@ if __name__ == "__main__":
 
 
 class ScaffoldMatrixTests(unittest.TestCase):
+    def test_package_and_generated_checkout_line_endings_preserve_idempotence(self):
+        bundled = Path(__file__).resolve().parents[1] / "storyloop/templates/onboarding"
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            resources = base / "resources"
+            templates = resources / "templates/onboarding"
+            templates.mkdir(parents=True)
+            for name in ("AGENT_GUIDE.md", "executor.py.tmpl"):
+                content = (bundled / name).read_text(encoding="utf-8")
+                (templates / name).write_bytes(content.replace("\n", "\r\n").encode("utf-8"))
+            root = base / "repo"
+            root.mkdir()
+            repository(root)
+            args = ("init", root, "--scaffold", "--stack", "python", "--json")
+            with patch("storyloop.onboarding_templates.files", return_value=resources):
+                self.assertEqual(cli(*args)[0], 0)
+                code, value = cli(*args)
+                self.assertEqual(code, 0, value)
+                self.assertEqual(value["status"], "SCAFFOLD_UNCHANGED")
+                for relative in value["files"]:
+                    path = root / relative
+                    content = path.read_bytes().replace(b"\r\n", b"\n")
+                    path.write_bytes(content.replace(b"\n", b"\r\n"))
+                code, value = cli(*args)
+                self.assertEqual(code, 0, value)
+                self.assertEqual(value["status"], "SCAFFOLD_UNCHANGED")
+
     def test_explicit_stack_matrix_and_ambiguous_selection(self):
         markers = {"maven": {"pom.xml": "<project/>"},
                    "node": {"package.json": '{"scripts": {"test": "not executed"}}'},
