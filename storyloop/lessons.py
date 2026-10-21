@@ -14,9 +14,12 @@ from .path_security import forbidden_path_root, repository_relative
 LESSONS_ROOT = "openspec/lessons"
 MAX_BODY = 4096
 MAX_CORE_BODY = 4096
+MAX_SUMMARY = 120
 STRENGTHS = ("prose", "knowledge", "check", "config")
 TIERS = ("core", "normal")
 STATUSES = ("active", "needs-review", "retired")
+ACTIONS = ("create", "update", "retire")
+LANDING_KINDS = ("foundation", "check_command", "principles")
 
 _FIELDS = (
     "id",
@@ -135,8 +138,8 @@ def _validate_metadata(metadata: dict, filename: str) -> None:
     if PurePosixPath(filename).name != f"{lesson_id}.md":
         raise _invalid(filename, "id", "必须与文件名一致")
     summary = _nonempty_text(metadata["summary"], filename, "summary")
-    if len(summary) > 120:
-        raise _invalid(filename, "summary", "不能超过 120 字符")
+    if len(summary) > MAX_SUMMARY:
+        raise _invalid(filename, "summary", f"不能超过 {MAX_SUMMARY} 字符")
     for field, allowed in (("tier", TIERS), ("strength", STRENGTHS), ("status", STATUSES)):
         if metadata[field] not in allowed:
             raise _invalid(filename, field, f"必须是 {', '.join(allowed)} 之一")
