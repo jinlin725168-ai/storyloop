@@ -1,0 +1,184 @@
+{
+  "scope": "Offline deliberately seeded errors; manual source judgments, not natural model output",
+  "fixture_revision": "f65e8f7901dd1da578a72ce8a9aadb9f2a284dfa",
+  "selection": {
+    "rule_version": 1,
+    "seed": "22e2e5b09db4d8e20dbbd276cfc29cec",
+    "candidate_sha256": "721ef0ce747e116b7ee5c98d5d01222aed98b9143cb87e775eb9e8ed817006af",
+    "N": 8,
+    "D": 8,
+    "sample_size": 8,
+    "candidates": [
+      [
+        "openspec/foundation/api.md",
+        "F001"
+      ],
+      [
+        "openspec/foundation/architecture.md",
+        "F001"
+      ],
+      [
+        "openspec/foundation/building-blocks.md",
+        "F001"
+      ],
+      [
+        "openspec/foundation/capabilities.md",
+        "F001"
+      ],
+      [
+        "openspec/foundation/extension.md",
+        "F001"
+      ],
+      [
+        "openspec/foundation/extra-runtime.md",
+        "F001"
+      ],
+      [
+        "openspec/foundation/modules.md",
+        "F001"
+      ],
+      [
+        "openspec/foundation/testing.md",
+        "F001"
+      ]
+    ],
+    "samples": [
+      [
+        "openspec/foundation/testing.md",
+        "F001"
+      ],
+      [
+        "openspec/foundation/modules.md",
+        "F001"
+      ],
+      [
+        "openspec/foundation/building-blocks.md",
+        "F001"
+      ],
+      [
+        "openspec/foundation/capabilities.md",
+        "F001"
+      ],
+      [
+        "openspec/foundation/api.md",
+        "F001"
+      ],
+      [
+        "openspec/foundation/architecture.md",
+        "F001"
+      ],
+      [
+        "openspec/foundation/extra-runtime.md",
+        "F001"
+      ],
+      [
+        "openspec/foundation/extension.md",
+        "F001"
+      ]
+    ],
+    "status": "selected"
+  },
+  "reviews": [
+    {
+      "path": "openspec/foundation/modules.md",
+      "id": "F001",
+      "original_claim": "Library entry is app/catalog.py:lookup; no server entry is declared",
+      "original_state": "已核对",
+      "source": "pyproject.toml",
+      "reopened_source": "[project]\nname = \"public-catalog\"\nversion = \"0.0.1\"\nrequires-python = \">=3.11\"\n",
+      "first_result": "相符",
+      "corrected_claim": "Library entry is app/catalog.py:lookup; no server entry is declared",
+      "corrected_state": "已核对",
+      "same_sample_recheck": "相符"
+    },
+    {
+      "path": "openspec/foundation/architecture.md",
+      "id": "F001",
+      "original_claim": "lookup implements prefix matching",
+      "original_state": "已核对",
+      "source": "app/catalog.py",
+      "reopened_source": "def lookup(items, name):\n    \"\"\"Return exact names, preserving input order and values.\"\"\"\n    return [item for item in items if item[\"name\"] == name]\n",
+      "first_result": "不符",
+      "corrected_claim": "lookup uses exact equality (app/catalog.py:3), while the living spec requires prefixes (openspec/specs/search/spec.md); implementation is inconsistent",
+      "corrected_state": "冲突",
+      "same_sample_recheck": "相符（代码/规格冲突被保留）"
+    },
+    {
+      "path": "openspec/foundation/extension.md",
+      "id": "F001",
+      "original_claim": "Existing lookup and its unittest are in app/catalog.py and tests/test_catalog.py",
+      "original_state": "已核对",
+      "source": "tests/test_catalog.py",
+      "reopened_source": "import unittest\nfrom app.catalog import lookup\n\nclass CatalogTests(unittest.TestCase):\n    def test_exact_search(self):\n        rows = [{\"name\": \"alpha\"}, {\"name\": \"alpine\"}]\n        self.assertEqual(lookup(rows, \"al\"), [])\n        self.assertEqual(lookup(rows, \"alpha\"), [rows[0]])\n",
+      "first_result": "相符",
+      "corrected_claim": "Existing lookup and its unittest are in app/catalog.py and tests/test_catalog.py",
+      "corrected_state": "已核对",
+      "same_sample_recheck": "相符"
+    },
+    {
+      "path": "openspec/foundation/api.md",
+      "id": "F001",
+      "original_claim": "lookup(items, name) returns a list filtered by exact item name",
+      "original_state": "已核对",
+      "source": "app/catalog.py",
+      "reopened_source": "def lookup(items, name):\n    \"\"\"Return exact names, preserving input order and values.\"\"\"\n    return [item for item in items if item[\"name\"] == name]\n",
+      "first_result": "相符",
+      "corrected_claim": "lookup(items, name) returns a list filtered by exact item name",
+      "corrected_state": "已核对",
+      "same_sample_recheck": "相符"
+    },
+    {
+      "path": "openspec/foundation/capabilities.md",
+      "id": "F001",
+      "original_claim": "Living specification requires prefix matching",
+      "original_state": "已核对",
+      "source": "openspec/specs/search/spec.md",
+      "reopened_source": "# Search capability\n\n## Requirement: prefix search\nLookup SHOULD return names starting with the query.\n",
+      "first_result": "相符",
+      "corrected_claim": "Living specification requires prefix matching",
+      "corrected_state": "已核对",
+      "same_sample_recheck": "相符"
+    },
+    {
+      "path": "openspec/foundation/building-blocks.md",
+      "id": "F001",
+      "original_claim": "lookup is the only implemented application function in app/catalog.py",
+      "original_state": "已核对",
+      "source": "app/catalog.py",
+      "reopened_source": "def lookup(items, name):\n    \"\"\"Return exact names, preserving input order and values.\"\"\"\n    return [item for item in items if item[\"name\"] == name]\n",
+      "first_result": "相符",
+      "corrected_claim": "lookup is the only implemented application function in app/catalog.py",
+      "corrected_state": "已核对",
+      "same_sample_recheck": "相符"
+    },
+    {
+      "path": "openspec/foundation/testing.md",
+      "id": "F001",
+      "original_claim": "CatalogTest.test_lookup declares exact-name assertions using unittest",
+      "original_state": "已核对",
+      "source": "tests/test_catalog.py",
+      "reopened_source": "import unittest\nfrom app.catalog import lookup\n\nclass CatalogTests(unittest.TestCase):\n    def test_exact_search(self):\n        rows = [{\"name\": \"alpha\"}, {\"name\": \"alpine\"}]\n        self.assertEqual(lookup(rows, \"al\"), [])\n        self.assertEqual(lookup(rows, \"alpha\"), [rows[0]])\n",
+      "first_result": "相符",
+      "corrected_claim": "CatalogTest.test_lookup declares exact-name assertions using unittest",
+      "corrected_state": "已核对",
+      "same_sample_recheck": "相符"
+    },
+    {
+      "path": "openspec/foundation/extra-runtime.md",
+      "id": "F001",
+      "original_claim": "The retired runtime document proves deployed prefix matching",
+      "original_state": "已核对",
+      "source": "docs/retired-runtime.md",
+      "reopened_source": null,
+      "first_result": "无法核验",
+      "corrected_claim": "README links docs/retired-runtime.md, which is absent in the observed fixture; no deployed-behavior claim is supported",
+      "corrected_state": "待确认",
+      "same_sample_recheck": "无法核验（已降级，未伪造证明）"
+    }
+  ],
+  "new_facts_added": false,
+  "seed_replaced": false,
+  "protected_foundation_modified": false,
+  "runtime_tests_executed": false,
+  "independent_review": "Not claimed for this coordinator-authored exercise"
+}

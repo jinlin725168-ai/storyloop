@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "call": "20261021T075059-survey-f8f4b5",
+  "role": "survey",
+  "ledger": "foundation",
+  "adapter": "codex",
+  "started_at": "2026-10-21T07:50:59+00:00",
+  "status": "OK",
+  "context": {
+    "foundation": [],
+    "living_specs": [],
+    "skills": [
+      {
+        "path": ".claude/skills/foundation-survey/SKILL.md",
+        "sha256": "2d2e25d3e5128f44cddbac16d12523329385db40a0d74f79f1f1fc8e1efc8cb6"
+      }
+    ],
+    "plans": [],
+    "lessons": [],
+    "truncated": []
+  },
+  "lessons_provided": [],
+  "lessons_claimed": [],
+  "lessons_unknown": [],
+  "lessons_truncated": false,
+  "wall_ms": 300925,
+  "sessions": [
+    "01a15d71-285b-7933-8737-4f1788181fd0"
+  ],
+  "repairs": 0,
+  "errata": {
+    "drafts": [],
+    "dropped": []
+  }
+}

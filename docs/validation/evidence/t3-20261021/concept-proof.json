@@ -1,0 +1,68 @@
+{
+  "scenario": "Offline synthetic retrospective response; real draft/approve/BASE operations",
+  "initial_draft": {
+    "kind": "lesson",
+    "created_at": "2026-10-21T07:42:57+00:00",
+    "source": "FEAT-20261021-001",
+    "proposer": "offline-concept-fixture",
+    "payload": {
+      "action": "create",
+      "target": null,
+      "entry": {
+        "summary": "Catalog matching semantics",
+        "tier": "normal",
+        "scope": [
+          "**"
+        ],
+        "roles": [
+          "implement",
+          "review"
+        ],
+        "strength": "knowledge",
+        "source": "FEAT-20261021-001",
+        "baseline_commit": "f65e8f7901dd1da578a72ce8a9aadb9f2a284dfa",
+        "status": "active",
+        "updated_at": "2026-10-21",
+        "supersedes": [],
+        "landings": [
+          {
+            "kind": "foundation",
+            "path": "openspec/foundation/architecture.md"
+          }
+        ]
+      },
+      "why_needed": "缺少 Catalog matching semantics 时，冷读代码的 AI 无法获知证据中揭示的约束。",
+      "evidence": [
+        "app/catalog.py:3"
+      ],
+      "landing": {
+        "kind": "foundation",
+        "path": "openspec/foundation/architecture.md",
+        "append": "## Catalog matching semantics\n\n（待补充，证据：['app/catalog.py:3']）"
+      }
+    },
+    "status": "pending",
+    "failure": null,
+    "id": "D-FEAT-20261021-001-01",
+    "body": "## Catalog matching semantics\n\n（待补充，证据：['app/catalog.py:3']）"
+  },
+  "body_only_manual_decision": "Not signed off because landing.append still contains placeholder; no claim that engine enforces this human check",
+  "manually_completed_body": "## Catalog matching semantics\n\narchitecture:F001 | lookup uses exact equality while the living specification asks for prefixes | 引用已确认 | 冲突 | app/catalog.py:3; openspec/specs/search/spec.md:4 | f65e8f7901dd1da578a72ce8a9aadb9f2a284dfa | Read only; no claim of runtime conformance.\n",
+  "approved": {
+    "status": "APPLIED",
+    "lesson_id": "L-0001",
+    "commit": "779316a6ea0c66c49b24681ad6ebde7d0bf76ceb",
+    "base_proposal": "BASE-20261021-001",
+    "next": "commit exactly these paths on main, then storyloop base-update <project> --proposal BASE-20261021-001"
+  },
+  "base_update": {
+    "status": "BASELINE_UPGRADED",
+    "proposal_id": "BASE-20261021-001",
+    "baseline_version": "1.0.1",
+    "source_head": "779316a6ea0c66c49b24681ad6ebde7d0bf76ceb",
+    "lessons_to_review": [
+      "L-0001"
+    ]
+  },
+  "config_unchanged": true
+}
