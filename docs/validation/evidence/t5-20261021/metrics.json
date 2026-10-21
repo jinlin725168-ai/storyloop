@@ -1,0 +1,259 @@
+{
+  "status": "METRICS",
+  "generated_at": "2026-10-21T11:07:35.592822+00:00",
+  "since": "2026-10-21",
+  "changes": 2,
+  "missing": [],
+  "discrepancies": [],
+  "metrics": {
+    "M1": {
+      "id": "M1",
+      "value": 1.0,
+      "numerator": 1,
+      "denominator": 1,
+      "n": 1,
+      "changes": [
+        "FEAT-20261021-002"
+      ],
+      "missing": []
+    },
+    "M1b": {
+      "id": "M1b",
+      "value": 0.5,
+      "numerator": 1,
+      "denominator": 2,
+      "n": 2,
+      "changes": [],
+      "missing": [],
+      "attempt_changes": [
+        "FEAT-20261021-001",
+        "FEAT-20261021-002"
+      ],
+      "budget_exhausted": 0,
+      "budget_denominator": 2,
+      "budget_value": 0.0,
+      "progressing": 0,
+      "progressing_denominator": 0,
+      "progressing_value": null,
+      "progressing_changes": []
+    },
+    "M2": {
+      "id": "M2",
+      "value": 0.0,
+      "numerator": 0,
+      "denominator": 2,
+      "n": 2,
+      "changes": [],
+      "missing": [],
+      "by": {
+        "heavy": {
+          "id": "M2",
+          "value": 0.0,
+          "numerator": 0,
+          "denominator": 2,
+          "n": 2,
+          "changes": [],
+          "missing": [],
+          "upgrade_rules": {}
+        }
+      }
+    },
+    "M3": {
+      "id": "M3",
+      "value": 0.0,
+      "numerator": 0,
+      "denominator": 2,
+      "n": 2,
+      "changes": [],
+      "missing": [],
+      "attribution": {},
+      "attribution_changes": {}
+    },
+    "M4": {
+      "id": "M4",
+      "value": 0.0,
+      "numerator": 0,
+      "denominator": 2,
+      "n": 2,
+      "changes": [],
+      "missing": [
+        {
+          "change_id": "FEAT-20261021-001",
+          "reason": "UNREADABLE"
+        },
+        {
+          "change_id": "FEAT-20261021-002",
+          "reason": "UNREADABLE"
+        }
+      ],
+      "no_progress": 0,
+      "no_progress_changes": [],
+      "agent_failure_total": 0,
+      "agent_failure_denominator": 0,
+      "agent_failure_value": null,
+      "agent_failure_changes": [],
+      "agent_failures": {}
+    },
+    "M5": {
+      "id": "M5",
+      "value": 0.0,
+      "numerator": 0,
+      "denominator": 1,
+      "n": 1,
+      "changes": [],
+      "missing": [],
+      "by": {
+        "heavy": {
+          "id": "M5",
+          "value": 0.0,
+          "numerator": 0,
+          "denominator": 1,
+          "n": 1,
+          "changes": [],
+          "missing": []
+        }
+      }
+    },
+    "M6": {
+      "id": "M6",
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "n": 0,
+      "changes": [],
+      "missing": [
+        {
+          "change_id": "FEAT-20261021-002",
+          "reason": "CI_RESULT_ABSENT"
+        }
+      ],
+      "reason": "CI_RESULTS_NOT_PROVIDED",
+      "by": {}
+    },
+    "M7": {
+      "id": "M7",
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "n": 0,
+      "changes": [],
+      "missing": [
+        {
+          "change_id": "FEAT-20261021-001",
+          "reason": "UNREADABLE"
+        }
+      ],
+      "reason": "NO_SAMPLE",
+      "outcomes": {},
+      "failure_changes": [],
+      "mean_attempts": null,
+      "attempt_denominator": 0,
+      "attempt_changes": [],
+      "by": {}
+    },
+    "M8": {
+      "id": "M8",
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "n": 0,
+      "changes": [],
+      "missing": [
+        {
+          "change_id": "FEAT-20261021-001",
+          "reason": "UNREADABLE"
+        }
+      ],
+      "reason": "NO_SAMPLE"
+    },
+    "M9": {
+      "id": "M9",
+      "value": 0.7451,
+      "numerator": 950,
+      "denominator": 1275,
+      "n": 1,
+      "changes": [
+        "FEAT-20261021-002"
+      ],
+      "missing": [
+        {
+          "change_id": "FEAT-20261021-001",
+          "reason": "UNREADABLE"
+        }
+      ],
+      "by": {
+        "heavy": {
+          "id": "M9",
+          "value": 0.7451,
+          "numerator": 950,
+          "denominator": 1275,
+          "n": 1,
+          "changes": [
+            "FEAT-20261021-002"
+          ],
+          "missing": []
+        }
+      }
+    },
+    "M10": {
+      "id": "M10",
+      "value": {
+        "repairs": 4,
+        "design_approval": 2,
+        "resets": 1,
+        "supersede": 1
+      },
+      "numerator": 8,
+      "denominator": 2,
+      "n": 2,
+      "changes": [
+        "FEAT-20261021-001",
+        "FEAT-20261021-002"
+      ],
+      "missing": [
+        {
+          "change_id": "FEAT-20261021-001",
+          "reason": "UNREADABLE"
+        },
+        {
+          "change_id": "FEAT-20261021-002",
+          "reason": "UNREADABLE"
+        }
+      ],
+      "coverage": {
+        "answers": 0,
+        "resets": 1,
+        "repairs": 1,
+        "overrules": 1,
+        "supersede": 2,
+        "design_approval": 2,
+        "continue_heavy": 1,
+        "manual_acceptance": 0
+      }
+    },
+    "M12": {
+      "id": "M12",
+      "recurrence_rate": {
+        "id": "M12",
+        "value": null,
+        "numerator": 0,
+        "denominator": 0,
+        "n": 0,
+        "changes": [],
+        "missing": [],
+        "reason": "LESSONS_NOT_CONFIGURED"
+      },
+      "unclaimed_rate": {
+        "id": "M12",
+        "value": null,
+        "numerator": 0,
+        "denominator": 0,
+        "n": 0,
+        "changes": [],
+        "missing": [],
+        "reason": "LESSONS_NOT_CONFIGURED"
+      }
+    }
+  },
+  "export_note": "M11 and raw financial telemetry excluded. Cohort explicitly filtered to 2026-10-21, retaining both superseded and completed changes."
+}
