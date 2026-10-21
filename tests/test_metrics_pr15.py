@@ -46,3 +46,14 @@ class MetricsReviewTests(unittest.TestCase):
         for result in ({'contained': False}, {'contained': True, 'timed_out': True}):
             with self.subTest(result=result), patch('storyloop.baseline.run_process', return_value=result):
                 self.assertIsNone(ci_results._related(root, commit, commit))
+
+    def test_since_reports_changes_without_a_filterable_date(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            write_change(root, 'UNDATED', approved_at=None)
+            write_run(root, 'UNDATED', started_at=None)
+            write_change(root, 'OLD', approved_at='2020-01-01T00:00:00+00:00')
+            result = metrics_collect.collect(root, date(2026, 1, 1))
+            self.assertEqual(result['changes'], [])
+            self.assertEqual(result['missing'], [{'change_id': 'UNDATED', 'reason': 'UNREADABLE'}])
+            self.assertEqual(len(metrics_collect.collect(root)['changes']), 2)

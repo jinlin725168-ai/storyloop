@@ -29,7 +29,10 @@ def collect(project: Path, since: date | None = None) -> dict:
         run = _load_state(root, _run_path(root, change_id), change_id, MAX_RUN_BYTES, missing)
         report = _load_report(root, change_id, missing)
         record = _record(root, change_id, change, run, report, missing, discrepancies)
-        if since is None or (_as_date(record["approved_at"]) or date.min) >= since:
+        approved = _as_date(record["approved_at"])
+        if since is not None and approved is None:
+            _add_missing(missing, change_id, "UNREADABLE")
+        elif since is None or approved >= since:
             records.append(record)
     records.sort(key=lambda item: (_date_sort_key(item["approved_at"]), item["change_id"]))
     missing.sort(key=lambda item: (item["change_id"], item["reason"]))
