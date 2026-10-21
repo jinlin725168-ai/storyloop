@@ -1,0 +1,47 @@
+{
+  "vendor": "claude",
+  "engine_revision": "bce1a8661b0ebbf7e100d3a782883993d103b368",
+  "fixture_revision": "f65e8f7901dd1da578a72ce8a9aadb9f2a284dfa",
+  "skill": {
+    "name": "foundation-survey",
+    "path": ".claude/skills/foundation-survey/SKILL.md",
+    "version": "1.1.0",
+    "sha256": "2d2e25d3e5128f44cddbac16d12523329385db40a0d74f79f1f1fc8e1efc8cb6"
+  },
+  "skill_sha256": "2d2e25d3e5128f44cddbac16d12523329385db40a0d74f79f1f1fc8e1efc8cb6",
+  "capabilities": {
+    "status": "ADAPTERS_CHECKED",
+    "version": 1,
+    "config_sha256": "901dd41354d8ad49c8703872fadd72a98ab31cd8b81e4ce06c09ac19acb0e84c",
+    "argv_sha256": "b0332b006b9e606814f22d56f8af1b7fd732b5859b461602c9c5f9df4942e88d",
+    "adapters": {
+      "claude": {
+        "known": true,
+        "lanes": [],
+        "lane_prefixes": {},
+        "tiers": [
+          "standard",
+          "strong"
+        ],
+        "vendor": "anthropic",
+        "subagents": true,
+        "path_guard": true,
+        "fast_checks": true,
+        "modes": [
+          "*"
+        ]
+      }
+    }
+  },
+  "source_files": [
+    ".gitignore",
+    "README.md",
+    "app/__init__.py",
+    "app/catalog.py",
+    "openspec/specs/search/spec.md",
+    "pyproject.toml",
+    "tests/__init__.py",
+    "tests/test_catalog.py"
+  ],
+  "scope": "Public fixture only, one survey invocation, no behavioral retry"
+}

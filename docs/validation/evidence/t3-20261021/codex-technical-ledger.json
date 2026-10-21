@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "change_id": "foundation",
+  "entries": [
+    {
+      "role": "survey",
+      "wall_ms": 300925,
+      "at": "2026-10-21T07:55:59+00:00",
+      "call": "20261021T075059-survey-f8f4b5",
+      "session": "01a15d71-285b-7933-8737-4f1788181fd0",
+      "path_guard": "unsupported",
+      "subagents_applied": {
+        "mode": "sequential",
+        "perspectives": 0,
+        "explore": 0,
+        "lanes": 0
+      },
+      "turns": 1,
+      "input_tokens": 241659,
+      "output_tokens": 10561,
+      "segments": 1,
+      "model": "gpt-6-astra",
+      "vendor": "openai",
+      "tier_applied": "standard",
+      "skills": [
+        {
+          "name": "foundation-survey",
+          "path": ".claude/skills/foundation-survey/SKILL.md",
+          "version": "1.1.0",
+          "sha256": "2d2e25d3e5128f44cddbac16d12523329385db40a0d74f79f1f1fc8e1efc8cb6"
+        }
+      ],
+      "tier_requested": "standard",
+      "adapter": "codex"
+    }
+  ]
+}
