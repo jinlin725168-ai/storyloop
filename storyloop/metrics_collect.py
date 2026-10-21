@@ -8,7 +8,6 @@ from typing import Any
 
 from .report_evidence import IDENTIFIER, MAX_LEDGER_BYTES, _read_object
 from .stop_report import STOP_STATUSES
-from .telemetry import ledger_entries
 
 
 MAX_CHANGE_BYTES = 2_000_000
@@ -251,11 +250,7 @@ def _ledger(root: Path, change_id: str) -> list | None:
     if (value is None or value.get("version") != 1 or value.get("change_id") != change_id
             or not isinstance(value.get("entries"), list)):
         return None
-    try:
-        entries = ledger_entries(root, change_id)
-    except (OSError, RuntimeError, ValueError, KeyError, TypeError, AttributeError):
-        return None
-    return entries
+    return value["entries"]
 
 
 def _signal_evidence(change: dict | None, report: dict | None) -> dict:

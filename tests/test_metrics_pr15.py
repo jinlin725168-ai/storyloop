@@ -57,3 +57,16 @@ class MetricsReviewTests(unittest.TestCase):
             self.assertEqual(result['changes'], [])
             self.assertEqual(result['missing'], [{'change_id': 'UNDATED', 'reason': 'UNREADABLE'}])
             self.assertEqual(len(metrics_collect.collect(root)['changes']), 2)
+
+    def test_ledger_uses_only_the_validated_snapshot(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            write_ledger(root, 'A', [{'role': 'implement', 'cost_usd': 1}])
+            read = metrics_collect._read_object
+            def replace_after_read(*args):
+                value = read(*args)
+                write_ledger(root, 'A', [{'role': 'review', 'cost_usd': 999}])
+                return value
+            with patch('storyloop.metrics_collect._read_object', side_effect=replace_after_read):
+                self.assertEqual(metrics_collect._ledger(root, 'A'),
+                                 [{'role': 'implement', 'cost_usd': 1}])
