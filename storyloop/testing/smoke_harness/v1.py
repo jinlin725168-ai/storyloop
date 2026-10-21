@@ -2,7 +2,7 @@
 
 validate_cases(project: Path, cases: list[str], roots: list[str] | None = None) -> list[str]
 python_cases(project: Path, cases: list[str], timeout: float = 60, *, cwd: Path | None = None) -> Result
-Result(executed=0, failed=0, errors=0, skipped=0): immutable counts; .code is strict 0/1/2.
+Result(executed=0, failed=0, errors=0, skipped=0, diagnostics=()): immutable counts; .code is strict 0/1/2.
 Context(project: Path, cases: list[str], executor: dict): protected invocation inputs.
   .start_service(argv: list[str], cwd: Path) -> Service registers automatic tree cleanup.
 run_hooks(context: Context, **hooks: Callable) -> Result runs phases and finally cleanup.
@@ -11,7 +11,8 @@ Scratch(project: Path, base: Path | None = None) owns .root/.mirror and a lease 
   .cache(name: str, root: Path, files: list[str]) -> Path copies dependency archives only.
   .close() -> None verifies ownership and links before removing this lease.
 run_command(argv: list[str], cwd: Path, timeout: float = 60) -> dict executes native argv.
-Service(argv: list[str], cwd: Path) starts a contained tree; .close() reclaims it.
+Service(argv: list[str], cwd: Path) starts a contained tree; .check() rejects an early exit;
+  .close() reclaims it.
 wait_http(url: str, expected_status: int = 200, timeout: float = 5) -> None is a GET probe.
 free_port() -> int is advisory; a binding race is a start error.
 

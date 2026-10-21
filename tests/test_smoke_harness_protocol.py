@@ -162,7 +162,8 @@ class Case(unittest.TestCase):
             fixture(root)
             for child in ("import os; os._exit(0)", "raise SystemExit(1)",
                           "print('STORYLOOP_HARNESS_V1={fake}')",
-                          "print('{\"executed\":1,\"failed\":0,\"errors\":0,\"code\":0}')"):
+                          "print('{\"executed\":1,\"failed\":0,\"errors\":0,\"code\":0}')",
+                          "print('{\"value\":\"7\"}')", "print('{\"value\":true}')"):
                 with self.subTest(child=child):
                     source = case_source(repr(["PLACEHOLDER", "-c", child]))
                     source = source.replace("'PLACEHOLDER'", "sys.executable")

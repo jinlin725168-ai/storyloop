@@ -33,6 +33,8 @@ class Contract(unittest.TestCase):
             value = json.loads(result.stdout)
             if not isinstance(value, dict) or set(value) != {"value"}:
                 raise HarnessError("Missing business response protocol")
+            if type(value["value"]) is not int:
+                raise HarnessError("Invalid business response value type")
         except (OSError, ValueError, subprocess.TimeoutExpired):
             raise HarnessError("Business response unavailable") from None
         self.assertEqual(value["value"], EXPECTED)
