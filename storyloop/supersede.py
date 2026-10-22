@@ -136,7 +136,7 @@ def _linked_child(project: Path, old: dict, message: str, reason: str | None) ->
 
 
 def _result(project: Path, new: dict, old_run: dict) -> dict:
-    from .next_steps import draft_next, next_step
+    from .run_hints import draft_next, next_step
     result = deepcopy(new)
     result["next"] = (draft_next(project, new) if new['status'] == 'DRAFT'
                       else next_step(new['status'], new['change_id'], project))

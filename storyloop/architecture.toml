@@ -202,12 +202,14 @@ rank = 7
 "ci_command" = { module = "command", zone = "mutable" }
 "__main__" = { module = "command", zone = "mutable" }
 
+"run_state" = { module = "state_store", zone = "base" }
+"run_services" = { module = "agent_gateway", zone = "base" }
+"default_loop_services" = { module = "role_content", zone = "mutable" }
+"run_stops" = { module = "reporting", zone = "mutable" }
+"run_hints" = { module = "reporting", zone = "mutable" }
+
 # 仅登记已批准的现状债务；豁免只减不增，每条关联消除阶段。
-[[exemptions]]
-source = "acceptance_repair"
-target = "project_loop"
-until = "B"
-reason = "阶段 B 归一生命周期时一并处理"
+
 [[exemptions]]
 source = "adapter_capabilities"
 target = "cross_vendor"
@@ -233,11 +235,7 @@ source = "baseline"
 target = "system_smoke"
 until = "D"
 reason = "证据内核依赖业务，改为调用方传参或下沉定义"
-[[exemptions]]
-source = "change_log"
-target = "next_steps"
-until = "B"
-reason = "阶段 B 归一生命周期时一并处理"
+
 [[exemptions]]
 source = "evidence_locations"
 target = "failure_attribution"
@@ -328,26 +326,14 @@ source = "project_git"
 target = "baseline"
 until = "D"
 reason = "Git 原语借用 baseline._git，阶段 D 拆出"
-[[exemptions]]
-source = "project_loop_gates"
-target = "project_loop"
-until = "B"
-reason = "阶段 B 归一生命周期时一并处理"
+
 [[exemptions]]
 source = "project_loop_guards"
 target = "errata"
 until = "D"
 reason = "证据内核依赖业务，改为调用方传参或下沉定义"
-[[exemptions]]
-source = "project_loop_support"
-target = "next_steps"
-until = "B"
-reason = "停点由生命周期统一处理"
-[[exemptions]]
-source = "project_loop_support"
-target = "stop_report"
-until = "B"
-reason = "停点由生命周期统一处理"
+
+
 [[exemptions]]
 source = "project_profile"
 target = "oracle_counts"
@@ -383,11 +369,6 @@ source = "smoke_runner"
 target = "system_smoke"
 until = "D"
 reason = "证据内核依赖业务，改为调用方传参或下沉定义"
-[[exemptions]]
-source = "supersede"
-target = "next_steps"
-until = "B"
-reason = "阶段 B 归一生命周期时一并处理"
 
 [cycles]
 members = [
@@ -398,11 +379,11 @@ members = [
   "lesson_store", "models", "onboarding_manifest", "oracle_counts",
   "oracle_skill_approval", "path_security", "principles", "project_agents",
   "project_boundaries", "project_git", "project_loop", "project_loop_failures",
-  "project_loop_finish", "project_loop_gates", "project_preparation", "project_profile",
-  "readiness", "requirement_checklist", "role_profiles", "role_schemas",
-  "routing_cli", "routing_evidence", "routing_execution", "routing_policy",
-  "routing_report", "skills", "smoke", "smoke_runner",
-  "stop_report", "system_smoke", "telemetry", "telemetry_summary",
+  "project_preparation", "project_profile", "readiness", "requirement_checklist",
+  "role_profiles", "role_schemas", "routing_cli", "routing_evidence",
+  "routing_policy", "routing_report", "skills", "smoke",
+  "smoke_runner", "stop_report", "system_smoke", "telemetry",
+  "telemetry_summary",
 ]
 
 [invariants.I1]

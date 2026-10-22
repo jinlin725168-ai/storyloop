@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from storyloop.cli import parser
-from storyloop.project_loop_support import pause, pause_for_boundary
+from storyloop.run_stops import pause, pause_for_boundary
 from storyloop.run_recovery import reset_run
 from storyloop.stop_report import STOP_STATUSES, build_stop, failure_view, render_stop, stop_of
 
@@ -197,7 +197,7 @@ class FailureViewCompatibilityTests(unittest.TestCase):
 
 
 class StopPersistenceTests(unittest.TestCase):
-    @patch("storyloop.project_loop_support.save_run")
+    @patch("storyloop.run_stops.save_run")
     def test_pause_saves_and_returns_the_same_stop_report(self, save_run):
         state = state_for("IMPLEMENTING")
         result = pause(Path("/p"), state, "NO_PROGRESS", error="same failure")
@@ -206,7 +206,7 @@ class StopPersistenceTests(unittest.TestCase):
         self.assertEqual(state["stop"]["status"], "NO_PROGRESS")
         self.assertTrue(result["next"])
 
-    @patch("storyloop.project_loop_support.save_run")
+    @patch("storyloop.run_stops.save_run")
     def test_boundary_pause_passes_an_explicit_phase_to_the_report(self, _save_run):
         state = state_for("IMPLEMENTING")
         result = pause_for_boundary(Path("/p"), state, {
@@ -214,7 +214,7 @@ class StopPersistenceTests(unittest.TestCase):
         }, phase="prepare")
         self.assertEqual(result["stop"]["phase"], "prepare")
 
-    @patch("storyloop.project_loop_support.save_run")
+    @patch("storyloop.run_stops.save_run")
     def test_one_stop_explicit_phase_does_not_leak_into_a_later_stop(self, _save_run):
         state = state_for("IMPLEMENTING", design_plan={"status": "DONE"})
         pause_for_boundary(Path("/p"), state, {

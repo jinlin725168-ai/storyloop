@@ -12,7 +12,8 @@ from .principles import load_principles
 from .models import StoryLoopError, require, text
 from .planning import assess_plan, _record_assessment
 from .planning_validation import option_scope
-from .project_loop_support import pause, run_path, save_run
+from .project_loop_support import run_path, save_run
+from .run_stops import pause
 from .routing_state import is_routed, run_config
 from .smoke import smoke_digests
 from .storage import load_json, locked

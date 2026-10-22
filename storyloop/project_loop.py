@@ -10,12 +10,12 @@ from __future__ import annotations
 
 from .errata import defer_errata, release_errata
 
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
 
 from . import cost_resume
+from .run_services import LoopServices
+from .default_loop_services import _default_services
 from .cross_vendor import prepare_run
 from .cost_limits import check_before_call
 from .answers import _pending as _unanswered, load_answers
@@ -42,7 +42,8 @@ from .project_loop_guards import (read_only_call, require_control_unchanged, req
                                   verify_read_only_snapshot, write_safely)
 from .project_loop_failures import (apply_overrule, epoch_of, record_boundary, record_failure,
                                     require_routed_choice, route_review)
-from .project_loop_support import control_digest, pause, run_path, save_run
+from .project_loop_support import control_digest, run_path, save_run
+from .run_stops import pause
 from .oracle_counts import check_layers
 from .project_preparation import _prepare_acceptance
 from .project_profile import layer_commands
@@ -50,22 +51,10 @@ from .processutil import redact
 from .project_receipt import recover_completed_merge
 from .system_smoke import run_system_smoke_isolated
 from .smoke import RESULT_EVIDENCE
-from .semantic_repair import REPAIR_KEYS
 from .smoke import suite_relative
 from .skills import role_skill_versions
 from .smoke_runner import implementation_digest, run_commands_isolated, run_smoke_isolated
 from .storage import load_json, locked
-
-
-@dataclass(frozen=True)
-class LoopServices:
-    """Agent operations kept injectable so the controller remains authoritative."""
-
-    generate_smoke: Callable[[Path, dict], dict]
-    implement: Callable[[Path, dict], dict]
-    review: Callable[[Path, dict], dict]
-    characterize: Callable[[Path, dict], dict] | None = None
-    design: Callable[[Path, dict], dict] | None = None
 
 
 def run_change(project: Path, change_id: str, services: LoopServices | None = None,
@@ -475,21 +464,6 @@ def _new_run_state(change_id: str, started: dict, contract_digest: str) -> dict:
             "source_head": started["source_head"], "contract_digest": contract_digest,
             "started_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "failures": []}
-
-
-def _default_services() -> LoopServices:
-    from .project_agents import invoke_project_agent
-    return LoopServices(
-        generate_smoke=lambda project, state: invoke_project_agent(
-            project, "acceptance",
-            {"change": {key: value for key, value in state.items() if key not in REPAIR_KEYS},
-             "suite_root": suite_relative(project, state["change_id"]),
-             **{key: state[key] for key in REPAIR_KEYS if key in state}}),
-        implement=lambda project, context: invoke_project_agent(project, "implement", context),
-        review=lambda project, context: invoke_project_agent(project, "review", context),
-        characterize=lambda project, context: invoke_project_agent(project, "characterize", context),
-        design=lambda project, context: invoke_project_agent(project, "design", context),
-    )
 
 
 def _risk_updates(project, state, response, role):

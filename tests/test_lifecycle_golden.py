@@ -1,7 +1,11 @@
 """Frozen public outputs reject status, verdict, budget and evidence drift."""
 import json
 from pathlib import Path
+from pathlib import PureWindowsPath
+import os
+import tempfile
 import unittest
+from unittest.mock import patch
 
 from tests.lifecycle_support import capture_case, normalize_case
 
@@ -50,6 +54,45 @@ class GoldenNormalizerTests(unittest.TestCase):
         normalized = normalize_case(before, Path("/case"))
         self.assertEqual(normalized, normalize_case(later, Path("/case")))
         self.assertNotEqual(normalized["id"], normalized["base"])
+
+    def test_recorded_windows_paths_quotes_and_json_transport_match_posix(self):
+        posix = {"report": "/case/report.json", "next": "storyloop run /case",
+                 "error": json.dumps({"report": "/case/report.json"}),
+                 "literal": r"pattern=\w+\s; say 'yes'"}
+        windows = {"report": r"C:\case\report.json", "next": r"storyloop run 'C:\case'",
+                   "error": json.dumps({"report": r"C:\case\report.json"}),
+                   "literal": posix["literal"]}
+        self.assertEqual(normalize_case(posix, Path("/case")),
+                         normalize_case(windows, PureWindowsPath(r"C:\case")))
+
+    def test_candidate_paths_keep_suffixes_and_shared_identity_on_windows(self):
+        posix = {"cwd": "/tmp/storyloop-smoke-abc", "argv": ["/tmp/storyloop-smoke-abc/test.py"],
+                 "diagnostic": json.dumps({"cwd": "/tmp/storyloop-smoke-abc"})}
+        windows = {"cwd": r"C:\Temp\storyloop-smoke-xyz",
+                   "argv": [r"C:\Temp\storyloop-smoke-xyz\test.py"],
+                   "diagnostic": json.dumps({"cwd": r"C:\Temp\storyloop-smoke-xyz"})}
+        self.assertEqual(normalize_case(posix, Path("/case")),
+                         normalize_case(windows, PureWindowsPath(r"C:\case")))
+
+    def test_git_fixture_branch_is_independent_of_the_callers_default(self):
+        from tests.lifecycle_support import fixture_environment
+        from tests.test_baseline_behavior import git
+        config = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "init.defaultBranch",
+                  "GIT_CONFIG_VALUE_0": "main"}
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, config):
+            with fixture_environment():
+                git(Path(folder), "init", "-q")
+            self.assertEqual(git(Path(folder), "branch", "--show-current"), "master")
+
+    def test_windows_paths_with_spaces_and_json_newlines_preserve_diagnostics(self):
+        posix = {"file": "/case/some dir/report.json",
+                 "error": json.dumps({"text": "/case/test.py\nFAILED"}),
+                 "command": r"storyloop run /case --pattern \w+\s"}
+        windows = {"file": r"C:\case\some dir\report.json",
+                   "error": json.dumps({"text": "C:\\case\\test.py\r\nFAILED"}),
+                   "command": r"storyloop run 'C:\case' --pattern \w+\s"}
+        self.assertEqual(normalize_case(posix, Path("/case")),
+                         normalize_case(windows, PureWindowsPath(r"C:\case")))
 
 
 class LifecycleGoldenTests(unittest.TestCase):

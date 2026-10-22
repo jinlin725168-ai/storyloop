@@ -1,10 +1,11 @@
 """Capture actual CLI/artifacts and normalize only volatile transport metadata."""
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import hashlib
 import io
 import json
 import re
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+import shlex
 import sys
 import tempfile
 from unittest.mock import patch
@@ -29,7 +30,8 @@ def candidate_roots(value):
     if isinstance(value, dict):
         for key, item in sorted(value.items()):
             if key in {"cwd", "execution_cwd"} and isinstance(item, str):
-                if Path(item).name.startswith(("storyloop-smoke-", "storyloop-regression-",
+                path = PureWindowsPath(item) if re.match(r"^[A-Za-z]:[\\/]", item) else Path(item)
+                if path.name.startswith(("storyloop-smoke-", "storyloop-regression-",
                                                "storyloop-baseline-", "storyloop-system-smoke-",
                                                "storyloop-characterization-")):
                     roots.append(item)
@@ -38,6 +40,47 @@ def candidate_roots(value):
         for item in value:
             roots.extend(candidate_roots(item))
     return roots
+
+
+@contextmanager
+def fixture_environment():
+    """Keep legacy fixtures independent of the host's Git default, without changing config files."""
+    with patch.dict("os.environ", {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "init.defaultBranch",
+                                  "GIT_CONFIG_VALUE_0": "master"}):
+        yield
+
+
+def replace_recorded_path(value, path, token):
+    aliases = {str(path), path.as_posix()}
+    variants = set()
+    for alias in aliases:
+        quoted = shlex.quote(alias)
+        variants.update((alias, quoted))
+    for alias in sorted(variants, key=len, reverse=True):
+        value = value.replace(alias, token)
+    return value
+
+
+def canonical_windows_paths(value):
+    tagged = r"(<PROJECT>|<CANDIDATE-\d+>|<PYTHON>)([^\"'`\r\n|<>]*?)(?=\s--|[\"'`\r\n|<>]|$)"
+    value = re.sub(tagged, lambda m: m[1] + m[2].replace("\\\\", "/").replace("\\", "/"), value)
+    value = re.sub(r"'((?:<PROJECT>|<CANDIDATE-\d+>|<PYTHON>)(?:/[^'\n]*)?)'", r"\1", value)
+    return value.replace("\r\n", "\n")
+
+
+def normalize_json_transport(value, normalize):
+    """Rewrite decoded JSON string values while preserving key order and all non-string bytes."""
+    try:
+        parsed = json.loads(value)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(parsed, (dict, list)):
+        return None
+    def replace(match):
+        original = json.loads(match[0])
+        transformed = normalize(original)
+        return match[0] if transformed == original else json.dumps(transformed, ensure_ascii="\\u" in match[0])
+    return re.sub(r'"(?:[^"\\]|\\.)*"', replace, value)
 
 
 def normalize_measurements(value):
@@ -70,11 +113,21 @@ def normalize_case(value, root):
             return "<DURATION>"
         if not isinstance(item, str):
             return item
-        item = item.replace(str(root), "<PROJECT>").replace(sys.executable, "<PYTHON>")
+        decoded = normalize_json_transport(item, normalize)
+        if decoded is not None:
+            return decoded
+        item = replace_recorded_path(item, root, "<PROJECT>")
+        item = replace_recorded_path(item, Path(sys.executable), "<PYTHON>")
         item = TIMESTAMP.sub("<TIME>", item)
         item = normalize_measurements(item)
         for source, token in metadata.items():
-            item = item.replace(source, token)
+            if token.startswith("<CANDIDATE-"):
+                path = PureWindowsPath(source) if re.match(r"^[A-Za-z]:[\\/]", source) else Path(source)
+                item = replace_recorded_path(item, path, token)
+            else:
+                item = item.replace(source, token)
+        if isinstance(root, PureWindowsPath):
+            item = canonical_windows_paths(item)
         for digest, token in tokens.items():
             item = item.replace(digest, token)
         return item
@@ -95,9 +148,10 @@ def capture_case(name):
     with tempfile.TemporaryDirectory() as folder:
         root = Path(folder).resolve()
         calls = []
-        with patch("storyloop.project_agents._codex", side_effect=AssertionError("Real CLI forbidden")):
+        with fixture_environment(), patch("storyloop.project_agents._codex", side_effect=AssertionError("Real CLI forbidden")):
             identifier, results = execute_case(root, name, calls)
             state = load_run_state(root, identifier)
+            verify_active_bindings(root, state)
             value = {"results": results, "state": state, "change": load_change(root, identifier),
                      "calls": calls, "artifacts": artifacts(root, state), "git": topology(root)}
             commands = {"help": ["--help"], "log": ["log", str(root), "--change", identifier],
@@ -107,6 +161,19 @@ def capture_case(name):
                 commands["run"] = ["run", str(root), "--change", identifier]
             value["cli"] = {key: cli_output(args) for key, args in commands.items()}
         return normalize_case(value, root)
+
+
+def verify_active_bindings(root, state):
+    """Check current authoritative files before digest tokenization; historical evidence is not rewritten."""
+    from storyloop.changes import contract_digest
+    from storyloop.smoke import smoke_digests
+    change = load_change(root, state["change_id"])
+    assert state["contract_digest"] == change["approval"]["contract_digest"] == contract_digest(change["product"])
+    red_path = root / ".storyloop/evidence" / state["change_id"] / "acceptance-red.json"
+    red = json.loads(red_path.read_text(encoding="utf-8"))
+    assert state["red_evidence_sha256"] == hashlib.sha256(red_path.read_bytes()).hexdigest()
+    assert red["head_commit"] == state["contract_commit"]
+    assert red["suite_digests"] == smoke_digests(root, state["change_id"])
 
 
 def artifacts(root, state):

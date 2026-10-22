@@ -5,7 +5,8 @@ from dataclasses import asdict
 from .boundaries import FileChange
 from .call_log import _redacted
 from .models import require
-from .project_loop_support import pause, save_run
+from .project_loop_support import save_run
+from .run_stops import pause
 from .smoke_runner import implementation_digest
 
 

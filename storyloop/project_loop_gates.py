@@ -22,7 +22,8 @@ from .models import StoryLoopError, nature_of, require
 from .project_boundaries import audit_project_changes
 from .project_git import commit_paths
 from .project_loop_guards import exists_at, read_only_call, require_git_visible, write_safely
-from .project_loop_support import pause, pause_for_boundary, run_path, save_run
+from .project_loop_support import run_path, save_run
+from .run_stops import pause, pause_for_boundary
 from .changes import load_change
 from .oracle_counts import removal_paths, sample_layer
 from .project_profile import layer_commands, matches_test_root
@@ -30,7 +31,7 @@ from .characterization_baseline import run_characterization_baseline
 from .storage import load_json
 
 if TYPE_CHECKING:  # the loop imports this module; the services type is only an annotation
-    from .project_loop import LoopServices
+    from .run_services import LoopServices
 
 
 def design_plan(state: dict) -> dict | None:

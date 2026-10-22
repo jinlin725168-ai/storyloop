@@ -16,14 +16,15 @@ from .models import StoryLoopError, identifier, require, text
 from .oracle_counts import ensure_baseline
 from .project_git import commit_paths, current_branch
 from .project_loop_guards import read_only_call
-from .project_loop_support import pause, relative_files, run_path, save_run
+from .project_loop_support import relative_files, run_path, save_run
+from .run_stops import pause
 from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, without_manifest_echo
 from .smoke import suite_relative, suite_root as acceptance_suite_root
 from .smoke_runner import run_smoke_isolated
 from .storage import load_json
 
 if TYPE_CHECKING:  # the loop imports this module; the services type is only an annotation
-    from .project_loop import LoopServices
+    from .run_services import LoopServices
 
 
 REPAIRABLE = {"CONTRACT_COMMITTED", "IMPLEMENTING", "BUDGET_EXHAUSTED", "NEEDS_INPUT",
@@ -50,7 +51,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
             f"(current: {state.get('status')})")
     require(current_branch(project) == state["feature_branch"], "Check out the run's feature branch first")
     if services is None:
-        from .project_loop import _default_services  # local import: project_loop owns the services
+        from .default_loop_services import _default_services
         services = _default_services()
     suite_root = acceptance_suite_root(project, change_id)
     existing = [{"path": p.relative_to(suite_root).as_posix(), "content": p.read_text(encoding="utf-8")}
