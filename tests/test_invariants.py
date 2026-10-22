@@ -68,6 +68,11 @@ class RegistryRuleTests(unittest.TestCase):
                   'run_process(["git", "reset", "--hard"], root)\n')
         self.assertEqual(forbidden_git_calls(source), ["update-ref", "rebase", "--amend", "--hard"])
 
+    def test_git_guard_checks_keyword_command_argv(self):
+        source = ('run_process(command=["git", "push", "origin"], cwd=root, timeout=1)\n'
+                  'run_process(command=["git", "reset", "--hard"], cwd=root, timeout=1)\n')
+        self.assertEqual(forbidden_git_calls(source), ["push", "--hard"])
+
     def test_invalid_invariant_registrations_are_rejected(self):
         base = 'version=1\n[invariants.I1]\ntitle="规则"\n'
         cases = [(base + 'status="unknown"\n', "status"),

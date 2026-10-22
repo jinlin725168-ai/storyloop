@@ -413,7 +413,7 @@ def forbidden_git_calls(source: str) -> list[str]:
             found.extend(_forbidden_operation(_argument_values(call.args[1:])))
         elif name in process_names:
             argv = call.args[0] if call.args else next(
-                (kw.value for kw in call.keywords if kw.arg in {"args", "argv"}), None)
+                (kw.value for kw in call.keywords if kw.arg in {"args", "argv", "command"}), None)
             if isinstance(argv, (ast.List, ast.Tuple)):
                 values = _argument_values(argv.elts)
                 if values[:1] == ["git"]:

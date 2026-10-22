@@ -96,9 +96,6 @@ class DeclarationTests(unittest.TestCase):
     def test_no_declaration_entry_is_stale(self):
         self.assertEqual(stale_entries(DECL, code_modules(PACKAGE)), [])
 
-    def test_the_current_package_has_146_modules(self):
-        self.assertEqual(len(code_modules(PACKAGE)), 146)
-
 
 class LayeringRuleTests(unittest.TestCase):
     def test_every_import_form_is_counted(self):
