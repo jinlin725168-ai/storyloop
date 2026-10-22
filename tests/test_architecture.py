@@ -8,6 +8,7 @@ from tests.architecture_rules import (
     DECLARATION, PACKAGE, ArchModule, Declaration, Entry, classify, code_modules, load_declaration,
     Exemption, Violation, cycle_members, import_graph, module_name, stale_entries,
     stale_exemptions, undeclared, undeclared_message, unexempted, violations,
+    MODULES_MD, modules_md_rows,
 )
 
 DECL = load_declaration(DECLARATION)
@@ -186,3 +187,28 @@ class LayeringTests(unittest.TestCase):
     def test_no_stale_cycle_members(self):
         members = cycle_members(import_graph(PACKAGE))
         self.assertEqual(sorted(DECL.cycle_members - members), [], "这些模块已不在环里，从 [cycles] 删掉")
+
+
+class ModulesDocumentationTests(unittest.TestCase):
+    def test_rows_with_several_modules_dotted_names_and_blank_layer(self):
+        text = ("| 架构模块 | 模块 | 分区 | 职责 | 对外提供 |\n|---|---|---|---|---|\n"
+                "| 基础 | `a` / `b` | 底座 | x | y |\n| | `testing.smoke_harness` | 可变区 | x | y |\n")
+        self.assertEqual(modules_md_rows(text), {
+            "a": ("基础", "底座"), "b": ("基础", "底座"),
+            "testing.smoke_harness": ("基础", "可变区")})
+
+    def test_a_module_listed_twice_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "a"):
+            modules_md_rows("| 基础 | `a` | 底座 | x | y |\n| 合同 | `a` | 可变区 | x | y |\n")
+
+    def test_modules_md_lists_every_module_under_its_declared_title(self):
+        rows = modules_md_rows(MODULES_MD.read_text(encoding="utf-8"))
+        names = {name for name in code_modules(PACKAGE) if not name.startswith("testing.smoke_harness.")}
+        names.add("testing.smoke_harness")
+        self.assertEqual(sorted(names - set(rows)), [], "docs/modules.md 漏登记的模块")
+        self.assertEqual(sorted(set(rows) - names), [], "docs/modules.md 登记了不存在的模块")
+        zones = {"base": "底座", "mutable": "可变区"}
+        expected = {name: (DECL.architecture[classify(DECL, name).module].title,
+                           zones[classify(DECL, name).zone]) for name in rows}
+        self.assertEqual({name: row for name, row in rows.items() if row != expected[name]}, {},
+                         "第一列应为架构模块标题，分区列应与声明一致")

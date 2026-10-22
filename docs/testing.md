@@ -25,7 +25,7 @@
 
 | 套件 | 内容 | 什么时候跑 |
 |---|---|---|
-| `core` | 主流程端到端（`test_product_e2e`、`test_nature_e2e`、`test_reports_e2e`、`test_roles_e2e`、`test_project_loop`）、安全边界、命令行、跨平台回归（短路径、autocrlf、UTF-8 管道），以及每个都在几秒内跑完的纯逻辑模块 | 每个 PR、每次 push 到 main；Linux 4 路并行约 1 分钟 |
+| `core` | 主流程端到端（`test_product_e2e`、`test_nature_e2e`、`test_reports_e2e`、`test_roles_e2e`、`test_project_loop`）、安全边界、命令行、跨平台回归（短路径、autocrlf、UTF-8 管道），架构与不变量守护（含完成幂等），以及纯逻辑模块 | 每个 PR、每次 push 到 main；墙钟随模块变化，以实际运行记录为准 |
 | `full` | `tests/test_*.py` 全部模块 | CI 每天定时一次、手动触发；本地合并前、按计划实现时 |
 
 新增的测试模块默认只在 `full` 里；作者认为它守护的是主流程或安全边界时，在 `suites.py` 对应分组里加上它，`test_suites` 会检查名单里的模块都存在。分流、设计批准等重型流程的模块（单个就要几分钟）只在 `full` 里，它们的回归最晚在第二天的定时全量里暴露。
@@ -49,6 +49,7 @@
 
 | 主题 | 测试文件 |
 |---|---|
+| 架构守护 | `test_architecture`（声明、分层、环、modules.md）、`test_invariants`（不变量登记与补写的守护） |
 | 端到端样板 | `test_product_e2e`（干净仓库 → 合同 → RED → 实现 → 报告 → no-ff 合并，CI 文件字节不变） |
 | 底座与探测 | `test_baseline_*`、`test_project_profile*`、`test_monorepo_detection`、`test_base_propose`、`test_base_upgrade`、`test_resume_after_base_upgrade` |
 | 合同与规格 | `test_changes_*`、`test_change_approval`、`test_product_spec`、`test_spec_gates`、`test_openspec_docs` |

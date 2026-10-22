@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 import ast
+import re
 import sys
 import tomllib
 
@@ -418,3 +419,32 @@ def forbidden_git_calls(source: str) -> list[str]:
                 if values[:1] == ["git"]:
                     found.extend(_forbidden_operation(values[1:]))
     return found
+
+
+def modules_md_rows(text: str) -> dict[str, tuple[str, str]]:
+    """Read module names, inherited architecture titles and zones from the inventory."""
+    rows, title = {}, ""
+    has_section = any(line.startswith("## ") and "模块清单" in line for line in text.splitlines())
+    active = not has_section
+    for line in text.splitlines():
+        if has_section and line.startswith("## "):
+            if "模块清单" in line:
+                active = True
+            elif active:
+                break
+        if not active or not line.strip().startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) != 5:
+            continue
+        names = re.findall(r"`([A-Za-z_]\w*(?:\.\w+)*)`", cells[1])
+        if not names:
+            continue
+        title = cells[0] or title
+        if not title:
+            raise ValueError(f"{names[0]}: missing architecture title")
+        for name in names:
+            if name in rows:
+                raise ValueError(f"duplicate module: {name}")
+            rows[name] = (title, cells[2])
+    return rows
