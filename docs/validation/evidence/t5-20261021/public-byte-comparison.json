@@ -1,0 +1,22 @@
+{
+  "local_workflow_head": "658ab4bc19035e27e843d562a86f21c3cf0c94f6",
+  "paths": {
+    "acceptance/changes/FEAT-20261021-002/manifest.json": "55fb0c4a6b3082c7deb33e4468da7df52578ad82e00907b930eb6d2482847825",
+    "acceptance/changes/FEAT-20261021-002/redmagic_brand.spec.ts": "f84fca6e81476c02e967af75474d117853f253a0f41cfb5a13dae7a2093c238b",
+    "acceptance/changes/FEAT-20261021-002/redmagic_login_regression.spec.ts": "be94db45e8d8ec6e90f992a4278cacdd1f4eb8cc65629c9ff5d37afeb6de732a",
+    "acceptance/changes/FEAT-20261021-002/redmagic_support.ts": "42a0e8b6ccc369646c4b67fa40f60bdf695b98832737d19260915ffb2b4bed7b",
+    "frontend/src/components/AuthBrandPanel/index.vue": "ebf4b946819295c7b21dea780804b0a85cf9884f0dc0e6f9d7b639633158b183",
+    "frontend/src/constants/brand.test.ts": "d7b358f029c1853cf0be50aab7679a8266fdac67fe394440602abd87168d7098",
+    "frontend/src/constants/brand.ts": "4d502d238877055d31962a768e7b6ef89fe00ed912300fde868c2cb10b3054c2",
+    "frontend/src/layout/components/Sidebar/Logo.vue": "1d95f482fb042cc3ecdc14a4be282f98591908f93a1217c0dbb3d4f03209ea7d",
+    "frontend/src/permission.characterization.test.ts": "49ef30f598cdd9e62b8fe582263e59c259710e5a635f0adf7cf582a05eb94c90",
+    "frontend/src/permission.ts": "66a0af17622d336af3db10d8103e5858fc82c030a0a9a23c0fb29a968a9a8349",
+    "frontend/src/settings.ts": "18d9c9541b2067344255f2f2a1dbc04642ab2ecf6cc5fd781406037c6d9f8dd1",
+    "frontend/src/utils/dynamicTitle.ts": "c9c301d9c23bf41c48f714cf73b359b995aaf4137771ff54926f42b3bfae4169",
+    "frontend/src/views/brand.characterization.test.ts": "c25f8d8e17f02e76ee5541cd5f645ac14a08b92303eb2da7d0514b506052215d",
+    "frontend/src/views/index.vue": "669ae47655176d25cd56983995a95be4ce1de630043b05bf192f4988c5618db4",
+    "frontend/src/views/login.vue": "9fa094bd391db1df13ff112ab79646b8320d4d22801a65b2286cc53646506f7e",
+    "frontend/src/views/register.vue": "31e3336b57bc4b0c2cb6e107c2c17f150b51ee3906021545921caa386428ccc3"
+  },
+  "result": "IDENTICAL"
+}
