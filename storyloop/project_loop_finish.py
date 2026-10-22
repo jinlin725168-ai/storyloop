@@ -20,7 +20,8 @@ from .openspec_docs import capability_of, merge_into_main_spec, render_decisions
 from .project_boundaries import audit_project_changes
 from .project_git import commit_paths, current_branch, finish_feature
 from .project_loop_gates import design_plan
-from .project_loop_support import save_run, set_change_status
+from .project_loop_support import save_run
+from .run_transitions import set_change_status
 from .project_receipt import ensure_merge_receipt, verify_verified_artifacts
 from .smoke_runner import implementation_digest
 from .storage import load_json, write_json

@@ -1,6 +1,7 @@
 """Stop presentation and checkpointing above the deterministic run kernel."""
 from pathlib import Path
 from .run_state import save_run
+from .run_transitions import transition
 from .run_hints import next_step
 
 
@@ -20,7 +21,7 @@ def pause(project: Path, state: dict, status: str, **details) -> dict:
     """Persist an explicit stop with its details; the result always names the next command."""
     from .stop_report import build_stop
 
-    state["status"] = status
+    transition(project, state, status, event="stop")
     persisted_details = {key: value for key, value in details.items() if key != "phase"}
     state.update(persisted_details)
     state["stop"] = build_stop(project, state, status, details)

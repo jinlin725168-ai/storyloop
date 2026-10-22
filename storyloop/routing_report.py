@@ -3,9 +3,7 @@ from copy import deepcopy
 import shlex
 
 
-STATUSES = frozenset({'PROJECT_NOT_READY', 'READINESS_APPROVAL_REQUIRED',
-                     'EXPLORATION_RECOMMENDED', 'ORACLE_INFEASIBLE',
-                     'DESIGN_APPROVAL_REQUIRED', 'DESIGN_REVISION_REQUIRED', 'SPLIT_RECOMMENDED'})
+from .run_state import ROUTING_STATUSES as STATUSES
 
 
 def routing_options(project, change_id, status, details):

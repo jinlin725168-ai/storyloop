@@ -7,7 +7,6 @@ from pathlib import Path
 
 from .baseline import _git
 from .smoke import RED_EVIDENCE, RESULT_EVIDENCE
-from .storage import write_json
 from .run_state import run_path, save_run
 
 
@@ -42,13 +41,6 @@ def control_digest(
 def relative_files(project: Path, roots: list[Path]) -> list[str]:
     return sorted(path.relative_to(project).as_posix() for root in roots
                   for path in root.rglob("*") if path.is_file() and not path.is_symlink())
-
-
-def set_change_status(project: Path, change: dict, status: str) -> None:
-    updated = dict(change)
-    updated["status"] = status
-    write_json(project / ".storyloop/state/changes" / f"{change['change_id']}.json",
-               updated, max_bytes=2_000_000)
 
 
 def _path_digest(project: Path, relative_paths: list[str]) -> str:

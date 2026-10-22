@@ -10,11 +10,7 @@ from .routing_report import STATUSES, routing_options, routing_view
 
 LAYER_NAMES = ("unit", "integration", "acceptance", "smoke", "checks")
 PHASES = frozenset({"contract", "prepare", "planning", "implement", "verify", "finish"})
-STOP_STATUSES = STATUSES | frozenset({
-    "NEEDS_INPUT", "ORACLE_DEFECT", "EXISTING_GREEN", "CHARACTERIZATION_FAILED",
-    "BOUNDARY_VIOLATION", "BASE_CHANGE_REQUIRED", "WORKSPACE_TAINTED",
-    "COST_LIMIT_REACHED", "BUDGET_EXHAUSTED", "NO_PROGRESS", "MANUAL_ACCEPTANCE_REQUIRED", "NEEDS_SPEC_FIX",
-})
+from .run_state import DISPLAY_STOPS as STOP_STATUSES
 
 BLOCKERS = {
     "NEEDS_INPUT": "代理提出了需要人决定的问题",

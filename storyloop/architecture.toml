@@ -23,6 +23,9 @@ rank = 2
 [architecture.evidence_kernel]
 title = "证据内核"
 rank = 3
+[architecture.lifecycle_kernel]
+title = "变更生命周期内核"
+rank = 3
 [architecture.agent_gateway]
 title = "代理网关"
 rank = 4
@@ -202,6 +205,8 @@ rank = 7
 "ci_command" = { module = "command", zone = "mutable" }
 "__main__" = { module = "command", zone = "mutable" }
 
+"run_transitions" = { module = "lifecycle_kernel", zone = "base" }
+"run_guards" = { module = "lifecycle_kernel", zone = "base" }
 "run_state" = { module = "state_store", zone = "base" }
 "run_services" = { module = "agent_gateway", zone = "base" }
 "default_loop_services" = { module = "role_content", zone = "mutable" }
