@@ -58,6 +58,7 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
 def _require_initializable(project: Path) -> None:
     require(project.is_dir(), "Git project must be an existing directory")
     require(not (project / BASELINE_PATH).exists(), "StoryLoop baseline already exists")
+    _require_local_git_directory(project)
     top = Path(_git(project, "rev-parse", "--show-toplevel").strip()).resolve()
     require(os.path.normcase(str(top)) == os.path.normcase(str(project)),
             "Project must be the Git repository root")
@@ -65,6 +66,15 @@ def _require_initializable(project: Path) -> None:
             "Git worktree must be clean before initialization")
     require(bool(_git(project, "branch", "--show-current").strip()),
             "Git repository must be on a named branch")
+
+
+
+def _require_local_git_directory(project: Path) -> None:
+    """Reject external Git control before initialization or draft writes."""
+    git_control = safe_target(project, ".git", "Git control path", target_directory=True)
+    require(git_control.is_dir(),
+            "StoryLoop requires a local .git directory; linked worktrees and separate Git "
+            "directories are unsupported. Use an independent clone.")
 
 
 def _initial_baseline(project: Path, profile: dict) -> dict:

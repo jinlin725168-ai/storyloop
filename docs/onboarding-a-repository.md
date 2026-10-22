@@ -21,7 +21,7 @@ flowchart LR
 
 ## 1. 仓库准备
 
-- 单一 Git 根目录，工作树干净，处在有名字的本地分支。多个上游用 `git subtree add --squash` 引进来（`backend/`、`frontend/`），上游同步就是一次 BASE 迭代。
+- 单一 Git 根目录，工作树干净，处在有名字的本地分支，且 `.git` 是本仓库内的真实目录。当前 Judge 不支持 linked worktree 或 `--separate-git-dir`；这些形式会在生成草案或初始化写入前拒绝，请使用独立普通 clone。多个上游用 `git subtree add --squash` 引进来（`backend/`、`frontend/`），上游同步就是一次 BASE 迭代。
 - 能离线构建和跑测试。冒烟在候选副本里执行，环境只有 `PATH`、`SYSTEMROOT`、`TEMP`、`TMP`，依赖必须已经在本机（Maven `-o`、`node_modules` 已装）。
 - 决定可变区。业务新增放哪里、哪些已有目录允许功能变更改（例如 `backend/ruoyi-modules`、`frontend/src`、`frontend/public`、`sql/biz`），其余都是底座。
 - 把仓库自己会生成的被忽略文件列出来（`target`、`node_modules`、`dist`、`logs`、`__pycache__`、unplugin 生成的 `auto-imports.d.ts`），它们要进 `scratch_paths`。

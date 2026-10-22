@@ -1,7 +1,7 @@
 """Two-stage repository onboarding: draft first, clean committed foundation later."""
 from pathlib import Path
 
-from .baseline import BASELINE_PATH, _git
+from .baseline import BASELINE_PATH, _git, _require_local_git_directory
 from .models import require
 from .onboarding_templates import HINTS, MANIFEST, render
 from .onboarding_manifest import validate_onboarding
@@ -44,6 +44,7 @@ def scaffold_project(project: Path, stacks: list[str] | None = None) -> dict:
 
 def _check_repository(project: Path) -> None:
     require(project.is_dir(), "Git project must exist")
+    _require_local_git_directory(project)
     require(not (project / BASELINE_PATH).exists(), "Existing baseline cannot be scaffolded; use BASE")
     require(Path(_git(project, "rev-parse", "--show-toplevel").strip()).resolve() == project,
             "Project must be the Git repository root")
