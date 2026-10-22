@@ -207,7 +207,7 @@ class LandingTests(unittest.TestCase):
                                     head(self.project), head(self.project))
                 self.assertEqual(caught.exception.code, 'CHECK_NOT_PROVEN')
 
-    def test_check_config_write_failure_restores_commit_config_and_index(self):
+    def test_check_config_write_failure_preserves_commit_and_retry_deduplicates_config(self):
         change_id = self.passed_change()
         argv = [sys.executable, '-c',
                 'import app.clock, sys; sys.exit(0 if app.clock.SYNCED else 1)']
@@ -217,13 +217,20 @@ class LandingTests(unittest.TestCase):
 
         def write_then_fail(path, value, max_bytes=None):
             write_json(path, value, max_bytes=max_bytes)
-            raise OSError('config write failure')
+            if path == self.project / '.storyloop/config.json':
+                raise OSError('config write failure')
 
         with mock.patch('storyloop.lesson_landing.write_json', side_effect=write_then_fail):
             with self.assertRaisesRegex(OSError, 'config write failure'):
                 approve_draft(self.project, ref)
-        self.assertEqual(self.snapshot(), before)
+        committed = head(self.project)
+        self.assertNotEqual(committed, before[0])
+        self.assertEqual(_git(self.project, 'status', '--porcelain'), '')
         self.assertEqual(load_draft(self.project, ref)['status'], 'pending')
+        result = approve_draft(self.project, ref)
+        self.assertEqual(result['commit'], committed)
+        self.assertEqual(result['lesson_id'], 'L-0001')
+        self.assertEqual(load_json(self.project / '.storyloop/config.json')['profile']['check_commands'].count(argv), 1)
 
     def test_invalid_draft_no_trace(self):
         ref = self.draft(tier='legendary')
@@ -241,7 +248,7 @@ class LandingTests(unittest.TestCase):
                 approve_draft(self.project, ref)
         self.assertEqual(self.snapshot(), before)
 
-    def test_postcommit_failure_restores_exact_snapshot(self):
+    def test_postcommit_failure_preserves_knowledge_and_reuses_base_proposal(self):
         ref = self.draft(strength='knowledge', landing=self.foundation())
         before = self.snapshot()
         def fail_approval(project, reference, status, failure=None):
@@ -251,7 +258,16 @@ class LandingTests(unittest.TestCase):
         with mock.patch('storyloop.lesson_landing.set_draft_status', side_effect=fail_approval):
             with self.assertRaisesRegex(StoryLoopError, 'postcommit'):
                 approve_draft(self.project, ref)
-        self.assertEqual(self.snapshot(), before)
+        committed = head(self.project)
+        self.assertNotEqual(committed, before[0])
+        proposals = list((self.project / '.storyloop/base-proposals').glob('*.json'))
+        self.assertEqual(len(proposals), 1)
+        self.assertTrue((self.project / 'openspec/foundation/runtime.md').is_file())
+        result = approve_draft(self.project, ref)
+        self.assertEqual(result['commit'], committed)
+        self.assertEqual(result['base_proposal'], proposals[0].stem)
+        self.assertEqual(list((self.project / '.storyloop/base-proposals').glob('*.json')), proposals)
+        self.assertEqual(upgrade_baseline(self.project, result['base_proposal'])['status'], 'BASELINE_UPGRADED')
 
     def test_external_commit_is_preserved(self):
         ref = self.draft()
@@ -272,7 +288,7 @@ class LandingTests(unittest.TestCase):
         with self.assertRaisesRegex(StoryLoopError, 'FEAT-20261019-009'):
             approve_draft(self.project, self.draft())
 
-    def test_postcommit_query_failure_restores_snapshot(self):
+    def test_postcommit_query_failure_preserves_commit_and_resumes(self):
         from storyloop import project_git
         real_git = project_git._git
         def fail_query(project, *args):
@@ -284,7 +300,9 @@ class LandingTests(unittest.TestCase):
         with mock.patch('storyloop.project_git._git', side_effect=fail_query):
             with self.assertRaisesRegex(StoryLoopError, 'result query failed'):
                 approve_draft(self.project, ref)
-        self.assertEqual(self.snapshot(), before)
+        committed = head(self.project)
+        self.assertNotEqual(committed, before[0])
+        self.assertEqual(approve_draft(self.project, ref)['commit'], committed)
 
     def test_cli_draft_dispatch_and_exclusion(self):
         import json
@@ -356,7 +374,7 @@ class LandingTests(unittest.TestCase):
                     approve_draft(self.project, ref)
                 self.assertEqual(head(self.project), before)
 
-    def test_trailing_summary_whitespace_postcommit_failure_rolls_back(self):
+    def test_trailing_summary_whitespace_postcommit_failure_recovers_same_commit(self):
         def fail_approval(project, reference, status, failure=None):
             if status == 'approved':
                 raise StoryLoopError('postcommit whitespace')
@@ -370,8 +388,10 @@ class LandingTests(unittest.TestCase):
                 with mock.patch('storyloop.lesson_landing.set_draft_status', side_effect=fail_approval):
                     with self.assertRaisesRegex(StoryLoopError, 'postcommit whitespace'):
                         approve_draft(self.project, ref)
-                self.assertEqual(self.snapshot(), before)
+                committed = head(self.project)
+                self.assertNotEqual(committed, before[0])
                 self.assertEqual(load_draft(self.project, ref)['status'], 'pending')
+                self.assertEqual(approve_draft(self.project, ref)['commit'], committed)
 
     def test_unicode_summary_separator_preserves_commit_identity(self):
         summary = '经验\u2028继续'
@@ -381,7 +401,7 @@ class LandingTests(unittest.TestCase):
         self.assertEqual(load_draft(self.project, ref)['status'], 'approved')
         self.assertEqual(load_lessons_at(self.project, 'HEAD')[0]['summary'], summary)
 
-    def test_unicode_summary_separator_postcommit_failure_rolls_back(self):
+    def test_unicode_summary_separator_postcommit_failure_recovers_same_commit(self):
         ref = self.draft(summary='经验\u2028继续')
         before = self.snapshot()
         def fail_approval(project, reference, status, failure=None):
@@ -391,4 +411,6 @@ class LandingTests(unittest.TestCase):
         with mock.patch('storyloop.lesson_landing.set_draft_status', side_effect=fail_approval):
             with self.assertRaisesRegex(StoryLoopError, 'postcommit separator'):
                 approve_draft(self.project, ref)
-        self.assertEqual(self.snapshot(), before)
+        committed = head(self.project)
+        self.assertNotEqual(committed, before[0])
+        self.assertEqual(approve_draft(self.project, ref)['commit'], committed)

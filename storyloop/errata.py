@@ -120,6 +120,7 @@ def land_errata(project: Path, draft: dict) -> dict:
     from .baseline import _git
     from .lesson_landing import land_transaction
     parent = _git(project, 'rev-parse', 'HEAD').strip()
+    branch = _git(project, 'symbolic-ref', '--quiet', 'HEAD').strip()
     item = _validate(project, draft.get('payload'))
     target = safe_target(project, ERRATA_PATH, 'errata landing')
     original = target.read_bytes() if target.exists() else '# 知识库勘误\n'.encode('utf-8')
@@ -132,4 +133,5 @@ def land_errata(project: Path, draft: dict) -> dict:
     return land_transaction(project, 'errata/' + draft['id'],
                             {ERRATA_PATH: content},
                             f'docs(foundation): 勘误 {errata_id}',
-                            {'errata_id': errata_id}, parent=parent, base_reason=item['correction'])
+                            {'errata_id': errata_id}, parent=parent, draft=draft,
+                            branch=branch, base_reason=item['correction'])

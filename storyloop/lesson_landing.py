@@ -1,5 +1,6 @@
 """Approve human memory drafts with scoped Git transactions."""
 from datetime import date
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -28,19 +29,25 @@ PROFILE_SETTING_KEYS = {
 
 
 def approve_draft(project: Path, ref: str) -> dict:
-    """Validate and atomically land one pending memory draft."""
+    """Land a pending draft or finish its previously committed transaction."""
     project = Path(project).resolve()
     with locked(project):
         draft = load_draft(project, ref)
-        require(draft.get('status') == 'pending', '只能审批 pending 草案')
+        pending = _landing_path(project, ref)
+        _require_no_other_landing(project, pending)
+        require(draft.get('status') == 'pending' or (
+            pending.is_file() and draft.get('status') == 'approved'), '只能审批 pending 草案')
         try:
             require_idle_source(project)
+            if pending.exists():
+                return _resume_landing(project, ref, draft, pending)
             if draft['kind'] == 'errata':
                 from .errata import land_errata
                 return land_errata(project, draft)
             return _approve_lesson(project, ref, draft)
         except Exception as exc:
-            set_draft_status(project, ref, 'pending', str(exc))
+            if draft.get('status') == 'pending':
+                set_draft_status(project, ref, 'pending', str(exc))
             raise
 
 
@@ -211,13 +218,9 @@ def _own_commit(project, parent, tree, message):
     return candidate if actual == [parent, tree, message] else None
 
 
-def _restore(project, originals, parent, own, proposal):
+def _restore(project, originals, parent, proposal):
     current = _git(project, 'rev-parse', 'HEAD').strip()
-    if current != parent:
-        if own is None or current != own:
-            raise StoryLoopError('回滚受阻：外部 HEAD 已推进，保留当前提交和文件')
-        # Compare-and-swap prevents rewinding an independently advanced branch.
-        _git(project, 'update-ref', 'HEAD', parent, own)
+    require(current == parent, '回滚受阻：外部 HEAD 已推进，保留当前提交和文件')
     for path, raw in originals.items():
         if raw is None:
             path.unlink(missing_ok=True)
@@ -229,22 +232,26 @@ def _restore(project, originals, parent, own, proposal):
 
 def _approve_lesson(project, ref, draft):
     parent = _git(project, 'rev-parse', 'HEAD').strip()
+    branch = _git(project, 'symbolic-ref', '--quiet', 'HEAD').strip()
     try:
         entry, writes, check_argv = _candidate(project, draft, parent)
     except (ValueError, TypeError, KeyError) as exc:
         raise StoryLoopError('草案元数据或落点结构无效', code='LESSON_INVALID') from exc
     return land_transaction(project, ref, writes,
                             'chore(lessons): ' + entry['summary'],
-                            {'lesson_id': entry['id']}, parent=parent, check_argv=check_argv,
+                            {'lesson_id': entry['id']}, parent=parent, draft=draft,
+                            branch=branch, check_argv=check_argv,
                             base_reason=draft['payload']['why_needed'] if len(writes) > 1 else None)
 
 
 def land_transaction(project, ref, writes, message, result_ids,
-                     *, parent, check_argv=None, base_reason=None):
-    """Commit validated memory writes with Task 6's scoped compare-and-swap rollback."""
+                     *, parent, draft, branch, check_argv=None, base_reason=None):
+    """Roll back only uncommitted writes; preserve committed work for durable recovery."""
     require(_git(project, 'rev-parse', 'HEAD').strip() == parent, '校验期间 HEAD 已推进')
+    _require_landing_source(project, ref, draft, branch)
     originals = _snapshot(project, writes, include_config=check_argv is not None)
-    proposal, own, tree = None, None, None
+    proposal, own, tree, record = None, None, None, None
+    pending = _landing_path(project, ref)
     # Match Git's trailing ASCII-whitespace cleanup before binding commit identity.
     message = message.rstrip(' \t\r\n\v\f')
     try:
@@ -254,19 +261,150 @@ def land_transaction(project, ref, writes, message, result_ids,
             write_bytes_atomic(safe_target(project, relative, 'lesson landing'), content)
         _git(project, 'add', '--', *writes)
         tree = _git(project, 'write-tree').strip()
+        _require_landing_source(project, ref, draft, branch)
+        record = dict(version=1, ref=ref, draft_digest=_draft_digest(draft),
+                      parent=parent, tree=tree, message=message, paths=sorted(writes),
+                      branch=branch,
+                      result_ids=result_ids, check_argv=check_argv, proposal=proposal)
+        write_json(pending, record, max_bytes=512_000)
         commit_paths(project, list(writes), message)
         own = _own_commit(project, parent, tree, message)
         require(own is not None, '提交身份无法确认')
-        if check_argv is not None:
-            _land_check_config(project, check_argv)
-        set_draft_status(project, ref, 'approved')
+        return _resume_landing(project, ref, load_draft(project, ref), pending)
     except Exception:
         own = own or _own_commit(project, parent, tree, message)
-        _restore(project, originals, parent, own, proposal)
+        if own is not None:
+            require(_git(project, 'rev-parse', 'HEAD').strip() == own,
+                    '外部 HEAD 已推进，保留当前提交、文件与待恢复记录')
+        else:
+            _restore(project, originals, parent, proposal)
+            pending.unlink(missing_ok=True)
         raise
-    return dict(status='APPLIED', **result_ids, commit=own,
-                base_proposal=proposal['change_id'] if proposal else None,
-                next=proposal['next'] if proposal else '经验已落地')
+
+
+def _landing_path(project, ref):
+    repository_relative(ref, 'draft reference')
+    return safe_target(project, f'.storyloop/state/memory-landings/{ref}.json', 'memory landing')
+
+
+def _require_no_other_landing(project, pending):
+    root = safe_target(project, '.storyloop/state/memory-landings', 'memory landings', target_directory=True)
+    others = [path for path in root.glob('*/*.json') if path != pending] if root.is_dir() else []
+    require(not others, '存在未完成的记忆落地，请先恢复原草案')
+
+
+def _draft_digest(draft):
+    stable = {key: value for key, value in draft.items() if key not in {'status', 'failure'}}
+    return hashlib.sha256(json.dumps(stable, sort_keys=True, ensure_ascii=False).encode('utf-8')).hexdigest()
+
+
+def _require_landing_source(project, ref, draft, branch):
+    require(_draft_digest(load_draft(project, ref)) == _draft_digest(draft),
+            '草案已变化，保留现场，请重新核查')
+    require(_git(project, 'symbolic-ref', '--quiet', 'HEAD').strip() == branch,
+            '记忆落地分支已变化，保留现场')
+
+
+def _load_landing(project, path, ref, draft):
+    require(path.stat().st_size <= 512_000, '记忆落地恢复记录过大')
+    record = load_json(path)
+    keys = {'version', 'ref', 'draft_digest', 'parent', 'tree', 'message', 'paths',
+            'branch', 'result_ids', 'check_argv', 'proposal'}
+    require(set(record) == keys and type(record['version']) is int and record['version'] == 1
+            and record['ref'] == ref, '记忆落地恢复记录无效')
+    require(record['draft_digest'] == _draft_digest(draft), '草案已变化，保留原提交，请人工核查')
+    for field in ('parent', 'tree'):
+        value = record[field]
+        require(isinstance(value, str) and len(value) in {40, 64}
+                and all(c in '0123456789abcdef' for c in value), '记忆落地提交指纹无效')
+    text(record['message'], 'landing message')
+    require(isinstance(record['branch'], str) and record['branch'].startswith('refs/heads/'),
+            '记忆落地分支无效')
+    paths = record['paths']
+    require(isinstance(paths, list) and paths and all(isinstance(p, str) for p in paths),
+            '记忆落地路径无效')
+    require(paths == sorted(set(paths)), '记忆落地路径重复或无序')
+    for relative in paths:
+        repository_relative(relative, 'landing path')
+        require(relative.startswith(('openspec/lessons/', 'openspec/foundation/'))
+                or relative == 'openspec/principles.json', '记忆落地路径越界')
+    _validate_landing_payload(project, record, draft)
+    return record
+
+
+def _validate_landing_payload(project, record, draft):
+    kind = draft['kind']
+    ids = record['result_ids']
+    key = 'lesson_id' if kind == 'lesson' else 'errata_id'
+    require(isinstance(ids, dict) and set(ids) == {key}, '记忆落地结果标识无效')
+    identifier(ids[key], key)
+    if kind == 'lesson':
+        require(f"openspec/lessons/{ids[key]}.md" in record['paths'], '记忆落地标识与提交路径不一致')
+    else:
+        require(record['paths'] == ['openspec/foundation/errata.md'], '勘误提交路径无效')
+        diff = _git(project, 'diff', '--unified=0', record['parent'], record['tree'],
+                    '--', 'openspec/foundation/errata.md')
+        require(f"+## {ids[key]}" in diff.splitlines(), '勘误标识与本次新增条目不一致')
+    payload = draft.get('payload', {})
+    needs_check = (kind == 'lesson' and payload.get('action') != 'retire'
+                   and payload.get('entry', {}).get('strength') == 'check')
+    expected = (payload.get('landing') or {}).get('argv') if needs_check else None
+    require(record['check_argv'] == expected,
+            '记忆落地配置与批准草案不一致')
+    _validate_landing_proposal(project, record)
+
+
+def _validate_landing_proposal(project, record):
+    proposal = record['proposal']
+    needed = any(not path.startswith('openspec/lessons/') for path in record['paths'])
+    require((proposal is not None) == needed, '记忆落地 BASE 提案缺失或多余')
+    if proposal is None:
+        return
+    require(isinstance(proposal, dict) and set(proposal) == {
+        'status', 'change_id', 'proposal', 'paths', 'next'}, '记忆落地 BASE 提案无效')
+    proposal_id = identifier(proposal['change_id'], 'BASE 提案标识')
+    path = safe_target(project, f'.storyloop/base-proposals/{proposal_id}.json', 'BASE 提案')
+    require(proposal['status'] == 'PROPOSED' and proposal['proposal'] == str(path)
+            and path.is_file(), '记忆落地 BASE 提案已变化或丢失')
+    paths = proposal['paths']
+    require(isinstance(paths, list) and all(isinstance(p, str) for p in paths)
+            and paths == sorted(set(paths)) and set(record['paths']) <= set(paths),
+            '记忆落地 BASE 提案路径无效')
+    text(proposal['next'], 'BASE 提案 next')
+    actual = load_json(path)
+    changes = actual.get('changes')
+    require(isinstance(changes, list) and all(isinstance(c, dict) for c in changes), 'BASE 提案内容无效')
+    baseline = load_baseline(project)
+    require(actual.get('change_id') == proposal_id and actual.get('status') == 'PROPOSED'
+            and [c.get('path') for c in changes] == paths
+            and actual.get('baseline_version') == baseline['baseline_version']
+            and actual.get('baseline_source_head') == baseline['source_head'],
+            '记忆落地 BASE 提案内容或底座已变化')
+
+
+def _resume_landing(project, ref, draft, pending):
+    record = _load_landing(project, pending, ref, draft)
+    require(_git(project, 'symbolic-ref', '--quiet', 'HEAD').strip() == record['branch'],
+            '记忆落地恢复分支已变化，保留现场')
+    require_idle_source(project)
+    own = _own_commit(project, record['parent'], record['tree'], record['message'])
+    require(own is not None, '记忆落地 HEAD 与已提交事务不一致，保留现场')
+    paths = sorted(filter(None, _git(project, 'diff-tree', '--no-commit-id', '--name-only',
+                                   '-r', '-z', own).split('\0')))
+    require(paths == record['paths'], '记忆落地提交路径与恢复记录不一致')
+    return _finish_landing(project, ref, record, own, pending)
+
+
+def _finish_landing(project, ref, record, own, pending):
+    proposal = record['proposal']
+    result = dict(status='APPLIED', **record['result_ids'], commit=own,
+                  base_proposal=proposal['change_id'] if proposal else None,
+                  next=proposal['next'] if proposal else '经验已落地')
+    if record['check_argv'] is not None:
+        _land_check_config(project, record['check_argv'])
+    set_draft_status(project, ref, 'approved')
+    pending.unlink()
+    return result
 
 
 def _land_check_config(project: Path, argv: list[str]) -> None:

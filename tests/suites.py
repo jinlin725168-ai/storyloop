@@ -36,6 +36,7 @@ END_TO_END = [
 
 # Safety boundaries: out-of-scope writes, tampering, path and process containment.
 SAFETY = [
+    "tests.test_landing_recovery",
     "tests.test_boundaries", "tests.test_project_boundaries", "tests.test_project_security_gates",
     "tests.test_project_loop_tampering", "tests.test_process_containment", "tests.test_workspace_scratch",
     "tests.test_ci_path_safety", "tests.test_windows_path_guards", "tests.test_oracle_protection",
