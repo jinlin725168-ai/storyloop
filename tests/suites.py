@@ -8,6 +8,7 @@ until its author adds it here.
 
 # Pure logic and small fixtures: each module took under 3 s on Linux (2026-10-20 timing).
 FAST = [
+    "tests.test_architecture", "tests.test_invariants",
     "tests.test_acceptance_layout", "tests.test_adapter_capabilities", "tests.test_adapter_conformance",
     "tests.test_baseline_api", "tests.test_baseline_behavior", "tests.test_baseline_cli",
     "tests.test_baseline_contract", "tests.test_candidate_allow", "tests.test_change_approval",
@@ -58,4 +59,7 @@ PLATFORM = [
 # The suite runner and this list.
 RUNNER = ["tests.test_suites"]
 
-CORE = sorted(set(FAST + END_TO_END + SAFETY + COMMAND_LINE + PLATFORM + RUNNER))
+# Invariant guards that live in slower modules (design 2026-10-21 §9.2).
+INVARIANTS = ["tests.test_completion_resilience"]
+
+CORE = sorted(set(FAST + END_TO_END + SAFETY + COMMAND_LINE + PLATFORM + RUNNER + INVARIANTS))
