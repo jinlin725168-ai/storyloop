@@ -1,0 +1,481 @@
+# 本文件属于底座（架构设计 §9.3）；修改必须经过评审。
+# 归属存疑的模块写入 PR 描述交给评审，不自行改变已批准归属。
+version = 1
+
+[architecture.foundation]
+title = "基础"
+rank = 0
+[architecture.state_store]
+title = "状态存储"
+rank = 1
+[architecture.execution]
+title = "执行与隔离"
+rank = 1
+[architecture.git]
+title = "Git 原语"
+rank = 1
+[architecture.change_types]
+title = "变更类型"
+rank = 1
+[architecture.project_contract]
+title = "项目契约"
+rank = 2
+[architecture.evidence_kernel]
+title = "证据内核"
+rank = 3
+[architecture.agent_gateway]
+title = "代理网关"
+rank = 4
+[architecture.role_content]
+title = "角色内容"
+rank = 5
+[architecture.contract]
+title = "合同"
+rank = 5
+[architecture.oracle]
+title = "判据"
+rank = 5
+[architecture.implementation]
+title = "实现"
+rank = 5
+[architecture.verification]
+title = "验证"
+rank = 5
+[architecture.delivery]
+title = "交付"
+rank = 5
+[architecture.routing]
+title = "分流"
+rank = 5
+[architecture.onboarding]
+title = "接入与底座"
+rank = 5
+[architecture.memory]
+title = "记忆"
+rank = 5
+[architecture.outer_loop]
+title = "外环"
+rank = 5
+[architecture.reporting]
+title = "报告"
+rank = 5
+[architecture.lifecycle]
+title = "变更生命周期"
+rank = 6
+[architecture.command]
+title = "命令面"
+rank = 7
+
+[modules]
+"models" = { module = "foundation", zone = "base", split = "D" }
+"path_security" = { module = "foundation", zone = "base" }
+"storage" = { module = "state_store", zone = "base" }
+"initialization_transaction" = { module = "state_store", zone = "base" }
+"processutil" = { module = "execution", zone = "base" }
+"windows_job" = { module = "execution", zone = "base" }
+"process_bootstrap" = { module = "execution", zone = "base" }
+"linux_job" = { module = "execution", zone = "base" }
+"linux_supervisor" = { module = "execution", zone = "base" }
+"boundaries" = { module = "execution", zone = "base" }
+"project_git" = { module = "git", zone = "base" }
+"project_profile" = { module = "project_contract", zone = "base" }
+"smoke" = { module = "project_contract", zone = "base" }
+"onboarding_manifest" = { module = "project_contract", zone = "base" }
+"testing.smoke_harness.*" = { module = "project_contract", zone = "base" }
+"baseline" = { module = "evidence_kernel", zone = "base", split = "D" }
+"project_boundaries" = { module = "evidence_kernel", zone = "base" }
+"smoke_runner" = { module = "evidence_kernel", zone = "base" }
+"oracle_counts" = { module = "evidence_kernel", zone = "base" }
+"project_loop_support" = { module = "evidence_kernel", zone = "base" }
+"project_loop_guards" = { module = "evidence_kernel", zone = "base" }
+"project_receipt" = { module = "evidence_kernel", zone = "base" }
+"characterization_locks" = { module = "evidence_kernel", zone = "base" }
+"evidence_locations" = { module = "evidence_kernel", zone = "base" }
+"harness_command" = { module = "evidence_kernel", zone = "base" }
+"project_agents" = { module = "agent_gateway", zone = "base", split = "D" }
+"role_schemas" = { module = "agent_gateway", zone = "base" }
+"adapter_capabilities" = { module = "agent_gateway", zone = "base" }
+"role_instructions" = { module = "role_content", zone = "mutable" }
+"role_profiles" = { module = "role_content", zone = "mutable" }
+"role_subagents" = { module = "role_content", zone = "mutable" }
+"claude_contract" = { module = "role_content", zone = "mutable" }
+"claude_permissions" = { module = "role_content", zone = "mutable" }
+"claude_profiles" = { module = "role_content", zone = "mutable" }
+"adapter_profiles" = { module = "role_content", zone = "mutable" }
+"cross_vendor" = { module = "role_content", zone = "mutable" }
+"project_contracts" = { module = "role_content", zone = "mutable" }
+"semantic_repair" = { module = "role_content", zone = "mutable" }
+"testing" = { module = "role_content", zone = "mutable" }
+"testing.mock_adapter" = { module = "role_content", zone = "mutable" }
+"changes" = { module = "contract", zone = "mutable", split = "D" }
+"approvals" = { module = "contract", zone = "mutable" }
+"requirement_checklist" = { module = "contract", zone = "mutable" }
+"answers" = { module = "contract", zone = "mutable" }
+"supersede" = { module = "contract", zone = "mutable" }
+"acceptance_repair" = { module = "oracle", zone = "mutable" }
+"system_smoke" = { module = "oracle", zone = "mutable" }
+"oracle_skill_approval" = { module = "oracle", zone = "mutable" }
+"project_loop_gates" = { module = "implementation", zone = "mutable" }
+"planning" = { module = "implementation", zone = "mutable" }
+"planning_validation" = { module = "implementation", zone = "mutable" }
+"characterization_baseline" = { module = "implementation", zone = "mutable" }
+"facts" = { module = "implementation", zone = "mutable" }
+"failure_attribution" = { module = "implementation", zone = "mutable" }
+"project_loop_failures" = { module = "implementation", zone = "mutable" }
+"review_context" = { module = "verification", zone = "mutable" }
+"review_disposition" = { module = "verification", zone = "mutable" }
+"finding_disposition" = { module = "verification", zone = "mutable" }
+"consistency" = { module = "verification", zone = "mutable" }
+"consistency_locations" = { module = "verification", zone = "mutable" }
+"manual_acceptance" = { module = "verification", zone = "mutable" }
+"openspec_docs" = { module = "delivery", zone = "mutable" }
+"project_loop_finish" = { module = "delivery", zone = "mutable", split = "B" }
+"intake" = { module = "routing", zone = "mutable" }
+"assessment" = { module = "routing", zone = "mutable" }
+"design_approval" = { module = "routing", zone = "mutable" }
+"principles" = { module = "routing", zone = "mutable" }
+"dependency_checks" = { module = "routing", zone = "mutable" }
+"dependency_resolver" = { module = "routing", zone = "mutable" }
+"routing_evidence" = { module = "routing", zone = "mutable" }
+"routing_policy" = { module = "routing", zone = "mutable" }
+"routing_report" = { module = "routing", zone = "mutable" }
+"routing_restore" = { module = "routing", zone = "mutable" }
+"routing_risks" = { module = "routing", zone = "mutable" }
+"routing_state" = { module = "routing", zone = "mutable" }
+"routing_upgrade" = { module = "routing", zone = "mutable" }
+"routing_characterization" = { module = "routing", zone = "mutable" }
+"onboarding" = { module = "onboarding", zone = "mutable" }
+"onboarding_discovery" = { module = "onboarding", zone = "mutable" }
+"onboarding_install" = { module = "onboarding", zone = "mutable" }
+"onboarding_templates" = { module = "onboarding", zone = "mutable" }
+"readiness" = { module = "onboarding", zone = "mutable" }
+"readiness_lineage" = { module = "onboarding", zone = "mutable" }
+"base_upgrade" = { module = "onboarding", zone = "mutable" }
+"foundation_survey" = { module = "onboarding", zone = "mutable" }
+"skills" = { module = "onboarding", zone = "mutable" }
+"lessons" = { module = "memory", zone = "mutable" }
+"lesson_store" = { module = "memory", zone = "mutable" }
+"lesson_retrieval" = { module = "memory", zone = "mutable" }
+"lesson_landing" = { module = "memory", zone = "mutable" }
+"drafts" = { module = "memory", zone = "mutable" }
+"errata" = { module = "memory", zone = "mutable" }
+"retrospective" = { module = "memory", zone = "mutable" }
+"telemetry" = { module = "outer_loop", zone = "mutable" }
+"telemetry_summary" = { module = "outer_loop", zone = "mutable" }
+"cost_limits" = { module = "outer_loop", zone = "mutable" }
+"cost_resume" = { module = "outer_loop", zone = "mutable" }
+"call_log" = { module = "outer_loop", zone = "mutable" }
+"call_context" = { module = "outer_loop", zone = "mutable" }
+"metrics" = { module = "outer_loop", zone = "mutable" }
+"metrics_collect" = { module = "outer_loop", zone = "mutable" }
+"metrics_compute" = { module = "outer_loop", zone = "mutable" }
+"metrics_compute_support" = { module = "outer_loop", zone = "mutable" }
+"metrics_cost" = { module = "outer_loop", zone = "mutable" }
+"metrics_render" = { module = "outer_loop", zone = "mutable" }
+"metrics_rules" = { module = "outer_loop", zone = "mutable" }
+"ci_results" = { module = "outer_loop", zone = "mutable" }
+"change_report" = { module = "reporting", zone = "mutable" }
+"change_log" = { module = "reporting", zone = "mutable" }
+"stop_report" = { module = "reporting", zone = "mutable" }
+"report_commands" = { module = "reporting", zone = "mutable" }
+"report_evidence" = { module = "reporting", zone = "mutable" }
+"report_focus" = { module = "reporting", zone = "mutable" }
+"report_git" = { module = "reporting", zone = "mutable" }
+"report_items" = { module = "reporting", zone = "mutable" }
+"report_markdown" = { module = "reporting", zone = "mutable" }
+"report_markdown_sections" = { module = "reporting", zone = "mutable" }
+"report_memory" = { module = "reporting", zone = "mutable" }
+"report_presentation" = { module = "reporting", zone = "mutable" }
+"report_reconciliation" = { module = "reporting", zone = "mutable" }
+"report_roles" = { module = "reporting", zone = "mutable" }
+"report_sections" = { module = "reporting", zone = "mutable" }
+"project_loop" = { module = "lifecycle", zone = "mutable", split = "B" }
+"project_preparation" = { module = "lifecycle", zone = "mutable" }
+"run_recovery" = { module = "lifecycle", zone = "mutable" }
+"routing_execution" = { module = "lifecycle", zone = "mutable" }
+"cli" = { module = "command", zone = "mutable" }
+"cli_output" = { module = "command", zone = "mutable" }
+"next_steps" = { module = "command", zone = "mutable" }
+"memory_cli" = { module = "command", zone = "mutable" }
+"routing_cli" = { module = "command", zone = "mutable" }
+"onboarding_cli" = { module = "command", zone = "mutable" }
+"ci_command" = { module = "command", zone = "mutable" }
+"__main__" = { module = "command", zone = "mutable" }
+
+# 仅登记已批准的现状债务；豁免只减不增，每条关联消除阶段。
+[[exemptions]]
+source = "acceptance_repair"
+target = "project_loop"
+until = "B"
+reason = "阶段 B 归一生命周期时一并处理"
+[[exemptions]]
+source = "adapter_capabilities"
+target = "cross_vendor"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "adapter_capabilities"
+target = "role_profiles"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "adapter_capabilities"
+target = "role_subagents"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "baseline"
+target = "adapter_capabilities"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "baseline"
+target = "system_smoke"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "change_log"
+target = "next_steps"
+until = "B"
+reason = "阶段 B 归一生命周期时一并处理"
+[[exemptions]]
+source = "evidence_locations"
+target = "failure_attribution"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "models"
+target = "assessment"
+until = "D"
+reason = "基础层带入产品合同校验，阶段 D 移到合同模块"
+[[exemptions]]
+source = "onboarding_manifest"
+target = "onboarding_templates"
+until = "D"
+reason = "契约依赖内核或业务；被用到的定义下沉到契约层"
+[[exemptions]]
+source = "project_agents"
+target = "adapter_profiles"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "call_context"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "call_log"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "cost_limits"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "cross_vendor"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "errata"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "foundation_survey"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "lesson_retrieval"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "role_instructions"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "role_profiles"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "role_subagents"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "skills"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "telemetry"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_boundaries"
+target = "system_smoke"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "project_git"
+target = "baseline"
+until = "D"
+reason = "Git 原语借用 baseline._git，阶段 D 拆出"
+[[exemptions]]
+source = "project_loop_gates"
+target = "project_loop"
+until = "B"
+reason = "阶段 B 归一生命周期时一并处理"
+[[exemptions]]
+source = "project_loop_guards"
+target = "errata"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "project_loop_support"
+target = "next_steps"
+until = "B"
+reason = "停点由生命周期统一处理"
+[[exemptions]]
+source = "project_loop_support"
+target = "stop_report"
+until = "B"
+reason = "停点由生命周期统一处理"
+[[exemptions]]
+source = "project_profile"
+target = "oracle_counts"
+until = "D"
+reason = "契约依赖内核或业务；被用到的定义下沉到契约层"
+[[exemptions]]
+source = "project_receipt"
+target = "change_report"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "role_schemas"
+target = "lessons"
+until = "D"
+reason = "枚举取值属于状态格式，移到契约层（设计 §9.3）"
+[[exemptions]]
+source = "role_schemas"
+target = "routing_policy"
+until = "D"
+reason = "枚举取值属于状态格式，移到契约层（设计 §9.3）"
+[[exemptions]]
+source = "smoke"
+target = "changes"
+until = "D"
+reason = "契约依赖内核或业务；被用到的定义下沉到契约层"
+[[exemptions]]
+source = "smoke_runner"
+target = "changes"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "smoke_runner"
+target = "system_smoke"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "supersede"
+target = "next_steps"
+until = "B"
+reason = "阶段 B 归一生命周期时一并处理"
+
+[cycles]
+members = [
+  "adapter_capabilities", "assessment", "base_upgrade", "baseline",
+  "call_context", "changes", "cli", "consistency",
+  "cross_vendor", "errata", "evidence_locations", "facts",
+  "foundation_survey", "intake", "lesson_landing", "lesson_retrieval",
+  "lesson_store", "models", "onboarding_manifest", "oracle_counts",
+  "oracle_skill_approval", "path_security", "principles", "project_agents",
+  "project_boundaries", "project_git", "project_loop", "project_loop_failures",
+  "project_loop_finish", "project_loop_gates", "project_preparation", "project_profile",
+  "readiness", "requirement_checklist", "role_profiles", "role_schemas",
+  "routing_cli", "routing_evidence", "routing_execution", "routing_policy",
+  "routing_report", "skills", "smoke", "smoke_runner",
+  "stop_report", "system_smoke", "telemetry", "telemetry_summary",
+]
+
+[invariants.I1]
+title = "判定只来自引擎在受控进程中观察到的退出码和指纹，代理文字不构成证据"
+status = "guarded"
+tests = ["tests.test_change_report::test_failed_or_unmapped_acceptance_cannot_produce_pass_report", "tests.test_smoke::test_isolated_smoke_cannot_modify_the_candidate_to_make_itself_pass", "tests.test_invariants::test_i1_pass_claims_cannot_override_observed_exit_status"]
+
+[invariants.I2]
+title = "合同在批准时锁定指纹，任何修订都让批准失效"
+status = "guarded"
+tests = ["tests.test_change_approval::test_revision_invalidates_an_existing_approval"]
+
+[invariants.I3]
+title = "判据受字节保护，实现者写入即越界"
+status = "guarded"
+tests = ["tests.test_project_boundaries::test_ci_and_committed_acceptance_contracts_are_never_implementation_outputs"]
+
+[invariants.I4]
+title = "只有候选副本中退出码为 1 的行为失败才是有效 RED"
+status = "guarded"
+tests = ["tests.test_ci_runner::test_red_requires_a_real_behavioral_failure_and_tampering_blocks", "tests.test_invariants::test_i4_environment_exit_and_timeout_cannot_prove_red", "tests.test_invariants::test_i4_zero_execution_and_skipping_cannot_prove_red"]
+
+[invariants.I5]
+title = "每轮尝试后都做全树边界审计"
+status = "guarded"
+tests = ["tests.test_project_loop_tampering::test_implementation_cannot_modify_ignored_control_plane"]
+
+[invariants.I6]
+title = "证据和人工验收绑定实现指纹，代码变了就失效"
+status = "guarded"
+tests = ["tests.test_project_loop_tampering::test_review_cannot_change_code_after_green_evidence", "tests.test_invariants::test_i6_a_byte_change_invalidates_manual_acceptance"]
+
+[invariants.I7]
+title = "判据自证：执行数不为 0、不比基线骤降；新检查先在注入违规上跑红"
+status = "guarded"
+tests = ["tests.test_invariants::test_i7_a_green_layer_that_executed_nothing_fails", "tests.test_invariants::test_i7_fewer_tests_than_the_baseline_floor_fails"]
+
+[invariants.I8]
+title = "完成阶段幂等，每一步状态先落盘"
+status = "guarded"
+tests = ["tests.test_completion_resilience::test_completion_resumes_after_a_crash_following_the_implementation_commit"]
+
+[invariants.I9]
+title = "不 push、不改写历史，只提交显式路径"
+status = "guarded"
+tests = ["tests.test_invariants::test_i9_the_engine_has_no_push_or_history_rewrite"]
+
+[invariants.I10]
+title = "角色按权限划分"
+status = "guarded"
+tests = ["tests.test_workspace_scratch::test_staging_files_is_never_tolerated", "tests.test_project_security_gates::test_git_ignored_runtime_dependency_is_tainted", "tests.test_project_loop_tampering::test_review_cannot_change_tracked_code_in_a_cache_named_directory"]
+
+[invariants.I11]
+title = "只升不降：档位在运行中只能升级，且不低于类型的最低档位"
+status = "guarded"
+tests = ["tests.test_invariants::test_i11_a_lighter_decision_never_lowers_the_effective_tier"]
+
+[invariants.I12]
+title = "底线单调：状态迁移只经守卫，守卫读取类型底线；阶段只能加严"
+status = "pending"
+stage = "B"
+
+[invariants.I13]
+title = "底座只能被 base 类型的变更推进，也只有 base 类型能写底座"
+status = "pending"
+stage = "E"
+
+[invariants.I14]
+title = "依赖只能向下，底座不导入可变区"
+status = "guarded"
+tests = ["tests.test_architecture::test_no_unexempted_violations", "tests.test_architecture::test_no_new_module_joins_a_cycle"]
+
+[invariants.I15]
+title = "判定者与被判定者分离"
+status = "pending"
+stage = "T6"

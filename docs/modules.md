@@ -1,103 +1,179 @@
 # 模块组成
 
-对应引擎版本：0.1.0（`storyloop/__init__.py`），核对日期 2026-10-11。代码在 `storyloop/`，只用 Python 标准库。
+对应引擎版本：0.1.0，核对日期 2026-10-22。代码在 `storyloop/`，只用 Python 标准库。
 
 ## 一、模块清单
 
-按依赖由低到高分层；上层可以调用下层，下层不调用上层（例外见第二节）。
+分组与分区来自 `storyloop/architecture.toml`；按声明的 rank 排序。`change_types` 在阶段 C 前为空，不列作代码模块。
+对外提供列列出被其他代码模块导入或通过模块属性引用的公开函数；无此类函数时记为“—”。`testing.smoke_harness` 汇总其13个模块。
 
-| 层 | 模块 | 职责 | 对外提供 |
-|---|---|---|---|
-| 命令面 | `cli` | 解析参数、分发命令、终端澄清与问答、诚实退出码 | `main`、`dispatch`、`clarify_interactively`、`run_with_answers` |
-| | `cli_output` | CLI 文本/完整 JSON 展示；按状态选择日志、记忆、指标或停点渲染器 | `display` |
-| | `next_steps` | 每个停点与错误码对应的可复制下一步命令 | `next_step` |
-| | `change_log` | `storyloop log`：从已有状态拼出一个变更的全过程 | `change_log`、`render_log` |
-| 外环指标 | `metrics` | 只读编排 M1–M12、规则和延后信号；显式 `--save` 时安全写两份日期报告 | `build_metrics`、`save_metrics` |
-| | `metrics_render` | 完整渲染指标分子/分母、建议证据、样本不足、不可用与缺失汇总 | `render_metrics` |
-| | `metrics_collect` | 有界读取报告、运行状态、变更、辅助状态与账本；报告优先并记录差异 | `collect` |
-| | `metrics_compute` / `metrics_compute_support` / `metrics_cost` | 计算 M1–M12；通用指标结构、Git 行数口径和 M11 成本来源拆在小模块 | 各指标纯函数、`cost` |
-| | `metrics_rules` | R1–R12 默认阈值与项目覆盖、建议、可计算及人工延后项 | `thresholds`、`suggest`、`deferred_signals` |
-| | `ci_results` | 记录和有界读取 CI 产物，校验时间、提交祖先关系与 UTF-8 管道 | `record_ci_result`、`load_ci_results` |
-| 编排 | `project_loop` | 外部闭环状态机：从运行状态恢复、物化合同与证明 RED（含 `EXISTING_GREEN` 停点）、实现—边界审计—分层验证—审查循环、人工验收停点 | `run_change`、`LoopServices`、`layers_green`、`load_run_state` |
-| | `project_loop_gates` | RED 与第一轮实现之间的两道门：design 方案、特征化（含红了之后就地修正再续跑） | `ensure_design`、`ensure_characterization`、`characterize_paths`、`resume_characterization` |
-| | `project_loop_guards` | 每次代理调用的护栏：写入型调用不能动控制面与暂存区，只读调用不能改树 | `write_safely`、`read_only_call`、`scratch_paths` |
-| | `project_loop_finish` | 幂等完成阶段：实现提交、报告、文档与活规格、no-ff 合并、回执 | `complete_change`、`finish_verified`、`finish_merged`、`finish_receipting`、`finalize_change` |
-| | `acceptance_repair` | `acceptance-repair`：acceptance 角色修自己的套件，从合同提交重证 RED | `repair_smoke` |
-| | `project_loop_support` | 运行状态的持久化、控制面指纹、停点 | `save_run`、`run_path`、`control_digest`、`pause` |
-| | `project_receipt` | 合并回执的崩溃安全生成与核验 | `ensure_merge_receipt`、`recover_completed_merge` |
-| | `change_report` | 需求—故事—验收条件—测试—证据的追溯报告 | `generate_change_report` |
-| | `run_recovery` | `reset`：把卡住的运行复位到 IMPLEMENTING，理由留痕 | `reset_run` |
-| | `base_upgrade` | BASE 提案与回归门控的底座升级 | `propose_base_change`、`upgrade_baseline` |
-| 代理 | `project_agents` | 七个角色的调用（codex / command / manual 适配器）、角色说明、结构修复、诊断记录 | `invoke_project_agent`、`instructions_for`、`conform` |
-| | `role_schemas` | 每个角色返回值的 JSON Schema，引擎校验与 CLI 原生约束同源 | `schema_for`、`wire_schema`、`schema_errors` |
-| | `project_contracts` | implement 与 review 返回值的语义校验 | `validate_agent_summary`、`validate_review` |
-| | `skills` | 引擎自带技能包的安装、版本状态与文本加载 | `install_skills`、`skill_text` |
-| | `foundation_survey` | survey 角色摸底，产物校验后写入 `openspec/foundation/` 并开 BASE 提案 | `survey_foundation`、`foundation_payload` |
-| | `call_log` | 每次代理调用的诊断记录（不是证据） | `open_call`、`close_call` |
-| | `telemetry` | 每个变更的调用账本：墙钟、轮数、token、费用 | `record_call`、`summarize` |
-| 记忆 | `lessons` | 经验 Markdown 格式、解析、渲染与字段校验 | `parse_lesson`、`render_lesson`、`validate_lessons` |
-| | `lesson_store` | 从提交读取、校验并冻结经验层，处理确认与退休 | `load_lessons_at`、`lessons_digest`、`confirm_lesson`、`retire_lesson` |
-| | `lesson_retrieval` | 按角色、路径、新鲜度与强度筛选注入经验 | `select_lessons`、`lessons_payload` |
-| | `drafts` | 经验与勘误草案的创建、列出、读取和驳回 | `create_draft`、`list_drafts`、`reject_draft` |
-| | `lesson_landing` | 审批草案，验证 prose/knowledge/check 落点并原子提交 | `approve_draft`、`prove_check` |
-| | `errata` | 校验代理勘误、生成草案并落地 foundation 勘误 | `capture_errata`、`land_errata` |
-| | `retrospective` | 检测问题信号、统计复发并执行只读复盘 | `detect_signals`、`record_recurrence`、`retrospect` |
-| | `report_memory` | 从冻结状态、账本与完整调用记录生成报告第 6 节 | `memory_items` |
-| 命令面 | `memory_cli` | 解析并渲染 lessons、drafts、lessons-propose 的命令结果 | `add_memory_arguments`、`dispatch_memory`、`render_memory` |
-| 验证 | `smoke` | 第 2 层变更验收套件：安装、清单、字节保护 | `install_smoke_suite`、`load_smoke_manifest`、`suite_root` |
-| | `smoke_runner` | 隔离候选副本里跑套件与回归命令（快、重两级），RED 按行类型判定，证据与指纹 | `run_smoke_isolated`、`run_commands_isolated`、`implementation_digest`、`visible_paths`、`run_ci` |
-| | `oracle_counts` | 判据自证：从测试工具输出统计执行数、旧代码基线采样、零执行与下降检查 | `count_tests`、`sample_baseline`、`check_layers` |
-| | `system_smoke` | 第 1 层项目级系统冒烟：保护、隔离运行、`smoke-propose` / `smoke-apply` | `run_system_smoke_isolated`、`propose_smoke_update`、`apply_smoke_update` |
-| 合同 | `changes` | 草案创建与修订、合同指纹、预览文件 | `create_change`、`revise_change`、`load_change`、`contract_digest` |
-| | `requirement_checklist` | 批准前的确定性需求质量门 | `evaluate_checklist`、`blocking_items` |
-| | `approvals` | 批准锁定、把草案物化到 `openspec/changes/<id>/` | `approve_change`、`materialize_approved_change` |
-| | `openspec_docs` | 增量规格、活规格并入与取代、decisions.md、`openspec validate` 门、`document` | `render_delta_spec`、`merge_into_main_spec`、`document_change` |
-| | `answers` | NEEDS_INPUT 问答账本 | `record_answers`、`pending_questions` |
-| | `manual_acceptance` | 人工验收记录，绑定实现指纹 | `record_manual_acceptance`、`pending_manual_criteria` |
-| 接入 | `onboarding` / `onboarding_cli` / `onboarding_discovery` | 两阶段草案入口、安全检测与 CLI 分发 | `scaffold_project` |
-| | `onboarding_templates` / `onboarding_install` / `onboarding_manifest` | 包资源、分阶段安装、完整性/版本/保护校验 | `render`、`validate_onboarding` |
-| | `initialization_transaction` | 独占初始化锁与按内容归属回滚 | `initialization_transaction` |
-| | `harness_command` / `testing.smoke_harness` | 首 argv 展开、可信 launcher/case、私有 scratch 与进程生命周期 | `testing.smoke_harness.v1` |
-| 工程与底座 | `baseline` | `init`：锁定底座、写控制面配置；底座漂移检查 | `bootstrap_project`、`verify_baseline`、`load_project_config` |
-| | `project_profile` | 技术栈中立的工程探测、settings 校验、测试分层命令 | `detect_project`、`validate_project_settings`、`layer_commands`、`matches_test_root` |
-| | `project_boundaries` | 把每个 Git 可见改动分类为可变区 / 集成点 / 底座 / CI / 违规 | `audit_project_changes` |
-| | `project_git` | 本地功能分支、只提交显式路径、no-ff 合并 | `start_feature`、`commit_paths`、`finish_feature` |
-| 基础 | `boundaries` | 写入者停止后的全树快照与差异（拒绝链接、硬链接、采集中变化） | `capture_snapshot`、`snapshot_changes` |
-| | `processutil` | 无 shell 的受限子进程：最小环境、输出与时间上限、进程树回收、凭证脱敏 | `run_process`、`redact` |
-| | `windows_job` / `process_bootstrap` | Windows Job Object 进程树回收 | `WindowsJob` |
-| | `linux_job` / `linux_supervisor` | Linux subreaper 进程树回收协议 | `start_linux` |
-| | `storage` | 原子写、操作系统级互斥锁 | `load_json`、`write_json`、`locked` |
-| | `path_security` | 跨平台的仓库相对路径校验，不跟随链接 | `repository_relative`、`safe_target` |
-| | `models` | 错误类型、参数校验、产品合同结构校验 | `StoryLoopError`、`require`、`validate_product` |
+| 架构模块 | 模块 | 分区 | 职责 | 对外提供 |
+|---|---|---|---|---|
+| 基础 | `models` | 底座 | 校验产品合同中的故事、规则与验收条件 | `criterion_expects_red`、`criterion_tier`、`fields`、`identifier`、`nature_of`、`require`、`strings`、`text`、`validate_product` |
+|  | `path_security` | 底座 | 跨平台仓库路径校验，拒绝跟随链接 | `forbidden_path_root`、`repository_relative`、`safe_absolute_target`、`safe_target` |
+| 状态存储 | `initialization_transaction` | 底座 | 对显式控制面文件实施独占、按内容归属的初始化事务 | `initialization_transaction` |
+|  | `storage` | 底座 | 原子 JSON 与文本写入、可移植独占运行锁 | `load_json`、`locked`、`locked_file`、`write_bytes_atomic`、`write_json`、`write_text_atomic` |
+| 执行与隔离 | `boundaries` | 底座 | 全部写入进程停止后检测可信工作区边界 | `capture_snapshot`、`snapshot_changes` |
+|  | `linux_job` | 底座 | Linux 子进程收集完成协议的控制端 | `start_linux` |
+|  | `linux_supervisor` | 底座 | Linux 子进程收集器，回收全部后代才确认完成 | — |
+|  | `process_bootstrap` | 底座 | 等待 Windows Job Object 分配完成的可信启动器 | — |
+|  | `processutil` | 底座 | 不经 shell 插值的有界子进程执行 | `redact`、`run_process` |
+|  | `windows_job` | 底座 | 用于进程树隔离的最小 Windows Job Object 封装 | — |
+| Git 原语 | `project_git` | 底座 | 对已批准产品变更执行安全的本地 Git 生命周期 | `commit_paths`、`current_branch`、`finish_feature`、`start_feature` |
+| 项目契约 | `onboarding_manifest` | 底座 | 校验接入声明，不执行工程钩子或读取凭证 | `load_manifest`、`validate_hooks`、`validate_onboarding` |
+|  | `project_profile` | 底座 | 对既有工程执行技术栈中立的探测 | `detect_project`、`is_ci_path`、`layer_commands`、`matches_test_root`、`validate_project_settings` |
+|  | `smoke` | 底座 | 管理按合同盲写、先证明 RED 且受保护的变更验收套件 | `install_smoke_suite`、`load_smoke_manifest`、`protection_path`、`smoke_digests`、`suite_relative`、`suite_root`、`validate_suite`、`without_manifest_echo` |
+|  | `testing.smoke_harness` | 底座 | 汇总13个版本化冒烟执行器模块，受支持接口由 v1 导入 | `case_bytes`、`case_directory`、`evidence`、`free_port`、`protected_cases`、`python_cases`、`run_command`、`run_hooks`、`source_list`、`source_path`、`validate_cases`、`wait_http` |
+| 证据内核 | `baseline` | 底座 | 管理既有 Git 仓库的逻辑底座基线 | `advance_repository_head`、`bootstrap_project`、`load_baseline`、`load_project_config`、`verify_baseline` |
+|  | `characterization_locks` | 底座 | 以证据支持分流特征化门的覆盖声明 | `capture_locks`、`require_saved_coverage`、`routed_coverage`、`verified_locks` |
+|  | `evidence_locations` | 底座 | 安全校验候选或合同提交中的仓库证据位置 | `evidence_location_exists` |
+|  | `harness_command` | 底座 | 通过可信当前安装解析可移植冒烟执行器标记 | `expand_command`、`harness_counts` |
+|  | `oracle_counts` | 底座 | 从测试执行器自身汇总解析实际执行数量 | `check_layers`、`count_tests`、`ensure_baseline`、`project_patterns`、`removal_paths`、`sample_layer`、`validate_patterns` |
+|  | `project_boundaries` | 底座 | 审计单仓库的功能变更与底座边界 | `audit_project_changes`、`role_path_boundary` |
+|  | `project_loop_guards` | 底座 | 限制外部闭环中每次代理调用可修改的内容 | `exists_at`、`read_only_call`、`require_control_unchanged`、`require_git_visible`、`verify_read_only_snapshot`、`write_safely` |
+|  | `project_loop_support` | 底座 | 为外部闭环提供持久化与完整性辅助 | `control_digest`、`pause`、`pause_for_boundary`、`relative_files`、`run_path`、`save_run`、`set_change_status` |
+|  | `project_receipt` | 底座 | 崩溃安全地核验并持久化功能合并回执 | `ensure_merge_receipt`、`recover_completed_merge`、`verify_verified_artifacts` |
+|  | `smoke_runner` | 底座 | 以 CI 中立方式执行受保护冒烟清单 | `candidate_digest`、`implementation_digest`、`run_ci`、`run_commands`、`run_commands_at_commit`、`run_commands_isolated`、`run_smoke_isolated`、`visible_paths` |
+| 代理网关 | `adapter_capabilities` | 底座 | 项目代理适配器的能力握手与缓存 | `check`、`ensure_checked`、`ensure_for_run`、`require_role_target` |
+|  | `project_agents` | 底座 | 为产品级仓库迭代启动独立进程代理 | `invoke_project_agent` |
+|  | `role_schemas` | 底座 | 以统一 JSON Schema 校验引擎及适配器的角色最终回答 | `normalize`、`schema_errors`、`schema_for`、`wire_schema` |
+| 角色内容 | `adapter_profiles` | 可变区 | CLI 适配器的模型选择与如实报告单会话画像 | `diagnostic_fields`、`model_for`、`sequential_instructions`、`sequential_profile`、`tier_models` |
+|  | `claude_contract` | 可变区 | Claude Code 示例适配器共用的提示合同 | — |
+|  | `claude_permissions` | 可变区 | Claude Code 画像权限及文件修改工具授权 | `profile_command` |
+|  | `claude_profiles` | 可变区 | 独立于 CLI 入口的 Claude 画像编排辅助 | — |
+|  | `cross_vendor` | 可变区 | 跨厂商可用性策略，能力不能代替实际用量遥测 | `invoke`、`policy`、`prepare_run`、`require_distinct` |
+|  | `project_contracts` | 可变区 | 校验产品闭环代理回答的合同 | `validate_agent_summary`、`validate_review` |
+|  | `role_instructions` | 可变区 | 项目代理角色的静态说明 | — |
+|  | `role_profiles` | 可变区 | 解析各角色适配器请求，保留旧协议 | `build_profile`、`enabled`、`resolve_adapters`、`role_settings` |
+|  | `role_subagents` | 可变区 | 从引擎掌握的分流状态一次解析分档任务分解 | `lane_metadata`、`routing_tier`、`subagents_for` |
+|  | `semantic_repair` | 可变区 | 对通过角色 schema 但未满足引擎语义的回答重试一次 | `answer_with_repair` |
+|  | `testing` | 可变区 | 受保护项目测试执行器的版本化工具命名空间 | — |
+|  | `testing.mock_adapter` | 可变区 | 重放脚本化适配器回答，支持模块命令入口 | — |
+| 合同 | `answers` | 可变区 | 按尝试记录人工回答，并传给后续尝试 | `load_answers`、`pending_questions`、`record_answers` |
+|  | `approvals` | 可变区 | 人工批准与已批准 OpenSpec 合同的物化 | `approve_change`、`materialize_approved_change` |
+|  | `changes` | 可变区 | 创建和修订 OpenSpec 形状的产品变更草案 | `contract_digest`、`create_change`、`draft_directory`、`load_change`、`revise_change`、`write_change_preview` |
+|  | `requirement_checklist` | 可变区 | 确定性检查需求质量 | `blocking_items`、`evaluate_checklist`、`render_checklist` |
+|  | `supersede` | 可变区 | 作废已停运行，以新变更 ID 重开修订合同 | `supersede_change` |
+| 判据 | `acceptance_repair` | 可变区 | 修复单次变更验收套件缺陷的唯一命令通道 | `repair_smoke` |
+|  | `oracle_skill_approval` | 可变区 | 为修改验收判据技能提供显式 CLI 授权 | `confirmed_upgrade`、`require_confirmation` |
+|  | `system_smoke` | 可变区 | 管理每个变更必须保持通过的项目级系统冒烟层 | `adopt_system_smoke`、`apply_smoke_update`、`is_system_smoke_path`、`load_system_smoke`、`propose_smoke_update`、`run_system_smoke_isolated`、`system_smoke_digests`、`validate_manifest` |
+| 实现 | `characterization_baseline` | 可变区 | 在已提交旧代码及声明锁定产物上证明特征化判据 | `run_characterization_baseline` |
+|  | `facts` | 可变区 | 记录并跨运行传递代理声明的安全代码事实位置 | `merge_facts`、`valid_location` |
+|  | `failure_attribution` | 可变区 | 判定失败尝试的修复责任与闭环是否仍有进展 | `check_findings`、`failure_signature`、`finding_key`、`layer_attribution`、`location_file`、`next_mode`、`no_progress`、`route` |
+|  | `planning` | 可变区 | 运行锁内、特征化与实现之前的 L2 分档方案 | `assess_plan`、`ensure_routing_plan`、`plan_projection`、`required_locks`、`review_focus`、`selected_option` |
+|  | `planning_validation` | 可变区 | 结构化角色方案字段与确定性范围校验 | `option_scope`、`validate_plan` |
+|  | `project_loop_failures` | 可变区 | 记录失败尝试并路由到问题责任方 | `apply_overrule`、`epoch_of`、`record_boundary`、`record_failure`、`require_routed_choice`、`route_review` |
+|  | `project_loop_gates` | 可变区 | RED 与首次实现之间的方案、特征化两道门 | `characterize_paths`、`design_plan`、`ensure_characterization`、`ensure_design`、`resume_characterization`、`uncharacterized_paths` |
+| 验证 | `consistency` | 可变区 | 批准后、特征化前的重档只读一致性审查 | `ensure_consistency`、`invalidate_consistency`、`overrule_consistency` |
+|  | `consistency_locations` | 可变区 | 限制方案 JSON 引用，不读取任意文件 | `validate_plan_location` |
+|  | `finding_disposition` | 可变区 | 由引擎分类审查证据 | `check_checklist`、`dispose` |
+|  | `manual_acceptance` | 可变区 | 把人工条件的验收绑定到已验证的实现提交 | `load_manual_acceptance`、`pending_manual_criteria`、`record_manual_acceptance` |
+|  | `review_context` | 可变区 | 引擎内部调用上下文，适配器回答不能改变档位 | `strong_verification`、`verification_active` |
+|  | `review_disposition` | 可变区 | 审查分类、语义修复与可恢复的强验证 | `perform_review` |
+| 交付 | `openspec_docs` | 可变区 | 生成增量规格、合并活规格并记录变更决策 | `capability_of`、`document_change`、`merge_into_main_spec`、`render_decisions`、`render_delta_spec`、`validate_with_cli` |
+|  | `project_loop_finish` | 可变区 | 幂等完成阶段：实现提交、报告、文档、合并与回执 | `complete_change`、`finalize_change`、`finish_merged`、`finish_receipting`、`finish_verified`、`passed_result` |
+| 分流 | `assessment` | 可变区 | 校验产品角色上报的分流证据结构，不执行命令 | `validate_assessment` |
+|  | `dependency_checks` | 可变区 | 用已提交依赖输入核验可信离线解析器 | `verify_dependencies` |
+|  | `dependency_resolver` | 可变区 | 只解析纯 py3-none-any wheel 元数据，不导入、安装或解压 | — |
+|  | `design_approval` | 可变区 | 把显式人工决策绑定到当前分流方案与评估 | `approval_matches`、`approve_continue_heavy`、`approve_design`、`current_binding`、`ensure_design_approval`、`replan` |
+|  | `intake` | 可变区 | 只读 L1 分流评估及锁定的批准绑定核验 | `digest`、`project_intake`、`require_intake`、`validate_intake_record` |
+|  | `principles` | 可变区 | 管理已提交项目原则、来源绑定及逐选项覆盖 | `check_principles`、`load_principles`、`validate_principles` |
+|  | `routing_characterization` | 可变区 | 特征化崩溃期间对非锁定候选字节取指纹 | `candidate_manifest`、`verify_characterization_candidate` |
+|  | `routing_evidence` | 可变区 | 从提交绑定的 Git 证据获取分流范围与引用信号 | `actual_scope`、`measure_scope` |
+|  | `routing_policy` | 可变区 | 确定性、无副作用地评估分流策略 | `evaluate`、`max_tier`、`validate_policy` |
+|  | `routing_report` | 可变区 | 为 CLI 和报告提供分流权威状态的只读投影 | `draft_stop`、`report_routing`、`routing_markdown`、`routing_options`、`routing_view` |
+|  | `routing_restore` | 可变区 | 按路径预写 L3 恢复记录，不把源码复制到控制日志 | `fingerprint`、`prepare_restore`、`restore_lock_paths`、`resume_restore`、`retire_restore` |
+|  | `routing_risks` | 可变区 | 校验实现与审查角色提供的正向分流风险事实 | `merge_routing_risks`、`validate_routing_risks` |
+|  | `routing_state` | 可变区 | 提供纯分流快照及按版本区分的执行预算 | `advance_tier`、`is_routed`、`open_routing`、`run_config` |
+|  | `routing_upgrade` | 可变区 | 单调升级 L3 范围评估并使旧方案失效 | `check_l3`、`enforce_forbidden_paths` |
+| 接入与底座 | `base_upgrade` | 可变区 | 通过显式回归门控升级项目逻辑底座 | `propose_base_change`、`upgrade_baseline` |
+|  | `foundation_survey` | 可变区 | 受保护的底座知识库摸底与扩展说明 | `foundation_payload`、`survey_foundation` |
+|  | `onboarding` | 可变区 | 两阶段仓库接入：先草案，再建立干净且已提交的底座 | `scaffold_project` |
+|  | `onboarding_discovery` | 可变区 | 拒绝不安全显式构建标记后复用工程探测 | `safe_discovery` |
+|  | `onboarding_install` | 可变区 | 完整暂存草案，再独占安装并按归属回滚 | `install`、`require_draft_state` |
+|  | `onboarding_templates` | 可变区 | 提供确定性的随包接入草案，不执行命令或安装依赖 | `render` |
+|  | `readiness` | 可变区 | 独立于变更及运行收集项目测试底座门状态 | `approve_readiness`、`inspect_readiness`、`readiness_status`、`require_readiness` |
+|  | `readiness_lineage` | 可变区 | 以回执、实际报告与不变输入维护准备度沿革 | `advance_readiness` |
+|  | `skills` | 可变区 | 把引擎随包技能安装到项目供 Claude Code 与 Codex 使用 | `install_skills`、`role_skill_versions`、`selected_snapshots` |
+| 记忆 | `drafts` | 可变区 | 统一、安全寻址的经验与勘误草案 | `create_draft`、`list_drafts`、`load_draft`、`reject_draft`、`set_draft_status` |
+|  | `errata` | 可变区 | 校验底座更正，生成草案并通过 BASE 审批落地 | `capture_errata`、`defer_errata`、`land_errata`、`release_errata` |
+|  | `lesson_landing` | 可变区 | 以限定路径的 Git 事务审批人工记忆草案 | `approve_draft`、`land_transaction` |
+|  | `lesson_retrieval` | 可变区 | 选择冻结经验，区分代理声明使用与未知使用情况 | `change_id`、`claimed_lessons`、`lessons_payload`、`provided_ids` |
+|  | `lesson_store` | 可变区 | 从不可变 Git 提交读取并评估经验 | `confirm_lesson`、`effective_status`、`lesson_source_commit`、`lessons_digest`、`list_lessons`、`load_lessons_at`、`require_idle_source`、`retire_lesson`、`stale_ids` |
+|  | `lessons` | 可变区 | 解析、渲染与校验仓库经验条目 | `next_lesson_id`、`parse_lesson`、`render_lesson`、`scope_matches`、`validate_lessons` |
+|  | `retrospective` | 可变区 | 运行后的只读学习，遥测仅作诊断而非判定权威 | `detect_signals`、`retrospect`、`retrospect_after_pass` |
+| 外环 | `call_context` | 可变区 | 只记录实际交付的上下文引用，不保存文档正文 | `capability_for`、`context_manifest` |
+|  | `call_log` | 可变区 | 记录代理调用诊断信息，不作为判定证据 | `call_folder`、`close_call`、`load_meta`、`open_call`、`record_context`、`record_lesson_evidence`、`record_lessons_skipped` |
+|  | `ci_results` | 可变区 | 为跨变更指标提供有界 CI 结果产物 | `load_ci_results`、`record_ci_result` |
+|  | `cost_limits` | 可变区 | 基于实际用量限制单个变更的失控调用 | `check_before_call`、`render_usage`、`stop_fields` |
+|  | `cost_resume` | 可变区 | 跨成本停点保留候选证据，不消耗质量尝试 | `candidate`、`checkpoint`、`restore`、`stop` |
+|  | `metrics` | 可变区 | 只读编排跨变更指标，并按显式请求持久化 | `build_metrics`、`save_metrics` |
+|  | `metrics_collect` | 可变区 | 有界、只读地规范化持久化变更证据 | `collect` |
+|  | `metrics_compute` | 可变区 | 计算跨变更指标，包含一个显式只读 Git 指标 | `attempts`、`contract_ratio`、`escapes`、`first_pass`、`forced_heavy`、`interventions`、`lessons`、`local_green_ci_red`、`overrule_rate`、`rework`、`stuck`、`upgrades` |
+|  | `metrics_compute_support` | 可变区 | 指标计算共用的构造器与解析器 | `metric` |
+|  | `metrics_cost` | 可变区 | 从报告汇总聚合 M11，必要时回退读取原始账本 | `cost` |
+|  | `metrics_render` | 可变区 | 确定性地将跨变更指标呈现为 Markdown | `render_metrics` |
+|  | `metrics_rules` | 可变区 | 校准已计算指标，并只读收集延后事项信号 | `deferred_signals`、`suggest`、`thresholds` |
+|  | `telemetry` | 可变区 | 记录每次代理调用墙钟时间及适配器实际报告的用量 | `adopt_pending`、`ledger_entries`、`record_call`、`summarize` |
+|  | `telemetry_summary` | 可变区 | 纯函数聚合有界的逐次调用账本 | `summarize_entries` |
+| 报告 | `change_log` | 可变区 | 从引擎已有状态汇总单个变更的历史 | `change_log`、`render_log` |
+|  | `change_report` | 可变区 | 生成关联需求的产品验收报告 | `correction_view`、`generate_change_report`、`merge_receipt_bytes`、`record_merge_commit` |
+|  | `report_commands` | 可变区 | 将受保护执行 argv 投影为可复现的命令引用 | `execution_commands` |
+|  | `report_evidence` | 可变区 | 为验收报告呈现提供有界只读证据快照 | `collect_evidence` |
+|  | `report_focus` | 可变区 | 构造确定性机器审查引用，不消费代理叙述 | `build_focus` |
+|  | `report_git` | 可变区 | 以 NUL 分隔、有界时间及输出获取 Git 诊断事实 | `git_snapshot` |
+|  | `report_items` | 可变区 | 读者报告各节共用的有界呈现原语 | `effective_tier`、`item`、`recorded_statement`、`selected_plan` |
+|  | `report_markdown` | 可变区 | 纯函数渲染冻结报告的 Markdown | `render_presentation` |
+|  | `report_markdown_sections` | 可变区 | 面向读者的决策、审查重点与过程报告模板 | `legend`、`render_reader_section` |
+|  | `report_memory` | 可变区 | 构造冻结验收报告的诊断记忆节 | `memory_items` |
+|  | `report_presentation` | 可变区 | 持久化报告前构造冻结的七节呈现快照 | `build_presentation` |
+|  | `report_reconciliation` | 可变区 | 纯函数对照持久化运行证据与拟生成报告 | `reconcile` |
+|  | `report_roles` | 可变区 | 追加角色诊断，适配器声明不能成为验证证据 | `conclusion_items`、`cost_items`、`finding_refs`、`protection_items` |
+|  | `report_sections` | 可变区 | 明确区分人工、代理与引擎来源的报告章节 | `conclusion`、`header`、`process`、`proof` |
+|  | `stop_report` | 可变区 | 构造并渲染各显式停点共用的证据报告 | `build_entry_stop`、`build_stop`、`failure_view`、`render_stop`、`stop_of` |
+| 变更生命周期 | `project_loop` | 可变区 | 已批准产品变更的外部自治闭环 | `load_run_state`、`run_change` |
+|  | `project_preparation` | 可变区 | 物化合同并建立实现前不可变证据 | — |
+|  | `routing_execution` | 可变区 | 按序执行分流中的方案、批准、一致性及锁迁移 | `candidate_l3`、`prepare_execution` |
+|  | `run_recovery` | 可变区 | 显式人工恢复卡住的产品运行，并保留审计轨迹 | `reset_run` |
+| 命令面 | `__main__` | 可变区 | 以 python -m storyloop 启动命令面（入口模块无 docstring） | — |
+|  | `ci_command` | 可变区 | 执行 CI 并可选记录结果的命令适配器 | `run_ci_command` |
+|  | `cli` | 可变区 | 提供公共命令行接口与如实反映结果的机器退出码 | `main`、`run_with_answers` |
+|  | `cli_output` | 可变区 | 渲染 CLI 人类可读输出与完整 JSON | `display` |
+|  | `memory_cli` | 可变区 | 仓库经验命令的接线与呈现 | `add_memory_arguments`、`dispatch_memory`、`render_memory` |
+|  | `next_steps` | 可变区 | 为各停点提供推进变更的下一步命令 | `append_pending_memory`、`draft_next`、`next_step`、`supersede_revision_next` |
+|  | `onboarding_cli` | 可变区 | 保留 init 原签名并支持显式 scaffold 分支的 CLI 适配 | `add_init_arguments`、`initialize` |
+|  | `routing_cli` | 可变区 | 校验并分发显式分流命令，批准接口只记录决策 | `dispatch_routing` |
 
-随包发布的数据：`storyloop/skills/foundation-survey/`（`SKILL.md` + `references/`，见 `pyproject.toml` 的 `package-data`）。
+随包技能数据见 `storyloop/skills/` 与 `pyproject.toml` 的 `package-data`。
 
 ## 二、依赖方向
 
+目标结构见[设计 §5.3](superpowers/specs/2026-10-21-架构收敛-design.md#53-静态结构与依赖方向)。
+
 ```mermaid
 flowchart TD
-    CLI[命令面<br/>cli cli_output next_steps change_log] --> MET[外环指标<br/>metrics collect compute rules render<br/>cost ci_results]
-    CLI --> ORCH[编排<br/>project_loop 及 gates guards finish support<br/>acceptance_repair base_upgrade change_report<br/>project_receipt run_recovery]
-    CLI --> AGT
-    CLI --> CON
-    ORCH --> AGT[代理<br/>project_agents role_schemas skills<br/>foundation_survey call_log telemetry]
-    ORCH --> VER[验证<br/>smoke smoke_runner system_smoke]
-    ORCH --> CON[合同<br/>changes approvals openspec_docs<br/>answers manual_acceptance]
-    VER --> BASE[工程与底座<br/>baseline project_profile<br/>project_boundaries project_git]
-    MET --> BASE
-    MET --> FND
-    CON --> BASE
-    AGT --> BASE
-    BASE --> FND[基础<br/>models storage path_security<br/>processutil boundaries]
-    VER --> FND
+    CLI["命令面"] --> LC["变更生命周期"]
+    CLI --> BIZ
+    LC --> BIZ["业务模块<br/>合同 判据 实现 验证 交付 分流<br/>接入与底座 记忆 外环 报告"]
+    LC --> TYPE["变更类型"]
+    LC --> EVK
+    BIZ --> AG["代理网关"]
+    BIZ --> EVK["证据内核<br/>判据自证 边界审计 指纹"]
+    BIZ --> TYPE
+    AG --> EXE
+    EVK --> PC["项目契约"]
+    EVK --> EXE["执行与隔离"]
+    EVK --> ST["状态存储"]
+    EVK --> GIT["Git 原语"]
+    PC --> FND["基础"]
+    ST --> FND
+    EXE --> FND
+    GIT --> FND
+    TYPE --> FND
 ```
 
-- 代理调用只经 `project_agents.invoke_project_agent`；编排层通过 `LoopServices` 注入，测试用脚本化服务替换真实代理。
-- 子进程经 `processutil.run_process`；已知例外是 `openspec validate`（`openspec_docs`）与 `git archive`（`smoke_runner` 构造历史提交的候选副本）直接用 `subprocess.run`。
-- Git 命令统一经 `baseline._git`（禁用 hooks、最小环境、30 秒上限）；建分支、提交、合并只在 `project_git`。`project_loop`、`project_loop_finish` 与 `system_smoke` 另有几处 `git checkout -- <path>` 用于还原引擎产物或未锁定的改动。
-- 状态文件只经 `storage` 写。
-- 两处循环依赖用函数内局部导入化解：`baseline` → `system_smoke`（init 时采纳已提交的系统冒烟）、`foundation_survey` ↔ `project_agents`。新增代码不要再加循环。
-- 禁止方向：基础层不导入任何上层模块；验证层不调用代理；`cli` 之外不读 `sys.argv`、不做终端交互。
+规则由 `tests/test_architecture.py` 守护；现有37条分层豁免和48个环成员登记在 `storyloop/architecture.toml`，豁免只减不增。局部导入与类型检查块内的导入同样计入依赖。
+阶段 A 只声明并守护当前结构，后续阶段逐步消除现有违规；本图是设计目标，不表示现有代码已经完成搬迁。
 
 ## 三、目标仓库里的引擎区域
 
