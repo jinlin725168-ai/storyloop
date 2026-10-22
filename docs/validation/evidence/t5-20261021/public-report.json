@@ -1,0 +1,175 @@
+{
+  "format": "storyloop-public-evidence-v1",
+  "change_id": "FEAT-20261021-002",
+  "status": "PASSED",
+  "generated_at": "2026-10-21T11:00:46.570898Z",
+  "source_base": "5e3e994972545c72b8ce30e94105631d5e8bfb2a",
+  "local_workflow_head": "658ab4bc19035e27e843d562a86f21c3cf0c94f6",
+  "implementation_commit": "cd0ed74f590075a30a65fd9419645bed41ea620e",
+  "layers": {
+    "unit": {
+      "status": "PASSED",
+      "results": [
+        {
+          "id": "REGRESSION-001",
+          "status": "PASS",
+          "returncode": 0,
+          "timed_out": false,
+          "counts": {
+            "executed": 74,
+            "failed": 0,
+            "skipped": 0,
+            "parser": "maven"
+          }
+        },
+        {
+          "id": "REGRESSION-002",
+          "status": "PASS",
+          "returncode": 0,
+          "timed_out": false,
+          "counts": {
+            "executed": 38,
+            "failed": 0,
+            "skipped": 0,
+            "parser": "vitest"
+          }
+        }
+      ]
+    },
+    "integration": {
+      "status": "SKIPPED",
+      "results": []
+    },
+    "acceptance": {
+      "status": "PASSED",
+      "results": [
+        {
+          "id": "FEAT-20261021-002-redmagic-brand",
+          "status": "PASS",
+          "returncode": 0,
+          "timed_out": false,
+          "counts": {
+            "executed": null,
+            "failed": null,
+            "skipped": null,
+            "parser": null
+          },
+          "native_playwright_passed": [
+            9
+          ]
+        },
+        {
+          "id": "FEAT-20261021-002-login-regression",
+          "status": "PASS",
+          "returncode": 0,
+          "timed_out": false,
+          "counts": {
+            "executed": null,
+            "failed": null,
+            "skipped": null,
+            "parser": null
+          },
+          "native_playwright_passed": [
+            8
+          ]
+        }
+      ]
+    },
+    "smoke": {
+      "status": "PASSED",
+      "results": [
+        {
+          "id": "system-purchase-order-supplier-category",
+          "status": "PASS",
+          "returncode": 0,
+          "timed_out": false,
+          "counts": {
+            "executed": 13,
+            "failed": 0,
+            "skipped": 0,
+            "parser": "unittest"
+          },
+          "native_playwright_passed": [
+            2
+          ]
+        }
+      ]
+    },
+    "checks": {
+      "status": "PASSED",
+      "results": [
+        {
+          "id": "REGRESSION-001",
+          "status": "PASS",
+          "returncode": 0,
+          "timed_out": false,
+          "counts": {
+            "executed": null,
+            "failed": null,
+            "skipped": null,
+            "parser": null
+          }
+        },
+        {
+          "id": "REGRESSION-002",
+          "status": "PASS",
+          "returncode": 0,
+          "timed_out": false,
+          "counts": {
+            "executed": null,
+            "failed": null,
+            "skipped": null,
+            "parser": null
+          }
+        },
+        {
+          "id": "REGRESSION-003",
+          "status": "PASS",
+          "returncode": 0,
+          "timed_out": false,
+          "counts": {
+            "executed": null,
+            "failed": null,
+            "skipped": null,
+            "parser": null
+          }
+        },
+        {
+          "id": "REGRESSION-004",
+          "status": "PASS",
+          "returncode": 0,
+          "timed_out": false,
+          "counts": {
+            "executed": null,
+            "failed": null,
+            "skipped": null,
+            "parser": null
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "verdict": "pass",
+    "finding_count": 0
+  },
+  "provenance": {
+    "engine_tree_equivalent_to": "f171444cd46c151c4e28d304116526ef767dab41",
+    "export": "Final frontend, protected acceptance tests and OpenSpec artifacts copied from the completed local workflow. Public branch is a clean export; local workflow commit references are provenance, not remote ancestors.",
+    "approval": "Coordinator recorded decisions under prior user authorization; actor=user does not prove a new human signoff.",
+    "interventions": {
+      "superseded_changes": 1,
+      "workspace_resets": 1,
+      "acceptance_repairs": 4,
+      "adapter_switches": 1
+    }
+  },
+  "limitations": [
+    "Integration layer is MISSING (runner SKIPPED): no integration tests configured.",
+    "Playwright native summaries are verified separately; engine acceptance counts remain null.",
+    "Smoke engine count covers 13 unittest tests; native Playwright additionally passed 2 tests.",
+    "Captcha-on and external OAuth were not exercised in browser smoke.",
+    "Pre-hydration HTML title, favicon and top-navigation upstream logo are outside scope.",
+    "Raw logs, commands, internal telemetry and monetary fields are excluded from this public export."
+  ]
+}
