@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Callable
 from .models import require
-from .run_guards import guard_updates, guard_g1
+from .run_guards import guard_updates, guard_g1, guard_g2, guard_g3
 from .run_state import ACTIVE_STATUSES, DISPLAY_STOPS, RUN_STOPS
 from .storage import write_json
 
@@ -38,6 +38,11 @@ STOP_SOURCES = {
 }
 # Guarded implementation/completion events are added with their checks, never as empty stubs.
 TRANSITIONS = {
+    "verified": frozenset((source, "VERIFIED") for source in {"IMPLEMENTING", "MANUAL_ACCEPTANCE_REQUIRED"}),
+    "merge": frozenset({("VERIFIED", "MERGED")}),
+    "receipting": frozenset({("MERGED", "RECEIPTING")}),
+    "finalizing": frozenset({("RECEIPTING", "FINALIZING")}),
+    "passed": frozenset({("FINALIZING", "PASSED")}),
     "start": frozenset({(None, "PREPARING")}),
     "red_ready": frozenset((source, "IMPLEMENTING") for source in {
         "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}),
@@ -61,6 +66,11 @@ def transition(project: Path, state: dict, target: str, *, event: str,
     guard_updates(updates if updates is not None else {})
     if event in {"red_ready", "begin_attempt", "characterization_resumed"}:
         guard_g1(project, state, context or {})
+    if event == "verified":
+        require(isinstance(change, dict), "Verification transition needs its approved change")
+        guard_g2(project, change, state, context or {})
+    if event == "merge":
+        guard_g3(project, state, context or {})
     result = effect() if effect is not None else {}
     guard_updates(result)
     state.update(result)

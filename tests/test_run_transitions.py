@@ -25,8 +25,10 @@ class RunTransitionsTests(unittest.TestCase):
             for source, target in pairs:
                 with self.subTest(event=event, source=source, target=target):
                     state = {} if source is None else {"status": source}
-                    with patch("storyloop.run_transitions.guard_g1"):
-                        transition(Path("."), state, target, event=event)
+                    with patch("storyloop.run_transitions.guard_g1"), \
+                            patch("storyloop.run_transitions.guard_g2"), \
+                            patch("storyloop.run_transitions.guard_g3"):
+                        transition(Path("."), state, target, event=event, change={})
                     self.assertEqual(state["status"], target)
                     with self.assertRaises(StoryLoopError):
                         transition(Path("."), {"status": "UNKNOWN"}, target, event=event)

@@ -76,3 +76,119 @@ class PreparationGuardsTests(unittest.TestCase):
                 with self.assertRaises(StoryLoopError):
                     run_change(root, change_id, services)
             implement.assert_not_called()
+
+
+class VerificationGuardsTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from tests.lifecycle_guard_cases import verified_candidate
+        cls.temporary = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.temporary.name)
+        cls.candidate = verified_candidate(cls.root)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temporary.cleanup()
+
+    def test_g2_rejects_failed_missing_zero_count_below_floor_review_and_boundary(self):
+        from copy import deepcopy
+        from storyloop.run_guards import guard_g2
+        for violation in ('failed', 'missing', 'zero', 'floor', 'fail_review', 'question', 'boundary'):
+            case = deepcopy(self.candidate)
+            state, context = case['state'], case['context']
+            if violation == 'failed': context['layers']['unit']['status'] = 'FAILED'
+            if violation == 'missing': context['layers'].pop('unit')
+            if violation == 'zero': context['layers']['unit']['results'][0]['counts']['executed'] = 0
+            if violation == 'floor': state['oracle']['baseline']['unit'] = [2]
+            if violation == 'fail_review': context['review']['verdict'] = 'fail'
+            if violation == 'question': context['review']['verdict'] = 'needs_input'
+            if violation == 'boundary': context['boundary']['violations'] = [{'path': 'core.py'}]
+            effect = Mock(return_value={})
+            before = deepcopy(state)
+            with self.subTest(violation=violation), self.assertRaises(StoryLoopError):
+                transition(self.root, state, 'VERIFIED', event='verified',
+                           change=case['change'], context=context, effect=effect)
+            self.assertEqual(state, before)
+            effect.assert_not_called()
+
+    def test_real_completion_cannot_skip_a_configured_unit_layer(self):
+        from copy import deepcopy
+        from storyloop.project_loop_finish import complete_change
+        case = deepcopy(self.candidate)
+        case['context']['layers']['unit'] = {'status': 'SKIPPED', 'results': []}
+        with patch('storyloop.project_loop_finish.commit_paths') as commit:
+            with self.assertRaises(StoryLoopError):
+                complete_change(self.root, case['change'], case['state'], **case['context'])
+            commit.assert_not_called()
+
+    def test_g2_accepts_real_evidence_and_preserves_uncounted_legacy_layers(self):
+        from copy import deepcopy
+        from storyloop.run_guards import guard_g2
+        case = deepcopy(self.candidate)
+        guard_g2(self.root, case['change'], case['state'], case['context'])
+        case['context']['layers']['unit']['results'][0]['counts']['executed'] = None
+        guard_g2(self.root, case['change'], case['state'], case['context'])
+
+    def test_g2_rejects_tampered_acceptance_evidence_before_effect(self):
+        from copy import deepcopy
+        from storyloop.smoke import RESULT_EVIDENCE
+        case = deepcopy(self.candidate)
+        path = self.root / '.storyloop/evidence' / case['state']['change_id'] / RESULT_EVIDENCE
+        before = path.read_bytes()
+        try:
+            path.write_bytes(before + b' ')
+            effect = Mock(return_value={})
+            with self.assertRaises(StoryLoopError):
+                transition(self.root, case['state'], 'VERIFIED', event='verified',
+                           change=case['change'], context=case['context'], effect=effect)
+            effect.assert_not_called()
+        finally:
+            path.write_bytes(before)
+
+    def test_g2_manual_acceptance_is_bound_to_current_candidate(self):
+        from tests.lifecycle_guard_cases import verified_candidate
+        from storyloop.manual_acceptance import record_manual_acceptance
+        from storyloop.run_guards import guard_g2
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            case = verified_candidate(root, manual=True)
+            with self.assertRaises(StoryLoopError):
+                guard_g2(root, case['change'], case['state'], case['context'])
+            record_manual_acceptance(root, case['state']['change_id'], ['AC-2'], 'checked')
+            guard_g2(root, case['change'], case['state'], case['context'])
+
+
+class MergeGuardsTests(unittest.TestCase):
+    def test_g3_rejects_dirty_wrong_branch_report_and_source_before_effect(self):
+        state = {'status': 'VERIFIED', 'feature_branch': 'feature', 'source_branch': 'main',
+                 'report_commit': 'report', 'source_head': 'source'}
+        for violation in ('dirty', 'branch', 'report', 'source'):
+            def git(project, *args):
+                if args[0] == 'status': return ' M file' if violation == 'dirty' else ''
+                branch = args[1]
+                expected = 'report' if branch == 'feature' else 'source'
+                return 'changed' if violation == expected else expected
+            effect = Mock(return_value={'merge_commit': 'merge'})
+            with patch('storyloop.run_guards._git', side_effect=git), \
+                    patch('storyloop.run_guards.current_branch',
+                          return_value='wrong' if violation == 'branch' else 'feature'), \
+                    patch('storyloop.run_guards.verify_verified_artifacts'):
+                with self.subTest(violation=violation), self.assertRaises(StoryLoopError):
+                    transition(Path('.'), dict(state), 'MERGED', event='merge', effect=effect)
+                effect.assert_not_called()
+
+    def test_g3_checks_artifacts_before_successful_delivery(self):
+        state = {'status': 'VERIFIED', 'feature_branch': 'feature', 'source_branch': 'main',
+                 'report_commit': 'report', 'source_head': 'source'}
+        order = []
+        def git(project, *args):
+            return '' if args[0] == 'status' else 'report' if args[1] == 'feature' else 'source'
+        with patch('storyloop.run_guards._git', side_effect=git), \
+                patch('storyloop.run_guards.current_branch', return_value='feature'), \
+                patch('storyloop.run_guards.verify_verified_artifacts', side_effect=lambda *a: order.append('guard')):
+            def effect():
+                order.append('merge')
+                return {'merge_commit': 'merge'}
+            transition(Path('.'), state, 'MERGED', event='merge', effect=effect)
+        self.assertEqual(order, ['guard', 'merge'])
+        self.assertEqual(state['status'], 'MERGED')

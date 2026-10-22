@@ -7,17 +7,13 @@ from pathlib import Path
 from typing import Callable
 
 from .changes import load_change
+from .run_guards import manual_criteria, pending_manual_criteria
 from .models import StoryLoopError, identifier, require, text
 from .smoke_runner import implementation_digest
 from .storage import load_json, write_json
 
 Clock = Callable[[], datetime]
 ACCEPTING_STATES = {"MANUAL_ACCEPTANCE_REQUIRED"}
-
-
-def manual_criteria(change: dict) -> list[str]:
-    return [criterion["id"] for story in change["product"]["stories"]
-            for criterion in story["acceptance"] if criterion["kind"] == "manual"]
 
 
 def load_manual_acceptance(project: Path, change_id: str) -> list[dict]:
@@ -28,13 +24,6 @@ def load_manual_acceptance(project: Path, change_id: str) -> list[dict]:
     require(value.get("version") == 1 and value.get("change_id") == change_id
             and isinstance(value.get("records"), list), "Invalid manual acceptance file")
     return value["records"]
-
-
-def pending_manual_criteria(change: dict, records: list[dict], candidate_sha256: str) -> list[str]:
-    """Manual criteria without an acceptance bound to exactly this Git-visible code state."""
-    accepted = {record["criterion_id"] for record in records
-                if record.get("candidate_sha256") == candidate_sha256}
-    return [criterion for criterion in manual_criteria(change) if criterion not in accepted]
 
 
 def record_manual_acceptance(

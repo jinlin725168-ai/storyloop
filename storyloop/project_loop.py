@@ -16,6 +16,7 @@ from pathlib import Path
 from . import cost_resume
 from .run_services import LoopServices
 from .run_transitions import transition
+from .run_guards import layers_green
 from .default_loop_services import _default_services
 from .cross_vendor import prepare_run
 from .cost_limits import check_before_call
@@ -402,12 +403,6 @@ def _resume_manual_acceptance(project: Path, change: dict, state: dict) -> dict:
 
 
 LAYER_ORDER = ("unit", "integration", "acceptance", "smoke", "checks")
-
-
-def layers_green(layers: dict) -> bool:
-    """Acceptance must pass; every other layer passes or is skipped because it is not configured."""
-    return (layers["acceptance"]["status"] == "PASSED"
-            and all(layers[name]["status"] in {"PASSED", "SKIPPED"} for name in LAYER_ORDER if name != "acceptance"))
 
 
 def _run_checks_safely(

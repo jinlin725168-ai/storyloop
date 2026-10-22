@@ -12,7 +12,7 @@
 | 基础 | `models` | 底座 | 校验产品合同中的故事、规则与验收条件 | `criterion_expects_red`、`criterion_tier`、`fields`、`identifier`、`nature_of`、`require`、`strings`、`text`、`validate_product` |
 |  | `path_security` | 底座 | 跨平台仓库路径校验，拒绝跟随链接 | `forbidden_path_root`、`repository_relative`、`safe_absolute_target`、`safe_target` |
 | 变更生命周期内核 | `run_transitions` | 底座 | 显式迁移表、状态元数据与唯一状态写入口 | `transition`、`set_change_status` |
-| | `run_guards` | 底座 | 确定性守卫，不调用代理和停点视图 | `guard_g1`、`read_red_evidence`、`guard_updates` |
+| | `run_guards` | 底座 | 确定性守卫，不调用代理和停点视图 | `guard_g1`、`guard_g2`、`guard_g3`、`pending_manual_criteria` |
 | 状态存储 | `initialization_transaction` | 底座 | 对显式控制面文件实施独占、按内容归属的初始化事务 | `initialization_transaction` |
 |  | `run_state` | 底座 | 有界保存运行记录，不承担状态迁移判定 | `run_path`、`save_run` |
 |  | `storage` | 底座 | 原子 JSON 与文本写入、可移植独占运行锁 | `load_json`、`locked`、`locked_file`、`write_bytes_atomic`、`write_json`、`write_text_atomic` |
