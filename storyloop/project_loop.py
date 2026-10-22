@@ -15,7 +15,7 @@ from pathlib import Path
 
 from . import cost_resume
 from .run_services import LoopServices
-from .run_transitions import transition
+from .run_transitions import transition, RUNNABLE
 from .run_guards import layers_green
 from .default_loop_services import _default_services
 from .cross_vendor import prepare_run
@@ -50,7 +50,6 @@ from .oracle_counts import check_layers
 from .project_preparation import _prepare_acceptance
 from .project_profile import layer_commands
 from .processutil import redact
-from .project_receipt import recover_completed_merge
 from .system_smoke import run_system_smoke_isolated
 from .smoke import RESULT_EVIDENCE
 from .smoke import suite_relative
@@ -181,21 +180,14 @@ def _open_run(project: Path, change: dict, routing: dict | None = None) -> tuple
     path = run_path(project, change_id)
     if path.exists():
         state = load_json(path)
-        resumable = {"COST_LIMIT_REACHED", "PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED",
-                     "IMPLEMENTING", "BASE_CHANGE_REQUIRED",
-                     "BOUNDARY_VIOLATION", "NEEDS_INPUT", "BUDGET_EXHAUSTED",
-                     "CHARACTERIZATION_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_SPEC_FIX",
-                     "NO_PROGRESS", "DESIGN_APPROVAL_REQUIRED", "DESIGN_REVISION_REQUIRED", "SPLIT_RECOMMENDED",
-                     "VERIFIED", "MANUAL_ACCEPTANCE_REQUIRED", "MERGED", "RECEIPTING",
-                     "FINALIZING"}
+        resumable = RUNNABLE
         require(state.get("change_id") == change_id and state.get("status") in resumable,
                 "Run state cannot be resumed")
         require(state.get("contract_digest") == change["approval"]["contract_digest"],
                 "Saved run belongs to a different approved product contract")
         current = current_branch(project)
         if state["status"] == "VERIFIED" and current == state.get("source_branch"):
-            state.update({"status": "MERGED",
-                          "merge_commit": recover_completed_merge(project, state)})
+            transition(project, state, "MERGED", event="recover_merge")
             save_run(project, state)
         expected = (state.get("source_branch")
                     if state["status"] in {"MERGED", "RECEIPTING", "FINALIZING"}

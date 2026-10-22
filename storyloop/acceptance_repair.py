@@ -18,6 +18,7 @@ from .project_git import commit_paths, current_branch
 from .project_loop_guards import read_only_call
 from .project_loop_support import relative_files, run_path, save_run
 from .run_stops import pause
+from .run_transitions import transition, REPAIRABLE
 from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, without_manifest_echo
 from .smoke import suite_relative, suite_root as acceptance_suite_root
 from .smoke_runner import run_smoke_isolated
@@ -27,8 +28,7 @@ if TYPE_CHECKING:  # the loop imports this module; the services type is only an 
     from .run_services import LoopServices
 
 
-REPAIRABLE = {"CONTRACT_COMMITTED", "IMPLEMENTING", "BUDGET_EXHAUSTED", "NEEDS_INPUT",
-              "EXISTING_GREEN", "ORACLE_DEFECT", "NO_PROGRESS"}
+
 
 
 def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServices | None = None,
@@ -93,7 +93,8 @@ def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict
     for key in ("questions", "error", "pending", "acceptance", "next", "routed", "stop", "mode"):
         state.pop(key, None)
     ensure_baseline(project, state, change["product"])  # a stop before RED never sampled one
-    state.update({"status": "IMPLEMENTING", "attempt": 0, "red_evidence_sha256": red["evidence_sha256"]})
+    transition(project, state, "IMPLEMENTING", event="repair_red",
+               updates={"attempt": 0, "red_evidence_sha256": red["evidence_sha256"]})
     save_run(project, state)
     return {"status": "ACCEPTANCE_REPAIRED", "change_id": change_id, "commit": commit["commit"],
             "next": f"storyloop run <project> --change {change_id}"}

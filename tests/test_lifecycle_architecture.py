@@ -13,3 +13,10 @@ class LifecycleDependenciesTests(unittest.TestCase):
                                ("change_log", "next_steps"), ("supersede", "next_steps")):
             with self.subTest(source=source, target=target):
                 self.assertNotIn(target, graph[source])
+
+    def test_run_status_writes_have_one_owner(self):
+        from tests.architecture_rules import code_modules
+        from tests.lifecycle_rules import status_writes
+        found = {name: violations for name, path in code_modules(PACKAGE).items()
+                 if (violations := status_writes(path.read_text(encoding='utf-8'), name))}
+        self.assertEqual(found, {}, '运行顶层status或生命周期聚合状态绕过唯一迁移入口')

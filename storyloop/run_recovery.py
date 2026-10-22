@@ -9,12 +9,14 @@ from typing import Callable
 from .changes import load_change
 from .models import identifier, require, text
 from .project_git import current_branch
-from .storage import load_json, write_json
+from .storage import load_json
+from .run_state import save_run
+from .run_transitions import transition, RESETTABLE
+from .run_guards import reset_status as _reset_status
 
 Clock = Callable[[], datetime]
 # Terminal or wedged states a human may reset. Everything else either resumes by itself
 # (`storyloop run`) or must go through its own command (accept, answer, base-update).
-RESETTABLE = {"WORKSPACE_TAINTED", "MANUAL_ACCEPTANCE_REQUIRED"}
 STALE_KEYS = ("error", "questions", "pending", "verified", "candidate_sha256", "next", "stop")
 
 
@@ -42,30 +44,22 @@ def reset_run(project: Path, change_id: str, reason: str, now: Clock | None = No
     record = {"at": moment, "from_status": state["status"], "attempt": int(state.get("attempt", 0)),
               "reason": reason}
     resume_status = _reset_status(state)
+    transition(project, state, resume_status, event="reset",
+               effect=lambda: _reset_fields(state, resume_status))
+    state.setdefault("resets", []).append(record)
+    save_run(project, state)
+    return {"status": resume_status, "change_id": change_id, "reset": record,
+            "next": f"storyloop run <project> --change {change_id}"}
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _reset_fields(state: dict, resume_status: str) -> dict:
     for key in STALE_KEYS:
         state.pop(key, None)
     state.pop("interrupted_status", None)
     if resume_status == "IMPLEMENTING":
         state["attempt"] = max(int(state.get("attempt", 0)) - 1, 0)
-    state["status"] = resume_status
-    state.setdefault("resets", []).append(record)
-    write_json(path, state, max_bytes=8_000_000)
-    return {"status": resume_status, "change_id": change_id, "reset": record,
-            "next": f"storyloop run <project> --change {change_id}"}
-
-
-def _reset_status(state: dict) -> str:
-    """旧运行没有中断阶段时，尚未调用实现的运行必须重新经过准备门禁。"""
-    if state["status"] == "MANUAL_ACCEPTANCE_REQUIRED":
-        return "IMPLEMENTING"
-    if state.get("planning", {}).get("origin") == "L3" and state.get("phase") == "planning":
-        return "DESIGN_REVISION_REQUIRED"
-    if state.get("interrupted_status"):
-        return state["interrupted_status"]
-    if int(state.get("attempt", 0)) == 0:
-        return "CONTRACT_COMMITTED" if state.get("contract_commit") else "PREPARING"
-    return "IMPLEMENTING"
-
-
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return {}

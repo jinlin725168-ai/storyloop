@@ -6,18 +6,15 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Callable
 
-from .changes import _save, contract_digest, create_change, load_change
+from .changes import _save, contract_digest, create_change, load_change, write_change_preview
+from .run_transitions import transition, set_change_status, SUPERSEDABLE
 from .models import identifier, require, text
 from .project_loop_guards import read_only_call
 from .project_loop_support import run_path, save_run
 from .stop_report import stop_of
 from .storage import load_json, locked
 
-SUPERSEDABLE = frozenset({
-    "NEEDS_SPEC_FIX", "BUDGET_EXHAUSTED", "NO_PROGRESS", "ORACLE_DEFECT",
-    "EXISTING_GREEN", "NEEDS_INPUT", "IMPLEMENTING", "BOUNDARY_VIOLATION",
-    "CHARACTERIZATION_FAILED", "DESIGN_APPROVAL_REQUIRED", "DESIGN_REVISION_REQUIRED", "SPLIT_RECOMMENDED",
-})
+
 
 
 def supersede_change(project: Path, old_id: str, message: str,
@@ -91,8 +88,11 @@ def _revision_context(project: Path, old: dict, run: dict, message: str,
 
 
 def _finish_link(project: Path, old: dict, run: dict, new_id: str) -> None:
-    _save(project, {**old, "status": "SUPERSEDED", "superseded_by": new_id})
-    save_run(project, {**run, "status": "SUPERSEDED", "superseded_by": new_id})
+    updated = set_change_status(project, {**old, "superseded_by": new_id}, "SUPERSEDED")
+    write_change_preview(project, updated)
+    updated_run = dict(run)
+    transition(project, updated_run, "SUPERSEDED", event="supersede", updates={"superseded_by": new_id})
+    save_run(project, updated_run)
 
 
 def _existing_result(project: Path, old: dict, message: str, reason: str | None,
@@ -110,7 +110,8 @@ def _existing_result(project: Path, old: dict, message: str, reason: str | None,
         require(run.get("status") in SUPERSEDABLE or run.get("status") == "SUPERSEDED",
                 "Superseded change and run state are inconsistent")
         _finish_link(project, old, run, new_id)
-        run = {**run, "status": "SUPERSEDED", "superseded_by": new_id}
+        run = dict(run)
+        transition(project, run, "SUPERSEDED", event="supersede_result", updates={"superseded_by": new_id})
     return _result(project, new, run)
 
 

@@ -1,5 +1,6 @@
 """Monotonic L3 scope assessment and planning invalidation."""
 from copy import deepcopy
+from .run_transitions import transition
 from pathlib import Path
 
 from .intake import digest, _signals
@@ -80,7 +81,7 @@ def check_l3(project: Path, change: dict, state: dict, config: dict) -> dict | N
     state['planning'].update(origin='L3', phase='REPLAN', consumed_attempt=state['attempt'],
                              candidate_digest=implementation_digest(project), actual=actual,
                              l3_assessment=assessed)
-    state.update(status='DESIGN_REVISION_REQUIRED', phase='planning')
+    transition(project, state, 'DESIGN_REVISION_REQUIRED', event='l3_replan', updates={'phase': 'planning'})
     from .characterization_locks import verified_locks
     from .routing_restore import prepare_restore
     locks = verified_locks(project, state, config)

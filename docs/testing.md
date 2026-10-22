@@ -32,6 +32,12 @@
 
 测试会提交到临时仓库，所以本机需要 git 身份（`user.name`、`user.email`）。
 
+### 生命周期收敛守护
+
+阶段B将 `test_lifecycle_golden`、`test_lifecycle_recovery_entries` 加入 core：七组冻结金样比较运行/变更、JSON/Markdown报告、CLI完整输出、角色顺序和Git拓扑；恢复入口先用实际夹具确认必经具名事件，再由原恢复套件验证真实守卫。`test_completion_resilience` 额外覆盖六个交付崩溃窗口，检查角色调用和实现/报告/回执提交均不重复。
+
+I12在B守护唯一迁移入口与阶段跳层，类型定义来源在C集中。静态检查追踪可识别的运行来源、简单别名、副本和保存器，不声称覆盖动态反射/eval；引擎不允许新增这类旁路。缓存RED的旧弱校验、未知计数和reset历史兼容保持原行为，不以本轮重构宣称已补强。
+
 ### 共用夹具
 
 | 夹具 | 位置 | 用途 |
@@ -49,7 +55,7 @@
 
 | 主题 | 测试文件 |
 |---|---|
-| 架构守护 | `test_architecture`（声明、分层、环、modules.md）、`test_invariants`（不变量登记与补写的守护） |
+| 架构守护 | `test_lifecycle_architecture`（六边消除、全树唯一状态入口）、`test_lifecycle_rules`（来源、别名及副本的合成反例）、`test_run_transitions`（迁移、effect与历史恢复）、`test_lifecycle_guards`（G1–G3与真实阶段跳层）、`test_architecture`（声明、分层、环、modules.md）、`test_invariants`（不变量登记与补写的守护） |
 | 端到端样板 | `test_product_e2e`（干净仓库 → 合同 → RED → 实现 → 报告 → no-ff 合并，CI 文件字节不变） |
 | 底座与探测 | `test_baseline_*`、`test_project_profile*`、`test_monorepo_detection`、`test_base_propose`、`test_base_upgrade`、`test_resume_after_base_upgrade` |
 | 合同与规格 | `test_changes_*`、`test_change_approval`、`test_product_spec`、`test_spec_gates`、`test_openspec_docs` |

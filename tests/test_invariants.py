@@ -155,9 +155,9 @@ class InvariantRegistryTests(unittest.TestCase):
     def test_all_fifteen_invariants_are_registered(self):
         self.assertEqual(sorted(DECL.invariants, key=lambda k: int(k[1:])), [f"I{n}" for n in range(1, 16)])
 
-    def test_pending_invariants_are_exactly_i12_i13_i15(self):
+    def test_pending_invariants_are_exactly_i13_i15(self):
         pending = {k: v.stage for k, v in DECL.invariants.items() if v.status == "pending"}
-        self.assertEqual(pending, {"I12": "B", "I13": "E", "I15": "T6"})
+        self.assertEqual(pending, {"I13": "E", "I15": "T6"})
 
     def test_every_guard_exists_and_runs_in_core(self):
         for key, item in DECL.invariants.items():

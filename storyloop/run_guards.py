@@ -151,3 +151,21 @@ def guard_g3(project: Path, state: dict, context: dict) -> None:
     require(_git(project, "rev-parse", state["source_branch"]).strip() == state["source_head"],
             "Source branch changed after the feature run started")
     verify_verified_artifacts(project, state)
+
+
+def reset_status(state: dict) -> str:
+    """Keep the legacy interrupted-status selector, including old nonstandard values."""
+    if state["status"] == "MANUAL_ACCEPTANCE_REQUIRED":
+        return "IMPLEMENTING"
+    if state.get("planning", {}).get("origin") == "L3" and state.get("phase") == "planning":
+        return "DESIGN_REVISION_REQUIRED"
+    if state.get("interrupted_status"):
+        return state["interrupted_status"]
+    if int(state.get("attempt", 0)) == 0:
+        return "CONTRACT_COMMITTED" if state.get("contract_commit") else "PREPARING"
+    return "IMPLEMENTING"
+
+
+def guard_cost_restore(project: Path, state: dict) -> None:
+    require(state.get("cost_resume_digest") == implementation_digest(project),
+            "Workspace changed while cost stop was paused; restore the saved candidate before run")

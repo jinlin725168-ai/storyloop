@@ -25,9 +25,13 @@ class RunTransitionsTests(unittest.TestCase):
             for source, target in pairs:
                 with self.subTest(event=event, source=source, target=target):
                     state = {} if source is None else {"status": source}
+                    if event == "reset" and source == "WORKSPACE_TAINTED": state["interrupted_status"] = target
+                    if event == "cost_restore": state["cost_resume_status"] = target
                     with patch("storyloop.run_transitions.guard_g1"), \
                             patch("storyloop.run_transitions.guard_g2"), \
-                            patch("storyloop.run_transitions.guard_g3"):
+                            patch("storyloop.run_transitions.guard_g3"), \
+                            patch("storyloop.run_transitions.guard_cost_restore"), \
+                            patch("storyloop.run_transitions.recover_completed_merge", return_value="merge"):
                         transition(Path("."), state, target, event=event, change={})
                     self.assertEqual(state["status"], target)
                     with self.assertRaises(StoryLoopError):
@@ -86,3 +90,46 @@ class RunTransitionsTests(unittest.TestCase):
             for target in ('EXISTING_GREEN', 'ORACLE_DEFECT', 'MANUAL_ACCEPTANCE_REQUIRED'):
                 with self.subTest(source=source, target=target), self.assertRaises(StoryLoopError):
                     transition(Path('.'), {'status': source}, target, event='stop')
+
+    def test_aggregate_copy_is_returned_for_existing_supersede_preview_side_effect(self):
+        original = {'change_id': 'CHG-1', 'status': 'APPROVED'}
+        with tempfile.TemporaryDirectory() as folder:
+            result = set_change_status(Path(folder), original, 'SUPERSEDED')
+        self.assertEqual(result, {**original, 'status': 'SUPERSEDED'})
+        self.assertEqual(original['status'], 'APPROVED')
+
+    def test_snapshot_recovery_cannot_choose_a_different_target(self):
+        for source, event, extra in (
+            ('WORKSPACE_TAINTED', 'reset', {'interrupted_status': 'CONTRACT_COMMITTED'}),
+            ('COST_LIMIT_REACHED', 'cost_restore', {'cost_resume_status': 'CONTRACT_READY'}),
+        ):
+            state = {'status': source, **extra}
+            with self.subTest(event=event), self.assertRaises(StoryLoopError):
+                transition(Path('.'), state, 'PASSED', event=event)
+            self.assertEqual(state['status'], source)
+
+    def test_reset_keeps_historical_interrupted_values_without_hashing_them(self):
+        for target in ('OLD_PHASE', ['historical'], {'legacy': 'phase'}):
+            state = {'status': 'WORKSPACE_TAINTED', 'interrupted_status': target}
+            transition(Path('.'), state, target, event='reset')
+            self.assertEqual(state['status'], target)
+
+    def test_absent_cost_snapshot_is_not_an_authorized_none_target(self):
+        state = {'status': 'COST_LIMIT_REACHED'}
+        with patch('storyloop.run_transitions.guard_cost_restore'):
+            with self.assertRaises(StoryLoopError):
+                transition(Path('.'), state, None, event='cost_restore')
+        self.assertEqual(state, {'status': 'COST_LIMIT_REACHED'})
+
+    def test_committed_contract_can_pause_for_planning_without_bypassing_g1(self):
+        state = {'status': 'CONTRACT_COMMITTED', 'change_id': 'CHG-1', 'contract_commit': 'contract'}
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for target in ('DESIGN_APPROVAL_REQUIRED', 'DESIGN_REVISION_REQUIRED', 'NO_PROGRESS'):
+                with self.subTest(target=target), self.assertRaises(StoryLoopError):
+                    transition(root, dict(state), target, event='stop')
+            transition(root, state, 'NEEDS_INPUT', event='stop')
+            self.assertEqual(state['status'], 'NEEDS_INPUT')
+            with self.assertRaisesRegex(StoryLoopError, 'RED evidence is missing'):
+                transition(root, state, 'IMPLEMENTING', event='begin_attempt')
+            self.assertEqual(state['status'], 'NEEDS_INPUT')

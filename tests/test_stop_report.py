@@ -224,7 +224,7 @@ class StopPersistenceTests(unittest.TestCase):
         later = pause(Path("/p"), state, "BUDGET_EXHAUSTED")
         self.assertEqual(later["stop"]["phase"], "implement")
 
-    @patch("storyloop.run_recovery.write_json")
+    @patch("storyloop.run_state.write_json")
     @patch("storyloop.run_recovery.current_branch", return_value="feature/FEAT-1")
     @patch("storyloop.run_recovery.load_json")
     @patch("storyloop.run_recovery.load_change")

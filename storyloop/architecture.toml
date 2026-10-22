@@ -132,7 +132,7 @@ rank = 7
 "consistency_locations" = { module = "verification", zone = "mutable" }
 "manual_acceptance" = { module = "verification", zone = "mutable" }
 "openspec_docs" = { module = "delivery", zone = "mutable" }
-"project_loop_finish" = { module = "delivery", zone = "mutable", split = "B" }
+"project_loop_finish" = { module = "delivery", zone = "mutable" }
 "intake" = { module = "routing", zone = "mutable" }
 "assessment" = { module = "routing", zone = "mutable" }
 "design_approval" = { module = "routing", zone = "mutable" }
@@ -192,7 +192,7 @@ rank = 7
 "report_reconciliation" = { module = "reporting", zone = "mutable" }
 "report_roles" = { module = "reporting", zone = "mutable" }
 "report_sections" = { module = "reporting", zone = "mutable" }
-"project_loop" = { module = "lifecycle", zone = "mutable", split = "B" }
+"project_loop" = { module = "lifecycle", zone = "mutable" }
 "project_preparation" = { module = "lifecycle", zone = "mutable" }
 "run_recovery" = { module = "lifecycle", zone = "mutable" }
 "routing_execution" = { module = "lifecycle", zone = "mutable" }
@@ -448,8 +448,8 @@ tests = ["tests.test_invariants::test_i11_a_lighter_decision_never_lowers_the_ef
 
 [invariants.I12]
 title = "底线单调：状态迁移只经守卫，守卫读取类型底线；阶段只能加严"
-status = "pending"
-stage = "B"
+status = "guarded"
+tests = ["tests.test_lifecycle_architecture::test_run_status_writes_have_one_owner", "tests.test_lifecycle_guards::test_real_completion_cannot_skip_a_configured_unit_layer"]
 
 [invariants.I13]
 title = "底座只能被 base 类型的变更推进，也只有 base 类型能写底座"
