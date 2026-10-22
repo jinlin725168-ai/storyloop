@@ -1,11 +1,12 @@
 """Contract materialization and immutable pre-implementation evidence."""
 from __future__ import annotations
-import hashlib
 from pathlib import Path
 from typing import TYPE_CHECKING
 from .approvals import materialize_approved_change
 from .baseline import _git
 from .models import StoryLoopError, require
+from .run_transitions import transition
+from .run_guards import read_red_evidence
 from .lesson_store import lessons_digest
 from .openspec_docs import validate_with_cli
 from .project_git import commit_paths
@@ -17,9 +18,8 @@ from .semantic_repair import answer_with_repair
 from .smoke import (RED_EVIDENCE, install_smoke_suite, load_smoke_manifest, protection_path,
                     validate_suite, without_manifest_echo, suite_root as acceptance_suite_root)
 from .smoke_runner import run_smoke_isolated
-from .storage import load_json
 if TYPE_CHECKING:
-    from .project_loop import LoopServices
+    from .run_services import LoopServices
 
 
 def _prepare_acceptance(
@@ -45,11 +45,11 @@ def _prepare_acceptance(
     smoke_root = acceptance_suite_root(project, change_id)
     paths = relative_files(project, [contract_root, smoke_root])
     if state["status"] == "PREPARING":
-        state["status"] = "CONTRACT_READY"
+        transition(project, state, "CONTRACT_READY", event="contract_ready")
         save_run(project, state)
     if state["status"] == "CONTRACT_READY":
         contract_commit = _ensure_contract_commit(project, state, paths)
-        state.update({"status": "CONTRACT_COMMITTED",
+        transition(project, state, "CONTRACT_COMMITTED", event="contract_committed", updates={
                       "contract_commit": contract_commit,
                       **_lesson_snapshot(project, contract_commit)})
         save_run(project, state)
@@ -63,8 +63,8 @@ def _prepare_acceptance(
     ensure_baseline(project, state, change["product"])  # sampled once, on the code before implementation
     for key in ("acceptance", "error", "next"):
         state.pop(key, None)
-    state.update({"status": "IMPLEMENTING",
-                  "red_evidence_sha256": red["evidence_sha256"]})
+    transition(project, state, "IMPLEMENTING", event="red_ready",
+               updates={"red_evidence_sha256": red["evidence_sha256"]})
     save_run(project, state)
     return None
 
@@ -104,11 +104,7 @@ def _ensure_red_evidence(project: Path, change_id: str, contract_commit: str) ->
     stop may already hold implementation edits that would make the new behaviour look present."""
     path = project / ".storyloop/evidence" / change_id / RED_EVIDENCE
     if path.exists():
-        value = load_json(path)
-        require(value.get("change_id") == change_id and value.get("status") == "RED",
-                "Stored RED evidence is invalid")
-        return {**value, "evidence_path": str(path),
-                "evidence_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        return read_red_evidence(project, change_id)
     return read_only_call(
         project, change_id,
         lambda: run_smoke_isolated(project, change_id, expect_red=True, at_commit=contract_commit),

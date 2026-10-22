@@ -15,6 +15,7 @@ from pathlib import Path
 
 from . import cost_resume
 from .run_services import LoopServices
+from .run_transitions import transition
 from .default_loop_services import _default_services
 from .cross_vendor import prepare_run
 from .cost_limits import check_before_call
@@ -149,7 +150,7 @@ def _attempts(project: Path, change: dict, state: dict, services: LoopServices,
               config: dict, start_attempt: int) -> dict:
     while state["attempt"] < config["max_attempts"]:
         state["attempt"] += 1
-        state["status"] = "IMPLEMENTING"
+        transition(project, state, "IMPLEMENTING", event="begin_attempt")
         save_run(project, state)
         try:
             outcome = _run_attempt(project, change, state, services, config)
@@ -217,7 +218,7 @@ def _start_run(project: Path, change: dict, routing: dict | None) -> tuple[dict,
                 f"{change_id} 修订自 {link['change_id']}：新运行要从源分支开始，"
                 f"git checkout {link['source_branch']}（当前在 {branch}）")
     verify_baseline(project)
-    state = _new_run_state(change_id, start_feature(project, change_id),
+    state = _new_run_state(project, change_id, start_feature(project, change_id),
                            change["approval"]["contract_digest"])
     if routing is not None:
         state["routing"] = routing
@@ -458,12 +459,14 @@ def _perform_review(
         raise
 
 
-def _new_run_state(change_id: str, started: dict, contract_digest: str) -> dict:
-    return {"version": 1, "change_id": change_id, "status": "PREPARING", "attempt": 0,
+def _new_run_state(project: Path, change_id: str, started: dict, contract_digest: str) -> dict:
+    state = {"version": 1, "change_id": change_id, "attempt": 0,
             "feature_branch": started["branch"], "source_branch": started["source_branch"],
             "source_head": started["source_head"], "contract_digest": contract_digest,
             "started_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "failures": []}
+    transition(project, state, "PREPARING", event="start")
+    return state
 
 
 def _risk_updates(project, state, response, role):

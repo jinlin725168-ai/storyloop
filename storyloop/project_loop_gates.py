@@ -23,6 +23,7 @@ from .project_boundaries import audit_project_changes
 from .project_git import commit_paths
 from .project_loop_guards import exists_at, read_only_call, require_git_visible, write_safely
 from .project_loop_support import run_path, save_run
+from .run_transitions import transition
 from .run_stops import pause, pause_for_boundary
 from .changes import load_change
 from .oracle_counts import removal_paths, sample_layer
@@ -282,7 +283,7 @@ def resume_characterization(project: Path, change: dict, state: dict, config: di
     paused = _verify_characterization(project, change_id, state, config, pending)
     if paused is not None:
         return paused
-    state["status"] = "IMPLEMENTING"
+    transition(project, state, "IMPLEMENTING", event="characterization_resumed")
     if pending.get("extend") and state.get("planning", {}).get("origin") != "L3":
         state["failures"].append({"attempt": state["attempt"],
                                   "characterization": {"status": "FAILED", "uncharacterized": pending["extend"]}})

@@ -3,7 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from storyloop.models import StoryLoopError
 from storyloop.run_transitions import TRANSITIONS, STATE_METADATA, transition, set_change_status
@@ -25,7 +25,8 @@ class RunTransitionsTests(unittest.TestCase):
             for source, target in pairs:
                 with self.subTest(event=event, source=source, target=target):
                     state = {} if source is None else {"status": source}
-                    transition(Path("."), state, target, event=event)
+                    with patch("storyloop.run_transitions.guard_g1"):
+                        transition(Path("."), state, target, event=event)
                     self.assertEqual(state["status"], target)
                     with self.assertRaises(StoryLoopError):
                         transition(Path("."), {"status": "UNKNOWN"}, target, event=event)

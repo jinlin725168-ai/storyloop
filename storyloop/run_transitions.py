@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Callable
 from .models import require
-from .run_guards import guard_updates
+from .run_guards import guard_updates, guard_g1
 from .run_state import ACTIVE_STATUSES, DISPLAY_STOPS, RUN_STOPS
 from .storage import write_json
 
@@ -39,6 +39,10 @@ STOP_SOURCES = {
 # Guarded implementation/completion events are added with their checks, never as empty stubs.
 TRANSITIONS = {
     "start": frozenset({(None, "PREPARING")}),
+    "red_ready": frozenset((source, "IMPLEMENTING") for source in {
+        "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}),
+    "begin_attempt": frozenset((source, "IMPLEMENTING") for source in PLANNING_SOURCES),
+    "characterization_resumed": frozenset({("CHARACTERIZATION_FAILED", "IMPLEMENTING")}),
     "contract_ready": frozenset({("PREPARING", "CONTRACT_READY")}),
     "contract_committed": frozenset({("CONTRACT_READY", "CONTRACT_COMMITTED")}),
     "stop": frozenset((source, target) for target, sources in STOP_SOURCES.items() for source in sources),
@@ -55,6 +59,8 @@ def transition(project: Path, state: dict, target: str, *, event: str,
     require((source, target) in TRANSITIONS.get(event, ()),
             f"Illegal run transition: {event} {source} -> {target}")
     guard_updates(updates if updates is not None else {})
+    if event in {"red_ready", "begin_attempt", "characterization_resumed"}:
+        guard_g1(project, state, context or {})
     result = effect() if effect is not None else {}
     guard_updates(result)
     state.update(result)
