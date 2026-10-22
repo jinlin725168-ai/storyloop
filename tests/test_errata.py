@@ -82,7 +82,7 @@ class ErrataTests(unittest.TestCase):
         self.assertEqual(load_draft(self.project, ref)['status'], 'pending')
         self.assertFalse((self.project / ERRATA_PATH).exists())
 
-    def test_post_commit_failure_rolls_back(self):
+    def test_post_commit_failure_preserves_erratum_and_recovers_same_commit(self):
         ref = 'errata/' + self.capture()['drafts'][0]
         parent = head(self.project)
         from storyloop import lesson_landing
@@ -94,12 +94,46 @@ class ErrataTests(unittest.TestCase):
         with mock.patch.object(lesson_landing, 'set_draft_status', side_effect=fail):
             with self.assertRaisesRegex(RuntimeError, 'postcommit'):
                 approve_draft(self.project, ref)
-        self.assertEqual(head(self.project), parent)
-        self.assertFalse((self.project / ERRATA_PATH).exists())
+        committed = head(self.project)
+        self.assertNotEqual(committed, parent)
+        self.assertTrue((self.project / ERRATA_PATH).exists())
         self.assertEqual(load_draft(self.project, ref)['status'], 'pending')
+        proposals = list((self.project / '.storyloop/base-proposals').glob('*.json'))
+        result = approve_draft(self.project, ref)
+        self.assertEqual(result['commit'], committed)
+        self.assertEqual(result['errata_id'], 'E-0001')
+        self.assertEqual(result['base_proposal'], proposals[0].stem)
+        self.assertEqual((self.project / ERRATA_PATH).read_text().count('## E-0001'), 1)
+        self.assertNotIn('## E-0002', (self.project / ERRATA_PATH).read_text())
+        self.assertEqual(list((self.project / '.storyloop/base-proposals').glob('*.json')), proposals)
 
     def test_ids_ignore_prose_mentions(self):
         self.assertEqual(next_errata_id('mention E-9999\n## E-0003\n'), 'E-0004')
+
+    def test_recovery_id_cannot_point_to_an_older_erratum(self):
+        first = approve_draft(self.project, 'errata/' + self.capture()['drafts'][0])
+        upgrade_baseline(self.project, first['base_proposal'])
+        ref = 'errata/' + self.capture()['drafts'][0]
+        from storyloop import lesson_landing
+        actual = lesson_landing.set_draft_status
+        def fail(project, reference, status, *args):
+            if status == 'approved':
+                raise OSError('approval unavailable')
+            return actual(project, reference, status, *args)
+        with mock.patch.object(lesson_landing, 'set_draft_status', side_effect=fail):
+            with self.assertRaises(OSError):
+                approve_draft(self.project, ref)
+        committed = head(self.project)
+        pending = self.project / '.storyloop/state/memory-landings' / (ref + '.json')
+        record = load_json(pending)
+        self.assertEqual(record['result_ids']['errata_id'], 'E-0002')
+        record['result_ids']['errata_id'] = 'E-0001'
+        write_json(pending, record)
+        with self.assertRaisesRegex(StoryLoopError, '标识'):
+            approve_draft(self.project, ref)
+        self.assertEqual(head(self.project), committed)
+        self.assertEqual(load_draft(self.project, ref)['status'], 'pending')
+        self.assertTrue(pending.is_file())
 
     def test_nested_guards_and_failure_discard(self):
         p = self.project
