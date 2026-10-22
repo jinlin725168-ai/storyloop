@@ -201,3 +201,206 @@ rank = 7
 "onboarding_cli" = { module = "command", zone = "mutable" }
 "ci_command" = { module = "command", zone = "mutable" }
 "__main__" = { module = "command", zone = "mutable" }
+
+# 仅登记已批准的现状债务；豁免只减不增，每条关联消除阶段。
+[[exemptions]]
+source = "acceptance_repair"
+target = "project_loop"
+until = "B"
+reason = "阶段 B 归一生命周期时一并处理"
+[[exemptions]]
+source = "adapter_capabilities"
+target = "cross_vendor"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "adapter_capabilities"
+target = "role_profiles"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "adapter_capabilities"
+target = "role_subagents"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "baseline"
+target = "adapter_capabilities"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "baseline"
+target = "system_smoke"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "change_log"
+target = "next_steps"
+until = "B"
+reason = "阶段 B 归一生命周期时一并处理"
+[[exemptions]]
+source = "evidence_locations"
+target = "failure_attribution"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "models"
+target = "assessment"
+until = "D"
+reason = "基础层带入产品合同校验，阶段 D 移到合同模块"
+[[exemptions]]
+source = "onboarding_manifest"
+target = "onboarding_templates"
+until = "D"
+reason = "契约依赖内核或业务；被用到的定义下沉到契约层"
+[[exemptions]]
+source = "project_agents"
+target = "adapter_profiles"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "call_context"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "call_log"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "cost_limits"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "cross_vendor"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "errata"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "foundation_survey"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "lesson_retrieval"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "role_instructions"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "role_profiles"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "role_subagents"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "skills"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_agents"
+target = "telemetry"
+until = "D"
+reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
+[[exemptions]]
+source = "project_boundaries"
+target = "system_smoke"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "project_git"
+target = "baseline"
+until = "D"
+reason = "Git 原语借用 baseline._git，阶段 D 拆出"
+[[exemptions]]
+source = "project_loop_gates"
+target = "project_loop"
+until = "B"
+reason = "阶段 B 归一生命周期时一并处理"
+[[exemptions]]
+source = "project_loop_guards"
+target = "errata"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "project_loop_support"
+target = "next_steps"
+until = "B"
+reason = "停点由生命周期统一处理"
+[[exemptions]]
+source = "project_loop_support"
+target = "stop_report"
+until = "B"
+reason = "停点由生命周期统一处理"
+[[exemptions]]
+source = "project_profile"
+target = "oracle_counts"
+until = "D"
+reason = "契约依赖内核或业务；被用到的定义下沉到契约层"
+[[exemptions]]
+source = "project_receipt"
+target = "change_report"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "role_schemas"
+target = "lessons"
+until = "D"
+reason = "枚举取值属于状态格式，移到契约层（设计 §9.3）"
+[[exemptions]]
+source = "role_schemas"
+target = "routing_policy"
+until = "D"
+reason = "枚举取值属于状态格式，移到契约层（设计 §9.3）"
+[[exemptions]]
+source = "smoke"
+target = "changes"
+until = "D"
+reason = "契约依赖内核或业务；被用到的定义下沉到契约层"
+[[exemptions]]
+source = "smoke_runner"
+target = "changes"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "smoke_runner"
+target = "system_smoke"
+until = "D"
+reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+[[exemptions]]
+source = "supersede"
+target = "next_steps"
+until = "B"
+reason = "阶段 B 归一生命周期时一并处理"
+
+[cycles]
+members = [
+  "adapter_capabilities", "assessment", "base_upgrade", "baseline",
+  "call_context", "changes", "cli", "consistency",
+  "cross_vendor", "errata", "evidence_locations", "facts",
+  "foundation_survey", "intake", "lesson_landing", "lesson_retrieval",
+  "lesson_store", "models", "onboarding_manifest", "oracle_counts",
+  "oracle_skill_approval", "path_security", "principles", "project_agents",
+  "project_boundaries", "project_git", "project_loop", "project_loop_failures",
+  "project_loop_finish", "project_loop_gates", "project_preparation", "project_profile",
+  "readiness", "requirement_checklist", "role_profiles", "role_schemas",
+  "routing_cli", "routing_evidence", "routing_execution", "routing_policy",
+  "routing_report", "skills", "smoke", "smoke_runner",
+  "stop_report", "system_smoke", "telemetry", "telemetry_summary",
+]

@@ -6,7 +6,8 @@ import unittest
 
 from tests.architecture_rules import (
     DECLARATION, PACKAGE, ArchModule, Declaration, Entry, classify, code_modules, load_declaration,
-    module_name, stale_entries, undeclared, undeclared_message,
+    Exemption, Violation, cycle_members, import_graph, module_name, stale_entries,
+    stale_exemptions, undeclared, undeclared_message, unexempted, violations,
 )
 
 DECL = load_declaration(DECLARATION)
@@ -96,3 +97,92 @@ class DeclarationTests(unittest.TestCase):
 
     def test_the_current_package_has_146_modules(self):
         self.assertEqual(len(code_modules(PACKAGE)), 146)
+
+
+class LayeringRuleTests(unittest.TestCase):
+    def test_every_import_form_is_counted(self):
+        sources = {
+            "top.py": ("from .low import f\nimport storyloop.other as o\n"
+                       "def g():\n    from . import lazy\n"
+                       "if TYPE_CHECKING:\n    from .typed import T\n"
+                       "import pathlib\nfrom elsewhere import ignored\nfrom . import top\n"),
+            "sub/__init__.py": "from . import leaf\n",
+            "sub/leaf.py": "from ..models import x\n",
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            package = Path(folder) / "storyloop"
+            for name in [*sources, "low.py", "other.py", "lazy.py", "typed.py", "models.py"]:
+                path = package / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(sources.get(name, ""), encoding="utf-8")
+            graph = import_graph(package)
+        self.assertEqual(graph["top"], {"low", "other", "lazy", "typed"})
+        self.assertEqual(graph["sub.leaf"], {"models"})
+        self.assertEqual(graph["sub"], {"sub.leaf"})
+
+    def test_from_package_import_resolves_submodules_before_attributes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            package = Path(folder) / "storyloop"
+            (package / "sub").mkdir(parents=True)
+            (package / "sub/__init__.py").write_text("", encoding="utf-8")
+            (package / "sub/leaf.py").write_text("", encoding="utf-8")
+            (package / "top.py").write_text(
+                "from storyloop.sub import leaf, constant\nfrom storyloop import top\n",
+                encoding="utf-8")
+            self.assertEqual(import_graph(package)["top"], {"sub", "sub.leaf"})
+
+    def test_upward_and_base_to_mutable_edges_are_violations(self):
+        decl = declaration({"f": "m1", "c": "m3", "g": "m2", "r": "m3",
+                            "lo": "m1", "hi": "m2"})
+        entries = {n: Entry(n, e.module, "base" if n in {"f", "g"} else "mutable", None)
+                   for n, e in decl.modules.items()}
+        decl = Declaration(decl.architecture, entries, (), frozenset(), {})
+        graph = {"f": {"c"}, "g": {"r"}, "lo": {"hi"}, "c": {"f"}}
+        found = violations(decl, graph)
+        self.assertEqual([(v.source, v.target, v.rules) for v in found], [
+            ("f", "c", ("upward", "base_imports_mutable")),
+            ("g", "r", ("upward", "base_imports_mutable")),
+            ("lo", "hi", ("upward",)),
+        ])
+
+    def test_same_rank_base_to_mutable_is_still_a_violation(self):
+        decl = declaration({"x": "m1", "y": "m1"})
+        entries = {"x": decl.modules["x"], "y": Entry("y", "m1", "mutable", None)}
+        decl = Declaration(decl.architecture, entries, (), frozenset(), {})
+        self.assertEqual(violations(decl, {"x": {"y"}}),
+                         [Violation("x", "y", ("base_imports_mutable",))])
+
+    def test_unexempted_and_stale_exemptions(self):
+        decl = Declaration({}, {}, (Exemption("a", "b", "D", "拆分"),
+                                    Exemption("e", "f", "B", "迁移")), frozenset(), {})
+        found = [Violation("a", "b", ("upward",)), Violation("c", "d", ("upward",))]
+        self.assertEqual([(v.source, v.target) for v in unexempted(decl, found)], [("c", "d")])
+        self.assertEqual([(e.source, e.target) for e in stale_exemptions(decl, found)], [("e", "f")])
+
+    def test_cycle_members(self):
+        graph = {"a": {"b"}, "b": {"a"}, "c": {"a"}, "d": set(), "self": {"self"}}
+        self.assertEqual(cycle_members(graph), {"a", "b"})
+
+    def test_deep_graph_does_not_exhaust_the_default_recursion_limit(self):
+        graph = {str(n): {str(n + 1)} for n in range(1500)}
+        graph["1500"] = {"1499"}
+        self.assertEqual(cycle_members(graph), {"1499", "1500"})
+
+
+class LayeringTests(unittest.TestCase):
+    def test_no_unexempted_violations(self):
+        found = violations(DECL, import_graph(PACKAGE))
+        self.assertEqual(unexempted(DECL, found), [],
+                         "新违规：改代码，不要加豁免（设计 §2 反目标）")
+
+    def test_no_stale_exemptions(self):
+        stale = stale_exemptions(DECL, violations(DECL, import_graph(PACKAGE)))
+        self.assertEqual(stale, [], "这些依赖已消除，从 storyloop/architecture.toml 删掉对应豁免")
+
+    def test_no_new_module_joins_a_cycle(self):
+        members = cycle_members(import_graph(PACKAGE))
+        self.assertEqual(sorted(members - DECL.cycle_members), [], "新增了依赖环")
+
+    def test_no_stale_cycle_members(self):
+        members = cycle_members(import_graph(PACKAGE))
+        self.assertEqual(sorted(DECL.cycle_members - members), [], "这些模块已不在环里，从 [cycles] 删掉")
