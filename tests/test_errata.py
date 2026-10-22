@@ -103,8 +103,8 @@ class ErrataTests(unittest.TestCase):
         self.assertEqual(result['commit'], committed)
         self.assertEqual(result['errata_id'], 'E-0001')
         self.assertEqual(result['base_proposal'], proposals[0].stem)
-        self.assertEqual((self.project / ERRATA_PATH).read_text().count('## E-0001'), 1)
-        self.assertNotIn('## E-0002', (self.project / ERRATA_PATH).read_text())
+        self.assertEqual((self.project / ERRATA_PATH).read_text(encoding='utf-8').count('## E-0001'), 1)
+        self.assertNotIn('## E-0002', (self.project / ERRATA_PATH).read_text(encoding='utf-8'))
         self.assertEqual(list((self.project / '.storyloop/base-proposals').glob('*.json')), proposals)
 
     def test_ids_ignore_prose_mentions(self):
