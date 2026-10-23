@@ -9,7 +9,7 @@
 
 | 架构模块 | 模块 | 分区 | 职责 | 对外提供 |
 |---|---|---|---|---|
-| 基础 | `models` | 底座 | 校验产品合同中的故事、规则与验收条件 | `criterion_expects_red`、`criterion_tier`、`fields`、`identifier`、`nature_of`、`require`、`strings`、`text`、`validate_product` |
+| 基础 | `models` | 底座 | 提供纯 JSON 合同原语 | `fields`、`identifier`、`require`、`strings`、`text` |
 |  | `errors` | 底座 | 提供跨基础模块共享的安全工作流错误与断言 | `StoryLoopError`、`require` |
 |  | `path_security` | 底座 | 跨平台仓库路径校验，拒绝跟随链接 | `forbidden_path_root`、`repository_relative`、`safe_absolute_target`、`safe_target` |
 | 变更生命周期内核 | `run_transitions` | 底座 | 显式迁移表、状态元数据与唯一状态写入口 | `transition`、`set_change_status` |
@@ -26,7 +26,7 @@
 | Git 原语 | `project_git` | 底座 | 对已批准产品变更执行安全的本地 Git 生命周期 | `commit_paths`、`current_branch`、`finish_feature`、`start_feature` |
 | 变更类型 | `change_types` | 底座 | 声明三种现有变更类型的判据、范围、阶段与档位策略 | `CHANGE_TYPES`、`definition_for`、`type_for_change_id`、`type_of` |
 | 项目契约 | `onboarding_manifest` | 底座 | 校验接入声明，不执行工程钩子或读取凭证 | `load_manifest`、`validate_hooks`、`validate_onboarding` |
-|  | `state_format` | 底座 | 集中状态格式枚举、接入清单常量与测试计数模式校验 | `validate_test_count_patterns` |
+|  | `state_format` | 底座 | 集中状态格式枚举、接入清单常量与测试计数模式校验 | `criterion_expects_red`、`criterion_tier`、`validate_test_count_patterns` |
 |  | `project_profile` | 底座 | 对既有工程执行技术栈中立的探测 | `detect_project`、`is_ci_path`、`layer_commands`、`matches_test_root`、`validate_project_settings` |
 |  | `smoke` | 底座 | 管理按合同盲写、先证明 RED 且受保护的变更验收套件 | `install_smoke_suite`、`load_smoke_manifest`、`protection_path`、`smoke_digests`、`suite_relative`、`suite_root`、`validate_suite`、`without_manifest_echo` |
 |  | `testing.smoke_harness` | 底座 | 汇总13个版本化冒烟执行器模块，受支持接口由 v1 导入 | `case_bytes`、`case_directory`、`evidence`、`free_port`、`protected_cases`、`python_cases`、`run_command`、`run_hooks`、`source_list`、`source_path`、`validate_cases`、`wait_http` |
@@ -58,6 +58,7 @@
 |  | `testing` | 可变区 | 受保护项目测试执行器的版本化工具命名空间 | — |
 |  | `testing.mock_adapter` | 可变区 | 重放脚本化适配器回答，支持模块命令入口 | — |
 | 合同 | `answers` | 可变区 | 按尝试记录人工回答，并传给后续尝试 | `load_answers`、`pending_questions`、`record_answers` |
+|  | `product_contract` | 可变区 | 校验产品合同中的故事、规则与验收条件 | `nature_of`、`validate_product` |
 |  | `approvals` | 可变区 | 人工批准与已批准 OpenSpec 合同的物化 | `approve_change`、`materialize_approved_change` |
 |  | `changes` | 可变区 | 创建和修订 OpenSpec 形状的产品变更草案 | `contract_digest`、`create_change`、`draft_directory`、`load_change`、`revise_change`、`write_change_preview` |
 |  | `requirement_checklist` | 可变区 | 确定性检查需求质量 | `blocking_items`、`evaluate_checklist`、`render_checklist` |

@@ -30,7 +30,7 @@ def _prepare_acceptance(
     state.setdefault("openspec", {})["delta"] = validate_with_cli(project, "change", change_id)
     smoke_state = protection_path(project, change_id)
     if smoke_state.exists():
-        load_smoke_manifest(project, change_id)
+        load_smoke_manifest(project, change)
     else:
         def validate(answer: object) -> None:
             require(isinstance(answer, dict) and {"files", "manifest"} <= set(answer) <= {"files", "manifest", "lessons_used", "errata"},
@@ -41,7 +41,7 @@ def _prepare_acceptance(
             lambda request: read_only_call(
                 project, change_id, lambda: services.generate_smoke(project, request)),
             change, validate)
-        install_smoke_suite(project, change_id, without_manifest_echo(generated["files"]), generated["manifest"])
+        install_smoke_suite(project, change, without_manifest_echo(generated["files"]), generated["manifest"])
     smoke_root = acceptance_suite_root(project, change_id)
     paths = relative_files(project, [contract_root, smoke_root])
     if state["status"] == "PREPARING":
@@ -54,7 +54,7 @@ def _prepare_acceptance(
                       **_lesson_snapshot(project, contract_commit)})
         save_run(project, state)
     try:
-        red = _ensure_red_evidence(project, change_id, state["contract_commit"])
+        red = _ensure_red_evidence(project, change, state["contract_commit"])
     except StoryLoopError as exc:
         if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
             raise
@@ -99,14 +99,15 @@ def _ensure_contract_commit(project: Path, state: dict, paths: list[str]) -> str
     return head
 
 
-def _ensure_red_evidence(project: Path, change_id: str, contract_commit: str) -> dict:
+def _ensure_red_evidence(project: Path, change: dict, contract_commit: str) -> dict:
     """RED is proven on the contract commit plus the current suite: never on the workspace, which after a
     stop may already hold implementation edits that would make the new behaviour look present."""
+    change_id = change["change_id"]
     path = project / ".storyloop/evidence" / change_id / RED_EVIDENCE
     if path.exists():
         return read_red_evidence(project, change_id)
     return read_only_call(
         project, change_id,
-        lambda: run_smoke_isolated(project, change_id, expect_red=True, at_commit=contract_commit),
+        lambda: run_smoke_isolated(project, change, expect_red=True, at_commit=contract_commit),
         allowed_evidence=RED_EVIDENCE,
     )

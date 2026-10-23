@@ -309,7 +309,7 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
 
 def _verify_attempt(project, change, state, services, config, boundary):
     change_id = change['change_id']
-    layers, boundary = _run_checks_safely(project, change_id, config, boundary)
+    layers, boundary = _run_checks_safely(project, change, config, boundary)
     layers = check_layers(layers, state.get("oracle"))
     if boundary["violations"]:
         return record_boundary(project, state, boundary)
@@ -398,17 +398,18 @@ LAYER_ORDER = ("unit", "integration", "acceptance", "smoke", "checks")
 
 
 def _run_checks_safely(
-    project: Path, change_id: str, config: dict, prior_boundary: dict,
+    project: Path, change: dict, config: dict, prior_boundary: dict,
 ) -> tuple[dict, dict]:
     """Every verification layer, in order, each with its own verdict: unit, integration, acceptance, smoke, checks."""
     before = capture_snapshot(project, include_control=True, include_ignored=True)
+    change_id = change["change_id"]
     control = control_digest(project, change_id, excluded_evidence=RESULT_EVIDENCE)
     profile, timeout = config["profile"], config["check_timeout_seconds"]
     try:
         layers = {
             "unit": run_commands_isolated(project, layer_commands(profile, "unit"), timeout),
             "integration": run_commands_isolated(project, layer_commands(profile, "integration"), timeout),
-            "acceptance": run_smoke_isolated(project, change_id),
+            "acceptance": run_smoke_isolated(project, change),
             "smoke": run_system_smoke_isolated(project),
             "checks": run_commands_isolated(project, layer_commands(profile, "checks"), timeout),
         }

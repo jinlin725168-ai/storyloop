@@ -71,6 +71,7 @@ rank = 7
 
 [modules]
 "models" = { module = "foundation", zone = "base", split = "D" }
+"product_contract" = { module = "contract", zone = "mutable" }
 "change_types" = { module = "change_types", zone = "base" }
 "errors" = { module = "foundation", zone = "base" }
 "path_security" = { module = "foundation", zone = "base" }
@@ -250,11 +251,6 @@ target = "failure_attribution"
 until = "D"
 reason = "证据内核依赖业务，改为调用方传参或下沉定义"
 [[exemptions]]
-source = "models"
-target = "assessment"
-until = "D"
-reason = "基础层带入产品合同校验，阶段 D 移到合同模块"
-[[exemptions]]
 source = "project_agents"
 target = "adapter_profiles"
 until = "D"
@@ -343,16 +339,6 @@ target = "change_report"
 until = "D"
 reason = "证据内核依赖业务，改为调用方传参或下沉定义"
 [[exemptions]]
-source = "smoke"
-target = "changes"
-until = "D"
-reason = "契约依赖内核或业务；被用到的定义下沉到契约层"
-[[exemptions]]
-source = "smoke_runner"
-target = "changes"
-until = "D"
-reason = "证据内核依赖业务，改为调用方传参或下沉定义"
-[[exemptions]]
 source = "smoke_runner"
 target = "system_smoke"
 until = "D"
@@ -360,16 +346,16 @@ reason = "证据内核依赖业务，改为调用方传参或下沉定义"
 
 [cycles]
 members = [
-  "adapter_capabilities", "assessment", "base_upgrade", "baseline",
+  "adapter_capabilities", "base_upgrade", "baseline",
   "call_context", "changes", "cli", "consistency",
   "cross_vendor", "errata", "evidence_locations", "facts",
   "foundation_survey", "intake", "lesson_landing", "lesson_retrieval",
-  "lesson_store", "models", "oracle_counts",
-  "oracle_skill_approval", "path_security", "principles", "project_agents",
+  "lesson_store", "oracle_counts",
+  "oracle_skill_approval", "principles", "project_agents",
   "project_boundaries", "project_git", "project_loop_failures",
   "readiness", "requirement_checklist",
   "role_profiles", "role_schemas", "routing_cli", "routing_evidence",
-  "routing_policy", "routing_report", "skills", "smoke",
+  "routing_report", "skills",
   "smoke_runner", "stop_report", "system_smoke", "telemetry",
   "telemetry_summary",
 ]

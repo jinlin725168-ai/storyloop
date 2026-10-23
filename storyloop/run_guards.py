@@ -130,17 +130,18 @@ def guard_g2(project: Path, change: dict, state: dict, context: dict) -> None:
     digest = implementation_digest(project)
     require(not pending_manual_criteria(change, _manual_records(project, identifier), digest),
             "Manual acceptance is missing for the code being reported")
-    _acceptance_binding(project, identifier, layers["acceptance"])
+    _acceptance_binding(project, change, layers["acceptance"])
 
 
-def _acceptance_binding(project: Path, change_id: str, smoke: dict) -> None:
+def _acceptance_binding(project: Path, change: dict, smoke: dict) -> None:
+    change_id = change["change_id"]
     path = project / ".storyloop/evidence" / change_id / RESULT_EVIDENCE
     evidence = load_json(path)
     supplied = {key: value for key, value in smoke.items()
                 if key not in {"evidence_path", "evidence_sha256", "uncounted", "oracle_problems"}}
     require(smoke.get("evidence_sha256") == hashlib.sha256(path.read_bytes()).hexdigest()
             and supplied == evidence, "Smoke evidence does not match the protected evidence file")
-    require(evidence.get("suite_digests") == smoke_digests(project, change_id),
+    require(evidence.get("suite_digests") == smoke_digests(project, change),
             "Smoke evidence is not bound to the protected test bytes")
     require(evidence.get("workspace_sha256") == candidate_digest(project),
             "Smoke evidence is not bound to the implementation workspace")

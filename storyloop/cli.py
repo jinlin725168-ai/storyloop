@@ -20,7 +20,8 @@ from .changes import create_change, load_change, revise_change
 from .manual_acceptance import record_manual_acceptance
 from .next_steps import append_pending_memory, draft_next, next_step, supersede_revision_next
 from .openspec_docs import document_change
-from .models import StoryLoopError, require, validate_product
+from .models import StoryLoopError, require
+from .product_contract import validate_product
 from .processutil import redact
 from .project_agents import invoke_project_agent
 from .acceptance_repair import repair_smoke

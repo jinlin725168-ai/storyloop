@@ -65,7 +65,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
             "Smoke agent returned an invalid contract")
     files = without_manifest_echo(generated["files"])
     previous = _tracked_under(project, suite_relative(project, change_id))  # replaced files are committed as deletions
-    install_smoke_suite(project, change_id, files, generated["manifest"], replace=True)
+    install_smoke_suite(project, change, files, generated["manifest"], replace=True)
     for name in (RED_EVIDENCE, RESULT_EVIDENCE):
         (project / ".storyloop/evidence" / change_id / name).unlink(missing_ok=True)
     paths = sorted(set(relative_files(project, [suite_root])) | set(previous))
@@ -83,7 +83,7 @@ def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict
     try:
         red = read_only_call(
             project, change_id,
-            lambda: run_smoke_isolated(project, change_id, expect_red=True, at_commit=state["contract_commit"]),
+            lambda: run_smoke_isolated(project, change, expect_red=True, at_commit=state["contract_commit"]),
             allowed_evidence=RED_EVIDENCE,
         )
     except StoryLoopError as exc:

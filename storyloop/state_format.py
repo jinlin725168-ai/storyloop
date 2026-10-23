@@ -21,6 +21,23 @@ SETTINGS = "acceptance/storyloop-settings.json"
 GUIDE = "acceptance/AGENT_GUIDE.md"
 HOOKS = ("build", "start", "ready", "run_case", "cleanup")
 ONBOARDING_STACKS = ("maven", "node", "python", "generic")
+ROW_TYPES = ("positive", "degradation", "unknown_state", "form_parity",
+             "regression", "state_preservation", "non_goal")
+# Changed-behaviour rows must fail before implementation; preservation rows must pass.
+RED_ROWS = frozenset({"positive", "degradation", "unknown_state", "form_parity"})
+ORACLE_CLASSES = ("auto-fast", "auto-heavy", "manual")
+LOCATION = re.compile(r"^[^:\s][^:]*:[1-9][0-9]*$")
+
+
+def criterion_expects_red(criterion: dict) -> bool:
+    return criterion.get("row_type", "positive") in RED_ROWS
+
+
+def criterion_tier(criterion: dict) -> str:
+    """fast | heavy | manual, from oracle_class or kind when absent."""
+    default = "manual" if criterion.get("kind") == "manual" else "auto-fast"
+    oracle_class = criterion.get("oracle_class", default)
+    return {"auto-fast": "fast", "auto-heavy": "heavy", "manual": "manual"}[oracle_class]
 
 
 def validate_test_count_patterns(value: object) -> list[dict]:

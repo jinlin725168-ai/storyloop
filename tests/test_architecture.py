@@ -182,6 +182,14 @@ class LayeringRuleTests(unittest.TestCase):
 
 
 class LayeringTests(unittest.TestCase):
+    def test_product_and_smoke_bases_do_not_read_mutable_contract_owners(self):
+        graph = import_graph(PACKAGE)
+        forbidden = {"models": {"assessment"}, "smoke": {"changes"},
+                     "smoke_runner": {"changes"}}
+        self.assertEqual({source: sorted(graph[source] & targets)
+                          for source, targets in forbidden.items()},
+                         {source: [] for source in forbidden})
+
     def test_contract_format_consumers_do_not_import_mutable_owners(self):
         graph = import_graph(PACKAGE)
         old_edges = {

@@ -59,11 +59,11 @@ class PrepareResetTests(unittest.TestCase):
             (project / "unexpected.txt").write_text("污染\n", encoding="utf-8")
             return smoke_payload(change_id)
 
-        def red(project, identifier, **kwargs):
+        def red(project, change, **kwargs):
             if kwargs.get("expect_red"):
                 (project / "unexpected.txt").write_text("污染\n", encoding="utf-8")
                 raise StoryLoopError("RED 执行中断")
-            return run_smoke_isolated(project, identifier, **kwargs)
+            return run_smoke_isolated(project, change, **kwargs)
 
         with self.assertRaises(StoryLoopError) as raised:
             if stage == "acceptance":

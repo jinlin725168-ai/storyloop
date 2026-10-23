@@ -136,7 +136,7 @@ def routed_case(root: Path, tier: str, nature: str = 'feature') -> tuple[dict, L
     assert ready['layers']['checks']['status'] == 'PASSED'
     value = routed_product()
     if nature != 'feature':
-        from storyloop.models import ROW_TYPES
+        from storyloop.state_format import ROW_TYPES
         value['nature'] = nature
         value['coverage_exemptions'] = [
             {'row_type': row, 'reason': 'Not relevant to this routed sample'}

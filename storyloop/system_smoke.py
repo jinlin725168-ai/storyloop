@@ -196,7 +196,7 @@ def propose_smoke_update(project: Path, change_id: str, agent=None) -> dict:
     require(change["status"] == "PASSED", "Smoke maintenance follows a merged (PASSED) change")
     suite = suite_root(project, change_id)
     acceptance_suite = {
-        "manifest": load_smoke_manifest(project, change_id),
+        "manifest": load_smoke_manifest(project, change),
         "files": [{"path": p.relative_to(suite).as_posix(), "content": p.read_text(encoding="utf-8")}
                   for p in sorted(suite.rglob("*")) if p.is_file() and p.name != "manifest.json"],
     }

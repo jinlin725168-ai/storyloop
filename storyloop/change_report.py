@@ -40,7 +40,7 @@ def generate_change_report(
     project = Path(project).resolve()
     change = load_change(project, change_id)
     evidence_digest = _validate_gate(project, change, implementation_commit, layers, review)
-    manifest = load_smoke_manifest(project, change_id)
+    manifest = load_smoke_manifest(project, change)
     traceability = _build_traceability(
         change, manifest, layers["acceptance"].get("results", []), evidence_digest, manual_acceptance or []
     )
@@ -122,7 +122,7 @@ def _validate_gate(
                 if key not in {"evidence_path", "evidence_sha256", "uncounted", "oracle_problems"}}
     require(smoke.get("evidence_sha256") == evidence_digest and supplied == evidence,
             "Smoke evidence does not match the protected evidence file")
-    require(evidence.get("suite_digests") == smoke_digests(project, change["change_id"]),
+    require(evidence.get("suite_digests") == smoke_digests(project, change),
             "Smoke evidence is not bound to the protected test bytes")
     require(evidence.get("workspace_sha256") == candidate_digest(project),
             "Smoke evidence is not bound to the implementation workspace")

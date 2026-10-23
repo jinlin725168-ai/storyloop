@@ -17,8 +17,9 @@ from storyloop.baseline import load_project_config
 from storyloop.requirement_checklist import evaluate_checklist
 from storyloop.storage import write_json
 from storyloop.project_loop import LoopServices, run_change
-from storyloop.models import (StoryLoopError, criterion_expects_red, criterion_tier, nature_of,
-                              validate_product)
+from storyloop.models import StoryLoopError
+from storyloop.product_contract import nature_of, validate_product
+from storyloop.state_format import criterion_expects_red, criterion_tier
 from storyloop.role_schemas import SCHEMAS, normalize, schema_errors
 from tests.support import product
 

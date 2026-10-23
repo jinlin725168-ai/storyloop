@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 
+from storyloop.changes import load_change
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project, load_project_config
 from tests.routing_support import legacy_create_change as create_change
@@ -113,7 +114,7 @@ class SystemSmokeInTheLoopTests(unittest.TestCase):
             self.assertEqual(result["status"], "PASSED")
             report = json.loads(Path(result["report"]).read_text(encoding="utf-8"))
             self.assertEqual(report["layers"]["smoke"]["status"], "PASSED")
-            ci = run_ci(root, change_id)
+            ci = run_ci(root, load_change(root, change_id))
             self.assertEqual(ci["status"], "PASSED")
             self.assertEqual(ci["smoke"]["status"], "PASSED")
             self.assertEqual(ci["acceptance"]["status"], "PASSED")

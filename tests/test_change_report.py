@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from storyloop.changes import load_change
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
 from storyloop.change_report import _telemetry_view, generate_change_report
@@ -41,7 +42,7 @@ class ChangeReportTests(unittest.TestCase):
         state = create_change(root, "idea", product(), now=lambda: NOW)
         change_id = state["change_id"]
         approve_change(root, change_id, now=lambda: NOW)
-        install_smoke_suite(root, change_id, [{"path": "flow.py", "content": "raise SystemExit(0)\n"}], {
+        install_smoke_suite(root, load_change(root, change_id), [{"path": "flow.py", "content": "raise SystemExit(0)\n"}], {
             "version": 1, "tests": [{
                 "id": "SMOKE-1", "criteria": ["AC-1"],
                 "command": ["{python}", f"acceptance/changes/{change_id}/flow.py"],
@@ -50,7 +51,7 @@ class ChangeReportTests(unittest.TestCase):
         })
         git(root, "add", "acceptance")
         git(root, "commit", "-q", "-m", "candidate")
-        return temporary, root, change_id, run_smoke(root, change_id)
+        return temporary, root, change_id, run_smoke(root, load_change(root, change_id))
 
     def test_report_maps_story_criterion_test_result_evidence_and_commit(self):
         temporary, root, change_id, smoke = self._setup()

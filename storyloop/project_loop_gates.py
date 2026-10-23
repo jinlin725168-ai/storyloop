@@ -19,7 +19,8 @@ from .characterization_locks import (capture_locks, routed_coverage, require_sav
 from .answers import load_answers
 from .baseline import _git
 from .facts import merge_facts
-from .models import StoryLoopError, nature_of, require
+from .models import StoryLoopError, require
+from .product_contract import nature_of
 from .project_boundaries import audit_project_changes
 from .project_git import commit_paths
 from .project_loop_guards import exists_at, read_only_call, require_git_visible, write_safely
