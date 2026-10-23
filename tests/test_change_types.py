@@ -18,8 +18,11 @@ from storyloop.project_loop_gates import ensure_characterization
 from storyloop.requirement_checklist import evaluate_checklist
 from storyloop.routing_policy import evaluate, validate_policy
 from storyloop.routing_state import open_routing
+from storyloop.project_loop import run_change
+from storyloop.role_schemas import schema_errors, schema_for
 from tests.test_change_nature import fix_product, refactor_product
-from tests.routing_support import signals
+from tests.routing_support import routed_case, signals
+from tests.support import product as base_product
 
 
 class ChangeTypeTests(unittest.TestCase):
@@ -43,6 +46,19 @@ class ChangeTypeTests(unittest.TestCase):
         self.assertEqual(type_of({"nature": "fix"}), "fix")
         with self.assertRaises(StoryLoopError):
             definition_for("unknown")
+
+    def test_unhashable_type_names_fail_with_the_safe_workflow_error(self):
+        for invalid in ([], {}):
+            with self.subTest(invalid=invalid):
+                product = base_product()
+                product["nature"] = invalid
+                with self.assertRaises(StoryLoopError):
+                    from storyloop.models import validate_product
+                    validate_product(product)
+                with self.assertRaises(StoryLoopError):
+                    definition_for(invalid)
+                with self.assertRaises(StoryLoopError):
+                    evaluate(signals(nature=invalid), validate_policy(None))
 
     def test_policy_cannot_be_changed_by_a_caller(self):
         with self.assertRaises(TypeError):
@@ -70,6 +86,14 @@ class ChangeTypeTests(unittest.TestCase):
                 ensure_characterization(Path("."), {"product": refactor_product()}, state,
                                         SimpleNamespace(characterize=None), config)
         self.assertEqual(state["characterization"]["status"], "DEFERRED")
+
+    def test_refactor_characterization_cannot_be_skipped(self):
+        state = {"routing": {"version": 1, "effective_tier": "standard"}, "planning": {}}
+        with patch("storyloop.project_loop_gates.save_run"):
+            with self.assertRaisesRegex(StoryLoopError, "characterization gate"):
+                ensure_characterization(Path("."), {"product": refactor_product()}, state,
+                                        SimpleNamespace(characterize=None),
+                                        {"profile": {"test_roots": []}})
 
     def test_routing_respects_the_type_minimum_tier(self):
         policy = replace(CHANGE_TYPES["feature"], minimum_tier="heavy")
@@ -106,3 +130,14 @@ class ChangeTypeTests(unittest.TestCase):
         with patch.object(change_types, "CHANGE_TYPES", MappingProxyType({**CHANGE_TYPES, "feature": policy})):
             status = _status(Path("."), "ignored", product, {"unresolved": []})
         self.assertEqual(status, "READY")
+
+    def test_a_table_only_test_type_can_run_the_routed_skeleton(self):
+        policy = replace(CHANGE_TYPES["feature"], id_prefix="DEMO")
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.object(change_types, "CHANGE_TYPES",
+                              MappingProxyType({**CHANGE_TYPES, "demo": policy})):
+                change, services = routed_case(Path(folder), "light", nature="demo")
+                self.assertEqual(change["change_id"].split("-", 1)[0], "DEMO")
+                self.assertEqual(schema_errors(change["product"], schema_for("product", {})), [])
+                result = run_change(Path(folder), change["change_id"], services)
+        self.assertEqual(result["status"], "PASSED")

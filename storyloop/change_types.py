@@ -40,7 +40,7 @@ def type_of(product: dict) -> str:
 
 def definition_for(type_name: str) -> ChangeType:
     """Return the policy for a known nature, rejecting unsupported ones safely."""
-    if type_name not in CHANGE_TYPES:
+    if not isinstance(type_name, str) or type_name not in CHANGE_TYPES:
         raise StoryLoopError("Invalid change nature")
     return CHANGE_TYPES[type_name]
 

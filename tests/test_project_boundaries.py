@@ -31,6 +31,10 @@ class ProjectBoundaryTests(unittest.TestCase):
             self.assertEqual([(item["path"], item["category"]) for item in result["violations"]],
                              [("modules/orders/new.py", "OUT_OF_SCOPE")])
             self.assertFalse(any(path.startswith("modules/") for path in role["writable_paths"]))
+            demo = replace(CHANGE_TYPES["feature"], id_prefix="DEMO", writable_scope=("test_roots",))
+            with patch.object(change_types, "CHANGE_TYPES", MappingProxyType({**CHANGE_TYPES, "demo": demo})):
+                result = audit_project_changes(root, "DEMO-20261023-001")
+            self.assertEqual([item["category"] for item in result["violations"]], ["OUT_OF_SCOPE"])
 
     def test_agent_write_to_lessons_is_a_violation(self):
         with tempfile.TemporaryDirectory() as folder:

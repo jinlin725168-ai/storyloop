@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 
+from . import change_types
 from .adapter_capabilities import ROLES
 from .lessons import ACTIONS, LANDING_KINDS, MAX_SUMMARY, STATUSES, STRENGTHS, TIERS
 
@@ -132,7 +133,7 @@ SCHEMAS = {
             {"session": STRING, "question": STRING, "answer": STRING})}),
         "questions": {"type": "array", "items": QUESTION},
         "stories": {"type": "array", "items": STORY},
-        "nature": _nullable({"type": "string", "enum": ["feature", "fix", "refactor"]}),
+        "nature": _nullable({"type": "string", "enum": list(change_types.CHANGE_TYPES)}),
         "defect": _nullable(DEFECT),
         "refactor": _nullable(REFACTOR),
         "consumers": _nullable({"type": "array", "items": CONSUMER}),
@@ -241,6 +242,8 @@ for _proposal_field in ('lessons', 'uncovered_concepts'):
 def schema_for(role: str, payload: dict) -> dict:
     """Add optional memory metadata to every ordinary call, including special modes."""
     schema = copy.deepcopy(_selected_schema(role, payload))
+    if role == 'product':
+        schema['properties']['nature']['enum'] = [*change_types.CHANGE_TYPES, None]
     if role != 'survey' and payload.get('mode') != 'retrospective':
         schema['properties'].update(
             lessons_used=_nullable({'type': 'array', 'items': _obj({

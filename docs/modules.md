@@ -1,10 +1,10 @@
 # 模块组成
 
-对应引擎版本：0.1.0，核对日期 2026-10-22。代码在 `storyloop/`，只用 Python 标准库。
+对应引擎版本：0.1.0，核对日期 2026-10-23。代码在 `storyloop/`，只用 Python 标准库。
 
 ## 一、模块清单
 
-分组与分区来自 `storyloop/architecture.toml`；按声明的 rank 排序。
+分组与分区来自 `storyloop/architecture.toml`；表中模块按职责分组。
 对外提供列列出被其他代码模块导入或通过模块属性引用的公开函数；无此类函数时记为“—”。`testing.smoke_harness` 汇总其13个模块。
 
 | 架构模块 | 模块 | 分区 | 职责 | 对外提供 |
