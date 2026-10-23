@@ -4,6 +4,7 @@ from pathlib import Path, PureWindowsPath
 import tempfile
 import unittest
 
+from tests import architecture_rules
 from tests.architecture_rules import (
     DECLARATION, PACKAGE, ArchModule, Declaration, Entry, classify, code_modules, load_declaration,
     Exemption, Violation, cycle_members, import_graph, module_name, stale_entries,
@@ -98,6 +99,19 @@ class DeclarationTests(unittest.TestCase):
 
 
 class LayeringRuleTests(unittest.TestCase):
+    def test_base_cycle_graph_excludes_mutable_detours_but_layering_still_rejects_them(self):
+        architecture = {"root": ArchModule("root", "基础", 0)}
+        entries = {name: Entry(name, "root", "mutable" if name == "m" else "base", None)
+                   for name in ("a", "b", "m")}
+        decl = Declaration(architecture, entries, (), frozenset(), {})
+        graph = {"a": {"b", "m"}, "b": {"a"}, "m": {"a"}}
+        self.assertTrue(hasattr(architecture_rules, "base_graph"))
+        self.assertEqual(architecture_rules.base_graph(decl, graph),
+                         {"a": {"b"}, "b": {"a"}})
+        self.assertEqual(cycle_members(architecture_rules.base_graph(decl, graph)), {"a", "b"})
+        self.assertEqual([(v.source, v.target, v.rules) for v in violations(decl, graph)],
+                         [("a", "m", ("base_imports_mutable",))])
+
     def test_every_import_form_is_counted(self):
         sources = {
             "top.py": ("from .low import f\nimport storyloop.other as o\n"
