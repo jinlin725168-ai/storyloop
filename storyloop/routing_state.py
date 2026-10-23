@@ -1,8 +1,9 @@
 """Pure routing snapshots and version-aware execution budgets."""
 from copy import deepcopy
+from .change_types import definition_for, type_of
 from .intake import digest
 from .models import require
-from .routing_policy import DEFAULT_BUDGETS, validate_policy
+from .routing_policy import DEFAULT_BUDGETS, max_tier, validate_policy
 
 
 def is_routed(change: dict, state: dict | None = None) -> bool:
@@ -28,6 +29,8 @@ def open_routing(change: dict, policy: dict, config: dict) -> dict:
     """Freeze approved L1, policy and scope without retaining caller-owned references."""
     frozen = validate_policy(policy)
     tier = change['approval']['tier']
+    floor = definition_for(type_of(change['product'])).minimum_tier
+    require(tier == max_tier(tier, floor), 'Approved tier is below the type floor')
     budget = resolve_budget(config, tier)
     return {'version': 1, 'initial_tier': tier, 'effective_tier': tier,
             'policy': frozen, 'policy_digest': digest(frozen),

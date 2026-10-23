@@ -2,16 +2,24 @@
 
 import unittest
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
 from unittest.mock import patch
+import tempfile
 
 from storyloop import change_types
 from storyloop.change_types import CHANGE_TYPES, definition_for, type_of
 from storyloop.models import StoryLoopError
+from storyloop.changes import _next_id
+from storyloop.intake import _status
+from storyloop.planning import required_locks
 from storyloop.project_loop_gates import ensure_characterization
 from storyloop.requirement_checklist import evaluate_checklist
+from storyloop.routing_policy import evaluate, validate_policy
+from storyloop.routing_state import open_routing
 from tests.test_change_nature import fix_product, refactor_product
+from tests.routing_support import signals
 
 
 class ChangeTypeTests(unittest.TestCase):
@@ -62,3 +70,39 @@ class ChangeTypeTests(unittest.TestCase):
                 ensure_characterization(Path("."), {"product": refactor_product()}, state,
                                         SimpleNamespace(characterize=None), config)
         self.assertEqual(state["characterization"]["status"], "DEFERRED")
+
+    def test_routing_respects_the_type_minimum_tier(self):
+        policy = replace(CHANGE_TYPES["feature"], minimum_tier="heavy")
+        with patch.object(change_types, "CHANGE_TYPES", MappingProxyType({**CHANGE_TYPES, "feature": policy})):
+            decision = evaluate(signals(nature="feature"), validate_policy(None))
+        self.assertEqual(decision["tier"], "heavy")
+
+    def test_run_cannot_open_below_the_type_floor(self):
+        change = {"approval": {"tier": "light"}, "intake": {"decision": {"reasons": []}},
+                  "product": {"nature": "refactor", "assessment": {"scope": {}}}}
+        with self.assertRaisesRegex(StoryLoopError, "type floor"):
+            open_routing(change, validate_policy(None), {})
+
+    def test_required_locks_come_from_the_type_stages(self):
+        policy = replace(CHANGE_TYPES["refactor"], required_stages=("by_tier",))
+        with patch.object(change_types, "CHANGE_TYPES", MappingProxyType({**CHANGE_TYPES, "refactor": policy})):
+            paths = required_locks("standard", "refactor", ["app/a.py"])
+        self.assertEqual(paths, [])
+
+    def test_change_id_prefix_comes_from_the_type(self):
+        policy = replace(CHANGE_TYPES["fix"], id_prefix="DEMO")
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.object(change_types, "CHANGE_TYPES", MappingProxyType({**CHANGE_TYPES, "fix": policy})):
+                change_id = _next_id(Path(folder), datetime(2026, 10, 23, tzinfo=timezone.utc), "fix")
+        self.assertEqual(change_id, "DEMO-20261023-001")
+
+    def test_intake_existing_criteria_rule_comes_from_the_type(self):
+        policy = replace(CHANGE_TYPES["feature"], requires_new_criteria=False)
+        product = {"nature": "feature", "questions": [],
+                   "stories": [{"acceptance": [{"id": "A1", "kind": "automated"}]}],
+                   "assessment": {"verifiable_goal": True, "criteria": [
+                       {"existence": "exists", "feasibility": "local_automated",
+                        "method": {"commands": []}, "criterion_id": "A1"}]}}
+        with patch.object(change_types, "CHANGE_TYPES", MappingProxyType({**CHANGE_TYPES, "feature": policy})):
+            status = _status(Path("."), "ignored", product, {"unresolved": []})
+        self.assertEqual(status, "READY")

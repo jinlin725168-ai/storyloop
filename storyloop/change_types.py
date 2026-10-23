@@ -16,19 +16,20 @@ class ChangeType:
     minimum_tier: str
     human_review: str
     id_prefix: str
+    requires_new_criteria: bool
 
 
 CHANGE_TYPES: Mapping[str, ChangeType] = MappingProxyType({
     "feature": ChangeType(
         ("acceptance_red", "existing_file_characterization"),
-        ("mutable", "test_roots"), ("by_tier",), "light", "by_tier", "FEAT"),
+        ("mutable", "test_roots"), ("by_tier",), "light", "by_tier", "FEAT", True),
     "fix": ChangeType(
         ("defect_reproduction_red", "existing_file_characterization"),
-        ("mutable", "test_roots"), ("by_tier",), "light", "by_tier", "FIX"),
+        ("mutable", "test_roots"), ("by_tier",), "light", "by_tier", "FIX", False),
     "refactor": ChangeType(
         ("structural_red", "behavior_green"),
         ("mutable", "test_roots"), ("by_tier", "characterization"),
-        "standard", "by_tier", "REF"),
+        "standard", "by_tier", "REF", False),
 })
 
 
