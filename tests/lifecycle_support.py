@@ -66,6 +66,8 @@ def fixture_environment():
 
 def replace_recorded_path(value, path, token):
     aliases = {str(path), path.as_posix()}
+    if isinstance(path, PureWindowsPath):
+        aliases.add(str(path).replace("\\", "\\\\"))
     variants = set()
     for alias in aliases:
         quoted = shlex.quote(alias)

@@ -112,6 +112,17 @@ class GoldenNormalizerTests(unittest.TestCase):
         changed = {"diagnostic": value["diagnostic"].replace(r"\w+\s", "/w+/s")}
         self.assertNotEqual(result, normalize_case(changed, PureWindowsPath(r"C:\case")))
 
+    def test_markdown_escaped_recorded_windows_paths_match_posix(self):
+        from storyloop.report_markdown_sections import inline
+        posix = {"cwd": "/tmp/storyloop-smoke-abc",
+                 "markdown": "重放工作目录：" + inline("/case") + "；PROJECT_ROOT_REPLAY\n"
+                             + "原执行目录：" + inline("/tmp/storyloop-smoke-abc")}
+        windows = {"cwd": r"C:\Temp\storyloop-smoke-xyz",
+                   "markdown": "重放工作目录：" + inline(r"C:\case") + "；PROJECT_ROOT_REPLAY\n"
+                               + "原执行目录：" + inline(r"C:\Temp\storyloop-smoke-xyz")}
+        self.assertEqual(normalize_case(windows, PureWindowsPath(r"C:\case")),
+                         normalize_case(posix, Path("/case")))
+
     def test_fixture_openspec_result_does_not_depend_on_host_installation(self):
         import shutil
         from storyloop.openspec_docs import validate_with_cli
