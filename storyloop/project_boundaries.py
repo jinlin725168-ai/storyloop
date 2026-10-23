@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
+from .change_types import definition_for, type_for_change_id, type_of
 from .baseline import _git, load_baseline, load_project_config
 from .models import identifier, require
 from .project_profile import CI_FILES, matches_test_root
@@ -15,12 +16,15 @@ from .storage import write_json
 def role_path_boundary(project: Path, role: str, payload: dict) -> dict:
     """Expose the audit's mutable roots for adapter path guards from the same source."""
     baseline, profile = load_baseline(project), load_project_config(project).get("profile", {})
+    change = payload.get("change") or {}
+    product = change.get("product", {}) if isinstance(change, dict) else {}
+    scope = definition_for(type_of(product)).writable_scope
     writable = []
     if role == "implement":
-        writable = [*(f"{root.rstrip('/')}/**" for root in baseline["module_roots"]),
-                    *(f"{root.rstrip('/')}/**" for root in profile.get("test_roots", []))]
-    elif role == "characterize":
-        writable = [f"{root.rstrip('/')}/**" for root in profile.get("test_roots", [])]
+        if "mutable" in scope:
+            writable.extend(f"{root.rstrip('/')}/**" for root in baseline["module_roots"])
+    if role in {"implement", "characterize"} and "test_roots" in scope:
+        writable.extend(f"{root.rstrip('/')}/**" for root in profile.get("test_roots", []))
     plan = payload.get("design_plan") if isinstance(payload.get("design_plan"), dict) else {}
     forbidden = [*baseline["foundation_paths"], *baseline["protected_paths"],
                  "openspec/lessons/**", ".storyloop/**"]
@@ -28,18 +32,19 @@ def role_path_boundary(project: Path, role: str, payload: dict) -> dict:
     return {"writable_paths": sorted(set(writable)), "forbidden_paths": sorted(set(forbidden))}
 
 
-def audit_project_changes(project: Path, change_id: str) -> dict:
+def audit_project_changes(project: Path, change_id: str, *, nature: str | None = None) -> dict:
     """Classify every Git-visible change against the locked logical baseline."""
     project = Path(project).resolve()
     change_id = identifier(change_id, "change id")
     baseline = load_baseline(project)
+    scope = definition_for(nature or type_for_change_id(change_id)).writable_scope
     test_roots = _test_roots(project)
     changed = _changed_paths(project)
     allowed: list[dict] = []
     violations: list[dict] = []
     for relative in changed:
         path = project / relative
-        record = {"path": relative, "category": _category(relative, baseline, change_id, test_roots)}
+        record = {"path": relative, "category": _category(relative, baseline, change_id, test_roots, scope)}
         if path.exists() and (path.is_symlink()
                               or (hasattr(path, "is_junction") and path.is_junction())):
             record["category"] = "UNSAFE_LINK"
@@ -83,7 +88,8 @@ def _test_roots(project: Path) -> list[str]:
     return [root for root in roots if isinstance(root, str)]
 
 
-def _category(relative: str, baseline: dict, change_id: str, test_roots: list[str] = ()) -> str:
+def _category(relative: str, baseline: dict, change_id: str, test_roots: list[str] = (),
+              scope: tuple[str, ...] = ("mutable", "test_roots")) -> str:
     if _is_ci_path(relative):
         return "CI_PROTECTED"
     if (_inside(relative, f"openspec/changes/{change_id}")
@@ -96,9 +102,9 @@ def _category(relative: str, baseline: dict, change_id: str, test_roots: list[st
         return "SMOKE_PROTECTED"
     if relative in baseline["integration_paths"]:
         return "INTEGRATION_CHANGE"
-    if any(_inside(relative, root) for root in baseline["module_roots"]):
+    if "mutable" in scope and any(_inside(relative, root) for root in baseline["module_roots"]):
         return "FEATURE"
-    if matches_test_root(relative, list(test_roots)):
+    if "test_roots" in scope and matches_test_root(relative, list(test_roots)):
         return "TEST"  # declared test layout: implement and characterize may write it
     if relative in baseline["foundation_paths"]:
         return "FOUNDATION_CHANGE"

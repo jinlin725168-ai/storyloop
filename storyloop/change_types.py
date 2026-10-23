@@ -43,3 +43,11 @@ def definition_for(type_name: str) -> ChangeType:
     if type_name not in CHANGE_TYPES:
         raise StoryLoopError("Invalid change nature")
     return CHANGE_TYPES[type_name]
+
+
+def type_for_change_id(change_id: str) -> str:
+    """Identify a declared ID prefix; unknown legacy IDs retain feature policy."""
+    for type_name, definition in CHANGE_TYPES.items():
+        if change_id.startswith(definition.id_prefix + "-"):
+            return type_name
+    return "feature"
