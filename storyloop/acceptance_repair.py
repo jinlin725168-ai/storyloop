@@ -21,7 +21,7 @@ from .run_stops import pause
 from .run_transitions import transition, REPAIRABLE
 from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, without_manifest_echo
 from .smoke import suite_relative, suite_root as acceptance_suite_root
-from .smoke_runner import run_smoke_isolated
+from .smoke_runner import run_commands_at_commit, run_smoke_isolated
 from .storage import load_json
 
 if TYPE_CHECKING:  # the loop imports this module; the services type is only an annotation
@@ -92,7 +92,7 @@ def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict
         return _unproven_suite(project, state, exc)
     for key in ("questions", "error", "pending", "acceptance", "next", "routed", "stop", "mode"):
         state.pop(key, None)
-    ensure_baseline(project, state, change["product"])  # a stop before RED never sampled one
+    ensure_baseline(project, state, change["product"], run_commands_at_commit)
     transition(project, state, "IMPLEMENTING", event="repair_red",
                updates={"attempt": 0, "red_evidence_sha256": red["evidence_sha256"]})
     save_run(project, state)

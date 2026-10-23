@@ -201,10 +201,12 @@ rank = 7
 "report_roles" = { module = "reporting", zone = "mutable" }
 "report_sections" = { module = "reporting", zone = "mutable" }
 "project_loop" = { module = "lifecycle", zone = "mutable" }
+"run_attempts" = { module = "lifecycle", zone = "mutable" }
 "project_preparation" = { module = "lifecycle", zone = "mutable" }
 "run_recovery" = { module = "lifecycle", zone = "mutable" }
 "routing_execution" = { module = "lifecycle", zone = "mutable" }
 "cli" = { module = "command", zone = "mutable" }
+"product_cli" = { module = "command", zone = "mutable" }
 "cli_output" = { module = "command", zone = "mutable" }
 "next_steps" = { module = "command", zone = "mutable" }
 "memory_cli" = { module = "command", zone = "mutable" }
@@ -234,12 +236,12 @@ members = [
   "call_context", "changes", "cli", "consistency",
   "cross_vendor", "errata",
   "foundation_survey", "intake", "lesson_landing", "lesson_retrieval",
-  "lesson_store", "oracle_counts",
+  "lesson_store",
   "oracle_skill_approval", "project_agents",
   "project_loop_failures", "readiness",
   "role_profiles", "routing_cli",
   "routing_report", "skills",
-  "smoke_runner", "stop_report", "system_smoke", "telemetry",
+  "stop_report", "system_smoke", "telemetry",
   "telemetry_summary",
 ]
 

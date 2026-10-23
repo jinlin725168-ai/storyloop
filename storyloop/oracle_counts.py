@@ -139,7 +139,8 @@ def removal_paths(product: dict) -> list[str]:
     return [item["path"] for item in product.get("test_removals") or []]
 
 
-def sample_layer(project: Path, config: dict, commit: str, layer: str, removals: list[str]) -> list:
+def sample_layer(project: Path, config: dict, commit: str, layer: str, removals: list[str],
+                 run_at_commit) -> list:
     """Executed counts of one layer on a commit's tree, without the tests the contract allows to delete.
 
     The tree comes from the commit, never from the workspace, so implementation edits (including
@@ -147,25 +148,26 @@ def sample_layer(project: Path, config: dict, commit: str, layer: str, removals:
     implementation must still reach, so a declaration excuses exactly those files and nothing more.
     """
     from .project_profile import layer_commands
-    from .smoke_runner import run_commands_at_commit
     commands = layer_commands(config["profile"], layer)
     if not commands:
         return []
-    return executed_list(run_commands_at_commit(project, commit, commands, config["check_timeout_seconds"],
-                                                exclude=removals))
+    return executed_list(run_at_commit(project, commit, commands, config["check_timeout_seconds"],
+                                       exclude=removals))
 
 
-def sample_baseline(project: Path, config: dict, commit: str, removals: list[str]) -> dict:
+def sample_baseline(project: Path, config: dict, commit: str, removals: list[str], run_at_commit) -> dict:
     """The unit and integration floors on the code before implementation."""
-    return {name: sample_layer(project, config, commit, name, removals) for name in BASELINE_LAYERS}
+    return {name: sample_layer(project, config, commit, name, removals, run_at_commit)
+            for name in BASELINE_LAYERS}
 
 
-def ensure_baseline(project: Path, state: dict, product: dict) -> None:
+def ensure_baseline(project: Path, state: dict, product: dict, run_at_commit) -> None:
     """Sample the floors once, on the contract commit; idempotent for every path back to IMPLEMENTING."""
     if "oracle" not in state:
         from .baseline import load_project_config
         state["oracle"] = {"baseline": sample_baseline(project, load_project_config(project),
-                                                       state["contract_commit"], removal_paths(product))}
+                                                       state["contract_commit"], removal_paths(product),
+                                                       run_at_commit)}
 
 
 def check_layers(layers: dict, oracle: dict | None) -> dict:

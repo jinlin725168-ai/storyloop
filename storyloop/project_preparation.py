@@ -17,7 +17,7 @@ from .oracle_counts import ensure_baseline
 from .semantic_repair import answer_with_repair
 from .smoke import (RED_EVIDENCE, install_smoke_suite, load_smoke_manifest, protection_path,
                     validate_suite, without_manifest_echo, suite_root as acceptance_suite_root)
-from .smoke_runner import run_smoke_isolated
+from .smoke_runner import run_commands_at_commit, run_smoke_isolated
 if TYPE_CHECKING:
     from .run_services import LoopServices
 
@@ -60,7 +60,7 @@ def _prepare_acceptance(
             raise
         return pause(project, state, exc.code, error=str(exc),
                      acceptance={"status": exc.code, **exc.details})
-    ensure_baseline(project, state, change["product"])  # sampled once, on the code before implementation
+    ensure_baseline(project, state, change["product"], run_commands_at_commit)
     for key in ("acceptance", "error", "next"):
         state.pop(key, None)
     transition(project, state, "IMPLEMENTING", event="red_ready",

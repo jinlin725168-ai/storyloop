@@ -7,34 +7,20 @@ import json
 from pathlib import Path
 import sys
 from . import __version__
-from .answers import pending_questions, record_answers
-from .approvals import approve_change
 from .baseline import BASELINE_PATH
 from .onboarding_cli import initialize, add_init_arguments
-from .base_upgrade import propose_base_change, upgrade_baseline
+from .base_upgrade import propose_base_change
 from .foundation_survey import survey_foundation
 from .skills import install_skills
 from .system_smoke import apply_smoke_update, propose_smoke_update
-from .change_log import change_log
-from .changes import create_change, load_change, revise_change
-from .manual_acceptance import record_manual_acceptance
-from .next_steps import append_pending_memory, draft_next, next_step, supersede_revision_next
-from .openspec_docs import document_change
+from .next_steps import next_step
 from .models import StoryLoopError, require
-from .product_contract import validate_product
 from .processutil import redact
 from .project_agents import invoke_project_agent
-from .acceptance_repair import repair_smoke
 from .project_loop import load_run_state, run_change
-from .semantic_repair import answer_with_repair
 from .stop_report import build_stop, build_entry_stop, stop_of
 from .routing_cli import dispatch_routing, BLOCKED
-from .routing_report import draft_stop, report_routing
-from .requirement_checklist import blocking_items, evaluate_checklist
-from .run_recovery import reset_run
 from .ci_command import run_ci_command
-from .storage import load_json
-from .telemetry import adopt_pending, summarize
 from .memory_cli import add_memory_arguments, dispatch_memory
 from .cli_output import display
 
@@ -218,118 +204,31 @@ def dispatch(args) -> dict:
 
 
 def _change(project: Path, args) -> dict:
-    require(_is_product_project(project), "Run storyloop init on this Git project first")
-    from .adapter_capabilities import ensure_checked
-    ensure_checked(project)
-    interactive = not getattr(args, "no_interactive", False)
-    if args.supersede:
-        require(args.message and not args.idea and not args.change_id,
-                "--supersede needs --message (and no --idea / --change)")
-        from .supersede import supersede_change
-        from .guarded_calls import read_only_call
-        reviser = lambda payload: _product_answer(  # noqa: E731
-            project, payload,
-            call=lambda request: read_only_call(
-                project, args.supersede,
-                lambda: invoke_project_agent(project, "product", request)))
-        created = supersede_change(project, args.supersede, args.message, reviser,
-                                   reason=args.reason)
-        adopt_pending(project, created["change_id"])
-        state = clarify_interactively(project, created["change_id"], _revise_with_agent, interactive)
-        pending = state["product"]["questions"] or blocking_items(
-            evaluate_checklist(state["product"], project))
-        return _draft_result(project, state, draft_next(project, state) if pending else created["next"])
-    require(not args.reason, "--reason is only valid with --supersede")
-    if args.idea:
-        require(not args.change_id and not args.message,
-                "Use --idea for a new change, or --change with --message for a revision")
-        from .readiness import require_readiness
-        require_readiness(project)
-        product = _product_answer(project, {"idea": args.idea})
-        created = create_change(project, args.idea, product)
-        adopt_pending(project, created["change_id"])
-        state = clarify_interactively(project, created["change_id"], _revise_with_agent, interactive)
-        return _draft_result(project, state)
-    require(args.change_id and args.message,
-            "Revision needs both --change and --message")
-    _revise_with_agent(project, args.change_id, args.message, [])
-    state = clarify_interactively(project, args.change_id, _revise_with_agent, interactive)
-    return _draft_result(project, state)
+    from .product_cli import change
+    return change(project, args, _product_answer, _revise_with_agent,
+                  clarify_interactively, _draft_result, _is_product_project, invoke_project_agent)
 
 
 def _draft_result(project, state, next_action=None):
-    stop = draft_stop(project, state)
-    pending = state["product"].get("questions") or blocking_items(evaluate_checklist(state["product"], project))
-    hint = draft_next(project, state) if pending else (stop["resume"] if stop else next_action)
-    return {**state, "stop": stop,
-            "next": supersede_revision_next(project, state) or hint or draft_next(project, state)}
+    from .product_cli import draft_result
+    return draft_result(project, state, next_action)
 
 
 def _revise_with_agent(project: Path, change_id: str, message: str, answers: list[dict]) -> dict:
-    """One product revision: the agent rewrites the contract, the engine records the answers."""
-    current = load_change(project, change_id)
-    product = _product_answer(project, {
-        "change_id": change_id, "message": message,
-        "answers": [{"question_id": a["question_id"], "question": a["question"], "answer": a["answer"]}
-                    for a in answers],
-        "current_product": current["product"],
-    })
-    return revise_change(project, change_id, product, message,
-                         clarifications=[{"question": a["question"], "answer": a["answer"]} for a in answers])
+    from .product_cli import revise_with_agent
+    return revise_with_agent(project, change_id, message, answers, _product_answer)
 
 
 def _product_answer(project: Path, payload: dict, call=None) -> dict:
-    """Get one semantically valid product answer, allowing one corrective call."""
-    from .baseline import _git
-    from .guarded_calls import read_only_call
-    payload = {**payload, "routing_version": 1,
-               "source_commit": _git(project, "rev-parse", "HEAD").strip()}
-    def validate(value):
-        validate_product(value)
-        require(isinstance(value.get("assessment"), dict), "Product assessment is required")
-    operation = lambda: answer_with_repair(
-        call or (lambda request: invoke_project_agent(project, "product", request)), payload, validate)
-    return read_only_call(project, payload.get("change_id", "pending"), operation)
+    from .product_cli import product_answer
+    return product_answer(project, payload, call, invoke_project_agent)
 
 
 def clarify_interactively(project: Path, change_id: str, reviser, interactive: bool,
                           per_round: int = 5) -> dict:
-    """Spec-kit style clarification: up to five multiple-choice questions per round, on the record.
-
-    Empty input takes the recommended option; a number picks an option; free text is accepted;
-    `q` stops the round and leaves the remaining questions open. Without a terminal the draft is
-    returned untouched so the questions can be answered later with `change --message`.
-    """
-    state = load_change(project, change_id)
-    while state["product"]["questions"] and interactive and _terminal():
-        questions = state["product"]["questions"][:per_round]
-        _say(f"草案有 {len(state['product']['questions'])} 个待决问题，本轮澄清 {len(questions)} 个"
-              "（回车选推荐项，输入序号或自由文本，q 结束本轮）：")
-        answers = []
-        stopped = False
-        for index, question in enumerate(questions, 1):
-            _say(f"\n[{question['id']}] {question['text']}")
-            for number, option in enumerate(question["options"], 1):
-                marker = "（推荐）" if option == question.get("recommended") else ""
-                _say(f"  {number}. {option}{marker}")
-            if question.get("why"):
-                _say(f"  为什么重要：{question['why']}")
-            reply = input("> ").strip()
-            if reply.lower() == "q":
-                stopped = True
-                break
-            answer = _pick_answer(reply, question)
-            if answer is None:
-                continue
-            answers.append({"question_id": question["id"], "question": question["text"], "answer": answer})
-        if not answers:
-            break
-        message = "澄清回答（请据此更新故事、规则和验收条件，删除已回答的问题，并保留 clarifications）：\n" + \
-            "\n".join(f"{a['question_id']} {a['question']} → {a['answer']}" for a in answers)
-        state = reviser(project, change_id, message, answers)
-        if stopped:
-            break
-    return state
+    from .product_cli import clarify_interactively as clarify
+    return clarify(project, change_id, reviser, interactive, per_round,
+                   _terminal, _say, _pick_answer)
 
 
 def _say(text: str) -> None:
@@ -350,72 +249,15 @@ def _pick_answer(reply: str, question: dict) -> str | None:
 
 
 def _product_dispatch(project: Path, args) -> dict:
-    change_id = getattr(args, "change_id", None)
-    if args.command == "approve":
-        require(change_id, "Product approval needs --change")
-        approve_change(project, change_id)
-        return run_with_answers(project, change_id, interactive=not args.no_interactive)
-    if args.command == "run":
-        require(change_id, "Product execution needs --change")
-        return run_with_answers(project, change_id, interactive=not args.no_interactive,
-                                overrule=getattr(args, "overrule", None))
-    if args.command == "answer":
-        return record_answers(project, change_id, args.answers)
-    if args.command == "status":
-        require(change_id, "Product status needs --change")
-        change = load_change(project, change_id)
-        run_path = project / ".storyloop/state/runs" / f"{change_id}.json"
-        run = load_run_state(project, change_id) if run_path.exists() else None
-        return {"status": (run or {}).get("status", change["status"]), "change_id": change_id,
-                "revision": change["revision"], "run": run,
-                "stop": stop_of(project, run) if run else draft_stop(project, change),
-                "routing": report_routing(project, change),
-                "telemetry": summarize(project, change_id),
-                "next": append_pending_memory(project,
-                    _draft_result(project, change)["next"] if run is None and change["status"] == "DRAFT"
-                    else (next_step((run or {}).get("status") or change["status"], change_id, project, run)
-                          or ((run or {}).get("stop") or {}).get("resume")))}
-    if args.command == "log":
-        return change_log(project, change_id)
-    if args.command == "reset":
-        return reset_run(project, change_id, args.reason)
-    if args.command in {"smoke-repair", "acceptance-repair"}:
-        return repair_smoke(project, change_id, args.reason)
-    if args.command == "document":
-        return document_change(project, change_id, args.design.resolve() if args.design else None,
-                               capability=args.capability)
-    if args.command == "accept":
-        require(change_id and args.criteria, "Manual acceptance needs --change and --criterion")
-        return record_manual_acceptance(project, change_id, args.criteria, args.note)
-    if args.command == "report":
-        require(change_id, "Product report needs --change")
-        path = project / "reports" / "storyloop" / change_id / "report.md"
-        require(path.is_file(), "Acceptance report is not available")
-        return {"status": "REPORT", "change_id": change_id, "report": str(path)}
-    raise StoryLoopError(f"Unknown command {args.command}")
+    from .product_cli import dispatch
+    return dispatch(project, args, run_with_answers, _draft_result, load_run_state)
 
 
 def run_with_answers(project: Path, change_id: str, interactive: bool,
                      runner=None, overrule: str | None = None) -> dict:
-    """Run the change; when it pauses for input and a terminal is present, ask right here.
-
-    Answers are recorded exactly as `storyloop answer` would record them, then the run
-    continues. Without a terminal (CI, pipes) the NEEDS_INPUT result is returned unchanged.
-    """
-    runner = runner or run_change  # resolved at call time so tests can patch cli.run_change
-    result = runner(project, change_id, **({"overrule": overrule} if overrule is not None else {}))
-    while result.get("status") == "NEEDS_INPUT" and interactive and _terminal():
-        questions = pending_questions(project, change_id)
-        if not questions:
-            break
-        _say(f"代理有 {len(questions)} 个问题需要你决定（直接回车表示让代理自行决定）：")
-        answers = []
-        for index, question in enumerate(questions, 1):
-            reply = input(f"[{index}/{len(questions)}] {question}\n> ").strip()
-            answers.append(reply or "由人确认：此问题无特别要求，由代理按现有约定自行决定")
-        record_answers(project, change_id, answers)
-        result = runner(project, change_id)
-    return result
+    from .product_cli import run_with_answers as run_interactively
+    return run_interactively(project, change_id, interactive, runner or run_change,
+                             overrule, _terminal, _say)
 
 
 def _terminal() -> bool:
