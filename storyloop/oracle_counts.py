@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 
 from .models import StoryLoopError, require
+from .state_format import validate_test_count_patterns as validate_patterns
 
 
 def _last(pattern: str, text: str):
@@ -115,23 +116,6 @@ def count_tests(command: list[str], output: str, patterns: list[dict] | None = N
         return dict(UNCOUNTED)
     name, best = max(found, key=lambda pair: pair[1]["executed"])
     return {**best, "parser": name}
-
-
-def validate_patterns(value: object) -> list[dict]:
-    """settings `test_count_patterns`: [{match, executed}] where `executed` has a named group."""
-    require(isinstance(value, list), "test_count_patterns must be a list")
-    result = []
-    for item in value:
-        require(isinstance(item, dict) and set(item) == {"match", "executed"},
-                "Each test count pattern needs exactly match and executed")
-        require(isinstance(item["match"], str) and bool(item["match"]), "pattern match must be nonempty text")
-        try:
-            compiled = re.compile(item["executed"], re.M)
-        except (TypeError, re.error) as exc:
-            raise StoryLoopError(f"Invalid test count pattern: {exc}") from None
-        require("executed" in compiled.groupindex, "A test count pattern needs a named group 'executed'")
-        result.append({"match": item["match"], "executed": item["executed"]})
-    return result
 
 
 def project_patterns(project: Path) -> list[dict]:

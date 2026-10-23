@@ -7,6 +7,7 @@ from pathlib import PurePosixPath
 
 from .change_types import definition_for
 from .models import StoryLoopError
+from .state_format import RISK_FIELDS
 
 
 TIERS = ("light", "standard", "heavy")
@@ -24,11 +25,6 @@ DEFAULT_POLICY = {
     "guard_paths": [],
 }
 COUNT_FIELDS = ("stories", "existing_files", "created_files", "interfaces", "max_references")
-RISK_FIELDS = (
-    "sensitive", "migration", "external_contract", "new_interface", "crosscut",
-    "principle_deviation", "hard_verify_high_cost", "dependency_swap", "persistent_state",
-    "human_choice", "guard",
-)
 HEAVY_RISKS = RISK_FIELDS[:7]
 STANDARD_RISKS = RISK_FIELDS[7:10]
 SIGNAL_FIELDS = {"nature", "stories", "criteria", "manual", "existing_files",

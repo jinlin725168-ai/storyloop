@@ -4,12 +4,7 @@ from __future__ import annotations
 import re
 from . import change_types
 from .change_types import type_of
-from .errors import StoryLoopError
-
-
-def require(condition: bool, message: str) -> None:
-    if not condition:
-        raise StoryLoopError(message)
+from .errors import StoryLoopError, require
 
 
 def text(value: object, label: str) -> str:

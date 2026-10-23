@@ -4,17 +4,14 @@ from importlib.resources import files
 import json
 
 from . import __version__
+from .state_format import GUIDE, HOOKS, MANIFEST, ONBOARDING_STACKS, SETTINGS
 
-MANIFEST = "acceptance/onboarding.json"
-SETTINGS = "acceptance/storyloop-settings.json"
-GUIDE = "acceptance/AGENT_GUIDE.md"
-HOOKS = ("build", "start", "ready", "run_case", "cleanup")
-HINTS = {
-    "maven": "确认 reactor/module 与 Surefire/Failsafe，离线使用预热依赖；禁用跳测开关。",
-    "node": "确认包管理器与真实 unit/check runner，预热依赖；Windows 使用原生解释器。",
-    "python": "确认 unittest/pytest 实际执行数；业务依赖在子进程中加载。",
-    "generic": "仅通用骨架，无 Gradle/未知栈特化实现；所有阶段由项目明确。",
-}
+HINTS = dict(zip(ONBOARDING_STACKS, (
+    "确认 reactor/module 与 Surefire/Failsafe，离线使用预热依赖；禁用跳测开关。",
+    "确认包管理器与真实 unit/check runner，预热依赖；Windows 使用原生解释器。",
+    "确认 unittest/pytest 实际执行数；业务依赖在子进程中加载。",
+    "仅通用骨架，无 Gradle/未知栈特化实现；所有阶段由项目明确。",
+)))
 
 
 def json_bytes(value: dict) -> bytes:

@@ -84,6 +84,7 @@ rank = 7
 "boundaries" = { module = "execution", zone = "base" }
 "project_git" = { module = "git", zone = "base" }
 "project_profile" = { module = "project_contract", zone = "base" }
+"state_format" = { module = "project_contract", zone = "base" }
 "smoke" = { module = "project_contract", zone = "base" }
 "onboarding_manifest" = { module = "project_contract", zone = "base" }
 "testing.smoke_harness.*" = { module = "project_contract", zone = "base" }
@@ -254,11 +255,6 @@ target = "assessment"
 until = "D"
 reason = "基础层带入产品合同校验，阶段 D 移到合同模块"
 [[exemptions]]
-source = "onboarding_manifest"
-target = "onboarding_templates"
-until = "D"
-reason = "契约依赖内核或业务；被用到的定义下沉到契约层"
-[[exemptions]]
 source = "project_agents"
 target = "adapter_profiles"
 until = "D"
@@ -342,25 +338,10 @@ reason = "证据内核依赖业务，改为调用方传参或下沉定义"
 
 
 [[exemptions]]
-source = "project_profile"
-target = "oracle_counts"
-until = "D"
-reason = "契约依赖内核或业务；被用到的定义下沉到契约层"
-[[exemptions]]
 source = "project_receipt"
 target = "change_report"
 until = "D"
 reason = "证据内核依赖业务，改为调用方传参或下沉定义"
-[[exemptions]]
-source = "role_schemas"
-target = "lessons"
-until = "D"
-reason = "枚举取值属于状态格式，移到契约层（设计 §9.3）"
-[[exemptions]]
-source = "role_schemas"
-target = "routing_policy"
-until = "D"
-reason = "枚举取值属于状态格式，移到契约层（设计 §9.3）"
 [[exemptions]]
 source = "smoke"
 target = "changes"
@@ -383,10 +364,10 @@ members = [
   "call_context", "changes", "cli", "consistency",
   "cross_vendor", "errata", "evidence_locations", "facts",
   "foundation_survey", "intake", "lesson_landing", "lesson_retrieval",
-  "lesson_store", "models", "onboarding_manifest", "oracle_counts",
+  "lesson_store", "models", "oracle_counts",
   "oracle_skill_approval", "path_security", "principles", "project_agents",
   "project_boundaries", "project_git", "project_loop_failures",
-  "project_profile", "readiness", "requirement_checklist",
+  "readiness", "requirement_checklist",
   "role_profiles", "role_schemas", "routing_cli", "routing_evidence",
   "routing_policy", "routing_report", "skills", "smoke",
   "smoke_runner", "stop_report", "system_smoke", "telemetry",

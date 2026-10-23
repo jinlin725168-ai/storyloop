@@ -76,8 +76,8 @@ def validate_project_settings(root: Path, overrides: dict | None = None) -> dict
     if "scratch_paths" in overrides:
         profile["scratch_paths"] = _relative_paths(overrides["scratch_paths"], "scratch_paths")
     if "test_count_patterns" in overrides:
-        from .oracle_counts import validate_patterns  # local import: oracle_counts reads project config
-        profile["test_count_patterns"] = validate_patterns(overrides["test_count_patterns"])
+        from .state_format import validate_test_count_patterns
+        profile["test_count_patterns"] = validate_test_count_patterns(overrides["test_count_patterns"])
     if "stacks" in overrides:
         require(isinstance(overrides["stacks"], list) and all(isinstance(item, str) and item.strip()
                 for item in overrides["stacks"]), "stacks must be a list of names")

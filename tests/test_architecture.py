@@ -182,6 +182,16 @@ class LayeringRuleTests(unittest.TestCase):
 
 
 class LayeringTests(unittest.TestCase):
+    def test_contract_format_consumers_do_not_import_mutable_owners(self):
+        graph = import_graph(PACKAGE)
+        old_edges = {
+            "role_schemas": {"lessons", "routing_policy"},
+            "project_profile": {"oracle_counts"},
+            "onboarding_manifest": {"onboarding_templates"},
+        }
+        self.assertEqual({source: sorted(graph[source] & targets) for source, targets in old_edges.items()},
+                         {source: [] for source in old_edges})
+
     def test_no_unexempted_violations(self):
         found = violations(DECL, import_graph(PACKAGE))
         self.assertEqual(unexempted(DECL, found), [],
