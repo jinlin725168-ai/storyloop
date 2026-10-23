@@ -123,6 +123,25 @@ class GoldenNormalizerTests(unittest.TestCase):
         self.assertEqual(normalize_case(windows, PureWindowsPath(r"C:\case")),
                          normalize_case(posix, Path("/case")))
 
+    def test_fixture_real_python_output_normalizes_only_crlf_before_rendering(self):
+        import sys
+        from storyloop.report_markdown import _text
+        from tests.lifecycle_support import fixture_environment
+        script = ("import sys; sys.stdout.buffer.write(b'keep \r\nbare\rdone\n'); "
+                  "sys.stderr.buffer.write(b'..\r\nRan 2 tests in 0.1s\r\nOK\r\n'); sys.exit(1)")
+        # Keep escapes in the child source rather than embedding newline characters in argv.
+        script = script.replace("\r", r"\r").replace("\n", r"\n")
+        with tempfile.TemporaryDirectory() as folder, fixture_environment():
+            from storyloop import smoke_runner
+            result = smoke_runner.run_process([sys.executable, "-c", script], Path(folder), 10)
+        self.assertEqual(result["stdout"], "keep \nbare\rdone\n")
+        expected = "..\nRan 2 tests in 0.1s\nOK\n"
+        self.assertEqual(result["stderr"], expected)
+        self.assertEqual(_text(result["stderr"]), _text(expected))
+        self.assertEqual(result["returncode"], 1)
+        self.assertTrue(result["contained"])
+        self.assertFalse(result["timed_out"])
+
     def test_fixture_openspec_result_does_not_depend_on_host_installation(self):
         import shutil
         from storyloop.openspec_docs import validate_with_cli

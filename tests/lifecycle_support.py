@@ -47,7 +47,9 @@ def candidate_roots(value):
 @contextmanager
 def fixture_environment():
     """Keep lifecycle captures independent of optional CLI and host Git configuration."""
+    from storyloop import smoke_runner
     original_which, original_run = shutil.which, subprocess.run
+    original_process = smoke_runner.run_process
     executable = "storyloop-fixture-openspec"
     def which(name, *args, **kwargs):
         return executable if name == "openspec" else original_which(name, *args, **kwargs)
@@ -58,9 +60,17 @@ def fixture_environment():
             payload = {"items": [{"id": command[-2], "valid": True}]}
             return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
         return original_run(command, *args, **kwargs)
+    def process(command, *args, **kwargs):
+        result = original_process(command, *args, **kwargs)
+        if Path(command[0]) == Path(sys.executable):
+            # Canonicalize fixture transport before Markdown turns CR into visible spaces.
+            result = {**result, **{key: result[key].replace("\r\n", "\n")
+                                   for key in ("stdout", "stderr")}}
+        return result
     with patch.dict("os.environ", {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "init.defaultBranch",
                                   "GIT_CONFIG_VALUE_0": "master"}), fixture_git_policy(), \
-            patch("shutil.which", side_effect=which), patch("subprocess.run", side_effect=run):
+            patch("shutil.which", side_effect=which), patch("subprocess.run", side_effect=run), \
+            patch.object(smoke_runner, "run_process", side_effect=process):
         yield
 
 
