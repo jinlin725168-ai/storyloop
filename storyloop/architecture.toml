@@ -16,7 +16,7 @@ title = "Git 原语"
 rank = 1
 [architecture.change_types]
 title = "变更类型"
-rank = 1
+rank = 0
 [architecture.project_contract]
 title = "项目契约"
 rank = 2
@@ -71,6 +71,8 @@ rank = 7
 
 [modules]
 "models" = { module = "foundation", zone = "base", split = "D" }
+"change_types" = { module = "change_types", zone = "base" }
+"errors" = { module = "foundation", zone = "base" }
 "path_security" = { module = "foundation", zone = "base" }
 "storage" = { module = "state_store", zone = "base" }
 "initialization_transaction" = { module = "state_store", zone = "base" }
