@@ -23,7 +23,8 @@ from .models import StoryLoopError, require
 from .product_contract import nature_of
 from .project_boundaries import audit_project_changes
 from .project_git import commit_paths
-from .project_loop_guards import exists_at, read_only_call, require_git_visible, write_safely
+from .guarded_calls import read_only_call, write_safely
+from .project_loop_guards import exists_at, require_git_visible
 from .project_loop_support import run_path, save_run
 from .run_transitions import transition
 from .run_stops import pause, pause_for_boundary

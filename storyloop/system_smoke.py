@@ -20,21 +20,12 @@ import tempfile
 from .models import StoryLoopError, fields, require
 from .path_security import repository_relative, safe_target
 from .project_profile import is_ci_path
+from .state_format import LEGACY_CHANGE_DIR, SYSTEM_SMOKE_DIR, is_system_smoke_path
 from .storage import load_json, write_json, write_text_atomic
 
-SYSTEM_SMOKE_DIR = "acceptance/smoke"
 PROTECTION = ".storyloop/state/system-smoke.json"
-LEGACY_CHANGE_DIR = re.compile(r"^[A-Z]+-\d{8}-\d{3}$")
 MAX_FILES = 200
 MAX_FILE_BYTES = 512_000
-
-
-def is_system_smoke_path(relative: str) -> bool:
-    """True for files of the system suite, false for legacy per-change directories under it."""
-    if not relative.startswith(SYSTEM_SMOKE_DIR + "/"):
-        return False
-    first = relative[len(SYSTEM_SMOKE_DIR) + 1:].split("/", 1)[0]
-    return not LEGACY_CHANGE_DIR.match(first)
 
 
 def install_system_smoke(project: Path, files: list[dict], manifest: dict) -> dict:
@@ -167,6 +158,13 @@ def _digests(project: Path) -> dict[str, str]:
 # ---- maintenance: propose (agent) and apply (human) -------------------------------------
 
 DRAFTS = ".storyloop/drafts/smoke"
+
+
+def preflight_system_smoke(project: Path) -> None:
+    """Validate a committed system suite before initialization mutates control state."""
+    path = safe_target(project, SYSTEM_SMOKE_DIR + "/manifest.json", "system smoke manifest")
+    if path.is_file():
+        validate_manifest(load_json(path))
 
 
 def adopt_system_smoke(project: Path) -> dict | None:

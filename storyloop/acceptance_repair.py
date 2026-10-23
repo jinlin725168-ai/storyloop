@@ -15,7 +15,7 @@ from .changes import load_change
 from .models import StoryLoopError, identifier, require, text
 from .oracle_counts import ensure_baseline
 from .project_git import commit_paths, current_branch
-from .project_loop_guards import read_only_call
+from .guarded_calls import read_only_call
 from .project_loop_support import relative_files, run_path, save_run
 from .run_stops import pause
 from .run_transitions import transition, REPAIRABLE

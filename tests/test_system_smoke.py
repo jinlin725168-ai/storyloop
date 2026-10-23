@@ -8,15 +8,16 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from storyloop.changes import load_change
 from storyloop.approvals import approve_change
-from storyloop.baseline import bootstrap_project, load_project_config
+from storyloop.baseline import load_project_config
+from storyloop.onboarding_cli import bootstrap_with_project_checks as bootstrap_project
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.project_boundaries import audit_project_changes
 from storyloop.project_loop import LoopServices, load_run_state, run_change
-from storyloop.smoke_runner import run_ci
+from storyloop.ci_command import run_ci
 from storyloop.system_smoke import (SYSTEM_SMOKE_DIR, install_system_smoke, load_system_smoke,
                                     run_system_smoke_isolated)
 from tests.support import product
@@ -35,6 +36,21 @@ def _suite(exit_code: int) -> tuple[list[dict], dict]:
 
 
 class SystemSmokeSuiteTests(unittest.TestCase):
+    def test_init_preflights_committed_system_manifest_before_control_writes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            manifest = root / SYSTEM_SMOKE_DIR / "manifest.json"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text('{"version": 1, "tests": []}\n', encoding="utf-8")
+            git(root, "add", ".")
+            git(root, "commit", "-q", "-m", "invalid smoke")
+            with patch("storyloop.system_smoke.adopt_system_smoke") as adopt:
+                with self.assertRaisesRegex(StoryLoopError, "System smoke manifest needs tests"):
+                    bootstrap_project(root, {"unit_commands": []})
+                adopt.assert_not_called()
+            self.assertFalse((root / ".storyloop").exists())
+
     def test_install_protects_the_suite_and_ignores_legacy_change_directories(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -114,7 +130,7 @@ class SystemSmokeInTheLoopTests(unittest.TestCase):
             self.assertEqual(result["status"], "PASSED")
             report = json.loads(Path(result["report"]).read_text(encoding="utf-8"))
             self.assertEqual(report["layers"]["smoke"]["status"], "PASSED")
-            ci = run_ci(root, load_change(root, change_id))
+            ci = run_ci(root, change_id)
             self.assertEqual(ci["status"], "PASSED")
             self.assertEqual(ci["smoke"]["status"], "PASSED")
             self.assertEqual(ci["acceptance"]["status"], "PASSED")

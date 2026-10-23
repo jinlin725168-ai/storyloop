@@ -25,7 +25,6 @@ from .processutil import redact, run_process
 from .smoke import (RED_EVIDENCE, RESULT_EVIDENCE, load_smoke_manifest, protection_path, smoke_digests,
                     suite_relative, suite_root)
 from .storage import load_json, write_json
-from .system_smoke import run_system_smoke_isolated
 
 
 def run_smoke(
@@ -410,12 +409,3 @@ def _timestamp() -> str:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def run_ci(project: Path, change: dict) -> dict:
-    """The CI entry: the change's acceptance suite plus the system smoke suite, both isolated."""
-    change_id = change["change_id"]
-    acceptance = run_smoke_isolated(project, change)
-    smoke = run_system_smoke_isolated(project)
-    status = "PASSED" if acceptance["status"] == "PASSED" and smoke["status"] in {"PASSED", "SKIPPED"} else "FAILED"
-    return {"status": status, "change_id": change_id, "acceptance": acceptance, "smoke": smoke}

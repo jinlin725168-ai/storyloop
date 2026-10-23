@@ -226,7 +226,7 @@ def _change(project: Path, args) -> dict:
         require(args.message and not args.idea and not args.change_id,
                 "--supersede needs --message (and no --idea / --change)")
         from .supersede import supersede_change
-        from .project_loop_guards import read_only_call
+        from .guarded_calls import read_only_call
         reviser = lambda payload: _product_answer(  # noqa: E731
             project, payload,
             call=lambda request: read_only_call(
@@ -281,7 +281,7 @@ def _revise_with_agent(project: Path, change_id: str, message: str, answers: lis
 def _product_answer(project: Path, payload: dict, call=None) -> dict:
     """Get one semantically valid product answer, allowing one corrective call."""
     from .baseline import _git
-    from .project_loop_guards import read_only_call
+    from .guarded_calls import read_only_call
     payload = {**payload, "routing_version": 1,
                "source_commit": _git(project, "rev-parse", "HEAD").strip()}
     def validate(value):

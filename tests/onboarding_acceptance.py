@@ -11,7 +11,7 @@ import sys
 import tempfile
 import time
 
-from storyloop.baseline import bootstrap_project
+from storyloop.onboarding_cli import bootstrap_with_project_checks as bootstrap_project
 from storyloop.harness_command import expand_command
 from storyloop.onboarding import scaffold_project
 from storyloop.readiness import inspect_readiness

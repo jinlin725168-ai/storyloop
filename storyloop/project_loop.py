@@ -40,8 +40,9 @@ from .routing_execution import prepare_execution, candidate_l3
 from .routing_risks import merge_routing_risks
 from .routing_upgrade import enforce_forbidden_paths
 from .project_loop_gates import characterize_paths, design_plan, uncharacterized_paths
-from .project_loop_guards import (read_only_call, require_control_unchanged, require_git_visible,
-                                  verify_read_only_snapshot, write_safely)
+from .guarded_calls import read_only_call, write_safely
+from .project_loop_guards import (require_control_unchanged, require_git_visible,
+                                  verify_read_only_snapshot)
 from .project_loop_failures import (apply_overrule, epoch_of, record_boundary, record_failure,
                                     require_routed_choice, route_review)
 from .project_loop_support import control_digest, run_path, save_run

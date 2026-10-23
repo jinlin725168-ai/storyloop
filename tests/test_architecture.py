@@ -182,6 +182,16 @@ class LayeringRuleTests(unittest.TestCase):
 
 
 class LayeringTests(unittest.TestCase):
+    def test_evidence_kernels_receive_business_facts_from_callers(self):
+        graph = import_graph(PACKAGE)
+        forbidden = {"baseline": {"adapter_capabilities", "system_smoke"},
+                     "project_boundaries": {"system_smoke"},
+                     "smoke_runner": {"system_smoke"},
+                     "project_loop_guards": {"errata"}}
+        self.assertEqual({source: sorted(graph[source] & targets)
+                          for source, targets in forbidden.items()},
+                         {source: [] for source in forbidden})
+
     def test_git_and_evidence_kernels_do_not_import_upper_owners(self):
         graph = import_graph(PACKAGE)
         forbidden = {"project_git": {"baseline"},

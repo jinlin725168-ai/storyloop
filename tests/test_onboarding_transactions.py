@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from storyloop.baseline import bootstrap_project
+from storyloop.onboarding_cli import bootstrap_with_project_checks as bootstrap_project
 from storyloop.models import StoryLoopError
 from storyloop.storage import locked_file, write_json
 from tests.onboarding_support import cli, repository

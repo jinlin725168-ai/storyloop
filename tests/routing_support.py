@@ -68,7 +68,7 @@ def routing_repository(root: Path) -> None:
 
 def readiness_repository(root: Path, **settings) -> None:
     """Initialize a clean local repository with explicit readiness test layers."""
-    from storyloop.baseline import bootstrap_project
+    from storyloop.onboarding_cli import bootstrap_with_project_checks as bootstrap_project
     routing_repository(root)
     bootstrap_project(root, {
         "unit_commands": [["{python}", "-m", "unittest", "discover", "-s", "tests"]],
@@ -118,7 +118,7 @@ def routed_case(root: Path, tier: str, nature: str = 'feature') -> tuple[dict, L
     from tests.test_structured_output import passing_review
     if tier not in ('light', 'standard', 'heavy'):
         raise ValueError('Unknown routing tier')
-    from storyloop.baseline import bootstrap_project
+    from storyloop.onboarding_cli import bootstrap_with_project_checks as bootstrap_project
     routing_repository(root)
     (root / 'core.py').write_text('STABLE = True\n', encoding='utf-8')
     (root / 'tests/test_service.py').write_text(

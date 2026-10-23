@@ -96,6 +96,7 @@ rank = 7
 "oracle_counts" = { module = "evidence_kernel", zone = "base" }
 "project_loop_support" = { module = "evidence_kernel", zone = "base" }
 "project_loop_guards" = { module = "evidence_kernel", zone = "base" }
+"guarded_calls" = { module = "verification", zone = "mutable" }
 "project_receipt" = { module = "evidence_kernel", zone = "base" }
 "characterization_locks" = { module = "evidence_kernel", zone = "base" }
 "evidence_locations" = { module = "evidence_kernel", zone = "base" }
@@ -235,16 +236,6 @@ source = "adapter_capabilities"
 target = "role_subagents"
 until = "D"
 reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "baseline"
-target = "adapter_capabilities"
-until = "D"
-reason = "证据内核依赖业务，改为调用方传参或下沉定义"
-[[exemptions]]
-source = "baseline"
-target = "system_smoke"
-until = "D"
-reason = "证据内核依赖业务，改为调用方传参或下沉定义"
 
 [[exemptions]]
 source = "project_agents"
@@ -311,36 +302,20 @@ source = "project_agents"
 target = "telemetry"
 until = "D"
 reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "project_boundaries"
-target = "system_smoke"
-until = "D"
-reason = "证据内核依赖业务，改为调用方传参或下沉定义"
-
-[[exemptions]]
-source = "project_loop_guards"
-target = "errata"
-until = "D"
-reason = "证据内核依赖业务，改为调用方传参或下沉定义"
 
 
-[[exemptions]]
-source = "smoke_runner"
-target = "system_smoke"
-until = "D"
-reason = "证据内核依赖业务，改为调用方传参或下沉定义"
+
 
 [cycles]
 members = [
-  "adapter_capabilities", "base_upgrade", "baseline",
+  "adapter_capabilities", "base_upgrade",
   "call_context", "changes", "cli", "consistency",
-  "cross_vendor", "errata", "evidence_locations", "facts",
+  "cross_vendor", "errata",
   "foundation_survey", "intake", "lesson_landing", "lesson_retrieval",
   "lesson_store", "oracle_counts",
-  "oracle_skill_approval", "principles", "project_agents",
-  "project_boundaries", "project_loop_failures",
-  "readiness", "requirement_checklist",
-  "role_profiles", "role_schemas", "routing_cli", "routing_evidence",
+  "oracle_skill_approval", "project_agents",
+  "project_loop_failures", "readiness",
+  "role_profiles", "role_schemas", "routing_cli",
   "routing_report", "skills",
   "smoke_runner", "stop_report", "system_smoke", "telemetry",
   "telemetry_summary",

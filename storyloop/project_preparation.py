@@ -10,7 +10,7 @@ from .run_guards import read_red_evidence
 from .lesson_store import lessons_digest
 from .openspec_docs import validate_with_cli
 from .project_git import commit_paths
-from .project_loop_guards import read_only_call
+from .guarded_calls import read_only_call
 from .project_loop_support import relative_files, save_run
 from .run_stops import pause
 from .oracle_counts import ensure_baseline

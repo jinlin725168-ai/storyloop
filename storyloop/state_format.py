@@ -21,6 +21,8 @@ SETTINGS = "acceptance/storyloop-settings.json"
 GUIDE = "acceptance/AGENT_GUIDE.md"
 HOOKS = ("build", "start", "ready", "run_case", "cleanup")
 ONBOARDING_STACKS = ("maven", "node", "python", "generic")
+SYSTEM_SMOKE_DIR = "acceptance/smoke"
+LEGACY_CHANGE_DIR = re.compile(r"^[A-Z]+-\d{8}-\d{3}$")
 ROW_TYPES = ("positive", "degradation", "unknown_state", "form_parity",
              "regression", "state_preservation", "non_goal")
 # Changed-behaviour rows must fail before implementation; preservation rows must pass.
@@ -38,6 +40,14 @@ def criterion_tier(criterion: dict) -> str:
     default = "manual" if criterion.get("kind") == "manual" else "auto-fast"
     oracle_class = criterion.get("oracle_class", default)
     return {"auto-fast": "fast", "auto-heavy": "heavy", "manual": "manual"}[oracle_class]
+
+
+def is_system_smoke_path(relative: str) -> bool:
+    """Exclude legacy per-change suites nested below the system smoke directory."""
+    if not relative.startswith(SYSTEM_SMOKE_DIR + "/"):
+        return False
+    first = relative[len(SYSTEM_SMOKE_DIR) + 1:].split("/", 1)[0]
+    return LEGACY_CHANGE_DIR.match(first) is None
 
 
 def validate_test_count_patterns(value: object) -> list[dict]:

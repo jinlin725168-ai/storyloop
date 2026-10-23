@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
+from typing import Callable
 
 from .models import StoryLoopError, require
 from .path_security import safe_target
@@ -16,7 +17,12 @@ BASELINE_PATH = Path(".storyloop/baseline.json")
 CONFIG_PATH = Path(".storyloop/config.json")
 
 
-def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
+def bootstrap_project(
+    project: Path, overrides: dict | None = None, *,
+    smoke_preflight: Callable[[Path], None] | None = None,
+    smoke_adoption: Callable[[Path], object] | None = None,
+    adapter_check: Callable[[Path], object] | None = None,
+) -> dict:
     """Capture a clean repository atomically; restore only this attempt's control writes."""
     from .initialization_transaction import initialization_transaction
     from .onboarding_manifest import validate_onboarding
@@ -31,7 +37,8 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
     require(baseline["source_head"] == original_head and baseline["source_branch"] == original_branch,
             "Repository HEAD or branch changed during initialization validation")
     config = _initial_config(profile, budget, role_config)
-    _preflight_system_smoke(project)
+    if smoke_preflight is not None:
+        smoke_preflight(project)
     with initialization_transaction(project):
         _require_initializable(project)
         require(_git(project, "rev-parse", "HEAD").strip() == original_head
@@ -41,11 +48,10 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
         _exclude_control_plane(project)
         write_json(project / CONFIG_PATH, config, max_bytes=512_000)
         write_json(project / BASELINE_PATH, baseline, max_bytes=8_000_000)
-        from .system_smoke import adopt_system_smoke
-        adopt_system_smoke(project)
-        if config.get("adapters") or config.get("roles"):
-            from .adapter_capabilities import check
-            check(project)
+        if smoke_adoption is not None:
+            smoke_adoption(project)
+        if (config.get("adapters") or config.get("roles")) and adapter_check is not None:
+            adapter_check(project)
         require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
                 "StoryLoop control files must stay outside Git changes")
         require(_git(project, "rev-parse", "HEAD").strip() == original_head
@@ -96,13 +102,6 @@ def _initial_config(profile: dict, budget: dict, role_config: dict) -> dict:
         "agent_timeout_seconds": 14400, "check_timeout_seconds": 300,
         "design_min_stories": 2, "profile": profile, **budget, **role_config,
     }
-
-
-def _preflight_system_smoke(project: Path) -> None:
-    from .system_smoke import SYSTEM_SMOKE_DIR, validate_manifest
-    path = safe_target(project, SYSTEM_SMOKE_DIR + "/manifest.json", "system smoke manifest")
-    if path.is_file():
-        validate_manifest(load_json(path))
 
 
 def _bootstrap_settings(overrides: dict | None) -> tuple[dict, dict, dict]:
