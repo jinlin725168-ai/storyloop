@@ -1,8 +1,12 @@
 """Fixed engine checks cannot be selected or skipped by a stage caller."""
 from pathlib import Path
+from dataclasses import replace
+from types import MappingProxyType
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
+from storyloop import change_types
+from storyloop.change_types import CHANGE_TYPES
 from storyloop.models import StoryLoopError
 from storyloop.run_guards import guard_g1
 from storyloop.run_transitions import transition
@@ -19,6 +23,17 @@ def red_record(project, status='RED'):
 
 
 class PreparationGuardsTests(unittest.TestCase):
+    def test_g1_rejects_a_type_without_a_supported_red_floor(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            red_record(root)
+            state = {'change_id': 'CHG-1', 'status': 'CONTRACT_COMMITTED', 'contract_commit': 'contract'}
+            policy = replace(CHANGE_TYPES['feature'], criteria_floor=())
+            with patch.object(change_types, 'CHANGE_TYPES',
+                              MappingProxyType({**CHANGE_TYPES, 'feature': policy})):
+                with self.assertRaisesRegex(StoryLoopError, 'RED floor'):
+                    guard_g1(root, state, {})
+
     def test_g1_missing_red_wrong_status_and_uncommitted_preparation_are_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -128,6 +143,17 @@ class VerificationGuardsTests(unittest.TestCase):
         guard_g2(self.root, case['change'], case['state'], case['context'])
         case['context']['layers']['unit']['results'][0]['counts']['executed'] = None
         guard_g2(self.root, case['change'], case['state'], case['context'])
+
+    def test_g2_reads_the_type_writable_scope(self):
+        from copy import deepcopy
+        from storyloop.run_guards import guard_g2
+        case = deepcopy(self.candidate)
+        self.assertTrue(any(item['category'] == 'FEATURE' for item in case['context']['boundary']['allowed']))
+        policy = replace(CHANGE_TYPES['feature'], writable_scope=('test_roots',))
+        with patch.object(change_types, 'CHANGE_TYPES',
+                          MappingProxyType({**CHANGE_TYPES, 'feature': policy})):
+            with self.assertRaisesRegex(StoryLoopError, 'boundary|Workspace changed'):
+                guard_g2(self.root, case['change'], case['state'], case['context'])
 
     def test_g2_rejects_tampered_acceptance_evidence_before_effect(self):
         from copy import deepcopy

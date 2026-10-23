@@ -1,13 +1,41 @@
 from pathlib import Path
+from dataclasses import replace
+from types import MappingProxyType
 import tempfile
 import unittest
+from unittest.mock import patch
 
+from storyloop import change_types
+from storyloop.change_types import CHANGE_TYPES
 from storyloop.baseline import bootstrap_project
-from storyloop.project_boundaries import audit_project_changes
+from storyloop.project_boundaries import audit_project_changes, role_path_boundary
 from tests.test_baseline_behavior import git, repository
 
 
 class ProjectBoundaryTests(unittest.TestCase):
+    def test_type_writable_scope_controls_module_and_role_paths(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            target = root / "modules/orders/new.py"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("VALUE = 1\n", encoding="utf-8")
+            normal = role_path_boundary(root, "implement", {"change": {"product": {"nature": "feature"}}})
+            self.assertTrue(any(path.startswith("modules/") for path in normal["writable_paths"]))
+            policy = replace(CHANGE_TYPES["feature"], writable_scope=("test_roots",))
+            with patch.object(change_types, "CHANGE_TYPES",
+                              MappingProxyType({**CHANGE_TYPES, "feature": policy})):
+                result = audit_project_changes(root, "FEAT-20261023-001")
+                role = role_path_boundary(root, "implement", {"change": {"product": {"nature": "feature"}}})
+            self.assertEqual([(item["path"], item["category"]) for item in result["violations"]],
+                             [("modules/orders/new.py", "OUT_OF_SCOPE")])
+            self.assertFalse(any(path.startswith("modules/") for path in role["writable_paths"]))
+            demo = replace(CHANGE_TYPES["feature"], id_prefix="DEMO", writable_scope=("test_roots",))
+            with patch.object(change_types, "CHANGE_TYPES", MappingProxyType({**CHANGE_TYPES, "demo": demo})):
+                result = audit_project_changes(root, "DEMO-20261023-001")
+            self.assertEqual([item["category"] for item in result["violations"]], ["OUT_OF_SCOPE"])
+
     def test_agent_write_to_lessons_is_a_violation(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

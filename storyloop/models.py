@@ -2,16 +2,9 @@
 from __future__ import annotations
 
 import re
-
-
-class StoryLoopError(RuntimeError):
-    """A safe, actionable workflow failure with a machine-readable category."""
-
-    def __init__(self, message: str, code: str = "BLOCKED",
-                 details: dict | None = None) -> None:
-        super().__init__(message)
-        self.code = code
-        self.details = {} if details is None else details
+from . import change_types
+from .change_types import type_of
+from .errors import StoryLoopError
 
 
 def require(condition: bool, message: str) -> None:
@@ -45,7 +38,7 @@ def fields(value: object, required: set, optional: set | None = None) -> None:
 
 
 PRIORITIES = {"P1", "P2", "P3"}
-NATURES = ("feature", "fix", "refactor")
+NATURES = tuple(change_types.CHANGE_TYPES)
 ROW_TYPES = ("positive", "degradation", "unknown_state", "form_parity",
              "regression", "state_preservation", "non_goal")
 # Rows that assert new or changed behaviour must fail before implementation; the rest assert what
@@ -56,7 +49,7 @@ LOCATION = re.compile(r"^[^:\s][^:]*:[1-9][0-9]*$")
 
 
 def nature_of(product: dict) -> str:
-    return product.get("nature", "feature")
+    return type_of(product)
 
 
 def criterion_expects_red(criterion: dict) -> bool:
@@ -153,13 +146,17 @@ def validate_product(value: object) -> dict:
 
 def _nature_blocks(value: dict) -> None:
     nature = value.get("nature", "feature")
-    require(nature in NATURES, "nature must be feature, fix or refactor")
-    require(("defect" in value) == (nature == "fix"), "A fix needs a defect block; other natures have none")
-    require(("refactor" in value) == (nature == "refactor"),
+    require(isinstance(nature, str) and nature in change_types.CHANGE_TYPES,
+            "nature must be feature, fix or refactor")
+    floor = change_types.definition_for(nature).criteria_floor
+    defect = "defect_reproduction_red" in floor
+    refactor = "structural_red" in floor
+    require(("defect" in value) == defect, "A fix needs a defect block; other natures have none")
+    require(("refactor" in value) == refactor,
             "A refactor needs a refactor block; other natures have none")
-    if nature == "fix":
+    if defect:
         _defect(value["defect"])
-    if nature == "refactor":
+    if refactor:
         _refactor(value["refactor"])
 
 

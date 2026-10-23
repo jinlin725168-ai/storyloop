@@ -108,7 +108,7 @@ def legacy_create_change(project, *args, **kwargs):
     return state
 
 
-def routed_case(root: Path, tier: str) -> tuple[dict, LoopServices]:
+def routed_case(root: Path, tier: str, nature: str = 'feature') -> tuple[dict, LoopServices]:
     """Build a real counted repository and approved contract; roles only author artifacts."""
     from storyloop.approvals import approve_change
     from storyloop.changes import create_change
@@ -135,6 +135,12 @@ def routed_case(root: Path, tier: str) -> tuple[dict, LoopServices]:
     assert ready['layers']['unit']['executed'] == ready['layers']['smoke']['executed'] == 1
     assert ready['layers']['checks']['status'] == 'PASSED'
     value = routed_product()
+    if nature != 'feature':
+        from storyloop.models import ROW_TYPES
+        value['nature'] = nature
+        value['coverage_exemptions'] = [
+            {'row_type': row, 'reason': 'Not relevant to this routed sample'}
+            for row in ROW_TYPES if row != 'positive']
     change = create_change(root, 'orders', value)
     change = approve_change(root, change['change_id'], tier=None if tier == 'light' else tier)
     services = LoopServices(lambda p, c: routed_acceptance(change['change_id']),

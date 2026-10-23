@@ -16,7 +16,7 @@ title = "Git 原语"
 rank = 1
 [architecture.change_types]
 title = "变更类型"
-rank = 1
+rank = 0
 [architecture.project_contract]
 title = "项目契约"
 rank = 2
@@ -71,6 +71,8 @@ rank = 7
 
 [modules]
 "models" = { module = "foundation", zone = "base", split = "D" }
+"change_types" = { module = "change_types", zone = "base" }
+"errors" = { module = "foundation", zone = "base" }
 "path_security" = { module = "foundation", zone = "base" }
 "storage" = { module = "state_store", zone = "base" }
 "initialization_transaction" = { module = "state_store", zone = "base" }
@@ -444,12 +446,12 @@ tests = ["tests.test_workspace_scratch::test_staging_files_is_never_tolerated", 
 [invariants.I11]
 title = "只升不降：档位在运行中只能升级，且不低于类型的最低档位"
 status = "guarded"
-tests = ["tests.test_invariants::test_i11_a_lighter_decision_never_lowers_the_effective_tier"]
+tests = ["tests.test_invariants::test_i11_a_lighter_decision_never_lowers_the_effective_tier", "tests.test_change_types::test_run_cannot_open_below_the_type_floor"]
 
 [invariants.I12]
 title = "底线单调：状态迁移只经守卫，守卫读取类型底线；阶段只能加严"
 status = "guarded"
-tests = ["tests.test_lifecycle_architecture::test_run_status_writes_have_one_owner", "tests.test_lifecycle_guards::test_real_completion_cannot_skip_a_configured_unit_layer"]
+tests = ["tests.test_lifecycle_architecture::test_run_status_writes_have_one_owner", "tests.test_lifecycle_guards::test_real_completion_cannot_skip_a_configured_unit_layer", "tests.test_lifecycle_guards::test_g1_rejects_a_type_without_a_supported_red_floor", "tests.test_lifecycle_guards::test_g2_reads_the_type_writable_scope"]
 
 [invariants.I13]
 title = "底座只能被 base 类型的变更推进，也只有 base 类型能写底座"

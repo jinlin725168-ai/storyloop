@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 from pathlib import Path
+from .change_types import definition_for, type_of
 from .assessment import validate_assessment
 from .baseline import _git, load_project_config
 from .models import StoryLoopError, require, validate_product
@@ -56,7 +57,7 @@ def _signals(product: dict, measured: dict) -> dict:
     rank = {'no': 0, 'unknown': 1, 'yes': 2}
     for key, value in measured['signals']['risks'].items():
         risks[key] = max(risks[key], value, key=rank.get)
-    return {**measured['signals'], 'nature': product.get('nature', 'feature'),
+    return {**measured['signals'], 'nature': type_of(product),
             'stories': len(product['stories']), 'criteria': len(assessment['criteria']),
             # Feasibility describes available supporting methods, never changes contract kind.
             'manual': sum(c['kind'] == 'manual' for story in product['stories']
@@ -78,7 +79,7 @@ def _status(project: Path, commit: str, product: dict, decision: dict | None) ->
             or any(item['feasibility'] == 'unknown' or item['existence'] == 'unknown'
                    for item in criteria)):
         return 'NEEDS_INPUT'
-    if (product.get('nature', 'feature') == 'feature'
+    if (definition_for(type_of(product)).requires_new_criteria
             and (all(item['existence'] == 'exists' for item in criteria)
                  or any(item['existence'] == 'partial' for item in criteria))):
         return 'NEEDS_INPUT'

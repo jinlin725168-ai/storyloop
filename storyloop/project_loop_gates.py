@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .planning import plan_projection, required_locks
+from .change_types import definition_for
 from .routing_restore import restore_lock_paths
 from .characterization_locks import (capture_locks, routed_coverage, require_saved_coverage, verified_locks)
 from .answers import load_answers
@@ -127,6 +128,8 @@ def _add_superseded_context(project: Path, change: dict, context: dict) -> None:
 def ensure_characterization(project: Path, change: dict, state: dict, services: LoopServices,
                             config: dict) -> dict | None:
     """Layer 3 gate, once per change: lock the current behaviour of the paths about to change."""
+    required_by_type = "characterization" in definition_for(
+        nature_of(change["product"])).required_stages
     current = state.get("characterization") or {}
     routed = state.get("routing", {}).get("version") == 1
     if current.get("status") == "GREEN" or (current.get("status") == "SKIPPED" and not routed):
@@ -141,7 +144,7 @@ def ensure_characterization(project: Path, change: dict, state: dict, services: 
         return None
     if (state.get('routing', {}).get('version') == 1
             and state['routing']['effective_tier'] != 'heavy'
-            and nature_of(change['product']) != 'refactor'
+            and not required_by_type
             and not _mandatory_locks(change, state, config)):
         state['characterization'] = {'status': 'DEFERRED', 'touched': [], 'tests': []}
         save_run(project, state)
@@ -155,7 +158,7 @@ def ensure_characterization(project: Path, change: dict, state: dict, services: 
     elif services.characterize is None:
         reason = "no characterize service"
     if reason:
-        if nature_of(change["product"]) == "refactor" or _mandatory_locks(change, state, config):
+        if required_by_type or _mandatory_locks(change, state, config):
             # Characterization is a refactor's behaviour oracle; without it nothing proves "unchanged".
             raise StoryLoopError(f"Refactor or heavy plan needs its characterization gate ({reason})")
         state["characterization"] = {"status": "SKIPPED", "reason": reason, "touched": [], "tests": []}

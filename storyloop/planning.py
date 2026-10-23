@@ -12,13 +12,15 @@ from .project_loop_support import save_run
 from .run_stops import pause
 from .routing_evidence import measure_scope
 from .routing_policy import evaluate
+from .change_types import definition_for
 from .routing_state import advance_tier
 from .semantic_repair import answer_with_repair
 
 
 def required_locks(tier: str, nature: str, touched: list[str]) -> list[str]:
     """Heavy and refactor work lock all selected existing paths before implementation."""
-    return sorted(set(touched)) if tier == 'heavy' or nature == 'refactor' else []
+    required = "characterization" in definition_for(nature).required_stages
+    return sorted(set(touched)) if tier == 'heavy' or required else []
 
 
 def selected_option(plan: dict) -> dict:

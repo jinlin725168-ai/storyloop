@@ -1,6 +1,7 @@
 """Deterministic lifecycle checks; G1–G3 move here in Tasks 4 and 5."""
 import hashlib
 from pathlib import Path
+from .change_types import definition_for, type_for_change_id, type_of
 from .models import require
 from .smoke import RED_EVIDENCE
 from .storage import load_json
@@ -34,6 +35,9 @@ def read_red_evidence(project: Path, change_id: str) -> dict:
 def guard_g1(project: Path, state: dict, context: dict) -> None:
     """Fresh RED is judged by the controlled runner; cached RED keeps its old weak check."""
     require(bool(state.get("contract_commit")), "Contract must be committed before implementation")
+    floor = definition_for(type_for_change_id(state["change_id"])).criteria_floor
+    require(bool(set(floor) & {"acceptance_red", "defect_reproduction_red", "structural_red"}),
+            "Change type lacks a supported RED floor")
     read_red_evidence(project, state["change_id"])
 
 
@@ -116,7 +120,8 @@ def guard_g2(project: Path, change: dict, state: dict, context: dict) -> None:
             "Independent review did not pass")
     identifier = change["change_id"]
     boundary = _without_engine_outputs(context.get("boundary") or {}, identifier)
-    final = _without_engine_outputs(audit_project_changes(project, identifier), identifier)
+    final = _without_engine_outputs(audit_project_changes(
+        project, identifier, nature=type_of(change["product"])), identifier)
     subject = f"feat({identifier}): implement approved product change"
     already = _implementation_already_committed(project, subject, final)
     require(not boundary["violations"] and (already or final == boundary) and not final["violations"],

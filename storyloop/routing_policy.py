@@ -5,6 +5,7 @@ import math
 from copy import deepcopy
 from pathlib import PurePosixPath
 
+from .change_types import definition_for
 from .models import StoryLoopError
 
 
@@ -94,6 +95,7 @@ def evaluate(signals: dict, policy: dict) -> dict:
     _validate_signals(signals)
     unresolved = _unresolved(signals)
     tier = "light" if _can_be_light(signals, unresolved) else "standard"
+    tier = max_tier(tier, definition_for(signals["nature"]).minimum_tier)
     reasons = [_base_reason(signals, tier, unresolved)]
     tier, split = _apply_size_rules(signals, checked_policy, tier, reasons)
     tier = _apply_risk_rules(signals, tier, reasons)
@@ -109,8 +111,7 @@ def evaluate(signals: dict, policy: dict) -> dict:
 def _validate_signals(value: object) -> None:
     if not isinstance(value, dict) or set(value) != SIGNAL_FIELDS:
         raise StoryLoopError("Invalid routing Signals fields")
-    if value["nature"] not in ("feature", "fix", "refactor"):
-        raise StoryLoopError("Invalid change nature")
+    definition_for(value["nature"])
     for field in COUNT_FIELDS:
         item = value[field]
         if item is not None and (isinstance(item, bool) or not isinstance(item, int) or item < 0):
@@ -139,7 +140,8 @@ def _unresolved(signals: dict) -> list[str]:
 
 
 def _can_be_light(signals: dict, unresolved: list[str]) -> bool:
-    return (not unresolved and signals["stories"] == 1 and signals["nature"] in ("feature", "fix")
+    return (not unresolved and signals["stories"] == 1
+            and definition_for(signals["nature"]).minimum_tier == "light"
             and signals["existing_files"] <= 2
             and all(signals["risks"][field] == "no" for field in HEAVY_RISKS + STANDARD_RISKS))
 

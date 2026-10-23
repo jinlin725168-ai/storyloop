@@ -241,11 +241,9 @@ def _write_text(path: Path, content: str) -> None:
     write_text_atomic(path, content)
 
 
-ID_PREFIXES = {"feature": "FEAT", "fix": "FIX", "refactor": "REF"}
-
-
 def _next_id(project: Path, moment: datetime, nature: str = "feature") -> str:
-    prefix = ID_PREFIXES[nature] + "-" + moment.astimezone(timezone.utc).strftime("%Y%m%d") + "-"
+    from .change_types import definition_for
+    prefix = definition_for(nature).id_prefix + "-" + moment.astimezone(timezone.utc).strftime("%Y%m%d") + "-"
     root = project / ".storyloop" / "state" / "changes"
     existing = {path.stem for path in root.glob(prefix + "*.json")} if root.is_dir() else set()
     for number in range(1, 1000):
