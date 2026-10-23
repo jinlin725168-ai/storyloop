@@ -6,6 +6,8 @@ import json
 import re
 from pathlib import Path, PureWindowsPath
 import shlex
+import shutil
+import subprocess
 import sys
 import tempfile
 from unittest.mock import patch
@@ -13,7 +15,7 @@ from unittest.mock import patch
 from storyloop.changes import load_change
 from storyloop.cli import main
 from storyloop.project_loop import load_run_state
-from tests.lifecycle_cases import execute_case
+from tests.lifecycle_cases import execute_case, fixture_git_policy
 from tests.test_baseline_behavior import git
 
 SHA = re.compile(r"\b[0-9a-f]{40}(?:[0-9a-f]{24})?\b")
@@ -44,9 +46,21 @@ def candidate_roots(value):
 
 @contextmanager
 def fixture_environment():
-    """Keep legacy fixtures independent of the host's Git default, without changing config files."""
+    """Keep lifecycle captures independent of optional CLI and host Git configuration."""
+    original_which, original_run = shutil.which, subprocess.run
+    executable = "storyloop-fixture-openspec"
+    def which(name, *args, **kwargs):
+        return executable if name == "openspec" else original_which(name, *args, **kwargs)
+    def run(command, *args, **kwargs):
+        if isinstance(command, (list, tuple)) and command[0] == executable:
+            assert command[1:-2] in (["validate"], ["spec", "validate"])
+            assert command[-1] == "--json"
+            payload = {"items": [{"id": command[-2], "valid": True}]}
+            return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
+        return original_run(command, *args, **kwargs)
     with patch.dict("os.environ", {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "init.defaultBranch",
-                                  "GIT_CONFIG_VALUE_0": "master"}):
+                                  "GIT_CONFIG_VALUE_0": "master"}), fixture_git_policy(), \
+            patch("shutil.which", side_effect=which), patch("subprocess.run", side_effect=run):
         yield
 
 
@@ -62,7 +76,7 @@ def replace_recorded_path(value, path, token):
 
 
 def canonical_windows_paths(value):
-    tagged = r"(<PROJECT>|<CANDIDATE-\d+>|<PYTHON>)([^\"'`\r\n|<>]*?)(?=\s--|[\"'`\r\n|<>]|$)"
+    tagged = r"(<PROJECT>|<CANDIDATE-\d+>|<PYTHON>)([^\"'`\r\n|<>:]*?)(?=\s--|[\"'`\r\n|<>:]|$)"
     value = re.sub(tagged, lambda m: m[1] + m[2].replace("\\\\", "/").replace("\\", "/"), value)
     value = re.sub(r"'((?:<PROJECT>|<CANDIDATE-\d+>|<PYTHON>)(?:/[^'\n]*)?)'", r"\1", value)
     return value.replace("\r\n", "\n")
@@ -124,10 +138,11 @@ def normalize_case(value, root):
             if token.startswith("<CANDIDATE-"):
                 path = PureWindowsPath(source) if re.match(r"^[A-Za-z]:[\\/]", source) else Path(source)
                 item = replace_recorded_path(item, path, token)
-            else:
-                item = item.replace(source, token)
         if isinstance(root, PureWindowsPath):
             item = canonical_windows_paths(item)
+        for source, token in metadata.items():
+            if not token.startswith("<CANDIDATE-"):
+                item = item.replace(source, token)
         for digest, token in tokens.items():
             item = item.replace(digest, token)
         return item

@@ -1,4 +1,6 @@
 """Seven real local lifecycle scenarios; all agents are deterministic test doubles."""
+from contextlib import contextmanager
+from unittest.mock import patch
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,8 +17,24 @@ from tests.test_project_loop import smoke_payload
 NOW = datetime(2026, 9, 16, tzinfo=timezone.utc)
 
 
+@contextmanager
+def fixture_git_policy():
+    """Pin LF in synthetic repositories before their first tracked files are written."""
+    from tests import test_baseline_behavior
+    original = test_baseline_behavior.git
+    def git_with_lf(root, *args):
+        result = original(root, *args)
+        if args[0] == "init":
+            original(root, "config", "core.autocrlf", "false")
+        return result
+    with patch.object(test_baseline_behavior, "git", side_effect=git_with_lf):
+        yield
+
+
 def approved_case(root, name):
-    repository(root)
+    with fixture_git_policy():
+        repository(root)
+    git(root, "config", "core.autocrlf", "false")
     git(root, "branch", "-M", "main")
     if name == "boundary":
         (root / "core.py").write_text("STABLE = True\n", encoding="utf-8")

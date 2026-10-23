@@ -94,6 +94,37 @@ class GoldenNormalizerTests(unittest.TestCase):
         self.assertEqual(normalize_case(posix, Path("/case")),
                          normalize_case(windows, PureWindowsPath(r"C:\case")))
 
+    def test_windows_evidence_paths_keep_slashes_after_change_id_tokenization(self):
+        value = {'evidence_path': r'C:\case\.storyloop\evidence\FEAT-20261022-001\acceptance-result.json',
+                 'diagnostic': json.dumps({'report': r'C:\case\reports\FEAT-20261022-001\report.json'}),
+                 'literal': r'pattern=\w+\s'}
+        actual = normalize_case(value, PureWindowsPath(r'C:\case'))
+        self.assertEqual(actual['evidence_path'],
+                         '<PROJECT>/.storyloop/evidence/<FEAT-1>/acceptance-result.json')
+        self.assertEqual(json.loads(actual['diagnostic'])['report'],
+                         '<PROJECT>/reports/<FEAT-1>/report.json')
+        self.assertEqual(actual['literal'], r'pattern=\w+\s')
+
+    def test_windows_path_does_not_normalize_following_diagnostic_backslashes(self):
+        value = {"diagnostic": r"C:\case\FEAT-20261022-001\test.py: pattern=\w+\s"}
+        result = normalize_case(value, PureWindowsPath(r"C:\case"))
+        self.assertEqual(result["diagnostic"], r"<PROJECT>/<FEAT-1>/test.py: pattern=\w+\s")
+        changed = {"diagnostic": value["diagnostic"].replace(r"\w+\s", "/w+/s")}
+        self.assertNotEqual(result, normalize_case(changed, PureWindowsPath(r"C:\case")))
+
+    def test_fixture_openspec_result_does_not_depend_on_host_installation(self):
+        import shutil
+        from storyloop.openspec_docs import validate_with_cli
+        from tests.lifecycle_support import fixture_environment
+        original = shutil.which
+        def without_openspec(name, *args, **kwargs):
+            return None if name == 'openspec' else original(name, *args, **kwargs)
+        with patch('shutil.which', side_effect=without_openspec), fixture_environment():
+            for kind, identifier in (('change', 'FEAT-fixture'), ('spec', 'orders')):
+                with self.subTest(kind=kind):
+                    self.assertEqual(validate_with_cli(Path('.'), kind, identifier),
+                                     {'status': 'valid', 'kind': kind, 'id': identifier})
+
 
 class LifecycleGoldenTests(unittest.TestCase):
     def test_reports_run_states_cli_and_git_match_the_pre_refactor_main(self):

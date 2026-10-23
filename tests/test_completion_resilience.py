@@ -166,6 +166,31 @@ if __name__ == "__main__":
 
 
 class CompletionCrashMatrixTests(unittest.TestCase):
+    def test_merge_crash_keeps_report_bytes_under_host_autocrlf(self):
+        import hashlib
+        from tests.lifecycle_cases import approved_case, observed_services
+        from tests.test_baseline_behavior import repository
+        def with_crlf_policy(root):
+            repository(root)
+            git(root, 'config', 'core.autocrlf', 'true')
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            with patch('tests.lifecycle_cases.repository', side_effect=with_crlf_policy):
+                change_id = approved_case(root, 'manual')
+            calls = []
+            services = observed_services(change_id, 'manual', calls)
+            self.assertEqual(run_change(root, change_id, services)['status'],
+                             'MANUAL_ACCEPTANCE_REQUIRED')
+            record_manual_acceptance(root, change_id, ['AC-2'], 'checked')
+            before_calls = list(calls)
+            with self._crash('merge'), self.assertRaisesRegex(RuntimeError, 'delivery crash'):
+                run_change(root, change_id, services)
+            state = load_run_state(root, change_id)
+            self.assertEqual(hashlib.sha256(Path(state['report']).read_bytes()).hexdigest(),
+                             state['report_sha256'])
+            self.assertEqual(run_change(root, change_id, services)['status'], 'PASSED')
+            self.assertEqual(calls, before_calls)
+
     def test_all_delivery_windows_preserve_roles_commits_and_merge_topology(self):
         from tests.lifecycle_cases import approved_case, observed_services
         for window in ('implementation', 'verified', 'merge', 'merged', 'receipt', 'finalizing'):
