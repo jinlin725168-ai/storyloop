@@ -182,6 +182,13 @@ class LayeringRuleTests(unittest.TestCase):
 
 
 class LayeringTests(unittest.TestCase):
+    def test_capability_protocol_does_not_depend_on_role_policy(self):
+        graph = import_graph(PACKAGE)
+        self.assertTrue("capability_protocol" in graph, "缺少能力协议模块")
+        self.assertEqual(sorted(graph["capability_protocol"]
+                                & {"cross_vendor", "role_profiles", "role_subagents"}), [])
+        self.assertNotIn("adapter_capabilities", graph["role_schemas"])
+
     def test_evidence_kernels_receive_business_facts_from_callers(self):
         graph = import_graph(PACKAGE)
         forbidden = {"baseline": {"adapter_capabilities", "system_smoke"},

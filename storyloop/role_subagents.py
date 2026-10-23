@@ -1,8 +1,8 @@
 """Tier-dependent work decomposition, resolved once from engine-owned routing."""
 from pathlib import Path
 
+from .capability_protocol import lane_metadata
 from .models import require
-from .path_security import repository_relative
 from .storage import load_json
 
 PERSPECTIVES = ['correctness', 'security', 'architecture', 'tests', 'oracle-strength']
@@ -46,20 +46,3 @@ def routing_tier(project: Path, payload: dict) -> str:
     context = payload.get('routing') if isinstance(payload.get('routing'), dict) else {}
     tier = context.get('effective_tier') or payload.get('routing_tier') or payload.get('tier')
     return tier if isinstance(tier, str) and tier in {'light', 'standard', 'heavy'} else 'standard'
-
-
-def lane_metadata(value: dict) -> dict | None:
-    """Validate optional capability metadata without accepting executable/path syntax."""
-    names, prefixes = value.get('lanes', []), value.get('lane_prefixes', {})
-    if (not isinstance(names, list) or len(names) > 32 or
-            not all(isinstance(name, str) and name and len(name) <= 80 for name in names)
-            or not isinstance(prefixes, dict) or set(prefixes) - set(names)):
-        return None
-    from .models import StoryLoopError
-    try:
-        for prefix in prefixes.values():
-            require(isinstance(prefix, str) and not any(c in prefix for c in '*?[];|&$()`\n\r'), 'Unsafe lane prefix')
-            require(repository_relative(prefix) == prefix.rstrip('/'), 'Invalid lane prefix')
-    except StoryLoopError:
-        return None
-    return {key: value[key] for key in ('lanes', 'lane_prefixes') if key in value}

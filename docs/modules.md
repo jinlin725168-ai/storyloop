@@ -41,11 +41,12 @@
 |  | `project_loop_support` | 底座 | 为外部闭环提供控制面完整性与文件枚举辅助 | `control_digest`、`relative_files`、`run_path`、`save_run`、`set_change_status` |
 |  | `project_receipt` | 底座 | 崩溃安全地核验并持久化明确的功能合并回执字节 | `authoritative_report`、`ensure_merge_receipt`、`recover_completed_merge`、`verify_verified_artifacts` |
 |  | `smoke_runner` | 底座 | 以 CI 中立方式执行受保护冒烟清单 | `candidate_digest`、`implementation_digest`、`run_commands`、`run_commands_at_commit`、`run_commands_isolated`、`run_smoke_isolated`、`visible_paths` |
-| 代理网关 | `adapter_capabilities` | 底座 | 项目代理适配器的能力握手与缓存 | `check`、`ensure_checked`、`ensure_for_run`、`require_role_target` |
+| 代理网关 | `capability_protocol` | 底座 | 项目代理适配器的能力握手、响应与缓存格式 | `PROTOCOL`、`ROLES`、`probe`、`lane_metadata` |
 |  | `project_agents` | 底座 | 为产品级仓库迭代启动独立进程代理 | `invoke_project_agent` |
 |  | `role_schemas` | 底座 | 以统一 JSON Schema 校验引擎及适配器的角色最终回答 | `normalize`、`schema_errors`、`schema_for`、`wire_schema` |
 |  | `run_services` | 底座 | 定义可注入的代理操作协议，不组装业务上下文 | `LoopServices` |
 | 角色内容 | `adapter_profiles` | 可变区 | CLI 适配器的模型选择与如实报告单会话画像 | `diagnostic_fields`、`model_for`、`sequential_instructions`、`sequential_profile`、`tier_models` |
+|  | `adapter_capabilities` | 可变区 | 编排角色配置、能力缓存与跨厂商检查 | `check`、`ensure_checked`、`ensure_for_run`、`require_role_target` |
 |  | `claude_contract` | 可变区 | Claude Code 示例适配器共用的提示合同 | — |
 |  | `claude_permissions` | 可变区 | Claude Code 画像权限及文件修改工具授权 | `profile_command` |
 |  | `claude_profiles` | 可变区 | 独立于 CLI 入口的 Claude 画像编排辅助 | — |

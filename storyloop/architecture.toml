@@ -103,7 +103,8 @@ rank = 7
 "harness_command" = { module = "evidence_kernel", zone = "base" }
 "project_agents" = { module = "agent_gateway", zone = "base", split = "D" }
 "role_schemas" = { module = "agent_gateway", zone = "base" }
-"adapter_capabilities" = { module = "agent_gateway", zone = "base" }
+"capability_protocol" = { module = "agent_gateway", zone = "base" }
+"adapter_capabilities" = { module = "role_content", zone = "mutable" }
 "role_instructions" = { module = "role_content", zone = "mutable" }
 "role_profiles" = { module = "role_content", zone = "mutable" }
 "role_subagents" = { module = "role_content", zone = "mutable" }
@@ -221,21 +222,6 @@ rank = 7
 
 # 仅登记已批准的现状债务；豁免只减不增，每条关联消除阶段。
 
-[[exemptions]]
-source = "adapter_capabilities"
-target = "cross_vendor"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "adapter_capabilities"
-target = "role_profiles"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "adapter_capabilities"
-target = "role_subagents"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
 
 [[exemptions]]
 source = "project_agents"
@@ -315,7 +301,7 @@ members = [
   "lesson_store", "oracle_counts",
   "oracle_skill_approval", "project_agents",
   "project_loop_failures", "readiness",
-  "role_profiles", "role_schemas", "routing_cli",
+  "role_profiles", "routing_cli",
   "routing_report", "skills",
   "smoke_runner", "stop_report", "system_smoke", "telemetry",
   "telemetry_summary",

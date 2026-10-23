@@ -13,7 +13,7 @@ from __future__ import annotations
 import copy
 
 from . import change_types
-from .adapter_capabilities import ROLES
+from .capability_protocol import ROLES
 from .state_format import ACTIONS, LANDING_KINDS, MAX_SUMMARY, RISK_FIELDS, STATUSES, STRENGTHS, TIERS
 
 MAX_ERRORS = 12
