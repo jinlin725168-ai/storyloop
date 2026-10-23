@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from .change_types import definition_for
 from .models import ROW_TYPES, criterion_expects_red, nature_of
 
 NEEDS_CLARIFICATION = re.compile(r"\[NEEDS CLARIFICATION[^\]]*\]", re.I)
@@ -60,16 +61,17 @@ IDENTIFIER_LIKE = re.compile(r"\b[a-z]+[A-Z]\w*\b|\b\w+\(\)")
 def _nature_items(add, product: dict, project: Path | None) -> None:
     """Checks that follow from the change's nature; legacy contracts (no nature) only get warnings."""
     nature = nature_of(product)
+    floor = definition_for(nature).criteria_floor
     strict = "nature" in product
     criteria = [c for story in product.get("stories") or [] for c in story.get("acceptance") or []]
     automated = [c for c in criteria if c.get("kind") == "automated"]
-    if nature in {"feature", "fix"}:
+    if "acceptance_red" in floor or "defect_reproduction_red" in floor:
         add("Coverage", "error" if strict and not any(criterion_expects_red(c) for c in automated) else "ok",
             "At least one automated criterion asserts new behaviour (must be red before implementation)")
         _row_coverage(add, product, criteria, "error" if strict else "warning")
-    if nature == "fix":
+    if "defect_reproduction_red" in floor:
         _fix_items(add, product, automated, project)
-    if nature == "refactor":
+    if "structural_red" in floor:
         _refactor_items(add, product, automated, project)
     _consumer_items(add, product, criteria, "error" if strict else "warning")
     named = [c["id"] for c in criteria if IDENTIFIER_LIKE.search(" ".join(
