@@ -182,6 +182,15 @@ class LayeringRuleTests(unittest.TestCase):
 
 
 class LayeringTests(unittest.TestCase):
+    def test_git_and_evidence_kernels_do_not_import_upper_owners(self):
+        graph = import_graph(PACKAGE)
+        forbidden = {"project_git": {"baseline"},
+                     "evidence_locations": {"failure_attribution"},
+                     "project_receipt": {"change_report"}}
+        self.assertEqual({source: sorted(graph[source] & targets)
+                          for source, targets in forbidden.items()},
+                         {source: [] for source in forbidden})
+
     def test_product_and_smoke_bases_do_not_read_mutable_contract_owners(self):
         graph = import_graph(PACKAGE)
         forbidden = {"models": {"assessment"}, "smoke": {"changes"},

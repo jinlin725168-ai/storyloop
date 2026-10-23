@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from .baseline import _git
-from .failure_attribution import location_file
 from .models import StoryLoopError
 from .path_security import safe_target
 
@@ -28,10 +27,21 @@ def _parse(location: object) -> tuple[str, int] | None:
         return None
     normalized = location.strip().replace("\\", "/")
     match = LOCATION.fullmatch(normalized)
-    path = location_file(normalized)
+    path = _location_file(normalized)
     if not match or path is None:
         return None
     return path, int(match.group("line"))
+
+
+def _location_file(location: str) -> str | None:
+    """Extract a safe repository filename without applying finding attribution policy."""
+    if any(ord(char) < 32 or ord(char) == 127 for char in location):
+        return None
+    path = location.split(":", 1)[0].strip()
+    if not path or path.startswith("/") or ".." in path.split("/"):
+        return None
+    normalized = PurePosixPath(path).as_posix()
+    return normalized if normalized != "." else None
 
 
 def _candidate_has_line(project: Path, relative: str, line: int) -> bool:

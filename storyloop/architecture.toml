@@ -84,6 +84,7 @@ rank = 7
 "linux_supervisor" = { module = "execution", zone = "base" }
 "boundaries" = { module = "execution", zone = "base" }
 "project_git" = { module = "git", zone = "base" }
+"git_command" = { module = "git", zone = "base" }
 "project_profile" = { module = "project_contract", zone = "base" }
 "state_format" = { module = "project_contract", zone = "base" }
 "smoke" = { module = "project_contract", zone = "base" }
@@ -246,11 +247,6 @@ until = "D"
 reason = "证据内核依赖业务，改为调用方传参或下沉定义"
 
 [[exemptions]]
-source = "evidence_locations"
-target = "failure_attribution"
-until = "D"
-reason = "证据内核依赖业务，改为调用方传参或下沉定义"
-[[exemptions]]
 source = "project_agents"
 target = "adapter_profiles"
 until = "D"
@@ -320,11 +316,6 @@ source = "project_boundaries"
 target = "system_smoke"
 until = "D"
 reason = "证据内核依赖业务，改为调用方传参或下沉定义"
-[[exemptions]]
-source = "project_git"
-target = "baseline"
-until = "D"
-reason = "Git 原语借用 baseline._git，阶段 D 拆出"
 
 [[exemptions]]
 source = "project_loop_guards"
@@ -333,11 +324,6 @@ until = "D"
 reason = "证据内核依赖业务，改为调用方传参或下沉定义"
 
 
-[[exemptions]]
-source = "project_receipt"
-target = "change_report"
-until = "D"
-reason = "证据内核依赖业务，改为调用方传参或下沉定义"
 [[exemptions]]
 source = "smoke_runner"
 target = "system_smoke"
@@ -352,7 +338,7 @@ members = [
   "foundation_survey", "intake", "lesson_landing", "lesson_retrieval",
   "lesson_store", "oracle_counts",
   "oracle_skill_approval", "principles", "project_agents",
-  "project_boundaries", "project_git", "project_loop_failures",
+  "project_boundaries", "project_loop_failures",
   "readiness", "requirement_checklist",
   "role_profiles", "role_schemas", "routing_cli", "routing_evidence",
   "routing_report", "skills",

@@ -5,11 +5,10 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
-import shutil
 
 from .models import StoryLoopError, require
 from .path_security import safe_target
-from .processutil import run_process
+from .git_command import GIT_ENVIRONMENT, git as _git, git_failure as _git_failure
 from .project_profile import GENERATED_PATHS, matches_test_root, validate_project_settings
 from .storage import load_json, write_json, write_text_atomic
 
@@ -251,35 +250,3 @@ def _exclude_control_plane(project: Path) -> None:
         if prefix and not prefix.endswith("\n"):
             prefix += "\n"
         write_text_atomic(exclude, prefix + ".storyloop/\n")
-
-
-# The home variables let git read the user's global config (identity, safe.directory) as it would
-# outside the loop; hooks stay disabled via core.hooksPath below.
-GIT_ENVIRONMENT = ["PATH", "SYSTEMROOT", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "XDG_CONFIG_HOME"]
-
-
-def _git_failure(stderr: str) -> str:
-    """Git's own reason, so a stop says what to fix (e.g. a missing user.email)."""
-    lines = [line.strip() for line in stderr.splitlines() if line.strip() and not line.startswith("***")]
-    reason = " ".join(lines)[:400]
-    return f"Git operation failed: {reason}" if reason else "Git operation failed"
-
-
-def _git(project: Path, *arguments: str) -> str:
-    executable = shutil.which("git")
-    require(bool(executable), "Git executable is unavailable")
-    result = run_process(
-        [executable, "-c", f"core.hooksPath={os.devnull}", *arguments],
-        project,
-        30,
-        environment_allowlist=GIT_ENVIRONMENT,
-        source_environment=os.environ,
-    )
-    if (result.get("contained") is not True or result.get("timed_out")
-            or result.get("truncated") or result.get("error")):
-        raise StoryLoopError("Git process failed safely", code="GIT_BLOCKED")
-    if result.get("returncode") != 0:
-        raise StoryLoopError(_git_failure(result.get("stderr", "")), code="GIT_BLOCKED")
-    stdout = result.get("stdout")
-    require(isinstance(stdout, str) and len(stdout) <= 8_000_000, "Git output is invalid")
-    return stdout

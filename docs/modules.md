@@ -24,6 +24,7 @@
 |  | `processutil` | 底座 | 不经 shell 插值的有界子进程执行 | `redact`、`run_process` |
 |  | `windows_job` | 底座 | 用于进程树隔离的最小 Windows Job Object 封装 | — |
 | Git 原语 | `project_git` | 底座 | 对已批准产品变更执行安全的本地 Git 生命周期 | `commit_paths`、`current_branch`、`finish_feature`、`start_feature` |
+|  | `git_command` | 底座 | 执行有界且禁用钩子的 Git 命令 | `git`、`git_failure` |
 | 变更类型 | `change_types` | 底座 | 声明三种现有变更类型的判据、范围、阶段与档位策略 | `CHANGE_TYPES`、`definition_for`、`type_for_change_id`、`type_of` |
 | 项目契约 | `onboarding_manifest` | 底座 | 校验接入声明，不执行工程钩子或读取凭证 | `load_manifest`、`validate_hooks`、`validate_onboarding` |
 |  | `state_format` | 底座 | 集中状态格式枚举、接入清单常量与测试计数模式校验 | `criterion_expects_red`、`criterion_tier`、`validate_test_count_patterns` |
@@ -38,7 +39,7 @@
 |  | `project_boundaries` | 底座 | 审计单仓库的功能变更与底座边界 | `audit_project_changes`、`role_path_boundary` |
 |  | `project_loop_guards` | 底座 | 限制外部闭环中每次代理调用可修改的内容 | `exists_at`、`read_only_call`、`require_control_unchanged`、`require_git_visible`、`verify_read_only_snapshot`、`write_safely` |
 |  | `project_loop_support` | 底座 | 为外部闭环提供控制面完整性与文件枚举辅助 | `control_digest`、`relative_files`、`run_path`、`save_run`、`set_change_status` |
-|  | `project_receipt` | 底座 | 崩溃安全地核验并持久化功能合并回执 | `ensure_merge_receipt`、`recover_completed_merge`、`verify_verified_artifacts` |
+|  | `project_receipt` | 底座 | 崩溃安全地核验并持久化明确的功能合并回执字节 | `authoritative_report`、`ensure_merge_receipt`、`recover_completed_merge`、`verify_verified_artifacts` |
 |  | `smoke_runner` | 底座 | 以 CI 中立方式执行受保护冒烟清单 | `candidate_digest`、`implementation_digest`、`run_ci`、`run_commands`、`run_commands_at_commit`、`run_commands_isolated`、`run_smoke_isolated`、`visible_paths` |
 | 代理网关 | `adapter_capabilities` | 底座 | 项目代理适配器的能力握手与缓存 | `check`、`ensure_checked`、`ensure_for_run`、`require_role_target` |
 |  | `project_agents` | 底座 | 为产品级仓库迭代启动独立进程代理 | `invoke_project_agent` |

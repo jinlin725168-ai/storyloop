@@ -44,7 +44,7 @@ class MetricsReviewTests(unittest.TestCase):
         self.addCleanup(cleanup_repo, root)
         commit = head(root)
         for result in ({'contained': False}, {'contained': True, 'timed_out': True}):
-            with self.subTest(result=result), patch('storyloop.baseline.run_process', return_value=result):
+            with self.subTest(result=result), patch('storyloop.git_command.run_process', return_value=result):
                 self.assertIsNone(ci_results._related(root, commit, commit))
 
     def test_since_reports_changes_without_a_filterable_date(self):
