@@ -175,7 +175,7 @@ def capture_case(name):
     with tempfile.TemporaryDirectory() as folder:
         root = Path(folder).resolve()
         calls = []
-        with fixture_environment(), patch("storyloop.project_agents._codex", side_effect=AssertionError("Real CLI forbidden")):
+        with fixture_environment(), patch("storyloop.agent_transport._codex", side_effect=AssertionError("Real CLI forbidden")):
             identifier, results = execute_case(root, name, calls)
             state = load_run_state(root, identifier)
             verify_active_bindings(root, state)

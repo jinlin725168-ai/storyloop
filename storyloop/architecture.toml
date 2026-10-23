@@ -101,7 +101,8 @@ rank = 7
 "characterization_locks" = { module = "evidence_kernel", zone = "base" }
 "evidence_locations" = { module = "evidence_kernel", zone = "base" }
 "harness_command" = { module = "evidence_kernel", zone = "base" }
-"project_agents" = { module = "agent_gateway", zone = "base", split = "D" }
+"agent_transport" = { module = "agent_gateway", zone = "base" }
+"project_agents" = { module = "role_content", zone = "mutable" }
 "role_schemas" = { module = "agent_gateway", zone = "base" }
 "capability_protocol" = { module = "agent_gateway", zone = "base" }
 "adapter_capabilities" = { module = "role_content", zone = "mutable" }
@@ -223,71 +224,6 @@ rank = 7
 # 仅登记已批准的现状债务；豁免只减不增，每条关联消除阶段。
 
 
-[[exemptions]]
-source = "project_agents"
-target = "adapter_profiles"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "project_agents"
-target = "call_context"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "project_agents"
-target = "call_log"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "project_agents"
-target = "cost_limits"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "project_agents"
-target = "cross_vendor"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "project_agents"
-target = "errata"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "project_agents"
-target = "foundation_survey"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "project_agents"
-target = "lesson_retrieval"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "project_agents"
-target = "role_instructions"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "project_agents"
-target = "role_profiles"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "project_agents"
-target = "role_subagents"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "project_agents"
-target = "skills"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
-[[exemptions]]
-source = "project_agents"
-target = "telemetry"
-until = "D"
-reason = "代理网关自己组装上下文，阶段 D 拆出协议部分"
 
 
 

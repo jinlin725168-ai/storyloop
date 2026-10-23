@@ -27,8 +27,8 @@ from tests.test_project_loop import NOW, smoke_payload
 
 def codex_call(root: Path, messages: list[str], role: str = "implement", payload: dict | None = None):
     fake = FakeCodex(messages)
-    with patch("storyloop.project_agents.run_process", fake), \
-            patch("storyloop.project_agents._codex_executable", return_value=["codex"]):
+    with patch("storyloop.agent_transport.run_process", fake), \
+            patch("storyloop.agent_transport._codex_executable", return_value=["codex"]):
         result = invoke_project_agent(root, role, payload or {"change": {"change_id": "FEAT-9"}})
     return result, fake
 
@@ -61,8 +61,8 @@ class CodexStructuredOutputTests(unittest.TestCase):
                 seen.append(json.loads(schema_path.read_text(encoding="utf-8")))
                 return fake(command, cwd, timeout, input_text=input_text, **kwargs)
 
-            with patch("storyloop.project_agents.run_process", capture), \
-                    patch("storyloop.project_agents._codex_executable", return_value=["codex"]):
+            with patch("storyloop.agent_transport.run_process", capture), \
+                    patch("storyloop.agent_transport._codex_executable", return_value=["codex"]):
                 result = invoke_project_agent(root, "implement", {"change": {"change_id": "FEAT-9"}})
             self.assertEqual(result, {"summary": "done", "questions": []})  # nullable fields dropped
             self.assertEqual(seen[0]["required"], ["summary", "questions", "design", "facts", "lessons_used", "errata"])

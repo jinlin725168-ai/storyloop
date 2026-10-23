@@ -182,6 +182,14 @@ class LayeringRuleTests(unittest.TestCase):
 
 
 class LayeringTests(unittest.TestCase):
+    def test_agent_transport_has_no_business_context_imports(self):
+        graph = import_graph(PACKAGE)
+        self.assertTrue("agent_transport" in graph, "缺少代理传输模块")
+        forbidden = {"adapter_profiles", "call_context", "call_log", "cost_limits", "cross_vendor",
+                     "errata", "foundation_survey", "lesson_retrieval", "role_instructions",
+                     "role_profiles", "role_subagents", "skills", "telemetry"}
+        self.assertEqual(sorted(graph["agent_transport"] & forbidden), [])
+
     def test_capability_protocol_does_not_depend_on_role_policy(self):
         graph = import_graph(PACKAGE)
         self.assertTrue("capability_protocol" in graph, "缺少能力协议模块")
