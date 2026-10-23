@@ -240,20 +240,29 @@ class L3IntegrationTests(unittest.TestCase):
 class AdaptiveLoopTests(unittest.TestCase):
     def test_second_attempt_upgrade_extends_only_tier_budget(self):
         from unittest.mock import patch
+        from pathlib import Path
+        import tempfile
+        from storyloop.smoke import RED_EVIDENCE
+        from storyloop.storage import write_json
         from storyloop.project_loop import _attempts
         from storyloop.routing_state import advance_tier
         change = {'approval': {'tier': 'light'}, 'intake': {'decision': {'reasons': []}},
                   'product': {'assessment': {'scope': {}}}}
         for explicit, expected in [(False, [1, 2, 3, 4]), (True, [1, 2])]:
             config = {'max_attempts': 2}
-            state = {'attempt': 0, 'routing': open_routing(change, DEFAULT_POLICY,
+            state = {'attempt': 0, 'status': 'IMPLEMENTING', 'change_id': 'CHG-1',
+                     'contract_commit': 'contract', 'routing': open_routing(change, DEFAULT_POLICY,
                                                          config if explicit else {})}
             calls = []
             def attempt(project, change, state, services, config):
                 calls.append(state['attempt'])
                 if state['attempt'] == 2:
                     advance_tier(state, {'tier': 'heavy', 'reasons': []}, 'L3', 'upgrade', config)
-            with patch('storyloop.project_loop.save_run'), patch('storyloop.project_loop.pause'), \
-                    patch('storyloop.project_loop._run_attempt', side_effect=attempt):
-                _attempts(None, change, state, None, config, 1)
+            with tempfile.TemporaryDirectory() as folder:
+                project = Path(folder)
+                write_json(project / '.storyloop/evidence/CHG-1' / RED_EVIDENCE,
+                           {'change_id': 'CHG-1', 'status': 'RED'})
+                with patch('storyloop.project_loop.save_run'), patch('storyloop.project_loop.pause'), \
+                        patch('storyloop.project_loop._run_attempt', side_effect=attempt):
+                    _attempts(project, change, state, None, config, 1)
             self.assertEqual(calls, expected)

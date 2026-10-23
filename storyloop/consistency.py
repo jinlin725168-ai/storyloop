@@ -15,7 +15,9 @@ from .planning import selected_option
 from .principles import load_principles
 from .project_git import commit_paths
 from .project_loop_guards import read_only_call
-from .project_loop_support import pause, save_run
+from .project_loop_support import save_run
+from .run_transitions import transition
+from .run_stops import pause
 from .role_schemas import schema_errors, schema_for
 from .routing_state import is_routed
 from .semantic_repair import answer_with_repair
@@ -185,5 +187,5 @@ def overrule_consistency(project: Path, state: dict, reason: str) -> dict | None
             item['blocking'] = False
     record['verdict'] = 'blocked' if consistency_status(record['findings']) != 'COHERENT' else 'coherent'
     _clear_stop(state)
-    state['status'] = 'IMPLEMENTING'
+    transition(project, state, "IMPLEMENTING", event="consistency_overrule")
     return _outcome(project, state, record)

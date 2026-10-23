@@ -20,7 +20,10 @@ from .openspec_docs import capability_of, merge_into_main_spec, render_decisions
 from .project_boundaries import audit_project_changes
 from .project_git import commit_paths, current_branch, finish_feature
 from .project_loop_gates import design_plan
-from .project_loop_support import save_run, set_change_status
+from .project_loop_support import save_run
+from .run_transitions import set_change_status, transition
+from .run_guards import (_engine_output_roots, _without_engine_outputs, _implementation_already_committed,
+                         guard_g3)
 from .project_receipt import ensure_merge_receipt, verify_verified_artifacts
 from .smoke_runner import implementation_digest
 from .storage import load_json, write_json
@@ -38,6 +41,17 @@ def complete_change(
     _discard_engine_outputs(project, change_id)
     final_boundary = _without_engine_outputs(audit_project_changes(project, change_id), change_id)
     boundary = _without_engine_outputs(boundary, change_id)
+    transition(project, state, "VERIFIED", event="verified", change=change,
+               context={"boundary": boundary, "layers": layers, "review": review},
+               effect=lambda: _deliver_verified(project, change, state, final_boundary, boundary, layers, review))
+    save_run(project, state)
+    return finish_verified(project, change, state)
+
+
+def _deliver_verified(project: Path, change: dict, state: dict, final_boundary: dict,
+                      boundary: dict, layers: dict, review: dict) -> dict:
+    change_id = change["change_id"]
+    subject = f"feat({change_id}): implement approved product change"
     digest = implementation_digest(project)
     manual = [record for record in load_manual_acceptance(project, change_id)
               if record.get("candidate_sha256") == digest]
@@ -70,18 +84,14 @@ def complete_change(
                                      report_path.with_suffix(".md").relative_to(project).as_posix(), *documents])),
         f"docs({change_id}): add acceptance evidence report",
     )
-    state.update({"status": "VERIFIED", "implementation_commit": implementation["commit"],
+    return { "implementation_commit": implementation["commit"],
                   "report_commit": report_commit["commit"], "report": str(report_path),
                   "report_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
-                  "acceptance_evidence_sha256": layers["acceptance"]["evidence_sha256"], "review": review})
-    save_run(project, state)
-    return finish_verified(project, change, state)
-
+                  "acceptance_evidence_sha256": layers["acceptance"]["evidence_sha256"], "review": review}
 
 def finish_verified(project: Path, change: dict, state: dict) -> dict:
-    _verify_verified_state(project, state)
-    merged = finish_feature(project, state["feature_branch"], state["source_branch"])
-    state.update({"status": "MERGED", "merge_commit": merged["merge_commit"]})
+    transition(project, state, "MERGED", event="merge", effect=lambda: {
+        "merge_commit": finish_feature(project, state["feature_branch"], state["source_branch"])["merge_commit"]})
     save_run(project, state)
     return finish_merged(project, change, state)
 
@@ -91,7 +101,7 @@ def finish_merged(project: Path, change: dict, state: dict) -> dict:
             "Merged run must finish on its source branch")
     require(_git(project, "rev-parse", "HEAD").strip() == state["merge_commit"],
             "Source branch changed after verified merge")
-    state["status"] = "RECEIPTING"
+    transition(project, state, "RECEIPTING", event="receipting")
     save_run(project, state)
     return finish_receipting(project, change, state)
 
@@ -101,7 +111,7 @@ def finish_receipting(project: Path, change: dict, state: dict) -> dict:
     advance_repository_head(project, integration)
     from .readiness_lineage import advance_readiness
     advance_readiness(project, {**state, "integration_commit": integration})
-    state.update({"status": "FINALIZING", "integration_commit": integration,
+    transition(project, state, "FINALIZING", event="finalizing", updates={ "integration_commit": integration,
                   "report_sha256": hashlib.sha256(Path(state["report"]).read_bytes()).hexdigest()})
     save_run(project, state)
     return finalize_change(project, change, state)
@@ -114,7 +124,7 @@ def finalize_change(project: Path, change: dict, state: dict) -> dict:
     advance_repository_head(project, state["integration_commit"])
     if change["status"] != "PASSED":
         set_change_status(project, change, "PASSED")
-    state["status"] = "PASSED"
+    transition(project, state, "PASSED", event="passed")
     save_run(project, state)
     try:
         from .retrospective import retrospect_after_pass
@@ -127,11 +137,6 @@ def finalize_change(project: Path, change: dict, state: dict) -> dict:
     except Exception:
         pass  # PASSED was already persisted; diagnostics cannot undo completion.
     return passed_result(state)
-
-
-def _engine_output_roots(change_id: str) -> tuple[str, ...]:
-    return (f"openspec/changes/{change_id}/design.md", f"openspec/changes/{change_id}/decisions.md",
-            "openspec/specs/", "acceptance/ui/", f"reports/storyloop/{change_id}/")
 
 
 def _discard_engine_outputs(project: Path, change_id: str) -> None:
@@ -155,28 +160,6 @@ def _discard_engine_outputs(project: Path, change_id: str) -> None:
         for empty in sorted((p for p in directory.rglob("*") if p.is_dir()), reverse=True) if directory.is_dir() else []:
             if not any(empty.iterdir()):
                 empty.rmdir()
-
-
-def _without_engine_outputs(boundary: dict, change_id: str) -> dict:
-    roots = _engine_output_roots(change_id)
-    keep = lambda item: not any(item["path"] == root or item["path"].startswith(root) for root in roots)  # noqa: E731
-    allowed = [i for i in boundary["allowed"] if keep(i)]
-    violations = [i for i in boundary["violations"] if keep(i)]
-    status = ("CLEAN" if not allowed and not violations else "ALLOWED" if not violations
-              else boundary["status"])
-    return {**boundary, "allowed": allowed, "violations": violations, "status": status,
-            "base_proposal": boundary.get("base_proposal") if violations else None}
-
-
-def _implementation_already_committed(project: Path, subject: str, boundary: dict) -> str | None:
-    """HEAD is the implementation commit of this change and nothing is left to commit."""
-    if boundary["allowed"] or boundary["violations"]:
-        return None
-    if _git(project, "log", "-1", "--format=%s").strip() != subject:
-        return None
-    if _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip():
-        return None
-    return _git(project, "rev-parse", "HEAD").strip()
 
 
 def _write_openspec_artifacts(project: Path, change: dict, state: dict, manual: list[dict]) -> list[str]:
@@ -255,12 +238,5 @@ def passed_result(state: dict) -> dict:
 
 
 def _verify_verified_state(project: Path, state: dict) -> None:
-    require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
-            "Verified feature worktree must remain clean")
-    require(current_branch(project) == state["feature_branch"],
-            "Verified feature branch is not checked out")
-    require(_git(project, "rev-parse", state["feature_branch"]).strip() == state["report_commit"],
-            "Verified feature branch changed after reporting")
-    require(_git(project, "rev-parse", state["source_branch"]).strip() == state["source_head"],
-            "Source branch changed after the feature run started")
-    verify_verified_artifacts(project, state)
+    """Compatibility alias; the merge entry calls this same fixed kernel check."""
+    guard_g3(project, state, {})

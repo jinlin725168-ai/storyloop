@@ -6,7 +6,8 @@ from .design_approval import ensure_design_approval
 from .intake import digest
 from .planning import ensure_routing_plan
 from .project_loop_gates import ensure_characterization, ensure_design, resume_characterization
-from .project_loop_support import pause, save_run
+from .project_loop_support import save_run
+from .run_stops import pause
 from .routing_restore import resume_restore, retire_restore
 from .routing_characterization import candidate_manifest, verify_characterization_candidate
 from .routing_state import is_routed

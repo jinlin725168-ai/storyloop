@@ -222,15 +222,23 @@ class EdgeTests(unittest.TestCase):
 
     def test_exhausted_checklist_repair_refunds_quality_attempt(self):
         from storyloop.project_loop import _attempts
-        state = {'change_id': 'C', 'attempt': 0, 'pending_review': {}, 'cost_candidate': {'response': {}}}
+        from pathlib import Path
+        import tempfile
+        from storyloop.smoke import RED_EVIDENCE
+        from storyloop.storage import write_json
+        state = {'change_id': 'C', 'status': 'IMPLEMENTING', 'contract_commit': 'contract', 'attempt': 0, 'pending_review': {}, 'cost_candidate': {'response': {}}}
         error = StoryLoopError('bad checklist', code='AGENT_CONTRACT_INVALID',
                                details={'review_semantic': True})
-        with patch('storyloop.project_loop._run_attempt', side_effect=error), \
-                patch('storyloop.project_loop.save_run'), \
-                patch('storyloop.stop_report.build_stop', return_value={}), \
-                patch('storyloop.project_loop.datetime'):
-            with self.assertRaises(StoryLoopError):
-                _attempts(None, {}, state, None, {'max_attempts': 1}, 0)
+        with tempfile.TemporaryDirectory() as folder:
+            project = Path(folder)
+            write_json(project / '.storyloop/evidence/C' / RED_EVIDENCE,
+                       {'change_id': 'C', 'status': 'RED'})
+            with patch('storyloop.project_loop._run_attempt', side_effect=error), \
+                    patch('storyloop.project_loop.save_run'), \
+                    patch('storyloop.stop_report.build_stop', return_value={}), \
+                    patch('storyloop.project_loop.datetime'):
+                with self.assertRaises(StoryLoopError):
+                    _attempts(project, {}, state, None, {'max_attempts': 1}, 0)
         self.assertEqual(state['attempt'], 0)
         self.assertIn('cost_candidate', state)
         self.assertNotIn('pending_review', state)

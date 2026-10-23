@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .call_log import call_folder, load_meta
 from .changes import load_change
-from .next_steps import append_pending_memory, next_step
+from .run_hints import append_pending_memory, next_step
 from .stop_report import failure_view, render_stop, stop_of
 from .storage import load_json
 from .telemetry import ledger_entries, summarize

@@ -163,3 +163,79 @@ class CompletionResilienceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CompletionCrashMatrixTests(unittest.TestCase):
+    def test_merge_crash_keeps_report_bytes_under_host_autocrlf(self):
+        import hashlib
+        from tests.lifecycle_cases import approved_case, observed_services
+        from tests.test_baseline_behavior import repository
+        def with_crlf_policy(root):
+            repository(root)
+            git(root, 'config', 'core.autocrlf', 'true')
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            with patch('tests.lifecycle_cases.repository', side_effect=with_crlf_policy):
+                change_id = approved_case(root, 'manual')
+            calls = []
+            services = observed_services(change_id, 'manual', calls)
+            self.assertEqual(run_change(root, change_id, services)['status'],
+                             'MANUAL_ACCEPTANCE_REQUIRED')
+            record_manual_acceptance(root, change_id, ['AC-2'], 'checked')
+            before_calls = list(calls)
+            with self._crash('merge'), self.assertRaisesRegex(RuntimeError, 'delivery crash'):
+                run_change(root, change_id, services)
+            state = load_run_state(root, change_id)
+            self.assertEqual(hashlib.sha256(Path(state['report']).read_bytes()).hexdigest(),
+                             state['report_sha256'])
+            self.assertEqual(run_change(root, change_id, services)['status'], 'PASSED')
+            self.assertEqual(calls, before_calls)
+
+    def test_all_delivery_windows_preserve_roles_commits_and_merge_topology(self):
+        from tests.lifecycle_cases import approved_case, observed_services
+        for window in ('implementation', 'verified', 'merge', 'merged', 'receipt', 'finalizing'):
+            with self.subTest(window=window), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                change_id = approved_case(root, 'manual')
+                calls = []
+                services = observed_services(change_id, 'manual', calls)
+                self.assertEqual(run_change(root, change_id, services)['status'], 'MANUAL_ACCEPTANCE_REQUIRED')
+                record_manual_acceptance(root, change_id, ['AC-2'], 'checked')
+                before_calls = list(calls)
+                with self._crash(window), self.assertRaisesRegex(RuntimeError, 'delivery crash'):
+                    run_change(root, change_id, services)
+                existing = self._delivery_commits(root, change_id)
+                done = run_change(root, change_id, services)
+                self.assertEqual(done['status'], 'PASSED')
+                self.assertEqual(calls, before_calls, 'recovery must not ask implement/review again')
+                final = self._delivery_commits(root, change_id)
+                for kind, commits in final.items():
+                    self.assertEqual(len(commits), 1, (window, kind, commits))
+                    if existing[kind]: self.assertEqual(commits, existing[kind])
+                parents = git(root, 'rev-list', '--parents', '-n', '1', done['merge_commit']).split()
+                self.assertEqual(len(parents), 3)
+                self.assertEqual(git(root, 'rev-parse', done['merge_commit']+'^2'), done['report_commit'])
+
+    def _crash(self, window):
+        import storyloop.project_loop_finish as finish
+        if window == 'implementation':
+            return patch.object(finish, 'generate_change_report', side_effect=RuntimeError('delivery crash'))
+        if window in {'verified', 'merged', 'finalizing'}:
+            original = finish.save_run
+            def save(project, state):
+                original(project, state)
+                if state['status'] == window.upper(): raise RuntimeError('delivery crash')
+            return patch.object(finish, 'save_run', side_effect=save)
+        name = 'finish_feature' if window == 'merge' else 'ensure_merge_receipt'
+        original = getattr(finish, name)
+        def deliver(*args, **kwargs):
+            original(*args, **kwargs)
+            raise RuntimeError('delivery crash')
+        return patch.object(finish, name, side_effect=deliver)
+
+    def _delivery_commits(self, root, identifier):
+        subjects = {'implementation': f'feat({identifier}): implement approved product change',
+                    'report': f'docs({identifier}): add acceptance evidence report',
+                    'receipt': f'docs({identifier}): record verified merge'}
+        rows = [line.split('\t', 1) for line in git(root, 'log', '--format=%H%x09%s').splitlines()]
+        return {kind: [sha for sha, text in rows if text == subject] for kind, subject in subjects.items()}

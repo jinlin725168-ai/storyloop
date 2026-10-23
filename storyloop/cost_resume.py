@@ -5,7 +5,9 @@ from dataclasses import asdict
 from .boundaries import FileChange
 from .call_log import _redacted
 from .models import require
-from .project_loop_support import pause, save_run
+from .project_loop_support import save_run
+from .run_stops import pause
+from .run_transitions import transition
 from .smoke_runner import implementation_digest
 
 
@@ -45,7 +47,13 @@ def restore(project, state):
         return
     require(state.get('cost_resume_digest') == implementation_digest(project),
             'Workspace changed while cost stop was paused; restore the saved candidate before run')
-    state['status'] = state.pop('cost_resume_status')
+    transition(project, state, state['cost_resume_status'], event='cost_restore',
+               effect=lambda: _pop_resume_status(state))
     state.pop('cost_resume_digest', None)
     for key in ('used', 'limits', 'by_role', 'cost_coverage'):
         state.pop(key, None)
+
+
+def _pop_resume_status(state):
+    state.pop('cost_resume_status')
+    return {}

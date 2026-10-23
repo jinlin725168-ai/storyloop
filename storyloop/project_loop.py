@@ -10,12 +10,14 @@ from __future__ import annotations
 
 from .errata import defer_errata, release_errata
 
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
 
 from . import cost_resume
+from .run_services import LoopServices
+from .run_transitions import transition, RUNNABLE
+from .run_guards import layers_green
+from .default_loop_services import _default_services
 from .cross_vendor import prepare_run
 from .cost_limits import check_before_call
 from .answers import _pending as _unanswered, load_answers
@@ -42,30 +44,18 @@ from .project_loop_guards import (read_only_call, require_control_unchanged, req
                                   verify_read_only_snapshot, write_safely)
 from .project_loop_failures import (apply_overrule, epoch_of, record_boundary, record_failure,
                                     require_routed_choice, route_review)
-from .project_loop_support import control_digest, pause, run_path, save_run
+from .project_loop_support import control_digest, run_path, save_run
+from .run_stops import pause
 from .oracle_counts import check_layers
 from .project_preparation import _prepare_acceptance
 from .project_profile import layer_commands
 from .processutil import redact
-from .project_receipt import recover_completed_merge
 from .system_smoke import run_system_smoke_isolated
 from .smoke import RESULT_EVIDENCE
-from .semantic_repair import REPAIR_KEYS
 from .smoke import suite_relative
 from .skills import role_skill_versions
 from .smoke_runner import implementation_digest, run_commands_isolated, run_smoke_isolated
 from .storage import load_json, locked
-
-
-@dataclass(frozen=True)
-class LoopServices:
-    """Agent operations kept injectable so the controller remains authoritative."""
-
-    generate_smoke: Callable[[Path, dict], dict]
-    implement: Callable[[Path, dict], dict]
-    review: Callable[[Path, dict], dict]
-    characterize: Callable[[Path, dict], dict] | None = None
-    design: Callable[[Path, dict], dict] | None = None
 
 
 def run_change(project: Path, change_id: str, services: LoopServices | None = None,
@@ -160,7 +150,7 @@ def _attempts(project: Path, change: dict, state: dict, services: LoopServices,
               config: dict, start_attempt: int) -> dict:
     while state["attempt"] < config["max_attempts"]:
         state["attempt"] += 1
-        state["status"] = "IMPLEMENTING"
+        transition(project, state, "IMPLEMENTING", event="begin_attempt")
         save_run(project, state)
         try:
             outcome = _run_attempt(project, change, state, services, config)
@@ -190,21 +180,14 @@ def _open_run(project: Path, change: dict, routing: dict | None = None) -> tuple
     path = run_path(project, change_id)
     if path.exists():
         state = load_json(path)
-        resumable = {"COST_LIMIT_REACHED", "PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED",
-                     "IMPLEMENTING", "BASE_CHANGE_REQUIRED",
-                     "BOUNDARY_VIOLATION", "NEEDS_INPUT", "BUDGET_EXHAUSTED",
-                     "CHARACTERIZATION_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_SPEC_FIX",
-                     "NO_PROGRESS", "DESIGN_APPROVAL_REQUIRED", "DESIGN_REVISION_REQUIRED", "SPLIT_RECOMMENDED",
-                     "VERIFIED", "MANUAL_ACCEPTANCE_REQUIRED", "MERGED", "RECEIPTING",
-                     "FINALIZING"}
+        resumable = RUNNABLE
         require(state.get("change_id") == change_id and state.get("status") in resumable,
                 "Run state cannot be resumed")
         require(state.get("contract_digest") == change["approval"]["contract_digest"],
                 "Saved run belongs to a different approved product contract")
         current = current_branch(project)
         if state["status"] == "VERIFIED" and current == state.get("source_branch"):
-            state.update({"status": "MERGED",
-                          "merge_commit": recover_completed_merge(project, state)})
+            transition(project, state, "MERGED", event="recover_merge")
             save_run(project, state)
         expected = (state.get("source_branch")
                     if state["status"] in {"MERGED", "RECEIPTING", "FINALIZING"}
@@ -228,7 +211,7 @@ def _start_run(project: Path, change: dict, routing: dict | None) -> tuple[dict,
                 f"{change_id} 修订自 {link['change_id']}：新运行要从源分支开始，"
                 f"git checkout {link['source_branch']}（当前在 {branch}）")
     verify_baseline(project)
-    state = _new_run_state(change_id, start_feature(project, change_id),
+    state = _new_run_state(project, change_id, start_feature(project, change_id),
                            change["approval"]["contract_digest"])
     if routing is not None:
         state["routing"] = routing
@@ -414,12 +397,6 @@ def _resume_manual_acceptance(project: Path, change: dict, state: dict) -> dict:
 LAYER_ORDER = ("unit", "integration", "acceptance", "smoke", "checks")
 
 
-def layers_green(layers: dict) -> bool:
-    """Acceptance must pass; every other layer passes or is skipped because it is not configured."""
-    return (layers["acceptance"]["status"] == "PASSED"
-            and all(layers[name]["status"] in {"PASSED", "SKIPPED"} for name in LAYER_ORDER if name != "acceptance"))
-
-
 def _run_checks_safely(
     project: Path, change_id: str, config: dict, prior_boundary: dict,
 ) -> tuple[dict, dict]:
@@ -469,27 +446,14 @@ def _perform_review(
         raise
 
 
-def _new_run_state(change_id: str, started: dict, contract_digest: str) -> dict:
-    return {"version": 1, "change_id": change_id, "status": "PREPARING", "attempt": 0,
+def _new_run_state(project: Path, change_id: str, started: dict, contract_digest: str) -> dict:
+    state = {"version": 1, "change_id": change_id, "attempt": 0,
             "feature_branch": started["branch"], "source_branch": started["source_branch"],
             "source_head": started["source_head"], "contract_digest": contract_digest,
             "started_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "failures": []}
-
-
-def _default_services() -> LoopServices:
-    from .project_agents import invoke_project_agent
-    return LoopServices(
-        generate_smoke=lambda project, state: invoke_project_agent(
-            project, "acceptance",
-            {"change": {key: value for key, value in state.items() if key not in REPAIR_KEYS},
-             "suite_root": suite_relative(project, state["change_id"]),
-             **{key: state[key] for key in REPAIR_KEYS if key in state}}),
-        implement=lambda project, context: invoke_project_agent(project, "implement", context),
-        review=lambda project, context: invoke_project_agent(project, "review", context),
-        characterize=lambda project, context: invoke_project_agent(project, "characterize", context),
-        design=lambda project, context: invoke_project_agent(project, "design", context),
-    )
+    transition(project, state, "PREPARING", event="start")
+    return state
 
 
 def _risk_updates(project, state, response, role):

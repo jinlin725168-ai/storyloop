@@ -23,6 +23,9 @@ rank = 2
 [architecture.evidence_kernel]
 title = "证据内核"
 rank = 3
+[architecture.lifecycle_kernel]
+title = "变更生命周期内核"
+rank = 3
 [architecture.agent_gateway]
 title = "代理网关"
 rank = 4
@@ -129,7 +132,7 @@ rank = 7
 "consistency_locations" = { module = "verification", zone = "mutable" }
 "manual_acceptance" = { module = "verification", zone = "mutable" }
 "openspec_docs" = { module = "delivery", zone = "mutable" }
-"project_loop_finish" = { module = "delivery", zone = "mutable", split = "B" }
+"project_loop_finish" = { module = "delivery", zone = "mutable" }
 "intake" = { module = "routing", zone = "mutable" }
 "assessment" = { module = "routing", zone = "mutable" }
 "design_approval" = { module = "routing", zone = "mutable" }
@@ -189,7 +192,7 @@ rank = 7
 "report_reconciliation" = { module = "reporting", zone = "mutable" }
 "report_roles" = { module = "reporting", zone = "mutable" }
 "report_sections" = { module = "reporting", zone = "mutable" }
-"project_loop" = { module = "lifecycle", zone = "mutable", split = "B" }
+"project_loop" = { module = "lifecycle", zone = "mutable" }
 "project_preparation" = { module = "lifecycle", zone = "mutable" }
 "run_recovery" = { module = "lifecycle", zone = "mutable" }
 "routing_execution" = { module = "lifecycle", zone = "mutable" }
@@ -202,12 +205,16 @@ rank = 7
 "ci_command" = { module = "command", zone = "mutable" }
 "__main__" = { module = "command", zone = "mutable" }
 
+"run_transitions" = { module = "lifecycle_kernel", zone = "base" }
+"run_guards" = { module = "lifecycle_kernel", zone = "base" }
+"run_state" = { module = "state_store", zone = "base" }
+"run_services" = { module = "agent_gateway", zone = "base" }
+"default_loop_services" = { module = "role_content", zone = "mutable" }
+"run_stops" = { module = "reporting", zone = "mutable" }
+"run_hints" = { module = "reporting", zone = "mutable" }
+
 # 仅登记已批准的现状债务；豁免只减不增，每条关联消除阶段。
-[[exemptions]]
-source = "acceptance_repair"
-target = "project_loop"
-until = "B"
-reason = "阶段 B 归一生命周期时一并处理"
+
 [[exemptions]]
 source = "adapter_capabilities"
 target = "cross_vendor"
@@ -233,11 +240,7 @@ source = "baseline"
 target = "system_smoke"
 until = "D"
 reason = "证据内核依赖业务，改为调用方传参或下沉定义"
-[[exemptions]]
-source = "change_log"
-target = "next_steps"
-until = "B"
-reason = "阶段 B 归一生命周期时一并处理"
+
 [[exemptions]]
 source = "evidence_locations"
 target = "failure_attribution"
@@ -328,26 +331,14 @@ source = "project_git"
 target = "baseline"
 until = "D"
 reason = "Git 原语借用 baseline._git，阶段 D 拆出"
-[[exemptions]]
-source = "project_loop_gates"
-target = "project_loop"
-until = "B"
-reason = "阶段 B 归一生命周期时一并处理"
+
 [[exemptions]]
 source = "project_loop_guards"
 target = "errata"
 until = "D"
 reason = "证据内核依赖业务，改为调用方传参或下沉定义"
-[[exemptions]]
-source = "project_loop_support"
-target = "next_steps"
-until = "B"
-reason = "停点由生命周期统一处理"
-[[exemptions]]
-source = "project_loop_support"
-target = "stop_report"
-until = "B"
-reason = "停点由生命周期统一处理"
+
+
 [[exemptions]]
 source = "project_profile"
 target = "oracle_counts"
@@ -383,11 +374,6 @@ source = "smoke_runner"
 target = "system_smoke"
 until = "D"
 reason = "证据内核依赖业务，改为调用方传参或下沉定义"
-[[exemptions]]
-source = "supersede"
-target = "next_steps"
-until = "B"
-reason = "阶段 B 归一生命周期时一并处理"
 
 [cycles]
 members = [
@@ -397,12 +383,12 @@ members = [
   "foundation_survey", "intake", "lesson_landing", "lesson_retrieval",
   "lesson_store", "models", "onboarding_manifest", "oracle_counts",
   "oracle_skill_approval", "path_security", "principles", "project_agents",
-  "project_boundaries", "project_git", "project_loop", "project_loop_failures",
-  "project_loop_finish", "project_loop_gates", "project_preparation", "project_profile",
-  "readiness", "requirement_checklist", "role_profiles", "role_schemas",
-  "routing_cli", "routing_evidence", "routing_execution", "routing_policy",
-  "routing_report", "skills", "smoke", "smoke_runner",
-  "stop_report", "system_smoke", "telemetry", "telemetry_summary",
+  "project_boundaries", "project_git", "project_loop_failures",
+  "project_profile", "readiness", "requirement_checklist",
+  "role_profiles", "role_schemas", "routing_cli", "routing_evidence",
+  "routing_policy", "routing_report", "skills", "smoke",
+  "smoke_runner", "stop_report", "system_smoke", "telemetry",
+  "telemetry_summary",
 ]
 
 [invariants.I1]
@@ -462,8 +448,8 @@ tests = ["tests.test_invariants::test_i11_a_lighter_decision_never_lowers_the_ef
 
 [invariants.I12]
 title = "底线单调：状态迁移只经守卫，守卫读取类型底线；阶段只能加严"
-status = "pending"
-stage = "B"
+status = "guarded"
+tests = ["tests.test_lifecycle_architecture::test_run_status_writes_have_one_owner", "tests.test_lifecycle_guards::test_real_completion_cannot_skip_a_configured_unit_layer"]
 
 [invariants.I13]
 title = "底座只能被 base 类型的变更推进，也只有 base 类型能写底座"

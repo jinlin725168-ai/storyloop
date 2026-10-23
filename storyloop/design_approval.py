@@ -12,7 +12,9 @@ from .principles import load_principles
 from .models import StoryLoopError, require, text
 from .planning import assess_plan, _record_assessment
 from .planning_validation import option_scope
-from .project_loop_support import pause, run_path, save_run
+from .project_loop_support import run_path, save_run
+from .run_transitions import transition
+from .run_stops import pause
 from .routing_state import is_routed, run_config
 from .smoke import smoke_digests
 from .storage import load_json, locked
@@ -100,7 +102,7 @@ def _record(binding: dict, **fields) -> dict:
             'binding': deepcopy(binding), **fields}
 
 
-def _clear_checks(state: dict) -> None:
+def _clear_checks(project: Path, state: dict) -> None:
     state['planning'].pop('consistency', None)
     state.pop('consistency', None)
     if not (state['planning'].get('origin') == 'L3'
@@ -111,7 +113,7 @@ def _clear_checks(state: dict) -> None:
     if state.get('status') == 'CHARACTERIZATION_FAILED':
         for key in ('stop', 'unit', 'error', 'next', 'questions'):
             state.pop(key, None)
-        state.update(status='DESIGN_APPROVAL_REQUIRED', phase='planning')
+        transition(project, state, 'DESIGN_APPROVAL_REQUIRED', event='design_reapprove', updates={'phase': 'planning'})
 
 
 def _valid_design(plan: dict, binding: dict) -> bool:
@@ -143,14 +145,14 @@ def _approve_design_locked(project: Path, change_id: str, plan_id: str, *,
     _record_assessment(state, config, assessed)
     if assessed['decision']['split'] and not _valid_continue(state, binding, assessed):
         plan.pop('approval', None)
-        _clear_checks(state)
+        _clear_checks(project, state)
         state['planning'].pop('continue_heavy', None)
         state['planning']['pending_option'] = {'plan_id': plan_id, 'option_id': selected}
         return _pause_split(project, change, state, assessed)
     if old and _valid_design({**plan, 'approval': old}, binding) and old['option_id'] == selected:
         return deepcopy(old)
     if old:
-        _clear_checks(state)
+        _clear_checks(project, state)
     state['planning'].pop('pending_option', None)
     save_run(project, state)
     return deepcopy(plan['approval'])
@@ -200,7 +202,7 @@ def _replan_locked(project: Path, change_id: str, reason: str) -> dict:
     planning_input = state['status'] == 'NEEDS_INPUT' and (
         state.get('phase') == 'planning' or state.get('stop', {}).get('phase') == 'planning')
     require(state['status'] in PLANNING_STOPS or planning_input, 'Replan requires a planning stop')
-    _clear_checks(state)
+    _clear_checks(project, state)
     planning = state['planning']
     planning.setdefault('history', []).append({'reason': reason, 'plan': planning.get('plan'),
                                               'attempt': state.get('attempt', 0)})
@@ -221,7 +223,7 @@ def _replan_locked(project: Path, change_id: str, reason: str) -> dict:
         state.pop(key, None)
     state.pop('questions', None)
     state.pop('stop', None)
-    state.update(status='DESIGN_REVISION_REQUIRED', phase='planning')
+    transition(project, state, 'DESIGN_REVISION_REQUIRED', event='design_replan', updates={'phase': 'planning'})
     save_run(project, state)
     return deepcopy(state)
 
@@ -253,7 +255,7 @@ def ensure_design_approval(project: Path, change: dict, state: dict, config: dic
     plan = state['planning']['plan']
     if plan.get('approval') and not _valid_design(plan, binding):
         plan.pop('approval')
-        _clear_checks(state)
+        _clear_checks(project, state)
     assessed = assess_plan(project, change, state, _assessment_plan(state))
     _record_assessment(state, config, assessed)
     if assessed['decision']['unresolved']:

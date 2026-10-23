@@ -8,7 +8,9 @@ from pathlib import Path
 from .evidence_locations import evidence_location_exists
 from .failure_attribution import check_findings, failure_signature, finding_key, no_progress, route
 from .models import require, text
-from .project_loop_support import pause, save_run
+from .project_loop_support import save_run
+from .run_transitions import transition
+from .run_stops import pause
 from .smoke import suite_relative
 
 ROUTED_STOPS = {"oracle": "ORACLE_DEFECT", "contract": "NEEDS_SPEC_FIX"}
@@ -117,7 +119,7 @@ def apply_overrule(project: Path, state: dict, reason: str) -> dict | None:
     _clear_stop(state)
     if target in ROUTED_STOPS:
         return _pause_routed(project, state, target, findings)
-    state["status"] = "IMPLEMENTING"
+    transition(project, state, "IMPLEMENTING", event="overrule")
     save_run(project, state)
     return None
 
