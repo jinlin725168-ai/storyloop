@@ -13,13 +13,12 @@ from .changes import _save, load_change
 from .models import identifier, require, text
 from .path_security import repository_relative
 from .product_contract import validate_product
-from .project_boundaries import _write_base_proposal
-from .project_profile import base_commands_digest, is_ci_path, matches_test_root
+from .project_boundaries import _write_base_proposal, audit_base_scope, base_scope_path_allowed
+from .project_profile import base_commands_digest, is_ci_path
 from .project_profile import layer_commands
 from .smoke_runner import run_commands_at_commit, run_commands_isolated
 from .system_smoke import adopt_system_smoke, load_system_smoke, run_system_smoke_isolated
 from .storage import load_json, locked, write_json
-from .state_format import is_system_smoke_path
 from .lesson_store import load_lessons_at
 from .lessons import scope_matches
 
@@ -72,7 +71,7 @@ def propose_base_change(project: Path, paths: list[str], reason: str,
                       and not allow_ci and not allow_mutable))
     require(authorized,
             "Base scope authorization does not match proposal flags")
-    require(all(_scope_path_allowed(scope, item["path"]) for item in changes),
+    require(all(base_scope_path_allowed(scope, item["path"]) for item in changes),
             "Base scope cannot include these paths")
     path = _write_base_proposal(project, "manual", changes, baseline, reason)
     draft_from_proposal(project, path.stem, scope=scope)
@@ -153,6 +152,9 @@ def establish_old_green(project: Path, change: dict, state: dict) -> dict:
                 "baseline_version": baseline["baseline_version"],
                 "commands_sha256": change["approval"]["base_commands_sha256"],
                 "engine_version": change["approval"]["versions"]["engine_version"],
+                "engine_source": state.get("engine_source", str(Path(__file__).resolve().parent)),
+                "target_tree_oid": state.get("target_tree_oid") or
+                _git(project, "rev-parse", f"{source}^{{tree}}").strip(),
                 "layers": layers, "system_smoke": smoke, "build": build}
     path = project / ".storyloop/evidence" / change["change_id"] / "base-old-green.json"
     write_json(path, evidence, max_bytes=4_000_000)
@@ -175,36 +177,8 @@ def base_candidate_paths(project: Path, change: dict, state: dict) -> list[str]:
     require(not extra and not missing,
             "Base committed paths differ from approved contract; extra: " + ", ".join(extra)
             + "; missing: " + ", ".join(missing))
-    profile = load_project_config(project)["profile"]
-    scope = change["product"]["base"]["scope"]
-    proposal = load_json(project / ".storyloop/base-proposals" / f"{change['change_id']}.json")
-    categories = {item["path"]: item["category"] for item in proposal["changes"]}
-    allowed = {"foundation": {"FOUNDATION_CHANGE", "INTEGRATION_CHANGE"},
-               "ci": {"CI_CHANGE", "FOUNDATION_CHANGE", "INTEGRATION_CHANGE"},
-               "upstream": {"UPSTREAM_MUTABLE", "FOUNDATION_CHANGE", "INTEGRATION_CHANGE"},
-               "skills": {"FOUNDATION_CHANGE"}, "knowledge": {"FOUNDATION_CHANGE"}}[scope]
-    for path in actual:
-        require(categories.get(path) in allowed, f"Base scope {scope} cannot write {path}")
-        require(_scope_path_allowed(scope, path), f"Base scope {scope} cannot write {path}")
-        require(not _oracle_path(path, profile), f"Base oracle path requires E2: {path}")
-        require(not _git(project, "ls-tree", "HEAD", "--", path).startswith("120000 "),
-                f"Base candidate contains unsafe symlink: {path}")
+    audit_base_scope(project, change, actual)
     return sorted(actual)
-
-
-def _oracle_path(path: str, profile: dict) -> bool:
-    return (is_system_smoke_path(path) or path.startswith("acceptance/changes/")
-            or matches_test_root(path, profile.get("test_roots") or [])
-            or path == "acceptance/storyloop-settings.json")
-
-
-def _scope_path_allowed(scope: str, path: str) -> bool:
-    if scope == "skills":
-        return path.startswith((".claude/skills/", ".codex/skills/"))
-    if scope == "knowledge":
-        return (path.startswith(("openspec/foundation/", "openspec/lessons/"))
-                or path == "openspec/principles.json")
-    return True
 
 
 
@@ -239,8 +213,8 @@ def _upgrade_locked(project: Path, proposal_id: str) -> dict:
     paths = [item["path"] for item in proposal["changes"]]
     scope = ("ci" if "CI_CHANGE" in categories else
              "upstream" if "UPSTREAM_MUTABLE" in categories else
-             "skills" if all(_scope_path_allowed("skills", path) for path in paths) else
-             "knowledge" if all(_scope_path_allowed("knowledge", path) for path in paths) else
+             "skills" if all(base_scope_path_allowed("skills", path) for path in paths) else
+             "knowledge" if all(base_scope_path_allowed("knowledge", path) for path in paths) else
              "foundation")
     state_path = project / ".storyloop/state/changes" / f"{proposal_id}.json"
     if state_path.exists():

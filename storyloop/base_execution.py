@@ -6,6 +6,7 @@ from pathlib import Path
 import hashlib
 import json
 
+from . import __version__
 from .approvals import materialize_approved_change
 from .base_upgrade import base_candidate_paths, establish_old_green
 from .baseline import _git, load_project_config, verify_baseline
@@ -101,6 +102,9 @@ def _verify_candidate(project: Path, change: dict, state: dict) -> dict:
     evidence = {"version": 1, "change_id": change["change_id"], "status": "PASSED",
                 "candidate_commit": state["candidate_commit"],
                 "candidate_sha256": implementation_digest(project),
+                "engine_version": state["engine_version"],
+                "engine_source": state["engine_source"],
+                "target_tree_oid": _git(project, "rev-parse", "HEAD^{tree}").strip(),
                 "contract_digest": state["contract_digest"], "layers": layers,
                 "system_smoke": smoke, "build": build}
     write_json(_evidence_path(project, change["change_id"]), evidence, max_bytes=4_000_000)
@@ -253,6 +257,8 @@ def _open_state(project: Path, change: dict, implementer: str | None, new_run_st
                 "Resume the saved StoryLoop base branch")
         return state
     require(implementer == "human", "Use --implementer human for E1 base changes")
+    require(change["approval"]["versions"]["engine_version"] == __version__,
+            "Approved base engine version differs from the running engine")
     dirty = _git(project, "status", "--porcelain=v1", "--untracked-files=all", "-z")
     records = [item for item in dirty.split("\0") if item]
     expected = set(change["product"]["base"]["paths"])
@@ -263,6 +269,9 @@ def _open_state(project: Path, change: dict, implementer: str | None, new_run_st
     state = new_run_state(project, change_id, start_base(project, change_id, allowed),
                           change["approval"]["contract_digest"])
     state["implementer"] = "human"
+    state["engine_version"] = __version__
+    state["engine_source"] = str(Path(__file__).resolve().parent)
+    state["target_tree_oid"] = _git(project, "rev-parse", f"{state['source_head']}^{{tree}}").strip()
     save_run(project, state)
     return state
 

@@ -175,6 +175,9 @@ class ReportMemoryTests(unittest.TestCase):
         proposal = propose_base_change(project, ["core.py"], "update core")
         (project / "core.py").write_text("VALUE = 2\n", encoding="utf-8")
         commit_all(project, "base update")
+        from tests.test_base_upgrade import begin_legacy_receipt
+        begin_legacy_receipt(project, project / ".storyloop/base-proposals" /
+                             f"{proposal['change_id']}.json")
         result = upgrade_baseline(project, proposal["change_id"])
         self.assertEqual(result["lessons_to_review"], ["L-0001"])
 
@@ -183,6 +186,8 @@ class ReportMemoryTests(unittest.TestCase):
         proposal = propose_base_change(project, ["core.py"], "update core")
         (project / "core.py").write_text("VALUE = 2\n", encoding="utf-8")
         commit_all(project, "base update")
+        begin_legacy_receipt(project, project / ".storyloop/base-proposals" /
+                             f"{proposal['change_id']}.json")
         with patch("storyloop.base_upgrade._lessons_to_review", side_effect=ValueError("bad memory")):
             result = upgrade_baseline(project, proposal["change_id"])
         self.assertEqual(result["status"], "BASELINE_UPGRADED")

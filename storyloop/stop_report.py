@@ -60,7 +60,7 @@ def _options(status: str, project: str, change_id: str, routed: bool) -> list[di
             {"action": "确需扩大范围时发起底座提案", "command": _command(
                 "storyloop", "base-propose", project, "--path", "<路径>", "--reason", "<原因>")},
         ],
-        "BASE_CHANGE_REQUIRED": [{"action": "升级底座", "command": _command(
+        "BASE_CHANGE_REQUIRED": [{"action": "导入底座草案", "command": _command(
             "storyloop", "base-update", project, "--proposal", "<BASE-ID>")}],
         "WORKSPACE_TAINTED": [{"action": "清理后复位", "command": _command(
             "storyloop", "reset", *where, "--reason", "<原因>")}],
@@ -69,8 +69,10 @@ def _options(status: str, project: str, change_id: str, routed: bool) -> list[di
         "NO_PROGRESS": [repair, supersede_with_reason, run],
         "MANUAL_ACCEPTANCE_REQUIRED": [{"action": "逐条人工验收", "command": _command(
             "storyloop", "accept", *where, "--criterion", "<ID>", "--note", "<核对内容>")}],
-        "HUMAN_IMPLEMENTATION_REQUIRED": [run],
-        "BASE_REVIEW_REQUIRED": [run],
+        "HUMAN_IMPLEMENTATION_REQUIRED": [{**run, "action": "提交批准路径后继续"}],
+        "BASE_REVIEW_REQUIRED": [{"action": "具名独立审查", "command": _command(
+            "storyloop", "base-review", project, "--change", change_id,
+            "--verdict", "pass", "--note", "<核对内容>")}],
         "NEEDS_SPEC_FIX": [supersede, *([overrule] if routed else [])],
         "AGENT_UNAVAILABLE": [run],
     }

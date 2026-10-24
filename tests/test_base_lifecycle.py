@@ -62,11 +62,31 @@ class BaseG1Tests(unittest.TestCase):
         with self.assertRaises(StoryLoopError):
             guard_g1(self.root, self.state, {})
 
+    def test_g1_rejects_changed_approved_command_digest(self):
+        base_upgrade.establish_old_green(self.root, self.change, self.state)
+        path = self.root / ".storyloop/evidence" / self.state["change_id"] / "base-old-green.json"
+        evidence = load_json(path)
+        evidence["commands_sha256"] = "0" * 64
+        write_json(path, evidence)
+        with self.assertRaisesRegex(StoryLoopError, "commands"):
+            guard_g1(self.root, self.state, {})
+
     def test_human_run_opens_branch_and_stops_without_design_agent(self):
         result = run_change(self.root, self.change["change_id"], implementer="human")
         self.assertEqual(result["status"], "HUMAN_IMPLEMENTATION_REQUIRED")
         self.assertEqual(git(self.root, "branch", "--show-current"),
                          f"storyloop/{self.change['change_id']}")
+
+    def test_base_run_records_engine_source_and_target_tree(self):
+        run_change(self.root, self.change["change_id"], implementer="human")
+        state = load_json(self.root / ".storyloop/state/runs" / f"{self.change['change_id']}.json")
+        evidence = load_json(self.root / ".storyloop/evidence" / self.change["change_id"] /
+                             "base-old-green.json")
+        self.assertEqual(state["engine_version"], evidence["engine_version"])
+        self.assertEqual(state["engine_source"], evidence["engine_source"])
+        self.assertEqual(state["target_tree_oid"], evidence["target_tree_oid"])
+        self.assertEqual(state["target_tree_oid"],
+                         git(self.root, "rev-parse", f"{state['source_head']}^{{tree}}"))
 
     def test_human_candidate_rejects_unapproved_committed_path(self):
         run_change(self.root, self.change["change_id"], implementer="human")
@@ -75,6 +95,17 @@ class BaseG1Tests(unittest.TestCase):
         git(self.root, "commit", "-q", "-m", "rogue")
         with self.assertRaisesRegex(StoryLoopError, "rogue.py"):
             run_change(self.root, self.change["change_id"])
+
+    def test_human_candidate_rejects_git_symlink_mode(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        git(self.root, "config", "core.symlinks", "false")
+        blob = git(self.root, "hash-object", "-w", "pom.xml")
+        git(self.root, "update-index", "--cacheinfo", f"120000,{blob},pom.xml")
+        git(self.root, "commit", "-q", "-m", "base symlink")
+        git(self.root, "checkout", "-f", "HEAD", "--", "pom.xml")
+        with self.assertRaisesRegex(StoryLoopError, "symlink"):
+            run_change(self.root, change_id)
 
     def test_cli_approval_does_not_start_base_run(self):
         source = git(self.root, "branch", "--show-current")
@@ -130,6 +161,19 @@ class BaseG1Tests(unittest.TestCase):
                                     "--verdict", "pass", "--note", "已复核"])
         self.assertEqual(dispatch(args)["status"], "REVIEW_RECORDED")
 
+    def test_review_stop_resumes_to_manual_acceptance(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project/>\n<!-- reviewed -->\n", encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "base")
+        run_change(self.root, change_id)
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        git(self.root, "config", "user.name", "Independent Reviewer")
+        base_execution.record_base_review(self.root, change_id, "pass", "已复核")
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "MANUAL_ACCEPTANCE_REQUIRED")
+
     def test_approved_commands_cannot_change_before_old_green(self):
         config = load_project_config(self.root)
         config["profile"]["unit_commands"] = [[sys.executable, "-c", "print('changed')"]]
@@ -151,6 +195,24 @@ class BaseG1Tests(unittest.TestCase):
         review["reviewer"] = git(self.root, "show", "-s", "--format=%an", "HEAD")
         write_json(path, review)
         with self.assertRaisesRegex(StoryLoopError, "reviewer"):
+            run_change(self.root, change_id)
+
+    def test_g2_rechecks_proposal_scope_after_review(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project/>\n<!-- scope -->\n", encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "base")
+        run_change(self.root, change_id)
+        git(self.root, "config", "user.name", "Independent Reviewer")
+        base_execution.record_base_review(self.root, change_id, "pass", "已复核")
+        run_change(self.root, change_id)
+        record_manual_acceptance(self.root, change_id, ["BASE-ACCEPT"], "目标满足")
+        path = self.root / ".storyloop/base-proposals" / f"{change_id}.json"
+        proposal = load_json(path)
+        proposal["changes"][0]["category"] = "UPSTREAM_MUTABLE"
+        write_json(path, proposal)
+        with self.assertRaisesRegex(StoryLoopError, "scope"):
             run_change(self.root, change_id)
 
 

@@ -275,6 +275,7 @@ def land_transaction(project, ref, writes, message, result_ids,
             write_json(_base_landing_path(project, ref),
                        {'version': 1, 'ref': ref, 'draft_digest': _draft_digest(draft),
                         'source_head': parent, 'result': result}, max_bytes=512_000)
+            _validate_base_landing(project, {'result': result})
             return result
         _git(project, 'add', '--', *writes)
         tree = _git(project, 'write-tree').strip()
@@ -296,6 +297,7 @@ def land_transaction(project, ref, writes, message, result_ids,
         else:
             _restore(project, originals, parent, proposal)
             pending.unlink(missing_ok=True)
+            _base_landing_path(project, ref).unlink(missing_ok=True)
         raise
 
 
@@ -308,6 +310,13 @@ def _validate_base_landing(project: Path, record: dict) -> None:
     require(result.get('status') == 'BASE_APPROVAL_REQUIRED'
             and isinstance(result.get('paths'), list)
             and isinstance(result.get('base_proposal'), str), '待处理的 BASE 落点记录无效')
+    proposal_id = identifier(result['base_proposal'], 'BASE 提案标识')
+    proposal_path = safe_target(project, f'.storyloop/base-proposals/{proposal_id}.json', 'BASE 提案')
+    require(proposal_path.is_file(), 'BASE 提案已变化或丢失')
+    proposal = load_json(proposal_path)
+    approved = {item['path'] for item in proposal.get('changes') or []}
+    require(proposal.get('change_id') == proposal_id
+            and set(result['paths']) <= approved, 'BASE 提案与知识候选路径不一致')
     if 'errata_id' in result:
         content = (project / 'openspec/foundation/errata.md').read_text(encoding='utf-8')
         ids = [line[3:] for line in content.splitlines() if line.startswith('## E-')]

@@ -99,7 +99,7 @@
 |  | `routing_risks` | 可变区 | 校验实现与审查角色提供的正向分流风险事实 | `merge_routing_risks`、`validate_routing_risks` |
 |  | `routing_state` | 可变区 | 提供纯分流快照及按版本区分的执行预算 | `advance_tier`、`is_routed`、`open_routing`、`run_config` |
 |  | `routing_upgrade` | 可变区 | 单调升级 L3 范围评估并使旧方案失效 | `check_l3`、`enforce_forbidden_paths` |
-| 接入与底座 | `base_upgrade` | 可变区 | 通过显式回归门控升级项目逻辑底座 | `propose_base_change`、`upgrade_baseline` |
+| 接入与底座 | `base_upgrade` | 可变区 | 生成 base 草案、旧底座 G1 与历史回执兼容读取 | `propose_base_change`、`upgrade_baseline` |
 |  | `foundation_survey` | 可变区 | 受保护的底座知识库摸底与扩展说明 | `foundation_payload`、`survey_foundation` |
 |  | `onboarding` | 可变区 | 两阶段仓库接入：先草案，再建立干净且已提交的底座 | `scaffold_project` |
 |  | `onboarding_discovery` | 可变区 | 拒绝不安全显式构建标记后复用工程探测 | `safe_discovery` |

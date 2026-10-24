@@ -7,7 +7,7 @@ from .smoke import RED_EVIDENCE
 from .storage import load_json
 from .baseline import _git, load_baseline, load_project_config
 from .oracle_counts import check_layers
-from .project_boundaries import audit_project_changes
+from .project_boundaries import audit_base_scope, audit_project_changes
 from .project_git import current_branch
 from .project_profile import base_commands_digest, layer_commands
 from .project_receipt import verify_verified_artifacts, recover_completed_merge  # noqa: F401  # 兼容再导出：保留旧模块导入路径
@@ -49,6 +49,9 @@ def _guard_base_green(project: Path, state: dict) -> None:
     require(path.is_file(), "Old-base green evidence is missing")
     evidence = load_json(path)
     baseline = load_baseline(project)
+    approval = load_json(project / ".storyloop/state/changes" /
+                         f"{state['change_id']}.json").get("approval") or {}
+    profile = load_project_config(project)["profile"]
     require(evidence.get("change_id") == state["change_id"]
             and evidence.get("status") == "PASSED"
             and evidence.get("contract_digest") == state.get("contract_digest")
@@ -56,12 +59,24 @@ def _guard_base_green(project: Path, state: dict) -> None:
             and evidence.get("source_head") == state.get("source_head", baseline["source_head"])
             and evidence.get("baseline_version") == baseline["baseline_version"],
             "Old-base green evidence does not match the approved run")
+    require(evidence.get("commands_sha256") == approval.get("base_commands_sha256")
+            and evidence.get("commands_sha256") == base_commands_digest(profile),
+            "Old-base green evidence commands differ from approval")
+    if state.get("engine_source"):
+        require(evidence.get("engine_version") == state.get("engine_version")
+                and evidence.get("engine_source") == state["engine_source"]
+                and evidence.get("target_tree_oid") == state["target_tree_oid"],
+                "Old-base engine source or target tree changed")
+    if state.get("source_branch"):
+        require(_git(project, "rev-parse", state["source_branch"]).strip() == state["source_head"],
+                "Old-base source branch moved after approval")
     require(evidence.get("system_smoke", {}).get("status") == "PASSED"
             and evidence.get("build", {}).get("status") in {"PASSED", "DECLARED_ABSENT"},
             "Old-base green evidence has missing checks")
     layers = evidence.get("layers") or {}
     require(set(layers) == {"unit", "integration", "checks"}
-            and all(row.get("status") in {"PASSED", "SKIPPED"} for row in layers.values())
+            and all(layers[name].get("status") == ("PASSED" if layer_commands(profile, name)
+                                                  else "SKIPPED") for name in layers)
             and any(row.get("status") == "PASSED" for row in layers.values()),
             "Old-base regression evidence is incomplete")
 
@@ -173,6 +188,11 @@ def _guard_base_g2(project: Path, change: dict, state: dict) -> None:
             and evidence.get("candidate_sha256") == digest
             and evidence.get("contract_digest") == state.get("contract_digest"),
             "Base verification evidence is stale")
+    require(evidence.get("engine_version") == state.get("engine_version")
+            and evidence.get("engine_source") == state.get("engine_source")
+            and evidence.get("target_tree_oid")
+            == _git(project, "rev-parse", f"{state['candidate_commit']}^{{tree}}").strip(),
+            "Base candidate engine source or target tree changed")
     require(evidence.get("system_smoke", {}).get("status") == "PASSED"
             and evidence.get("build", {}).get("status") in {"PASSED", "DECLARED_ABSENT"},
             "Base smoke or build did not pass")
@@ -196,6 +216,7 @@ def _guard_base_g2(project: Path, change: dict, state: dict) -> None:
                                     state["contract_commit"], "HEAD").split("\0") if item}
     require(actual == set(change["product"]["base"]["paths"]),
             "Base committed paths differ from the approved contract")
+    audit_base_scope(project, change, actual)
 
 
 def _acceptance_binding(project: Path, change: dict, smoke: dict) -> None:

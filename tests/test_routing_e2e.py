@@ -288,12 +288,13 @@ class RoutedEndToEndTests(unittest.TestCase):
         self.assertEqual(pause['status'], 'BASE_CHANGE_REQUIRED')
         state = load_run_state(root, identifier)
         proposal = Path(pause['base_proposal']).stem
-        with self.assertRaises(StoryLoopError):
-            upgrade_baseline(root, proposal)
+        self.assertEqual(upgrade_baseline(root, proposal)['status'], 'APPROVAL_REQUIRED')
         git(root, 'checkout', '--', 'core.py')
         git(root, 'checkout', '-q', state['source_branch'])
         (root / 'core.py').write_text('STABLE = False\n')
         git(root, 'commit', '-qam', 'base: update core')
+        from tests.test_base_upgrade import begin_legacy_receipt
+        begin_legacy_receipt(root, root / '.storyloop/base-proposals' / f'{proposal}.json')
         self.assertEqual(upgrade_baseline(root, proposal)['status'], 'BASELINE_UPGRADED')
         git(root, 'checkout', '-q', state['feature_branch'])
         git(root, 'merge', '-q', '--no-edit', state['source_branch'])

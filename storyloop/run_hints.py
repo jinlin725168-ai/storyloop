@@ -44,8 +44,9 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
     if status == "BASE_CHANGE_REQUIRED":
         proposal = details.get("base_proposal")
         named = f"（提案 {Path(str(proposal)).stem}）" if proposal else ""
-        return (f"底座改动要独立迭代{named}：在源分支单独提交提案里的路径，storyloop base-update {project} "
-                f"--proposal <BASE-ID>，把源分支合进功能分支，再 {run}")
+        return (f"底座改动要独立迭代{named}：storyloop base-update {project} --proposal <BASE-ID> "
+                "导入旧提案，再 approve --change <BASE-ID>、run --change <BASE-ID> "
+                "--implementer human；底座完成后把源分支合进功能分支，再 " + run)
     if status == "BOUNDARY_VIOLATION":
         return (f"代理写了不允许的路径：{log} 看是哪次调用写的；还原这些文件（或把目录加进 module_roots / "
                 f"test_roots 走一次 BASE 迭代），再 {run}")
