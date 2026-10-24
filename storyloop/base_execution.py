@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import hashlib
+import json
 
 from .approvals import materialize_approved_change
 from .base_upgrade import base_candidate_paths, establish_old_green
@@ -38,6 +39,18 @@ def run_base_change(project: Path, change: dict, implementer: str | None, new_ru
         return _verify_and_pause(project, change, state)
     if state["status"] == "MANUAL_ACCEPTANCE_REQUIRED":
         return _finish_after_acceptance(project, change, state)
+    if state["status"] == "VERIFIED":
+        return _finish_verified(project, change, state)
+    if state["status"] == "MERGED":
+        return _finish_merged(project, change, state)
+    if state["status"] == "RECEIPTING":
+        return _base_receipt(project, change, state)
+    if state["status"] == "FINALIZING":
+        return _finalize_base(project, change, state)
+    if state["status"] == "PASSED":
+        require(change["status"] == "PASSED", "Completed base run has inconsistent change state")
+        from .project_loop_finish import passed_result
+        return passed_result(state)
     return {"status": state["status"], "change_id": change["change_id"]}
 
 
@@ -139,10 +152,24 @@ def _complete_base(project: Path, change: dict, state: dict, records: list[dict]
                context={"base_evidence": evidence},
                effect=lambda: _verified_report(project, change, state, evidence, review, records))
     save_run(project, state)
-    transition(project, state, "MERGED", event="merge", effect=lambda: {
-        "merge_commit": finish_feature(project, state["feature_branch"],
-                                        state["source_branch"])["merge_commit"]})
+    return _finish_verified(project, change, state)
+
+
+def _finish_verified(project: Path, change: dict, state: dict) -> dict:
+    if current_branch(project) == state["source_branch"]:
+        transition(project, state, "MERGED", event="recover_merge")
+    else:
+        transition(project, state, "MERGED", event="merge", effect=lambda: {
+            "merge_commit": finish_feature(project, state["feature_branch"],
+                                            state["source_branch"])["merge_commit"]})
     save_run(project, state)
+    return _finish_merged(project, change, state)
+
+
+def _finish_merged(project: Path, change: dict, state: dict) -> dict:
+    require(current_branch(project) == state["source_branch"]
+            and _git(project, "rev-parse", "HEAD").strip() == state["merge_commit"],
+            "Merged base branch changed before receipting")
     transition(project, state, "RECEIPTING", event="receipting")
     save_run(project, state)
     return _base_receipt(project, change, state)
@@ -184,14 +211,12 @@ def _base_markdown(report: dict) -> str:
 
 
 def _base_receipt(project: Path, change: dict, state: dict) -> dict:
-    path = Path(state["report"])
-    report = load_json(path)
+    from .project_receipt import authoritative_report, ensure_merge_receipt
+    report = authoritative_report(project, state)
     report["merge_commit"] = state["merge_commit"]
-    write_json(path, report, max_bytes=8_000_000)
-    write_text_atomic(path.with_suffix(".md"), _base_markdown(report))
-    receipt_commit = commit_paths(project, [path.relative_to(project).as_posix(),
-                                            path.with_suffix(".md").relative_to(project).as_posix()],
-                                  f"docs({change['change_id']}): record base merge")["commit"]
+    receipt_bytes = ((json.dumps(report, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
+                     _base_markdown(report).encode("utf-8"))
+    receipt_commit = ensure_merge_receipt(project, state, receipt_bytes)
     transition(project, state, "FINALIZING", event="finalizing",
                updates={"integration_commit": receipt_commit})
     save_run(project, state)
@@ -199,22 +224,43 @@ def _base_receipt(project: Path, change: dict, state: dict) -> dict:
             "integration_commit": receipt_commit}
 
 
+def _finalize_base(project: Path, change: dict, state: dict) -> dict:
+    from .base_finalization import finalize_base_baseline
+    from .project_loop_finish import passed_result
+    from .run_transitions import set_change_status
+    finalize_base_baseline(project, change, state)
+    if change["status"] != "PASSED":
+        set_change_status(project, change, "PASSED")
+    transition(project, state, "PASSED", event="passed")
+    save_run(project, state)
+    return passed_result(state)
+
+
 def _open_state(project: Path, change: dict, implementer: str | None, new_run_state) -> dict:
     change_id = change["change_id"]
     saved = run_path(project, change_id)
-    require(change["status"] == "APPROVED" and change["approval"],
+    require(change["status"] in {"APPROVED", "PASSED"} and change["approval"],
             "Base change must be approved before execution")
     if saved.exists():
         state = load_json(saved)
         require(state.get("contract_digest") == change["approval"]["contract_digest"]
                 and state.get("implementer") == "human", "Saved base run is invalid")
         require(implementer in {None, "human"}, "Base agent implementation belongs to E2")
-        require(current_branch(project) == state["feature_branch"],
+        expected = (state["source_branch"] if state["status"] in
+                    {"MERGED", "RECEIPTING", "FINALIZING", "PASSED"} else state["feature_branch"])
+        require(current_branch(project) == expected
+                or (state["status"] == "VERIFIED" and current_branch(project) == state["source_branch"]),
                 "Resume the saved StoryLoop base branch")
         return state
     require(implementer == "human", "Use --implementer human for E1 base changes")
-    verify_baseline(project)
-    state = new_run_state(project, change_id, start_base(project, change_id),
+    dirty = _git(project, "status", "--porcelain=v1", "--untracked-files=all", "-z")
+    records = [item for item in dirty.split("\0") if item]
+    expected = set(change["product"]["base"]["paths"])
+    allowed = {item[3:].replace("\\", "/") for item in records}
+    require(all(item[:2] in {" M", " D", "??"} for item in records)
+            and allowed <= expected, "Prepared base files exceed approved paths")
+    verify_baseline(project, allowed_base_paths=allowed)
+    state = new_run_state(project, change_id, start_base(project, change_id, allowed),
                           change["approval"]["contract_digest"])
     state["implementer"] = "human"
     save_run(project, state)

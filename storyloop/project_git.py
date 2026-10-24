@@ -30,11 +30,19 @@ def start_feature(project: Path, change_id: str) -> dict:
             "source_head": _git(project, "rev-parse", "HEAD").strip()}
 
 
-def start_base(project: Path, change_id: str) -> dict:
+def start_base(project: Path, change_id: str,
+               allowed_dirty_paths: set[str] | None = None) -> dict:
     """Create the local branch on which a human commits one approved base change."""
     project = Path(project).resolve()
     change_id = identifier(change_id, "change id")
-    _require_clean(project)
+    if not allowed_dirty_paths:
+        _require_clean(project)
+    else:
+        records = [item for item in _git(project, "status", "--porcelain=v1",
+                                         "--untracked-files=all", "-z").split("\0") if item]
+        require(all(item[:2] in {" M", " D", "??"}
+                    and item[3:].replace("\\", "/") in allowed_dirty_paths for item in records),
+                "Base branch has changes outside the approved paths")
     source = _git(project, "branch", "--show-current").strip()
     require(_valid_branch(source), "Git repository must be on a safe named branch")
     branch = f"storyloop/{change_id}"

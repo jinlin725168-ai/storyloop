@@ -25,7 +25,8 @@ from .lessons import scope_matches
 
 
 def propose_base_change(project: Path, paths: list[str], reason: str,
-                        allow_mutable: bool = False, allow_ci: bool = False) -> dict:
+                        allow_mutable: bool = False, allow_ci: bool = False,
+                        scope: str | None = None) -> dict:
     """Open a BASE proposal for a planned foundation change (no feature run needed).
 
     `allow_mutable` is for upstream synchronisation, where the imported tree legitimately
@@ -62,8 +63,18 @@ def propose_base_change(project: Path, paths: list[str], reason: str,
         else:
             category = "FOUNDATION_CHANGE"
         changes.append({"path": relative, "category": category})
+    scope = scope or ("ci" if allow_ci else "upstream" if allow_mutable else "foundation")
+    require(scope in {"foundation", "ci", "upstream", "skills", "knowledge"},
+            "Invalid base scope")
+    authorized = ((scope == "ci" and allow_ci and not allow_mutable)
+                  or (scope == "upstream" and allow_mutable and not allow_ci)
+                  or (scope in {"foundation", "skills", "knowledge"}
+                      and not allow_ci and not allow_mutable))
+    require(authorized,
+            "Base scope authorization does not match proposal flags")
+    require(all(_scope_path_allowed(scope, item["path"]) for item in changes),
+            "Base scope cannot include these paths")
     path = _write_base_proposal(project, "manual", changes, baseline, reason)
-    scope = "ci" if allow_ci else "upstream" if allow_mutable else "foundation"
     draft_from_proposal(project, path.stem, scope=scope)
     return {"status": "PROPOSED", "change_id": path.stem, "proposal": str(path),
             "paths": [item["path"] for item in changes],
@@ -79,11 +90,19 @@ def draft_from_proposal(project: Path, proposal_id: str, *, scope: str) -> dict:
     """Create the matching change state once; leave historical proposal bytes alone."""
     project = Path(project).resolve()
     proposal = load_json(project / ".storyloop/base-proposals" / f"{proposal_id}.json")
+    proposal_path = project / ".storyloop/base-proposals" / f"{proposal_id}.json"
+    proposal_sha256 = hashlib.sha256(proposal_path.read_bytes()).hexdigest()
     require(proposal.get("change_id") == proposal_id, "Base proposal identity mismatch")
     state_path = project / ".storyloop/state/changes" / f"{proposal_id}.json"
     if state_path.exists():
         existing = load_change(project, proposal_id)
         require(existing["product"]["nature"] == "base", "Base ID belongs to another change")
+        require(existing.get("base_proposal_sha256", proposal_sha256) == proposal_sha256
+                and existing["product"]["base"]["paths"]
+                == [item["path"] for item in proposal["changes"]]
+                and existing["product"]["goal"] == (proposal.get("reason") or "更新项目底座")
+                and existing["product"]["base"]["scope"] == scope,
+                "Base proposal changed after import")
         return existing
     product = {"version": 1, "goal": proposal.get("reason") or "更新项目底座",
                "non_goals": [], "questions": [], "stories": [], "nature": "base",
@@ -96,6 +115,7 @@ def draft_from_proposal(project: Path, proposal_id: str, *, scope: str) -> dict:
              "revision": 1, "idea": product["goal"], "product": product,
              "created_at": timestamp, "updated_at": timestamp,
              "history": [], "approval": None}
+    state["base_proposal_sha256"] = proposal_sha256
     _save(project, state)
     return state
 
@@ -182,7 +202,8 @@ def _scope_path_allowed(scope: str, path: str) -> bool:
     if scope == "skills":
         return path.startswith((".claude/skills/", ".codex/skills/"))
     if scope == "knowledge":
-        return path.startswith(("openspec/foundation/", "openspec/lessons/"))
+        return (path.startswith(("openspec/foundation/", "openspec/lessons/"))
+                or path == "openspec/principles.json")
     return True
 
 
@@ -200,22 +221,34 @@ def _upgrade_locked(project: Path, proposal_id: str) -> dict:
     proposal = _load_proposal(proposal_path, proposal_id)
     receipt_path = _receipt_path(project, proposal_id)
     if receipt_path.exists():
+        lifecycle = load_json(receipt_path)
+        if lifecycle.get("version") == 2:
+            require(lifecycle.get("proposal_id") == proposal_id
+                    and lifecycle.get("status") == "ACCEPTED",
+                    "Base lifecycle receipt is unfinished; resume storyloop run")
+            baseline = load_baseline(project)
+            require(baseline["source_head"] == lifecycle["integration_commit"]
+                    and baseline["baseline_version"] == lifecycle["new_baseline_version"]
+                    and _dict_digest(baseline) == lifecycle["candidate_baseline_digest"],
+                    "Base lifecycle receipt does not match current baseline")
+            return _upgrade_result(project, {**lifecycle,
+                                             "source_head": lifecycle["integration_commit"]})
         return _recover_upgrade(project, proposal_path, proposal, receipt_path)
     require(proposal["status"] == "PROPOSED", "Base proposal is already handled")
-    baseline = load_baseline(project)
-    _require_candidate(project, baseline, proposal)
-    head = _git(project, "rev-parse", "HEAD").strip()
-    receipt = _new_receipt(project, proposal, baseline, head)
-    from .oracle_skill_approval import require_confirmation
-    require_confirmation(project, proposal, receipt)
-    write_json(receipt_path, receipt, max_bytes=4_000_000)
-    proposal.update({"status": "ACCEPTING", "old_baseline_version": baseline["baseline_version"],
-                     "new_baseline_version": receipt["new_baseline_version"], "source_head": head,
-                     "source_branch": baseline["source_branch"],
-                     "baseline_source_head": baseline["source_head"],
-                     "acceptance_digest": receipt["proposal_digest"]})
-    write_json(proposal_path, proposal, max_bytes=4_000_000)
-    return _recover_upgrade(project, proposal_path, proposal, receipt_path)
+    categories = {item["category"] for item in proposal["changes"]}
+    paths = [item["path"] for item in proposal["changes"]]
+    scope = ("ci" if "CI_CHANGE" in categories else
+             "upstream" if "UPSTREAM_MUTABLE" in categories else
+             "skills" if all(_scope_path_allowed("skills", path) for path in paths) else
+             "knowledge" if all(_scope_path_allowed("knowledge", path) for path in paths) else
+             "foundation")
+    state_path = project / ".storyloop/state/changes" / f"{proposal_id}.json"
+    if state_path.exists():
+        scope = load_change(project, proposal_id)["product"]["base"]["scope"]
+    draft_from_proposal(project, proposal_id, scope=scope)
+    return {"status": "APPROVAL_REQUIRED", "change_id": proposal_id,
+            "next": f"storyloop approve <project> --change {proposal_id}; "
+                    f"storyloop run <project> --change {proposal_id} --implementer human"}
 
 
 def _load_proposal(path: Path, proposal_id: str) -> dict:
@@ -283,6 +316,8 @@ def _recover_upgrade(
     _require_baseline_state(project, baseline, config, receipt)
     from .oracle_skill_approval import require_confirmation
     require_confirmation(project, proposal, receipt)
+    if receipt.get("oracle_skills_approval") and load_json(receipt_path).get("oracle_skills_approval") != receipt["oracle_skills_approval"]:
+        write_json(receipt_path, receipt, max_bytes=4_000_000)
     if receipt["status"] == "ACCEPTED":
         require(baseline["source_head"] == receipt["source_head"]
                 and baseline["baseline_version"] == receipt["new_baseline_version"],

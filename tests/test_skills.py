@@ -55,7 +55,7 @@ class PackagedSkillTests(unittest.TestCase):
             result = install_skills(root)
             proposal = load_json(Path(result["proposal"]))
             self.assertEqual({item["path"] for item in proposal["changes"]}, set(result["written"]))
-            self.assertIn("base-update", result["next"])
+            self.assertIn("storyloop approve", result["next"])
 
 
 class SurveyUsesSkillTests(unittest.TestCase):

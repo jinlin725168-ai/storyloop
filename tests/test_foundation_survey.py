@@ -61,7 +61,7 @@ class SurveyTests(unittest.TestCase):
             proposal = load_json(Path(result["proposal"]))
             self.assertEqual({item["path"] for item in proposal["changes"]}, set(result["paths"]))
             self.assertTrue(all(item["category"] == "FOUNDATION_CHANGE" for item in proposal["changes"]))
-            self.assertIn("base-update", result["next"])
+            self.assertIn("storyloop approve", result["next"])
             # A survey belongs to the foundation ledger, never to the next change's bill.
             self.assertEqual(summarize(root, "foundation")["calls"], 1)
             self.assertFalse((root / ".storyloop/state/telemetry/pending.json").exists())

@@ -39,8 +39,8 @@ class BaseProposeTests(unittest.TestCase):
             git(root, "add", "core.py", "docs/base.md")
             git(root, "commit", "-q", "-m", "base: tighten core")
             result = upgrade_baseline(root, proposed["change_id"])
-            self.assertEqual(result["status"], "BASELINE_UPGRADED")
-            self.assertEqual(load_baseline(root)["baseline_version"], "1.0.1")
+            self.assertEqual(result["status"], "APPROVAL_REQUIRED")
+            self.assertEqual(load_baseline(root)["baseline_version"], "1.0.0")
 
     def test_upstream_sync_may_include_mutable_paths_when_allowed(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -87,7 +87,7 @@ class BaseProposeTests(unittest.TestCase):
             git(root, "add", ".github", "core.py")
             git(root, "commit", "-q", "-m", "ci")
             result = upgrade_baseline(root, proposed["change_id"])
-            self.assertEqual(result["status"], "BASELINE_UPGRADED")
+            self.assertEqual(result["status"], "APPROVAL_REQUIRED")
             self.assertIn(".github/workflows/ci.yml", load_baseline(root)["protected_paths"])
             # A later feature run still sees the workflow as protected foundation.
             with self.assertRaises(StoryLoopError):

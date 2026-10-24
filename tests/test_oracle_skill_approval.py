@@ -8,6 +8,7 @@ from storyloop.baseline import bootstrap_project
 from storyloop.models import StoryLoopError
 from storyloop.storage import load_json
 from tests.test_baseline_behavior import git, repository
+from tests.test_base_upgrade import begin_legacy_receipt
 
 
 class OracleSkillApprovalTests(unittest.TestCase):
@@ -27,6 +28,7 @@ class OracleSkillApprovalTests(unittest.TestCase):
         self.proposal = propose_base_change(self.root, [self.path], 'skill change')['change_id']
         git(self.root, 'add', self.path)
         git(self.root, 'commit', '-qm', 'change skill')
+        begin_legacy_receipt(self.root, self.root / '.storyloop/base-proposals' / (self.proposal + '.json'))
 
     def test_oracle_role_removal_still_requires_confirmation(self):
         with self.assertRaisesRegex(StoryLoopError, 'confirm-oracle-skills'):
@@ -73,6 +75,7 @@ class OracleSkillPrecedenceTests(unittest.TestCase):
         proposal = propose_base_change(root, changed, 'skill precedence')['change_id']
         git(root, 'add', '-A', '--', *changed)
         git(root, 'commit', '-qm', 'switch effective skill')
+        begin_legacy_receipt(root, root / '.storyloop/base-proposals' / (proposal + '.json'))
         return root, proposal
 
     def require_explicit_upgrade(self, before, after):
@@ -80,7 +83,8 @@ class OracleSkillPrecedenceTests(unittest.TestCase):
         root, proposal = self.candidate(before, after)
         with self.assertRaisesRegex(StoryLoopError, 'confirm-oracle-skills'):
             upgrade_baseline(root, proposal)
-        self.assertFalse((root / '.storyloop/state/base-upgrades' / (proposal + '.json')).exists())
+        self.assertNotIn('oracle_skills_approval', load_json(
+            root / '.storyloop/state/base-upgrades' / (proposal + '.json')))
         self.assertEqual(confirmed_upgrade(root, proposal, True)['status'], 'BASELINE_UPGRADED')
         self.assertEqual(upgrade_baseline(root, proposal)['status'], 'BASELINE_UPGRADED')
         return root, proposal

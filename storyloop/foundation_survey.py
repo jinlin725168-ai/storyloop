@@ -71,7 +71,8 @@ def survey_foundation(project: Path, reason: str, from_file: Path | None = None)
         source = Path(from_file).resolve() if from_file is not None else saved
         raise StoryLoopError(f"{error}. The survey response is kept at {source}; fix it and rerun "
                              f"`storyloop survey <project> --from {source}`", code=error.code) from None
-    proposal = propose_base_change(project, written, f"foundation survey: {reason}")
+    proposal = propose_base_change(project, written, f"foundation survey: {reason}",
+                                   scope="knowledge")
     return {"status": "SURVEYED", "paths": written, "proposal": proposal["proposal"],
             "change_id": proposal["change_id"], "next": proposal["next"]}
 

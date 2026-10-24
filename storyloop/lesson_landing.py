@@ -33,6 +33,14 @@ def approve_draft(project: Path, ref: str) -> dict:
     project = Path(project).resolve()
     with locked(project):
         draft = load_draft(project, ref)
+        base_pending = _base_landing_path(project, ref)
+        if base_pending.is_file():
+            record = load_json(base_pending)
+            require(record.get('draft_digest') == _draft_digest(draft)
+                    and record.get('source_head') == _git(project, 'rev-parse', 'HEAD').strip(),
+                    '待处理的 BASE 草案与当前知识草案不一致')
+            _validate_base_landing(project, record)
+            return record['result']
         pending = _landing_path(project, ref)
         _require_no_other_landing(project, pending)
         require(draft.get('status') == 'pending' or (
@@ -256,9 +264,18 @@ def land_transaction(project, ref, writes, message, result_ids,
     message = message.rstrip(' \t\r\n\v\f')
     try:
         if base_reason is not None:
-            proposal = propose_base_change(project, _proposal_paths(project, writes), base_reason)
+            proposal = propose_base_change(project, _proposal_paths(project, writes), base_reason,
+                                           scope="knowledge")
         for relative, content in writes.items():
             write_bytes_atomic(safe_target(project, relative, 'lesson landing'), content)
+        if proposal is not None:
+            result = dict(status='BASE_APPROVAL_REQUIRED', **result_ids, commit=None,
+                          paths=sorted(writes), base_proposal=proposal['change_id'],
+                          next=proposal['next'])
+            write_json(_base_landing_path(project, ref),
+                       {'version': 1, 'ref': ref, 'draft_digest': _draft_digest(draft),
+                        'source_head': parent, 'result': result}, max_bytes=512_000)
+            return result
         _git(project, 'add', '--', *writes)
         tree = _git(project, 'write-tree').strip()
         _require_landing_source(project, ref, draft, branch)
@@ -280,6 +297,24 @@ def land_transaction(project, ref, writes, message, result_ids,
             _restore(project, originals, parent, proposal)
             pending.unlink(missing_ok=True)
         raise
+
+
+def _base_landing_path(project: Path, ref: str) -> Path:
+    return project / '.storyloop/state/base-landings' / (hashlib.sha256(ref.encode('utf-8')).hexdigest() + '.json')
+
+
+def _validate_base_landing(project: Path, record: dict) -> None:
+    result = record.get('result') or {}
+    require(result.get('status') == 'BASE_APPROVAL_REQUIRED'
+            and isinstance(result.get('paths'), list)
+            and isinstance(result.get('base_proposal'), str), '待处理的 BASE 落点记录无效')
+    if 'errata_id' in result:
+        content = (project / 'openspec/foundation/errata.md').read_text(encoding='utf-8')
+        ids = [line[3:] for line in content.splitlines() if line.startswith('## E-')]
+        require(bool(ids) and ids[-1] == result['errata_id'], '勘误标识与待处理的 BASE 候选不一致')
+    if 'lesson_id' in result:
+        require((project / 'openspec/lessons' / f"{result['lesson_id']}.md").is_file(),
+                '经验标识与待处理的 BASE 候选不一致')
 
 
 def _landing_path(project, ref):
