@@ -185,10 +185,9 @@ def guard_g2(project: Path, change: dict, state: dict, context: dict) -> None:
 def _guard_base_g2(project: Path, change: dict, state: dict, context: dict) -> None:
     change_id = change["change_id"]
     head = _git(project, "rev-parse", "HEAD").strip()
-    require(head == state.get("candidate_commit") or base_report_commit(project, state),
+    require(head == state.get("candidate_commit"),
             "Base candidate changed before G2")
-    allowed_dirty = base_report_paths(state) if head == state.get("candidate_commit") else set()
-    require(_dirty_paths(project) <= allowed_dirty,
+    require(not _dirty_paths(project),
             "Base candidate worktree changed before G2")
     evidence = trusted_base_evidence(project, state)
     require(evidence is not None, "Base verification evidence is stale")
@@ -244,10 +243,10 @@ def trusted_base_evidence(project: Path, state: dict) -> dict | None:
         evidence = load_json(path)
     except (OSError, ValueError, StoryLoopError):
         return None
-    return evidence if evidence == saved_base_evidence(state) else None
+    return evidence if evidence == _state_base_evidence(state) else None
 
 
-def saved_base_evidence(state: dict) -> dict | None:
+def _state_base_evidence(state: dict) -> dict | None:
     evidence = state.get("base_evidence")
     expected = state.get("base_evidence_sha256")
     if not isinstance(evidence, dict) or not isinstance(expected, str):
@@ -273,8 +272,7 @@ def trusted_base_review(project: Path, state: dict) -> dict | None:
 def base_candidate_matches(project: Path, state: dict) -> bool:
     """Compare the accepted Git object, allowing Git's clean checkout conversion."""
     return (current_branch(project) == state.get("feature_branch")
-            and (_git(project, "rev-parse", "HEAD").strip() == state.get("candidate_commit")
-                 or base_report_commit(project, state))
+            and _git(project, "rev-parse", "HEAD").strip() == state.get("candidate_commit")
             and not _dirty_paths(project)
             and (proof := trusted_base_evidence(project, state)) is not None
             and proof.get("status") == "PASSED"
@@ -286,26 +284,6 @@ def trusted_base_acceptance(project: Path, state: dict) -> bool:
     expected = state.get("manual_acceptance_sha256")
     return (isinstance(expected, str) and path.is_file()
             and hashlib.sha256(path.read_bytes()).hexdigest() == expected)
-
-
-def base_report_commit(project: Path, state: dict) -> str | None:
-    """Identify a bounded chain containing only report commits above the candidate."""
-    head = _git(project, "rev-parse", "HEAD").strip()
-    if head == state.get("candidate_commit"):
-        return None
-    current = head
-    for _ in range(8):
-        parents = _git(project, "rev-list", "--parents", "-n", "1", current).split()
-        if len(parents) != 2:
-            return None
-        changed = changed_paths(project, parents[1], current)
-        allowed = base_report_paths(state)
-        if not changed or not changed <= allowed:
-            return None
-        if parents[1] == state.get("candidate_commit"):
-            return head if changed == allowed else None
-        current = parents[1]
-    return None
 
 
 def base_report_paths(state: dict) -> set[str]:

@@ -80,6 +80,15 @@ class BaseCompatibilityTests(unittest.TestCase):
         write_json(path, baseline)
         self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
 
+    def test_finalizing_baseline_mismatch_does_not_offer_reset(self):
+        change_id = self._merged_candidate()
+        path = self.root / ".storyloop/baseline.json"
+        baseline = load_json(path)
+        write_json(path, {**baseline, "baseline_version": "0.9.9"})
+        result = run_change(self.root, change_id)
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        self.assertNotIn("reset", str(result["stop"]["options"]))
+
     def test_finalizing_checks_ancestry_without_listing_history(self):
         change_id = self._merged_candidate()
         from storyloop import base_finalization
@@ -150,6 +159,34 @@ class BaseCompatibilityTests(unittest.TestCase):
         state.pop("base_finalization_receipt_sha256")
         write_json(state_path, state)
         self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+
+    def test_legacy_applied_receipt_can_recover_after_old_baseline_is_restored(self):
+        change_id = self._merged_candidate()
+        from storyloop import base_finalization
+        baseline_path = self.root / ".storyloop/baseline.json"
+        old_bytes = baseline_path.read_bytes()
+        original = base_finalization.write_json
+
+        def crash_after_baseline(path, value, **kwargs):
+            original(path, value, **kwargs)
+            if path == baseline_path:
+                raise RuntimeError("baseline write interrupted")
+
+        with patch.object(base_finalization, "write_json", side_effect=crash_after_baseline):
+            with self.assertRaisesRegex(RuntimeError, "baseline write interrupted"):
+                run_change(self.root, change_id)
+        state_path = self.root / ".storyloop/state/runs" / f"{change_id}.json"
+        state = load_json(state_path)
+        state.pop("base_finalization_receipt")
+        state.pop("base_finalization_receipt_sha256")
+        write_json(state_path, state)
+        with patch.object(base_finalization, "_load_or_repair_receipt",
+                          side_effect=RuntimeError("receipt interrupted")):
+            with self.assertRaisesRegex(RuntimeError, "receipt interrupted"):
+                run_change(self.root, change_id)
+        baseline_path.write_bytes(old_bytes)
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+        self.assertEqual(load_baseline(self.root)["baseline_version"], "1.0.1")
 
     def test_proposed_base_update_imports_without_changing_old_file(self):
         proposed = base_upgrade.propose_base_change(self.root, ["pom.xml"], "刷新构建配置")
@@ -332,8 +369,9 @@ class BaseCompatibilityTests(unittest.TestCase):
 
     def test_oracle_skill_candidate_needs_explicit_confirmation(self):
         project, change_id = self._oracle_candidate()
-        with self.assertRaisesRegex(StoryLoopError, "confirm-oracle-skills"):
-            run_change(project, change_id)
+        result = run_change(project, change_id)
+        self.assertEqual(result["status"], "HUMAN_IMPLEMENTATION_REQUIRED")
+        self.assertIn("confirm-oracle-skills", result["reason"])
         from storyloop.oracle_skill_approval import CONFIRMED
         token = CONFIRMED.set(True)
         try:
@@ -363,8 +401,11 @@ class BaseCompatibilityTests(unittest.TestCase):
                              "base-candidate-green.json")
         approval = evidence["oracle_skills_approval"]
         self.assertEqual(approval["candidate_commit"], git(project, "rev-parse", "HEAD"))
-        with self.assertRaisesRegex(StoryLoopError, "confirm-oracle-skills"):
-            run_change(project, change_id)
+        self.assertEqual(run_change(project, change_id)["status"],
+                         "HUMAN_IMPLEMENTATION_REQUIRED")
+        result = run_change(project, change_id)
+        self.assertEqual(result["status"], "HUMAN_IMPLEMENTATION_REQUIRED")
+        self.assertIn("confirm-oracle-skills", result["reason"])
         token = CONFIRMED.set(True)
         try:
             self.assertEqual(run_change(project, change_id)["status"], "BASE_REVIEW_REQUIRED")
@@ -380,7 +421,7 @@ class BaseCompatibilityTests(unittest.TestCase):
         self.assertIn("Oracle 技能确认", (project / "reports/storyloop" / change_id /
                                     "report.md").read_text(encoding="utf-8"))
 
-    def test_tampered_oracle_evidence_rechecks_from_state_confirmation(self):
+    def test_tampered_oracle_evidence_requires_new_confirmation_and_review(self):
         from storyloop import base_execution
         from storyloop.oracle_skill_approval import CONFIRMED
         project, change_id = self._oracle_candidate()
@@ -397,11 +438,18 @@ class BaseCompatibilityTests(unittest.TestCase):
         evidence = load_json(evidence_path)
         evidence.pop("oracle_skills_approval", None)
         write_json(evidence_path, evidence)
+        self.assertEqual(run_change(project, change_id)["status"],
+                         "HUMAN_IMPLEMENTATION_REQUIRED")
+        self.assertFalse(evidence_path.exists())
+        token = CONFIRMED.set(True)
+        try:
+            self.assertEqual(run_change(project, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        finally:
+            CONFIRMED.reset(token)
+        base_execution.record_base_review(project, change_id, "pass", "重新审查")
+        self.assertEqual(run_change(project, change_id)["status"], "MANUAL_ACCEPTANCE_REQUIRED")
+        record_manual_acceptance(project, change_id, ["BASE-ACCEPT"], "重新验收")
         self.assertEqual(run_change(project, change_id)["status"], "FINALIZING")
-        repaired = load_json(evidence_path)
-        self.assertEqual(repaired["oracle_skills_approval"],
-                         load_json(project / ".storyloop/state/runs" / f"{change_id}.json")
-                         ["base_evidence"]["oracle_skills_approval"])
 
     def test_legacy_source_commit_requires_explicit_replay_before_starting_run(self):
         proposed = base_upgrade.propose_base_change(self.root, ["pom.xml"], "旧底座候选")

@@ -211,6 +211,9 @@ def build_stop(project: Path | str, state: dict, status: str, details: dict) -> 
     options = routed_options or _options(
         status, project_text, change_id, bool(state.get("routed")),
         details.get("ci_requires_human_proposal", False))
+    if status == "WORKSPACE_TAINTED" and details.get("base_resume_status") == "FINALIZING":
+        options = [{"action": "恢复已批准 baseline 后继续", "command": _command(
+            "storyloop", "run", project_text, "--change", change_id)}]
     return {
         **stop_fields(project, change_id, details),
         "status": status,

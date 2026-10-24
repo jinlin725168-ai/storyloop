@@ -45,8 +45,9 @@ def finalize_base_baseline(project: Path, change: dict, state: dict) -> dict:
         _require_baseline(receipt["status"] == "ACCEPTING"
                           and baseline["source_head"] == receipt["baseline_source_head"]
                           and baseline["baseline_version"] == receipt["old_baseline_version"]
-                          and hashlib.sha256(baseline_path.read_bytes()).hexdigest()
-                          == receipt["baseline_sha256"],
+                          and (not receipt["baseline_sha256"]
+                               or hashlib.sha256(baseline_path.read_bytes()).hexdigest()
+                               == receipt["baseline_sha256"]),
                           "Current baseline does not match the accepted base transition")
         candidate = _next_baseline(project, baseline, config["profile"], head,
                                    receipt["new_baseline_version"])
