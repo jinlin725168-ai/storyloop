@@ -106,7 +106,7 @@ def audit_project_changes(project: Path, change_id: str, *, nature: str | None =
 
 def _changed_paths(project: Path) -> list[str]:
     outputs = [
-        _git(project, "diff", "--name-only", "-z", "HEAD"),
+        _git(project, "diff", "--no-renames", "--name-only", "-z", "HEAD"),
         _git(project, "ls-files", "--others", "--exclude-standard", "-z"),
     ]
     result: set[str] = set()

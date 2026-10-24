@@ -253,7 +253,7 @@ def _require_candidate(project: Path, baseline: dict, proposal: dict) -> None:
 
 
 def _changed_since(project: Path, source_head: str) -> set[str]:
-    output = _git(project, "diff", "--name-only", "-z", source_head, "HEAD")
+    output = _git(project, "diff", "--no-renames", "--name-only", "-z", source_head, "HEAD")
     result = set()
     for raw in output.split("\0"):
         if raw:

@@ -150,6 +150,16 @@ class BaseCompatibilityTests(unittest.TestCase):
         self.assertEqual(git(self.root, "rev-parse", self.before["source_branch"]), source_head)
         self.assertIn("pom.xml", git(self.root, "status", "--porcelain=v1"))
 
+    def test_base_path_set_includes_both_sides_of_detected_rename(self):
+        (self.root / "a.md").write_text("same content\n", encoding="utf-8")
+        git(self.root, "add", "a.md")
+        git(self.root, "commit", "-q", "-m", "add source")
+        source = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "config", "diff.renames", "true")
+        git(self.root, "mv", "a.md", "b.md")
+        git(self.root, "commit", "-q", "-m", "rename source")
+        self.assertEqual(base_upgrade._changed_since(self.root, source), {"a.md", "b.md"})
+
 
 if __name__ == "__main__":
     unittest.main()
