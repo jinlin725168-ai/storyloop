@@ -205,6 +205,18 @@ class DocumentationTests(unittest.TestCase):
     def test_trial_record_exists(self):
         self.assertTrue((ROOT / "docs/validation/2026-10-24-spec-craft-第1批试用.md").is_file())
 
+    def test_batch2_docs_explain_the_view_and_customization(self):
+        api = (ROOT / "docs/api.md").read_text(encoding="utf-8")
+        roles = (ROOT / "docs/roles.md").read_text(encoding="utf-8")
+        for phrase in ("--view", "SKILL_VIEW", "storyloop-custom/spec-craft.toml",
+                       "storyloop-custom/spec-craft.user.toml", ".git/info/exclude"):
+            self.assertIn(phrase, api)
+        for phrase in ("--view spec-craft", ".storyloop/skills-view/spec-craft.md"):
+            self.assertIn(phrase, roles)
+
+    def test_batch2_trial_record_exists(self):
+        self.assertTrue((ROOT / "docs/validation/2026-10-24-spec-craft-第2批试用.md").is_file())
+
 
 class Batch2ContentTests(unittest.TestCase):
     def test_skill_md_tells_the_agent_to_load_the_project_view(self):

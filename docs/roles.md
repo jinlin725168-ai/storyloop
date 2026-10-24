@@ -58,4 +58,4 @@ flowchart LR
 
 product、acceptance、characterize、review 的角色说明里嵌入 `oracle-craft` 技能包（行类型、特征化写法、结构断言、执行器退出码）。项目可以在 `.claude/skills/` 或 `.codex/skills/` 放同名副本覆盖；这两个目录属于底座，实现者不能修改，运行状态的 `skills_used` 记录本次实际使用的版本。
 
-`spec-craft` 用于在 Claude Code、Codex 对话里与人共创需求和规格，运行 `storyloop skills <项目路径>` 安装。目前它不下发给任何引擎角色，命令行的 product 角色不受影响；对话草稿仍经现有 `storyloop change` 流程进入引擎。
+`spec-craft` 用于在 Claude Code、Codex 对话里与人共创需求和规格，运行 `storyloop skills <项目路径>` 安装。团队和个人可以分别在 `storyloop-custom/spec-craft.toml`、`storyloop-custom/spec-craft.user.toml` 追加定制；有定制时运行 `storyloop skills <项目路径> --view spec-craft`，让对话代理读取 `.storyloop/skills-view/spec-craft.md` 末尾的项目定制。安装副本仍是技能本体，定制不能改“只能由人判断的事”。目前 spec-craft 不下发给任何引擎角色，命令行的 product 角色不受影响；对话草稿仍经现有 `storyloop change` 流程进入引擎。
