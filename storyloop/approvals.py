@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
-import hashlib
-import json
 from pathlib import Path
 from typing import Callable
 
@@ -15,7 +13,7 @@ from .changes import (contract_digest, draft_directory, load_change,  # noqa: F4
                       write_change_preview)
 from .models import require, text
 from .product_contract import nature_of
-from .project_profile import _commands, layer_commands
+from .project_profile import base_commands_digest
 from .path_security import safe_target
 from .requirement_checklist import blocking_items, evaluate_checklist
 from .storage import locked, write_bytes_atomic, write_json
@@ -85,12 +83,7 @@ def version_snapshot(project: Path) -> dict:
 def _base_approval(project: Path, tier: str | None) -> dict:
     require(tier in {None, "heavy"}, "Base changes require the heavy tier")
     profile = load_project_config(project)["profile"]
-    require("base_build_commands" in profile,
-            "Set base_build_commands in acceptance/storyloop-settings.json before base approval")
-    commands = {name: layer_commands(profile, name) for name in ("unit", "integration", "checks")}
-    commands["build"] = _commands(profile["base_build_commands"])
-    payload = json.dumps(commands, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return {"tier": "heavy", "base_commands_sha256": hashlib.sha256(payload.encode()).hexdigest()}
+    return {"tier": "heavy", "base_commands_sha256": base_commands_digest(profile)}
 
 
 def _intake_approval(project: Path, state: dict, tier: str | None) -> dict:

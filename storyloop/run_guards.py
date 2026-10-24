@@ -9,7 +9,7 @@ from .baseline import _git, load_baseline, load_project_config
 from .oracle_counts import check_layers
 from .project_boundaries import audit_project_changes
 from .project_git import current_branch
-from .project_profile import layer_commands
+from .project_profile import base_commands_digest, layer_commands
 from .project_receipt import verify_verified_artifacts, recover_completed_merge  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .smoke import RESULT_EVIDENCE, smoke_digests
 from .smoke_runner import candidate_digest, implementation_digest
@@ -67,6 +67,8 @@ def _guard_base_green(project: Path, state: dict) -> None:
 
 
 def manual_criteria(change: dict) -> list[str]:
+    if type_of(change["product"]) == "base":
+        return ["BASE-ACCEPT"]
     return [criterion["id"] for story in change["product"]["stories"]
             for criterion in story["acceptance"] if criterion["kind"] == "manual"]
 
@@ -132,6 +134,9 @@ def _manual_records(project: Path, change_id: str) -> list[dict]:
 
 def guard_g2(project: Path, change: dict, state: dict, context: dict) -> None:
     """Read authoritative evidence before any implementation/report delivery commit."""
+    if type_of(change["product"]) == "base":
+        _guard_base_g2(project, change, state)
+        return
     layers, review = context.get("layers"), context.get("review") or {}
     require(isinstance(layers, dict) and set(layers) == set(LAYER_ORDER),
             "Report needs every verification layer")
@@ -156,6 +161,41 @@ def guard_g2(project: Path, change: dict, state: dict, context: dict) -> None:
     require(not pending_manual_criteria(change, _manual_records(project, identifier), digest),
             "Manual acceptance is missing for the code being reported")
     _acceptance_binding(project, change, layers["acceptance"])
+
+
+def _guard_base_g2(project: Path, change: dict, state: dict) -> None:
+    change_id = change["change_id"]
+    evidence_path = project / ".storyloop/evidence" / change_id / "base-candidate-green.json"
+    evidence = load_json(evidence_path)
+    digest = implementation_digest(project)
+    require(evidence.get("status") == "PASSED"
+            and evidence.get("candidate_commit") == state.get("candidate_commit")
+            and evidence.get("candidate_sha256") == digest
+            and evidence.get("contract_digest") == state.get("contract_digest"),
+            "Base verification evidence is stale")
+    require(evidence.get("system_smoke", {}).get("status") == "PASSED"
+            and evidence.get("build", {}).get("status") in {"PASSED", "DECLARED_ABSENT"},
+            "Base smoke or build did not pass")
+    profile = load_project_config(project)["profile"]
+    require(base_commands_digest(profile) == change["approval"]["base_commands_sha256"],
+            "Approved base commands changed before G2")
+    layers = evidence.get("layers") or {}
+    require(set(layers) == {"unit", "integration", "checks"}, "Base regression layers are incomplete")
+    for name in layers:
+        require(not layer_commands(profile, name) or layers[name]["status"] == "PASSED",
+                f"Base {name} regression did not pass")
+    review = load_json(project / ".storyloop/state/base-reviews" / f"{change_id}.json")
+    require(review.get("verdict") == "pass" and review.get("candidate_sha256") == digest
+            and review.get("candidate_commit") == state.get("candidate_commit")
+            and review.get("reviewer") != _git(project, "show", "-s", "--format=%an",
+                                              state["candidate_commit"]).strip(),
+            "Independent base review is missing")
+    require(not pending_manual_criteria(change, _manual_records(project, change_id), digest),
+            "Base manual acceptance is missing")
+    actual = {item for item in _git(project, "diff", "--name-only", "-z",
+                                    state["contract_commit"], "HEAD").split("\0") if item}
+    require(actual == set(change["product"]["base"]["paths"]),
+            "Base committed paths differ from the approved contract")
 
 
 def _acceptance_binding(project: Path, change: dict, smoke: dict) -> None:

@@ -6,10 +6,12 @@ import tempfile
 import unittest
 
 from storyloop import base_upgrade
+from storyloop import base_execution
 from storyloop.approvals import approve_change
-from storyloop.baseline import load_baseline
+from storyloop.baseline import load_baseline, load_project_config
 from storyloop.cli import dispatch, parser
 from storyloop.models import StoryLoopError
+from storyloop.manual_acceptance import record_manual_acceptance
 from storyloop.onboarding_cli import bootstrap_with_project_checks as bootstrap_project
 from storyloop.project_loop import run_change
 from storyloop.run_guards import guard_g1
@@ -96,6 +98,60 @@ class BaseG1Tests(unittest.TestCase):
         git(self.root, "commit", "-q", "-m", "base")
         with self.assertRaisesRegex(StoryLoopError, "scope"):
             run_change(self.root, approved["change_id"])
+
+    def test_human_candidate_requires_independent_review_and_fixed_acceptance(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project><version>2</version></project>\n", encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "base: update pom")
+        self.assertEqual(run_change(self.root, change_id)["status"], "IMPLEMENTING")
+        git(self.root, "config", "user.name", "Independent Reviewer")
+        base_execution.record_base_review(self.root, change_id, "pass", "已核对底座修改")
+        self.assertEqual(run_change(self.root, change_id)["status"], "MANUAL_ACCEPTANCE_REQUIRED")
+        record_manual_acceptance(self.root, change_id, ["BASE-ACCEPT"], "构建配置符合目标")
+        self.assertEqual(run_change(self.root, change_id)["status"], "FINALIZING")
+        self.assertEqual(git(self.root, "branch", "--show-current"),
+                         load_baseline(self.root)["source_branch"])
+        report = load_json(self.root / "reports/storyloop" / change_id / "report.json")
+        self.assertEqual(report["review"]["reviewer"], "Independent Reviewer")
+        self.assertEqual(report["manual_acceptance"][0]["criterion_id"], "BASE-ACCEPT")
+        self.assertEqual(report["build_note"], "项目声明无构建步骤")
+
+    def test_cli_records_named_base_review(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project/>\n<!-- base -->\n", encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "base")
+        run_change(self.root, change_id)
+        git(self.root, "config", "user.name", "Independent Reviewer")
+        args = parser().parse_args(["base-review", str(self.root), "--change", change_id,
+                                    "--verdict", "pass", "--note", "已复核"])
+        self.assertEqual(dispatch(args)["status"], "REVIEW_RECORDED")
+
+    def test_approved_commands_cannot_change_before_old_green(self):
+        config = load_project_config(self.root)
+        config["profile"]["unit_commands"] = [[sys.executable, "-c", "print('changed')"]]
+        write_json(self.root / ".storyloop/config.json", config)
+        with self.assertRaisesRegex(StoryLoopError, "commands"):
+            run_change(self.root, self.change["change_id"], implementer="human")
+
+    def test_review_record_cannot_claim_implementation_author(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project/>\n<!-- reviewed -->\n", encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "base")
+        run_change(self.root, change_id)
+        git(self.root, "config", "user.name", "Independent Reviewer")
+        base_execution.record_base_review(self.root, change_id, "pass", "已复核")
+        path = self.root / ".storyloop/state/base-reviews" / f"{change_id}.json"
+        review = load_json(path)
+        review["reviewer"] = git(self.root, "show", "-s", "--format=%an", "HEAD")
+        write_json(path, review)
+        with self.assertRaisesRegex(StoryLoopError, "reviewer"):
+            run_change(self.root, change_id)
 
 
 if __name__ == "__main__":

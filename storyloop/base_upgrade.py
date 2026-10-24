@@ -14,7 +14,7 @@ from .models import identifier, require, text
 from .path_security import repository_relative
 from .product_contract import validate_product
 from .project_boundaries import _write_base_proposal
-from .project_profile import is_ci_path, matches_test_root
+from .project_profile import base_commands_digest, is_ci_path, matches_test_root
 from .project_profile import layer_commands
 from .smoke_runner import run_commands_at_commit, run_commands_isolated
 from .system_smoke import adopt_system_smoke, load_system_smoke, run_system_smoke_isolated
@@ -106,6 +106,8 @@ def establish_old_green(project: Path, change: dict, state: dict) -> dict:
     baseline, config = load_baseline(project), load_project_config(project)
     profile = config["profile"]
     require(change["product"]["nature"] == "base", "Old-green proof needs a base change")
+    require(base_commands_digest(profile) == change["approval"]["base_commands_sha256"],
+            "Approved base commands changed before G1")
     source = state.get("source_head", baseline["source_head"])
     timeout = config["check_timeout_seconds"]
     layers = {}

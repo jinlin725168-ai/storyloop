@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -149,6 +150,16 @@ def layer_commands(profile: dict, layer: str) -> list[list[str]]:
         return list(profile.get("test_commands") or [])
     key = {"unit": "unit_commands", "integration": "integration_commands", "checks": "check_commands"}[layer]
     return list(profile.get(key) or [])
+
+
+def base_commands_digest(profile: dict) -> str:
+    """Bind a base approval to the actual configured regression and build argv."""
+    require("base_build_commands" in profile,
+            "Set base_build_commands in acceptance/storyloop-settings.json before base approval")
+    commands = {name: layer_commands(profile, name) for name in LAYERS}
+    commands["build"] = _commands(profile["base_build_commands"])
+    payload = json.dumps(commands, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def is_ci_path(relative_path: str) -> bool:

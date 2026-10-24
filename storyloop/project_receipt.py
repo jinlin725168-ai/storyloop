@@ -82,7 +82,9 @@ def recover_completed_merge(project: Path, state: dict) -> str:
 
 
 def verify_evidence_digest(project: Path, state: dict) -> None:
-    evidence = project / ".storyloop/evidence" / state["change_id"] / RESULT_EVIDENCE
+    evidence_name = ("base-candidate-green.json" if state["change_id"].startswith("BASE-")
+                     else RESULT_EVIDENCE)
+    evidence = project / ".storyloop/evidence" / state["change_id"] / evidence_name
     require(evidence.is_file()
             and hashlib.sha256(evidence.read_bytes()).hexdigest()
             == state["acceptance_evidence_sha256"],

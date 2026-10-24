@@ -41,6 +41,7 @@ def parser() -> argparse.ArgumentParser:
         "report": "定位某次变更的验收报告",
         "base-propose": "为计划中的底座改动开一个 BASE 提案（无需先触发功能变更）",
         "base-update": "按 BASE 提案校验独立底座提交并升级底座版本",
+        "base-review": "由独立的人对已提交的底座候选记录具名审查",
         "answer": "回答代理在 NEEDS_INPUT 停点提出的问题（--answer 可重复，按问题顺序）",
         "accept": "记录人工验收：--change 与 --criterion（仅在 MANUAL_ACCEPTANCE_REQUIRED 停点可用）",
         "log": "查看一个变更的全过程：每次代理调用（结果、耗时、费用、会话、调用记录目录）、每轮失败原因和下一步",
@@ -110,6 +111,10 @@ def _product_arguments(child, command):
     elif command == "skills":
         child.add_argument("--view", metavar="NAME",
                            help="生成技能的项目定制视图，写到 .storyloop/skills-view/")
+    elif command == "base-review":
+        child.add_argument("--change", dest="change_id", required=True)
+        child.add_argument("--verdict", choices=("pass", "fail"), required=True)
+        child.add_argument("--note", required=True)
 
 
 def _maintenance_arguments(child, command):
@@ -184,6 +189,9 @@ def dispatch(args) -> dict:
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         from .oracle_skill_approval import confirmed_upgrade
         return confirmed_upgrade(project, args.proposal, args.confirm_oracle_skills)
+    if args.command == "base-review":
+        from .base_execution import record_base_review
+        return record_base_review(project, args.change_id, args.verdict, args.note)
     if args.command == "skills":
         if args.view is not None:
             require(bool(args.view), "Skill view name must not be empty")

@@ -25,6 +25,7 @@ BLOCKERS = {
     "NO_PROGRESS": "根因调查后失败特征仍不变",
     "MANUAL_ACCEPTANCE_REQUIRED": "有验收条件需要人工核对",
     "HUMAN_IMPLEMENTATION_REQUIRED": "等待人在 StoryLoop 底座分支提交批准的路径",
+    "BASE_REVIEW_REQUIRED": "等待另一名人员审查底座候选提交",
     "NEEDS_SPEC_FIX": "合同按现在的写法做不出来",
     "AGENT_UNAVAILABLE": "代理进程没有给出回答",
 }
@@ -69,6 +70,7 @@ def _options(status: str, project: str, change_id: str, routed: bool) -> list[di
         "MANUAL_ACCEPTANCE_REQUIRED": [{"action": "逐条人工验收", "command": _command(
             "storyloop", "accept", *where, "--criterion", "<ID>", "--note", "<核对内容>")}],
         "HUMAN_IMPLEMENTATION_REQUIRED": [run],
+        "BASE_REVIEW_REQUIRED": [run],
         "NEEDS_SPEC_FIX": [supersede, *([overrule] if routed else [])],
         "AGENT_UNAVAILABLE": [run],
     }
