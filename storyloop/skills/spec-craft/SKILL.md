@@ -1,6 +1,6 @@
 ---
 name: spec-craft
-version: 1.0.1
+version: 1.1.0
 description: 与人共创需求和规格，产出需求文档和规格文档交给 StoryLoop；适用于“写需求”“需求共创”“帮我把这个想法写成规格”、write a spec、co-create requirements。AI 只引导和起草，值不值得做及例子的预期结果由人拍板。
 ---
 
@@ -9,6 +9,10 @@ description: 与人共创需求和规格，产出需求文档和规格文档交�
 ## 何时使用
 
 人在对话里提出功能想法，需要先评估价值，再写需求与可验证规格时使用。fix、refactor 和人声明的小改动可以跳过评估，须记录理由。只处理共创；批准、编号和质量检查交给 StoryLoop。
+
+## 项目定制
+
+项目里有 `storyloop-custom/spec-craft.toml` 或 `storyloop-custom/spec-craft.user.toml` 时，先运行 `storyloop skills <项目> --view spec-craft`，读取生成的 `.storyloop/skills-view/spec-craft.md` 末尾“项目定制”一节，再按追加的分类、模板节、提问偏好和术语表工作。定制只能补充内置内容，不能删除或改写它，也不能改变“只能由人判断的事”。
 
 ## 五步
 
