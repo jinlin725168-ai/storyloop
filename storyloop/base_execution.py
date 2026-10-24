@@ -15,6 +15,7 @@ from .models import StoryLoopError, require, text
 from .project_git import current_branch, start_base, commit_paths, finish_feature
 from .project_loop_support import relative_files
 from .project_profile import base_commands_digest, layer_commands
+from .project_boundaries import audit_base_scope
 from .run_state import run_path, save_run
 from .run_stops import pause
 from .run_transitions import transition
@@ -334,6 +335,7 @@ def _open_state(project: Path, change: dict, implementer: str | None, new_run_st
     allowed = {item[3:].replace("\\", "/") for item in records}
     require(all(item[:2] in {" M", " D", "??"} for item in records)
             and allowed <= expected, "Prepared base files exceed approved paths")
+    audit_base_scope(project, change, expected)
     baseline = load_baseline(project)
     committed = _changed_since(project, baseline["source_head"])
     require(not committed.intersection(expected),

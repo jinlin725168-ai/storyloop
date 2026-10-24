@@ -210,8 +210,10 @@ def _upgrade_locked(project: Path, proposal_id: str) -> dict:
         return _recover_upgrade(project, proposal_path, proposal, receipt_path)
     require(proposal["status"] == "PROPOSED", "Base proposal is already handled")
     categories = {item["category"] for item in proposal["changes"]}
+    require("CI_PROTECTED" not in categories,
+            "Agent-generated CI proposal needs a new human base-propose --allow-ci authorization")
     paths = [item["path"] for item in proposal["changes"]]
-    scope = ("ci" if categories & {"CI_CHANGE", "CI_PROTECTED"} else
+    scope = ("ci" if "CI_CHANGE" in categories else
              "upstream" if "UPSTREAM_MUTABLE" in categories else
              "skills" if all(base_scope_path_allowed("skills", path) for path in paths) else
              "knowledge" if all(base_scope_path_allowed("knowledge", path) for path in paths) else

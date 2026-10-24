@@ -193,23 +193,29 @@ class BaseCompatibilityTests(unittest.TestCase):
         git(self.root, "commit", "-q", "-m", "rename source")
         self.assertEqual(base_upgrade._changed_since(self.root, source), {"a.md", "b.md"})
 
-    def test_legacy_ci_protected_proposal_imports_as_ci_scope(self):
+    def test_agent_generated_ci_protected_proposal_requires_new_human_authorization(self):
         path = _write_base_proposal(
             self.root, "FEAT-20261024-001",
             [{"path": ".github/workflows/ci.yml", "category": "CI_PROTECTED"}], self.before)
         proposal_bytes = path.read_bytes()
         change_id = path.stem
-        self.assertEqual(base_upgrade.upgrade_baseline(self.root, change_id)["status"],
-                         "APPROVAL_REQUIRED")
-        state = load_json(self.root / ".storyloop/state/changes" / f"{change_id}.json")
-        self.assertEqual(state["product"]["base"]["scope"], "ci")
-        approve_change(self.root, change_id)
-        run_change(self.root, change_id, implementer="human")
-        (self.root / ".github/workflows/ci.yml").write_text("name: reviewed\n", encoding="utf-8")
-        git(self.root, "add", ".github/workflows/ci.yml")
-        git(self.root, "commit", "-q", "-m", "human CI update")
-        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        with self.assertRaisesRegex(StoryLoopError, "base-propose --allow-ci"):
+            base_upgrade.upgrade_baseline(self.root, change_id)
+        self.assertFalse((self.root / ".storyloop/state/changes" / f"{change_id}.json").exists())
         self.assertEqual(path.read_bytes(), proposal_bytes)
+
+    def test_previously_imported_agent_ci_proposal_cannot_start_base_branch(self):
+        path = _write_base_proposal(
+            self.root, "FEAT-20261024-001",
+            [{"path": ".github/workflows/ci.yml", "category": "CI_PROTECTED"}], self.before)
+        change_id = path.stem
+        base_upgrade.draft_from_proposal(self.root, change_id, scope="ci")
+        approve_change(self.root, change_id)
+        (self.root / ".github/workflows/ci.yml").write_text("name: reviewed\n", encoding="utf-8")
+        with self.assertRaisesRegex(StoryLoopError, "base-propose --allow-ci"):
+            run_change(self.root, change_id, implementer="human")
+        self.assertFalse((self.root / ".storyloop/state/runs" / f"{change_id}.json").exists())
+        self.assertEqual(git(self.root, "branch", "--show-current"), self.before["source_branch"])
 
     def test_oracle_skill_candidate_needs_explicit_confirmation(self):
         folder = tempfile.TemporaryDirectory()
