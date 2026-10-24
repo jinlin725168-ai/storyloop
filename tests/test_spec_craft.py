@@ -141,3 +141,40 @@ class SpecTemplateTests(unittest.TestCase):
         for phrase in ("规则", "EARS", "正例", "反例", "Given", "When", "Then", "外部可观察"):
             self.assertIn(phrase, text)
         self.assertIn("不写类名", text)
+
+
+COVERAGE = ("功能范围与行为", "领域与数据", "交互流程", "非功能", "外部依赖",
+            "边界与失败", "约束与取舍", "术语一致性", "完成标准", "占位与含糊词")
+
+
+class ClarifyAndHandoffTests(unittest.TestCase):
+    def test_coverage_map_has_ten_categories_and_three_states(self):
+        text = read("references/clarify.md")
+        rows = re.findall(r"^\| *(\d+) *\| *([^|]+?) *\|", text, re.M)
+        self.assertEqual([name for _, name in rows][:10], list(COVERAGE))
+        for state in ("清楚", "部分", "缺失"):
+            self.assertIn(state, text)
+
+    def test_question_limits_are_exact(self):
+        text = read("references/clarify.md")
+        for phrase in ("最多 3 处", "最多 5 个问题", "一次只问一个"):
+            self.assertIn(phrase, text)
+
+    def test_question_priority_and_format(self):
+        text = read("references/clarify.md")
+        self.assertIn("范围 > 安全与隐私 > 体验 > 技术细节", text)
+        for phrase in ("为什么重要", "推荐", "选项"):
+            self.assertIn(phrase, text)
+
+    def test_answers_are_written_back_without_contradictions(self):
+        self.assertIn("不能留下互相矛盾", read("references/clarify.md"))
+
+    def test_handoff_names_the_draft_folder_and_the_command(self):
+        text = read("references/handoff.md")
+        for phrase in (".storyloop/drafts/spec/", "requirements.md", "spec.md", "storyloop change --idea"):
+            self.assertIn(phrase, text)
+
+    def test_handoff_keeps_approval_in_storyloop(self):
+        text = read("references/handoff.md")
+        self.assertIn("批准", text)
+        self.assertIn("storyloop approve --change", text)
