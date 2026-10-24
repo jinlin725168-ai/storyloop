@@ -244,10 +244,13 @@ def _sha256(path: Path) -> str:
 def _exclude_control_plane(project: Path) -> None:
     exclude = safe_target(project, ".git/info/exclude", "Git exclude path")
     require(exclude.parent.is_dir(), "Git metadata is unavailable")
-    current = exclude.read_text(encoding="utf-8-sig") if exclude.exists() else ""
+    try:
+        current = exclude.read_text(encoding="utf-8-sig") if exclude.exists() else ""
+    except (OSError, UnicodeDecodeError) as exc:
+        raise StoryLoopError("Cannot read Git exclude as UTF-8") from exc
     entries = {line.strip() for line in current.splitlines()}
-    if ".storyloop/" not in entries:
-        prefix = current
-        if prefix and not prefix.endswith("\n"):
-            prefix += "\n"
-        write_text_atomic(exclude, prefix + ".storyloop/\n")
+    missing = [entry for entry in (".storyloop/", "storyloop-custom/*.user.toml")
+               if entry not in entries]
+    if missing:
+        prefix = current + ("\n" if current and not current.endswith("\n") else "")
+        write_text_atomic(exclude, prefix + "".join(f"{entry}\n" for entry in missing))

@@ -7,10 +7,11 @@ from pathlib import Path
 import re
 import tomllib
 
-from .baseline import _git
+from .baseline import BASELINE_PATH, _exclude_control_plane, _git
 from .models import StoryLoopError, require
-from .path_security import safe_absolute_target, safe_target
+from .path_security import safe_target
 from .skills import skill_text
+from .storage import locked_file, write_text_atomic
 
 
 CUSTOM_ROOT = "storyloop-custom"
@@ -177,8 +178,12 @@ def write_view(project: Path, name: str) -> dict:
     body = _render_view(project, name, custom)
     relative = f"{VIEW_ROOT}/{name}.md"
     target = safe_target(project, relative, "skill view")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(body, encoding="utf-8")
+    if (project / ".git").is_dir() and not (project / BASELINE_PATH).exists():
+        with locked_file(project / ".git/storyloop-init.lock"):
+            _exclude_control_plane(project)
+            write_text_atomic(target, body)
+    else:
+        write_text_atomic(target, body)
     warnings = _protect_personal_file(project, name)
     return {
         "status": "SKILL_VIEW", "skill": name, "path": relative,
@@ -190,16 +195,6 @@ def write_view(project: Path, name: str) -> dict:
 def _protect_personal_file(project: Path, name: str) -> list[str]:
     if not (project / ".git").exists():
         return []
-    exclude_path = Path(_git(project, "rev-parse", "--git-path", "info/exclude").strip())
-    if not exclude_path.is_absolute():
-        exclude_path = project / exclude_path
-    exclude_path = safe_absolute_target(exclude_path, "Git exclude")
-    exclude_path.parent.mkdir(parents=True, exist_ok=True)
-    existing = exclude_path.read_text(encoding="utf-8") if exclude_path.exists() else ""
-    pattern = f"{CUSTOM_ROOT}/*.user.toml"
-    if pattern not in existing.splitlines():
-        exclude_path.write_text(existing + ("\n" if existing and not existing.endswith("\n") else "")
-                                + pattern + "\n", encoding="utf-8")
     _, personal = custom_paths(project, name)
     relative = personal.relative_to(project).as_posix()
     tracked = _git(project, "ls-files", "--cached", "--", relative).strip()

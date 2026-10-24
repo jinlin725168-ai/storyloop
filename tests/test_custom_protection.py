@@ -7,7 +7,9 @@ import tempfile
 import unittest
 
 from storyloop.baseline import bootstrap_project, load_baseline, verify_baseline
+from storyloop.models import StoryLoopError
 from storyloop.project_boundaries import audit_project_changes, role_path_boundary
+from storyloop.project_loop_support import control_digest
 from storyloop.skill_custom import custom_paths, write_view
 from tests.test_baseline_behavior import git, repository
 
@@ -54,6 +56,29 @@ class CustomProtectionTests(unittest.TestCase):
         self.assertIn("storyloop-custom/*.user.toml", exclude)
         self.assertEqual(git(self.root, "check-ignore", "storyloop-custom/spec-craft.user.toml").strip(),
                          "storyloop-custom/spec-craft.user.toml")
+
+    def test_view_before_init_keeps_repository_clean_and_initializable(self):
+        write_view(self.root, "spec-craft")
+        self.assertEqual(git(self.root, "status", "--porcelain=v1", "--untracked-files=all"), "")
+        self.assertEqual(bootstrap_project(self.root)["status"], "BASELINE_LOCKED")
+
+    def test_init_excludes_personal_customization_without_view(self):
+        bootstrap_project(self.root)
+        self.write(self.user)
+        self.assertEqual(git(self.root, "check-ignore", "storyloop-custom/spec-craft.user.toml"),
+                         "storyloop-custom/spec-craft.user.toml")
+        self.assertEqual(verify_baseline(self.root)["status"], "BASELINE_VERIFIED")
+
+    def test_view_does_not_change_initialized_control_digest(self):
+        bootstrap_project(self.root)
+        before = control_digest(self.root, "FEAT-20261024-001")
+        write_view(self.root, "spec-craft")
+        self.assertEqual(control_digest(self.root, "FEAT-20261024-001"), before)
+
+    def test_non_utf8_git_exclude_has_a_domain_error(self):
+        (self.root / ".git/info/exclude").write_bytes(b"\xff\n")
+        with self.assertRaisesRegex(StoryLoopError, "Git exclude"):
+            write_view(self.root, "spec-craft")
 
     def test_tracked_user_file_is_reported(self):
         self.write(self.user)
