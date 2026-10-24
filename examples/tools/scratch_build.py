@@ -15,7 +15,6 @@ Exit code is the command's exit code; 2 means the copy itself failed.
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 import shutil
 import subprocess

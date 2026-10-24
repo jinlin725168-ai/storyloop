@@ -59,7 +59,7 @@ class RoutedEndToEndTests(unittest.TestCase):
 
     def test_invalid_approval_and_replan_cannot_spend_attempt(self):
         root, identifier, services = self.case('heavy')
-        first = run_change(root, identifier, services)
+        run_change(root, identifier, services)
         with self.assertRaises(StoryLoopError):
             approve_design(root, identifier, 'stale-plan')
         self.assertEqual(run_change(root, identifier, services)['status'], 'DESIGN_APPROVAL_REQUIRED')
@@ -95,7 +95,6 @@ class RoutedEndToEndTests(unittest.TestCase):
 
     def test_split_continuation_still_requires_design_consent(self):
         from storyloop.design_approval import approve_continue_heavy
-        from tests.test_routing_planning import answer
         root, identifier, services = self.case('heavy')
         original_design = services.design
         def expanded(project, context):

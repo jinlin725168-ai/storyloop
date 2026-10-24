@@ -25,11 +25,11 @@ Only unittest Python case files are built in. Other runners need an explicit pro
 adapter that separates actual executions, assertion failures and environment errors;
 unknown outcomes must raise HarnessError, never synthesize PASS or a RED exit code.
 """
-from ...models import StoryLoopError as HarnessError
-from .cases import validate_cases
-from .health import free_port, wait_http
-from .lifecycle import Context, run_hooks
-from .processes import Service, run_command
-from .python_runner import python_cases
-from .results import Result
-from .scratch import Scratch
+from ...models import StoryLoopError as HarnessError  # noqa: F401  # 兼容再导出：v1 公共辅助 API
+from .cases import validate_cases  # noqa: F401  # 兼容再导出：v1 公共辅助 API
+from .health import free_port, wait_http  # noqa: F401  # 兼容再导出：v1 公共辅助 API
+from .lifecycle import Context, run_hooks  # noqa: F401  # 兼容再导出：v1 公共辅助 API
+from .processes import Service, run_command  # noqa: F401  # 兼容再导出：v1 公共辅助 API
+from .python_runner import python_cases  # noqa: F401  # 兼容再导出：v1 公共辅助 API
+from .results import Result  # noqa: F401  # 兼容再导出：v1 公共辅助 API
+from .scratch import Scratch  # noqa: F401  # 兼容再导出：v1 公共辅助 API

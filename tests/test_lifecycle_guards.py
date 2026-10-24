@@ -107,7 +107,6 @@ class VerificationGuardsTests(unittest.TestCase):
 
     def test_g2_rejects_failed_missing_zero_count_below_floor_review_and_boundary(self):
         from copy import deepcopy
-        from storyloop.run_guards import guard_g2
         for violation in ('failed', 'missing', 'zero', 'floor', 'fail_review', 'question', 'boundary'):
             case = deepcopy(self.candidate)
             state, context = case['state'], case['context']

@@ -1,7 +1,6 @@
 """Exercise profile dispatch through the example adapter, not just permission helpers."""
 import io
 import json
-from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch

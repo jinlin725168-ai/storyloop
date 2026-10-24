@@ -6,7 +6,7 @@ from unittest.mock import patch
 from storyloop.onboarding_cli import bootstrap_with_project_checks as bootstrap_project
 from storyloop.models import StoryLoopError
 from storyloop.storage import locked_file, write_json
-from tests.onboarding_support import cli, repository
+from tests.onboarding_support import repository
 from tests.test_baseline_behavior import git
 
 

@@ -25,10 +25,11 @@
 
 | 套件 | 内容 | 什么时候跑 |
 |---|---|---|
-| `core` | 主流程端到端（`test_product_e2e`、`test_nature_e2e`、`test_reports_e2e`、`test_roles_e2e`、`test_project_loop`）、安全边界、命令行、跨平台回归（短路径、autocrlf、UTF-8 管道），架构与不变量守护（含完成幂等），以及纯逻辑模块 | 每个 PR、每次 push 到 main；墙钟随模块变化，以实际运行记录为准 |
+| `core` | 主流程端到端（`test_product_e2e`、`test_nature_e2e`、`test_reports_e2e`、`test_roles_e2e`、`test_project_loop`）、安全边界、命令行、跨平台回归（短路径、autocrlf、UTF-8 管道），架构与不变量守护（含完成幂等），以及纯逻辑模块 | PR 的 Linux 作业、每次 push 到 main；墙钟随模块变化，以实际运行记录为准 |
+| `platform` | `PLATFORM + SAFETY + RUNNER` 去重排序；跨平台回归、安全边界、套件运行器 | PR 的 Windows 作业；目标墙钟不超过 4 分钟 |
 | `full` | `tests/test_*.py` 全部模块 | CI 每天定时一次、手动触发；本地合并前、按计划实现时 |
 
-新增的测试模块默认只在 `full` 里；作者认为它守护的是主流程或安全边界时，在 `suites.py` 对应分组里加上它，`test_suites` 会检查名单里的模块都存在。分流、设计批准等重型流程的模块（单个就要几分钟）只在 `full` 里，它们的回归最晚在第二天的定时全量里暴露。
+新增的测试模块默认只在 `full` 里；作者认为它守护的是主流程或安全边界时，在 `suites.py` 对应分组里加上它，`test_suites` 会检查名单里的模块都存在。I8 在 `core` 中登记为一个完整测试 ID，`test_completion_resilience` 其余测试仍在 `full`。分流、设计批准等重型流程的模块（单个就要几分钟）只在 `full` 里，它们的回归最晚在第二天的定时全量里暴露。
 
 测试会提交到临时仓库，所以本机需要 git 身份（`user.name`、`user.email`）。
 
@@ -77,9 +78,12 @@ I12在B守护唯一迁移入口与阶段跳层，类型定义来源在C集中。
 | 作业 | 内容 |
 |---|---|
 | 改动范围 | 判断是否只改了文档（`docs/`、`LICENSE`、`storyloop/` 与 `tests/` 以外的 `.md`）；是则跳过测试 |
-| 测试（矩阵） | Ubuntu、Windows，Python 统一 3.11（pyproject 声明的最低版本），全部必须通过；步骤为 `compileall`（含 `examples/claude-code`）→ `pip install .`（确认打包与技能包数据）→ `tests/run.py`：PR 与 push 跑 `core`，定时跑 `full`，手动触发可选（默认 `full`），4 路并行 |
+| 测试（矩阵） | Ubuntu、Windows，Python 统一 3.11（pyproject 声明的最低版本），全部必须通过；步骤为 `compileall`（含 `examples/claude-code`）→ `pip install .`（确认打包与技能包数据）→ `tests/run.py`：PR 的 Ubuntu 跑 `core`、Windows 跑 `platform`，push 到 main 跑 `core`，定时跑 `full`，手动触发按输入选择（默认 `full`），4 路并行 |
+| 代码规范 | Linux 的 `lint` 作业固定安装 `ruff==0.8.4`，检查 `storyloop tests examples` 的 F 与 E9；PR 与 push 运行，只改文档时跳过；不做格式化检查 |
 | 密钥扫描 | gitleaks（固定版本、校验摘要）扫描本次引入的每个提交，手动触发时扫描全部历史；只改文档时也运行 |
 | CI 结果 | 汇总以上作业，跳过算通过；`main` 的分支规则只要求这一项 |
+
+CodeQL 在独立工作流分析 Python：PR、push 到 main 和每周定时触发，暂不加入 `CI 结果` 必过项。
 
 ## 三、真实模型验证
 

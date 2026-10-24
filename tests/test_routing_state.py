@@ -107,7 +107,7 @@ class RunRoutingTests(unittest.TestCase):
         from storyloop.project_loop import LoopServices, run_change, load_run_state
         from storyloop.baseline import load_project_config
         from storyloop.storage import write_json
-        from tests.test_agent_unavailable import implement_after, unavailable
+        from tests.test_agent_unavailable import implement_after
         from tests.test_project_loop import smoke_payload
         calls = []
         implement = implement_after(1, calls)

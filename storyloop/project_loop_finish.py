@@ -24,7 +24,7 @@ from .project_loop_support import save_run
 from .run_transitions import set_change_status, transition
 from .run_guards import (_engine_output_roots, _without_engine_outputs, _implementation_already_committed,
                          guard_g3)
-from .project_receipt import authoritative_report, ensure_merge_receipt, verify_verified_artifacts
+from .project_receipt import authoritative_report, ensure_merge_receipt, verify_verified_artifacts  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .smoke_runner import implementation_digest
 from .storage import load_json, write_json
 from .telemetry import summarize
@@ -35,7 +35,6 @@ def complete_change(
     layers: dict, review: dict,
 ) -> dict:
     change_id = change["change_id"]
-    subject = f"feat({change_id}): implement approved product change"
     # A completion that crashed after writing docs, specs, UI assets or reports left engine
     # outputs behind; discard them so this attempt regenerates everything from the same state.
     _discard_engine_outputs(project, change_id)

@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .baseline import load_project_config
-from .capability_protocol import (PROTOCOL, ROLES, ROUTING, probe, _argv_digest, _digest,
+from .capability_protocol import (PROTOCOL, ROLES, ROUTING, probe, _argv_digest, _digest,  # noqa: F401  # 兼容再导出：保留旧模块导入路径
                                   _load_cache, _require_tier)
 from .models import StoryLoopError, require
 from .role_profiles import enabled, resolve_adapters, role_settings
