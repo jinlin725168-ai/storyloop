@@ -13,7 +13,7 @@
 | `adapters check` | `[--json]` | 能力握手结果 |
 | `skills` | — | `SKILLS_INSTALLED` |
 | `survey` | `[--reason TEXT] [--from FILE]` | `SURVEYED` |
-| `change` | `--idea TEXT`、`--change ID --message TEXT` 或 `--supersede ID --message TEXT [--reason TEXT]`；`[--no-interactive]` | 变更状态（`DRAFT`） |
+| `change` | `--idea TEXT [--slug NAME]`、`--change ID --message TEXT` 或 `--supersede ID --message TEXT [--reason TEXT]`；`[--no-interactive]` | 变更状态（`DRAFT`） |
 | `approve` | `--change ID [--no-interactive]` 或 `--draft KIND/ID`（二者互斥） | 运行状态（见第二节）或 `APPLIED` |
 | `run` | `--change ID [--overrule TEXT] [--no-interactive]` | 运行状态 |
 | `status` | `--change ID` | 变更状态，附 `run`、`telemetry`、`next`、`stop` |
@@ -33,6 +33,8 @@
 | `drafts` | `[--reject KIND/ID --reason TEXT]` | `DRAFTS` 清单或状态为 `rejected` 的草案；`--reason` 只与 `--reject` 同用 |
 | `lessons` | `[--confirm ID \| --retire ID --reason TEXT]` | 经验清单或 `COMMITTED`；确认与退休互斥，退休必须给理由 |
 | `lessons-propose` | `--change ID` | `DONE`、`FAILED`、`SKIPPED_NO_SIGNAL` 或 `SKIPPED_COST_LIMIT` 的复盘结果 |
+
+例如 `storyloop change PATH --idea "导出用户" --slug user-export` 会生成形如 `FEAT-20261024-user-export` 的 ID。短名须为 3–40 个小写字母、数字或连字符，首尾为字母或数字。未提供短名时继续使用 `FEAT-20261024-001` 这样的序号格式；已有旧格式 ID 仍可使用。
 
 各命令的用法见 [使用指南](product-iteration-guide.md)。两阶段接入、onboarding.json、`{storyloop_harness}` argv、可信 case 及公开 helper API 见[版本化冒烟执行器](smoke-harness.md)。scaffold 幂等只接受未改草案；人工补齐后按干净提交执行原 init。init 失败按写入内容归属回滚，不覆盖并发修改。
 

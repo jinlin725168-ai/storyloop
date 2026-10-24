@@ -31,6 +31,7 @@ FAST = [
 
 # The main flow end to end: contract, RED, implementation, review, report, merge.
 END_TO_END = [
+    "tests.test_trace_ids", "tests.test_execution_profile",
     "tests.test_product_e2e", "tests.test_nature_e2e", "tests.test_change_types",
     "tests.test_reports_e2e", "tests.test_roles_e2e",
     "tests.test_project_loop", "tests.test_lifecycle_golden", "tests.test_lifecycle_recovery_entries",
