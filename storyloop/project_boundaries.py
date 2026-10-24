@@ -102,12 +102,13 @@ def audit_project_changes(project: Path, change_id: str, *, nature: str | None =
     proposal = _write_base_proposal(project, change_id, base_changes, baseline) if base_changes else None
     status = "CLEAN" if not changed else ("ALLOWED" if not violations else
              ("BASE_CHANGE_REQUIRED" if base_changes else "BOUNDARY_VIOLATION"))
-    return {
+    result = {
         "status": status, "change_id": change_id, "allowed": allowed,
         "violations": violations, "base_proposal": str(proposal) if proposal else None,
-        "ci_requires_human_proposal": any(item["category"] == "CI_PROTECTED"
-                                          for item in base_changes),
     }
+    if any(item["category"] == "CI_PROTECTED" for item in base_changes):
+        result["ci_requires_human_proposal"] = True
+    return result
 
 
 def _changed_paths(project: Path) -> list[str]:
