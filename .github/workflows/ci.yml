@@ -50,11 +50,12 @@ jobs:
         # 文档：docs/ 下任意文件、LICENSE、storyloop/ 与 tests/ 以外的 .md。
         # storyloop/ 下的 .md 是随包发布的技能包，tests/ 下的 .md 是测试夹具，都按代码处理。
         # 手动触发、取不到对比基点或 diff 失败时一律按代码处理。
+        # core.quotepath=false：否则中文等非 ASCII 文件名会被转义成带引号的路径，匹配不上 docs/*，被误判为代码。
         run: |
           code=false
           if [ "$EVENT" = "workflow_dispatch" ] || [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
             code=true
-          elif ! files=$(git diff --name-only "$BASE...$HEAD") || [ -z "$files" ]; then
+          elif ! files=$(git -c core.quotepath=false diff --name-only "$BASE...$HEAD") || [ -z "$files" ]; then
             code=true
           else
             printf '%s\n' "$files"
