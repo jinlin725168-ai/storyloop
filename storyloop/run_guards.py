@@ -244,8 +244,8 @@ def base_report_paths(state: dict) -> set[str]:
 
 
 def base_candidate_authors(project: Path, state: dict) -> set[str]:
-    """Read every implementation author, including commits before the candidate tip."""
-    output = _git(project, "log", "--format=%an%x00",
+    """Read every implementation author and committer in the candidate history."""
+    output = _git(project, "log", "--format=%an%x00%cn%x00",
                   f"{state['contract_commit']}..{state['candidate_commit']}")
     authors = {item.strip() for item in output.split("\0") if item.strip()}
     require(authors, "Base candidate has no implementation author")

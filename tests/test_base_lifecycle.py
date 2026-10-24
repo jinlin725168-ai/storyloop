@@ -229,6 +229,21 @@ class BaseG1Tests(unittest.TestCase):
         with self.assertRaisesRegex(StoryLoopError, "reviewer"):
             base_execution.record_base_review(self.root, change_id, "pass", "已核对")
 
+    def test_review_rejects_candidate_committer_even_when_author_differs(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                             encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "initial candidate")
+        git(self.root, "config", "user.name", "Independent Reviewer")
+        git(self.root, "commit", "--amend", "-q", "--no-edit")
+        self.assertNotEqual(git(self.root, "show", "-s", "--format=%an", "HEAD"),
+                            git(self.root, "show", "-s", "--format=%cn", "HEAD"))
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        with self.assertRaisesRegex(StoryLoopError, "reviewer"):
+            base_execution.record_base_review(self.root, change_id, "pass", "已核对")
+
     def test_g2_rechecks_proposal_scope_after_review(self):
         change_id = self.change["change_id"]
         run_change(self.root, change_id, implementer="human")
