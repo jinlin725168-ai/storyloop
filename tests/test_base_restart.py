@@ -10,7 +10,7 @@ from storyloop.models import StoryLoopError
 from storyloop.project_loop import run_change
 from storyloop.run_recovery import reset_run
 from storyloop.run_state import run_path
-from storyloop.storage import load_json, write_json
+from storyloop.storage import load_json, locked, write_json
 from tests import test_base_lifecycle as lifecycle
 from tests.test_baseline_behavior import git
 
@@ -60,6 +60,18 @@ class BaseRestartTests(unittest.TestCase):
         value = load_json(review)
         value["reviewer"] = "candidate author"
         write_json(review, value)
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "HUMAN_IMPLEMENTATION_REQUIRED")
+        self._assert_discarded(change_id, candidate)
+
+    def test_review_snapshot_without_digest_or_file_cannot_be_used(self):
+        change_id = self._accepted_candidate()
+        candidate = git(self.root, "rev-parse", "HEAD")
+        self._paths(change_id)["review"].unlink()
+        state_path = run_path(self.root, change_id)
+        state = load_json(state_path)
+        state.pop("base_review_sha256")
+        write_json(state_path, state)
         self.assertEqual(run_change(self.root, change_id)["status"],
                          "HUMAN_IMPLEMENTATION_REQUIRED")
         self._assert_discarded(change_id, candidate)
@@ -182,4 +194,87 @@ class BaseRestartTests(unittest.TestCase):
         git(self.root, "checkout", before["source_branch"])
         baseline_path.write_bytes(original)
         self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+
+    def test_amended_human_candidate_restarts_without_old_commit_ancestry(self):
+        change_id = self._accepted_candidate()
+        git(self.root, "commit", "--amend", "-q", "-m", "amended human candidate")
+        amended = git(self.root, "rev-parse", "HEAD")
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "HUMAN_IMPLEMENTATION_REQUIRED")
+        self._assert_discarded(change_id, amended)
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+
+    def test_merge_before_state_save_cannot_be_reset_and_run_finishes_receipt(self):
+        change_id = self._accepted_candidate()
+        original = base_execution.save_run
+
+        def interrupt(project, state):
+            if state["status"] == "MERGED":
+                raise RuntimeError("crash after source merge")
+            return original(project, state)
+
+        with mock.patch.object(base_execution, "save_run", side_effect=interrupt):
+            with self.assertRaisesRegex(RuntimeError, "crash after source merge"):
+                run_change(self.root, change_id)
+        state = load_json(run_path(self.root, change_id))
+        self.assertEqual(state["status"], "VERIFIED")
+        merged = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "switch", state["feature_branch"])
+        with self.assertRaisesRegex(StoryLoopError, "Merged base runs cannot reset"):
+            reset_run(self.root, change_id, "不应回退已合并运行")
+        self.assertEqual(run_change(self.root, change_id)["status"], "FINALIZING")
+        self.assertEqual(git(self.root, "rev-parse", "HEAD^"), merged)
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+
+    def test_staged_report_after_failed_commit_is_unstaged_on_restart(self):
+        change_id = self._accepted_candidate()
+        candidate = git(self.root, "rev-parse", "HEAD")
+        original_commit = base_execution.commit_paths
+
+        def blocked(project, paths, message, **kwargs):
+            if message.startswith("docs("):
+                git(project, "add", "--", *paths)
+                raise StoryLoopError("signing failed", code="GIT_BLOCKED")
+            return original_commit(project, paths, message, **kwargs)
+
+        with mock.patch.object(base_execution, "commit_paths", side_effect=blocked):
+            with self.assertRaisesRegex(StoryLoopError, "signing failed"):
+                run_change(self.root, change_id)
+        self.assertIn("reports/storyloop", git(self.root, "status", "--porcelain"))
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "HUMAN_IMPLEMENTATION_REQUIRED")
+        self._assert_discarded(change_id, candidate)
+        self.assertEqual(git(self.root, "status", "--porcelain"), "")
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+
+    def test_reset_refuses_to_race_with_an_active_run(self):
+        change_id = self._accepted_candidate()
+        before = load_json(run_path(self.root, change_id))
+        with locked(self.root):
+            with self.assertRaisesRegex(StoryLoopError, "project lock"):
+                reset_run(self.root, change_id, "并发复位")
+        self.assertEqual(load_json(run_path(self.root, change_id)), before)
+
+    def test_candidate_paths_are_checked_before_reproving_old_green(self):
+        change_id = self.change["change_id"]
+        self.assertEqual(run_change(self.root, change_id, implementer="human")["status"],
+                         "HUMAN_IMPLEMENTATION_REQUIRED")
+        with mock.patch.object(base_execution, "_prove_old_green",
+                               side_effect=AssertionError("old green reran")) as prove:
+            self.assertEqual(run_change(self.root, change_id)["status"],
+                             "CONTRACT_COMMITTED")
+        prove.assert_not_called()
+
+    def test_valid_candidate_reuses_current_g1_without_rerunning_old_green(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                            encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "human candidate")
+        with mock.patch.object(base_execution, "_prove_old_green",
+                               side_effect=AssertionError("old green reran")) as prove:
+            self.assertEqual(run_change(self.root, change_id)["status"],
+                             "BASE_REVIEW_REQUIRED")
+        prove.assert_not_called()
 

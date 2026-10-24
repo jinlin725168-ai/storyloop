@@ -13,7 +13,7 @@ from .git_command import git_is_ancestor
 from .models import identifier, require, text
 from .path_security import safe_target
 from .project_git import changed_paths, current_branch
-from .storage import load_json
+from .storage import load_json, locked
 from .run_state import save_run
 from .run_transitions import transition, RESETTABLE
 from .run_guards import base_report_paths, reset_status as _reset_status
@@ -34,14 +34,15 @@ BASE_ATTEMPT_KEYS = ("old_green_sha256", "base_evidence", "base_evidence_sha256"
 
 
 def reset_run(project: Path, change_id: str, reason: str, now: Clock | None = None) -> dict:
-    """恢复被污染运行的中断阶段；人工验收复位后重新执行实现与验证。
-
-    Nothing in the working tree is touched; only the run state changes. The interrupted attempt
-    is not charged against the budget, and the reset itself is recorded with its reason.
-    """
+    """Reset one run while holding the same project lock as storyloop run."""
     project = Path(project).resolve()
     change_id = identifier(change_id, "change id")
     reason = text(reason, "reset reason")
+    with locked(project):
+        return _reset_locked(project, change_id, reason, now)
+
+
+def _reset_locked(project: Path, change_id: str, reason: str, now: Clock | None) -> dict:
     change = load_change(project, change_id)
     path = project / ".storyloop/state/runs" / f"{change_id}.json"
     require(path.exists(), "There is no run to reset for this change")
@@ -70,7 +71,8 @@ def reset_run(project: Path, change_id: str, reason: str, now: Clock | None = No
 def _reset_base(project: Path, change: dict, state: dict, reason: str,
                 now: Clock | None) -> dict:
     require(state.get("status") in BASE_PREMERGE
-            and state.get("base_resume_status") != "FINALIZING",
+            and state.get("base_resume_status") != "FINALIZING"
+            and not base_source_contains_candidate(project, state),
             "Merged base runs cannot reset; resume finalization with storyloop run")
     require(state.get("contract_digest") == change["approval"]["contract_digest"],
             "Run state belongs to a different approved contract")
@@ -89,23 +91,30 @@ def _reset_base(project: Path, change: dict, state: dict, reason: str,
 def restart_base_attempt(project: Path, state: dict, rejected: bool = False) -> str:
     """Discard only engine artifacts; leave the human's committed implementation intact."""
     require(state.get("contract_commit"), "Base restart needs the committed contract")
+    require(not base_source_contains_candidate(project, state),
+            "Merged base runs cannot restart; resume finalization with storyloop run")
     require(current_branch(project) == state.get("feature_branch"),
             "Resume the saved StoryLoop base branch before restarting")
     candidate = state.get("candidate_commit")
     head = _git(project, "rev-parse", "HEAD").strip()
+    if head == state["contract_commit"]:
+        candidate = None
     if candidate and head != candidate:
         if _report_tail(project, state, candidate, head):
             _git(project, "reset", "--soft", candidate)
-            _git(project, "reset", "-q", "--", *sorted(base_report_paths(state)))
             head = candidate
         else:
-            require(git_is_ancestor(project, candidate, head)
-                    and not changed_paths(project, candidate, head) & base_report_paths(state),
+            require(git_is_ancestor(project, state["contract_commit"], head)
+                    and not _has_report_history(project, state, head),
                     "Base branch contains mixed human and engine commits; preserve them manually")
             candidate = head
     if not candidate and head != state["contract_commit"]:
+        require(git_is_ancestor(project, state["contract_commit"], head)
+                and not _has_report_history(project, state, head),
+                "Base branch contains mixed human and engine commits; preserve them manually")
         candidate = head  # The human committed before the engine saved candidate state.
     target = "HUMAN_IMPLEMENTATION_REQUIRED" if candidate else "CONTRACT_COMMITTED"
+    _git(project, "reset", "-q", "--", *sorted(base_report_paths(state)))
     _discard_base_files(project, state)
     transition(project, state, target, event="base_restart")
     for key in BASE_ATTEMPT_KEYS:
@@ -114,6 +123,24 @@ def restart_base_attempt(project: Path, state: dict, rejected: bool = False) -> 
         state["rejected_candidate_commit"] = candidate
     save_run(project, state)
     return target
+
+
+def base_source_contains_candidate(project: Path, state: dict) -> bool:
+    """A source ref containing this candidate or report is already past the restart boundary."""
+    source = state.get("source_branch")
+    if not isinstance(source, str) or not source:
+        return False
+    source_ref = f"refs/heads/{source}"
+    return any(git_is_ancestor(project, commit, source_ref)
+               for commit in (state.get("report_commit"), state.get("candidate_commit"))
+               if isinstance(commit, str) and commit)
+
+
+def _has_report_history(project: Path, state: dict, head: str) -> bool:
+    paths = sorted(base_report_paths(state))
+    history = _git(project, "log", "--format=", "--name-only", "--no-renames",
+                   f"{state['contract_commit']}..{head}", "--", *paths)
+    return bool(history.strip())
 
 
 def _report_tail(project: Path, state: dict, candidate: str, head: str) -> bool:

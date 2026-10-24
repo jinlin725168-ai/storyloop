@@ -238,7 +238,8 @@ class StopPersistenceTests(unittest.TestCase):
             stop={"status": "WORKSPACE_TAINTED"},
         )
         load_json.return_value = state
-        reset_run(Path("/p"), "FEAT-1", "cleaned")
+        with patch("storyloop.run_recovery.locked"):
+            reset_run(Path("/p"), "FEAT-1", "cleaned")
         saved = write_json.call_args.args[1]
         self.assertEqual(saved["status"], "IMPLEMENTING")
         self.assertNotIn("stop", saved)

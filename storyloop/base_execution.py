@@ -10,6 +10,7 @@ from . import __version__
 from .approvals import materialize_approved_change
 from .base_upgrade import _changed_since, base_candidate_paths, establish_old_green
 from .baseline import _git, load_baseline, load_project_config, verify_baseline
+from .git_command import git_is_ancestor
 from .manual_acceptance import load_manual_acceptance
 from .models import StoryLoopError, require, text
 from .project_git import current_branch, start_base, commit_paths, exact_child_commit, finish_feature
@@ -21,7 +22,7 @@ from .run_stops import pause
 from .run_transitions import transition
 from .run_guards import (base_candidate_authors, trusted_base_acceptance,
                          trusted_base_evidence, trusted_base_review)
-from .run_recovery import restart_base_attempt
+from .run_recovery import base_source_contains_candidate, restart_base_attempt
 from .project_receipt import _dirty_paths
 from .smoke_runner import implementation_digest, run_commands_isolated
 from .storage import load_json, write_json, write_text_atomic
@@ -31,6 +32,9 @@ from .system_smoke import run_system_smoke_isolated
 def run_base_change(project: Path, change: dict, implementer: str | None, new_run_state) -> dict:
     """Open or resume the manually implemented base change without an agent call."""
     state = _open_state(project, change, implementer, new_run_state)
+    merged = _resume_git_merge(project, change, state)
+    if merged is not None:
+        return merged
     reason = _premerge_restart_reason(project, state)
     if reason is not None:
         return _restart_pause(project, change, state, reason)
@@ -67,6 +71,27 @@ def run_base_change(project: Path, change: dict, implementer: str | None, new_ru
     return {"status": state["status"], "change_id": change["change_id"]}
 
 
+def _resume_git_merge(project: Path, change: dict, state: dict) -> dict | None:
+    if not base_source_contains_candidate(project, state):
+        return None
+    if state["status"] == "VERIFIED":
+        report = state.get("report_commit")
+        require(isinstance(report, str) and git_is_ancestor(
+            project, report, f"refs/heads/{state['source_branch']}"),
+            "Source branch contains the candidate without its verified report")
+        if current_branch(project) == state["feature_branch"]:
+            require(not _dirty_paths(project), "Clean the base branch before merge recovery")
+            _git(project, "switch", state["source_branch"])
+        return _finish_verified(project, change, state)
+    premerge = {"CONTRACT_COMMITTED", "HUMAN_IMPLEMENTATION_REQUIRED", "IMPLEMENTING",
+                "BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED"}
+    require(state["status"] not in premerge
+            and not (state["status"] == "WORKSPACE_TAINTED"
+                     and state.get("base_resume_status") != "FINALIZING"),
+            "Source branch already contains this base candidate; do not restart it")
+    return None
+
+
 def _premerge_restart_reason(project: Path, state: dict) -> str | None:
     status = state["status"]
     if status == "WORKSPACE_TAINTED" and state.get("base_resume_status") != "FINALIZING":
@@ -79,15 +104,23 @@ def _premerge_restart_reason(project: Path, state: dict) -> str | None:
             return "Base attempt interrupted before checkpoint"
     if status not in {"BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED"}:
         return None
-    if trusted_base_evidence(project, state) is None:
+    if (_git(project, "rev-parse", "HEAD").strip() != state.get("candidate_commit")
+            or _dirty_paths(project)):
+        return "Human candidate changed before review or acceptance"
+    evidence = trusted_base_evidence(project, state)
+    if (evidence is None or evidence.get("status") != "PASSED"
+            or evidence.get("candidate_commit") != state.get("candidate_commit")
+            or evidence.get("candidate_sha256") != state.get("candidate_sha256")):
         return "Base evidence differs from the current attempt"
     review_path = _review_path(project, state["change_id"])
-    if state.get("base_review_sha256") or review_path.exists():
-        if trusted_base_review(project, state) is None:
+    if state.get("base_review") is not None or state.get("base_review_sha256") or review_path.exists():
+        review = trusted_base_review(project, state)
+        if (review is None or review.get("candidate_commit") != state["candidate_commit"]
+                or review.get("candidate_sha256") != evidence["candidate_sha256"]):
             return "Base review differs from the current attempt"
     if status == "MANUAL_ACCEPTANCE_REQUIRED":
         acceptance = project / ".storyloop/state/acceptance" / f"{state['change_id']}.json"
-        if acceptance.exists() and not trusted_base_acceptance(project, state):
+        if (state.get("manual_acceptance_sha256") or acceptance.exists()) and not trusted_base_acceptance(project, state):
             return "Base acceptance differs from the current attempt"
     return None
 
@@ -188,7 +221,12 @@ def _candidate_to_review(project: Path, change: dict, state: dict) -> dict:
     state["base_inflight"] = "candidate_verification"
     save_run(project, state)
     try:
-        _prove_old_green(project, change, state)
+        base_candidate_paths(project, change, state)
+        from .run_guards import guard_g1
+        try:
+            guard_g1(project, state, {})
+        except StoryLoopError:
+            _prove_old_green(project, change, state)
         evidence = _verify_candidate(project, change, state)
     except StoryLoopError as exc:
         return _restart_pause(project, change, state, str(exc))
@@ -218,50 +256,25 @@ def _pause_review(project: Path, change: dict, state: dict) -> dict:
                       "--verdict pass --note '<核对内容>', then storyloop run")
 
 
-def _reopen_human(project: Path, change: dict, state: dict, *, rejected: bool = False) -> dict:
-    return _restart_pause(project, change, state, "Human candidate needs a new attempt",
-                          rejected=rejected)
-
-
 def _review_stop(project: Path, change: dict, state: dict) -> dict:
-    if (_git(project, "rev-parse", "HEAD").strip() != state.get("candidate_commit")
-            or _dirty_paths(project)):
-        return _reopen_human(project, change, state)
-    evidence = trusted_base_evidence(project, state)
-    if evidence is None:
-        return _restart_pause(project, change, state, "Base evidence changed")
-    review = trusted_base_review(project, state)
+    review = state.get("base_review")
     if review is None:
         return _pause_review(project, change, state)
-    if (review.get("candidate_commit") != state["candidate_commit"]
-            or review.get("candidate_sha256") != evidence["candidate_sha256"]):
-        return _restart_pause(project, change, state, "Base review changed")
     if review.get("verdict") == "fail":
-        return _reopen_human(project, change, state, rejected=True)
+        return _restart_pause(project, change, state, "Human candidate needs a new attempt",
+                              rejected=True)
     require(review.get("verdict") == "pass", "Independent base review is invalid")
     require(review.get("reviewer") not in base_candidate_authors(project, state),
             "Base reviewer must differ from implementation author")
-    state["base_review"] = review
-    state["base_evidence"] = evidence
-    save_run(project, state)
     return pause(project, state, "MANUAL_ACCEPTANCE_REQUIRED",
-                 candidate_sha256=evidence["candidate_sha256"],
+                 candidate_sha256=state["candidate_sha256"],
                  pending=["BASE-ACCEPT"],
                  next=f"storyloop accept <project> --change {change['change_id']} "
                       "--criterion BASE-ACCEPT --note '<核对内容>', then storyloop run")
 
 
 def _finish_after_acceptance(project: Path, change: dict, state: dict) -> dict:
-    head = _git(project, "rev-parse", "HEAD").strip()
-    if head != state.get("candidate_commit") or _dirty_paths(project):
-        return _reopen_human(project, change, state)
-    if trusted_base_evidence(project, state) is None:
-        return _restart_pause(project, change, state, "Base evidence changed")
-    if trusted_base_review(project, state) is None:
-        return _restart_pause(project, change, state, "Base review changed")
-    if not trusted_base_acceptance(project, state):
-        if (project / ".storyloop/state/acceptance" / f"{change['change_id']}.json").exists():
-            return _restart_pause(project, change, state, "Base acceptance changed")
+    if not state.get("manual_acceptance_sha256"):
         return pause(project, state, "MANUAL_ACCEPTANCE_REQUIRED",
                      candidate_sha256=state["candidate_sha256"], pending=["BASE-ACCEPT"],
                      next=f"Re-record base acceptance for {change['change_id']}, then storyloop run")
@@ -273,9 +286,8 @@ def _finish_after_acceptance(project: Path, change: dict, state: dict) -> dict:
 
 
 def _complete_base(project: Path, change: dict, state: dict, records: list[dict]) -> dict:
-    evidence_path = _evidence_path(project, change["change_id"])
-    evidence = load_json(evidence_path)
-    review = load_json(_review_path(project, change["change_id"]))
+    evidence = state["base_evidence"]
+    review = state["base_review"]
     from .oracle_skill_approval import base_confirmation_record
     state["base_inflight"] = "report_delivery"
     save_run(project, state)
