@@ -114,6 +114,23 @@ class BaseCompatibilityTests(unittest.TestCase):
         self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
         self.assertEqual(load_baseline(self.root)["baseline_version"], "1.0.1")
 
+    def test_premature_accepted_receipt_is_discarded_before_baseline_write(self):
+        change_id = self._merged_candidate()
+        from storyloop import base_finalization
+        from storyloop.baseline import load_project_config
+        state = load_json(self.root / ".storyloop/state/runs" / f"{change_id}.json")
+        change = load_json(self.root / ".storyloop/state/changes" / f"{change_id}.json")
+        baseline = load_baseline(self.root)
+        receipt = base_finalization._new_receipt(
+            self.root, change, state, baseline, load_project_config(self.root),
+            state["integration_commit"], self.root / ".storyloop/baseline.json",
+            self.root / ".storyloop/config.json")
+        receipt["status"] = "ACCEPTED"
+        path = self.root / ".storyloop/state/base-upgrades" / f"{change_id}.json"
+        write_json(path, receipt)
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+        self.assertEqual(load_baseline(self.root)["baseline_version"], "1.0.1")
+
     def test_legacy_finalizing_state_after_baseline_write_is_revalidated(self):
         change_id = self._merged_candidate()
         from storyloop import base_finalization

@@ -30,13 +30,7 @@ def finalize_base_baseline(project: Path, change: dict, state: dict) -> dict:
     config = load_project_config(project)
     locked_receipt = _locked_receipt(project, change, state, baseline, config,
                                      head, baseline_path, config_path)
-    try:
-        receipt = load_json(receipt_path) if receipt_path.exists() else None
-    except StoryLoopError:
-        receipt = None
-    if receipt is None or not _receipt_matches(receipt, locked_receipt):
-        receipt = dict(locked_receipt)
-        write_json(receipt_path, receipt, max_bytes=4_000_000)
+    receipt = _load_or_repair_receipt(receipt_path, locked_receipt, baseline)
     require(receipt.get("version") == 2 and receipt.get("proposal_id") == change["change_id"]
             and receipt.get("contract_digest") == state["contract_digest"]
             and receipt.get("integration_commit") == head
@@ -63,6 +57,20 @@ def finalize_base_baseline(project: Path, change: dict, state: dict) -> dict:
         receipt["status"] = "ACCEPTED"
         write_json(receipt_path, receipt, max_bytes=4_000_000)
     _finish_memory_landings(project, change["change_id"])
+    return receipt
+
+
+def _load_or_repair_receipt(receipt_path: Path, locked_receipt: dict,
+                            baseline: dict) -> dict:
+    try:
+        receipt = load_json(receipt_path) if receipt_path.exists() else None
+    except StoryLoopError:
+        receipt = None
+    if (receipt is None or not _receipt_matches(receipt, locked_receipt)
+            or (receipt.get("status") == "ACCEPTED"
+                and baseline["baseline_version"] == locked_receipt["old_baseline_version"])):
+        receipt = dict(locked_receipt)
+        write_json(receipt_path, receipt, max_bytes=4_000_000)
     return receipt
 
 
