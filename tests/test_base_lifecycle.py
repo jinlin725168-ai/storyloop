@@ -198,6 +198,22 @@ class BaseG1Tests(unittest.TestCase):
         with self.assertRaisesRegex(StoryLoopError, "reviewer"):
             run_change(self.root, change_id)
 
+    def test_review_rejects_author_of_earlier_candidate_commit(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project><version>2</version></project>\n", encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "substantive change")
+        git(self.root, "config", "user.name", "Secondary Author")
+        (self.root / "pom.xml").write_text("<project><version>2</version><!-- note --></project>\n",
+                                            encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "minor note")
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        git(self.root, "config", "user.name", "StoryLoop Test")
+        with self.assertRaisesRegex(StoryLoopError, "reviewer"):
+            base_execution.record_base_review(self.root, change_id, "pass", "已核对")
+
     def test_g2_rechecks_proposal_scope_after_review(self):
         change_id = self.change["change_id"]
         run_change(self.root, change_id, implementer="human")

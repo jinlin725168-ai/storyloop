@@ -18,7 +18,7 @@ from .project_profile import base_commands_digest, layer_commands
 from .run_state import run_path, save_run
 from .run_stops import pause
 from .run_transitions import transition
-from .run_guards import base_report_commit
+from .run_guards import base_candidate_authors, base_report_commit
 from .smoke_runner import implementation_digest, run_commands_isolated
 from .storage import load_json, write_json, write_text_atomic
 from .system_smoke import run_system_smoke_isolated
@@ -69,8 +69,8 @@ def record_base_review(project: Path, change_id: str, verdict: str, note: str) -
     require(_git(project, "rev-parse", "HEAD").strip() == state.get("candidate_commit"),
             "Base candidate changed before review")
     reviewer = text(_git(project, "config", "user.name").strip(), "reviewer")
-    author = _git(project, "show", "-s", "--format=%an", "HEAD").strip()
-    require(reviewer != author, "Base reviewer must differ from the implementation author")
+    require(reviewer not in base_candidate_authors(project, state),
+            "Base reviewer must differ from every implementation author")
     record = {"version": 1, "change_id": change_id, "verdict": verdict,
               "note": text(note, "review note"), "reviewer": reviewer,
               "candidate_commit": state["candidate_commit"],
@@ -168,8 +168,7 @@ def _review_stop(project: Path, change: dict, state: dict) -> dict:
     if review.get("verdict") == "fail":
         return _reopen_human(project, change, state, rejected=True)
     require(review.get("verdict") == "pass", "Independent base review is invalid")
-    require(review.get("reviewer") != _git(project, "show", "-s", "--format=%an",
-                                           state["candidate_commit"]).strip(),
+    require(review.get("reviewer") not in base_candidate_authors(project, state),
             "Base reviewer must differ from implementation author")
     state["base_review"] = review
     state["base_evidence"] = evidence

@@ -212,8 +212,7 @@ def _guard_base_g2(project: Path, change: dict, state: dict) -> None:
     review = load_json(project / ".storyloop/state/base-reviews" / f"{change_id}.json")
     require(review.get("verdict") == "pass" and review.get("candidate_sha256") == digest
             and review.get("candidate_commit") == state.get("candidate_commit")
-            and review.get("reviewer") != _git(project, "show", "-s", "--format=%an",
-                                              state["candidate_commit"]).strip(),
+            and review.get("reviewer") not in base_candidate_authors(project, state),
             "Independent base review is missing")
     require(not pending_manual_criteria(change, _manual_records(project, change_id), digest),
             "Base manual acceptance is missing")
@@ -237,6 +236,15 @@ def base_report_commit(project: Path, state: dict) -> str | None:
             and paths == {root + ".json", root + ".md"}:
         return head
     return None
+
+
+def base_candidate_authors(project: Path, state: dict) -> set[str]:
+    """Read every implementation author, including commits before the candidate tip."""
+    output = _git(project, "log", "--format=%an%x00",
+                  f"{state['contract_commit']}..{state['candidate_commit']}")
+    authors = {item.strip() for item in output.split("\0") if item.strip()}
+    require(authors, "Base candidate has no implementation author")
+    return authors
 
 
 def _acceptance_binding(project: Path, change: dict, smoke: dict) -> None:
