@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from storyloop.baseline import bootstrap_project
+from storyloop.state_format import ROW_TYPES
 from storyloop.skills import (
     MAX_SKILL_BYTES, SKILLS_ROOT, SKILL_TARGETS, _frontmatter,
     install_skills, packaged_skills, select_skills, skill_text,
@@ -107,3 +108,36 @@ class AssessAndRequirementTests(unittest.TestCase):
         text = read("references/requirement-template.md")
         for phrase in ("不出现技术词", "具体人物", "可度量"):
             self.assertIn(phrase, text)
+
+
+EARS_PATTERNS = {"普遍": "THE SYSTEM SHALL", "事件驱动": "WHEN", "状态驱动": "WHILE",
+                 "不期望行为": "IF", "可选特性": "WHERE"}
+
+
+class SpecTemplateTests(unittest.TestCase):
+    def test_ears_covers_all_five_patterns_with_keywords(self):
+        text = read("references/ears.md")
+        for name, keyword in EARS_PATTERNS.items():
+            with self.subTest(pattern=name):
+                self.assertIn(f"## {name}", text)
+                self.assertIn(keyword, section(text, name))
+
+    def test_unwanted_behaviour_pattern_uses_if_then(self):
+        self.assertIn("THEN", section(read("references/ears.md"), "不期望行为"))
+
+    def test_examples_require_a_positive_and_a_counter_example_per_rule(self):
+        text = read("references/examples.md")
+        for phrase in ("至少一个正例", "至少一个反例", "具体数据"):
+            self.assertIn(phrase, text)
+
+    def test_examples_point_to_oracle_craft_row_types_instead_of_copying_them(self):
+        text = read("references/examples.md")
+        self.assertIn("oracle-craft", text)
+        self.assertIn("acceptance-matrix.md", text)
+        self.assertLess(sum(row in text for row in ROW_TYPES), len(ROW_TYPES))
+
+    def test_spec_template_is_organized_per_rule(self):
+        text = read("references/spec-template.md")
+        for phrase in ("规则", "EARS", "正例", "反例", "Given", "When", "Then", "外部可观察"):
+            self.assertIn(phrase, text)
+        self.assertIn("不写类名", text)
