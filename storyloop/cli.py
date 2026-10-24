@@ -12,6 +12,7 @@ from .onboarding_cli import initialize, add_init_arguments
 from .base_upgrade import propose_base_change
 from .foundation_survey import survey_foundation
 from .skills import install_skills
+from .skill_custom import write_view
 from .system_smoke import apply_smoke_update, propose_smoke_update
 from .next_steps import next_step
 from .models import StoryLoopError, require
@@ -106,6 +107,9 @@ def _product_arguments(child, command):
     elif command == "base-update":
         child.add_argument("--proposal", required=True)
         child.add_argument("--confirm-oracle-skills", action="store_true")
+    elif command == "skills":
+        child.add_argument("--view", metavar="NAME",
+                           help="生成技能的项目定制视图，写到 .storyloop/skills-view/")
 
 
 def _maintenance_arguments(child, command):
@@ -179,6 +183,9 @@ def dispatch(args) -> dict:
         from .oracle_skill_approval import confirmed_upgrade
         return confirmed_upgrade(project, args.proposal, args.confirm_oracle_skills)
     if args.command == "skills":
+        if args.view is not None:
+            require(bool(args.view), "Skill view name must not be empty")
+            return write_view(project, args.view)
         return install_skills(project)
     if args.command == "smoke-propose":
         require(_is_product_project(project), "Run storyloop init on this Git project first")

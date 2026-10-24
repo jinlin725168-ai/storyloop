@@ -22,7 +22,7 @@ FAST = [
     "tests.test_report_evidence", "tests.test_report_final_fixes", "tests.test_report_git_process", "tests.test_report_focus",
     "tests.test_report_presentation", "tests.test_report_rendering", "tests.test_role_context_integration",
     "tests.test_role_profiles", "tests.test_role_schemas", "tests.test_role_subagents",
-    "tests.test_routing_policy", "tests.test_routing_risks", "tests.test_skill_selection",
+    "tests.test_routing_policy", "tests.test_routing_risks", "tests.test_skill_custom", "tests.test_skill_selection",
     "tests.test_skills", "tests.test_spec_craft", "tests.test_smoke", "tests.test_state_format", "tests.test_stop_report",
     "tests.test_onboarding", "tests.test_onboarding_lock", "tests.test_smoke_harness",
     "tests.test_smoke_harness_protocol", "tests.test_smoke_harness_scratch",
@@ -38,6 +38,7 @@ END_TO_END = [
 
 # Safety boundaries: out-of-scope writes, tampering, path and process containment.
 SAFETY = [
+    "tests.test_custom_protection",
     "tests.test_landing_recovery",
     "tests.test_boundaries", "tests.test_project_boundaries", "tests.test_project_security_gates",
     "tests.test_project_loop_tampering", "tests.test_process_containment", "tests.test_workspace_scratch",

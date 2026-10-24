@@ -8,7 +8,7 @@ from pathlib import Path, PurePosixPath
 from .change_types import definition_for, type_for_change_id, type_of
 from .baseline import _git, load_baseline, load_project_config
 from .models import identifier, require
-from .project_profile import CI_FILES, matches_test_root
+from .project_profile import CI_FILES, CUSTOM_ROOT, matches_test_root
 from .state_format import is_system_smoke_path
 from .storage import write_json
 
@@ -27,7 +27,7 @@ def role_path_boundary(project: Path, role: str, payload: dict) -> dict:
         writable.extend(f"{root.rstrip('/')}/**" for root in profile.get("test_roots", []))
     plan = payload.get("design_plan") if isinstance(payload.get("design_plan"), dict) else {}
     forbidden = [*baseline["foundation_paths"], *baseline["protected_paths"],
-                 "openspec/lessons/**", ".storyloop/**"]
+                 "openspec/lessons/**", f"{CUSTOM_ROOT}/**", ".storyloop/**"]
     forbidden.extend(plan.get("forbidden_paths", []) if isinstance(plan.get("forbidden_paths", []), list) else [])
     return {"writable_paths": sorted(set(writable)), "forbidden_paths": sorted(set(forbidden))}
 
@@ -98,6 +98,8 @@ def _category(relative: str, baseline: dict, change_id: str, test_roots: list[st
         return "CONTRACT_PROTECTED"
     if _inside(relative, "openspec/lessons"):
         return "LESSON_PROTECTED"
+    if _inside(relative, CUSTOM_ROOT):
+        return "CUSTOM_PROTECTED"
     if is_system_smoke_path(relative):
         return "SMOKE_PROTECTED"
     if relative in baseline["integration_paths"]:

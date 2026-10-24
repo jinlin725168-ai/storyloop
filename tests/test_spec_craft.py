@@ -37,7 +37,7 @@ def section(text: str, title: str) -> str:
 class SpecCraftPackageTests(unittest.TestCase):
     def test_spec_craft_is_packaged_with_exactly_its_references(self):
         skill = packaged_skills()["spec-craft"]
-        self.assertEqual(skill["version"], "1.0.1")
+        self.assertEqual(skill["version"], "1.1.0")
         self.assertEqual(skill["files"], sorted(["SKILL.md", *(f"references/{n}" for n in REFERENCES)]))
 
     def test_frontmatter_has_only_name_version_description(self):
@@ -204,3 +204,43 @@ class DocumentationTests(unittest.TestCase):
 
     def test_trial_record_exists(self):
         self.assertTrue((ROOT / "docs/validation/2026-10-24-spec-craft-第1批试用.md").is_file())
+
+    def test_batch2_docs_explain_the_view_and_customization(self):
+        api = (ROOT / "docs/api.md").read_text(encoding="utf-8")
+        roles = (ROOT / "docs/roles.md").read_text(encoding="utf-8")
+        for phrase in ("--view", "SKILL_VIEW", "storyloop-custom/spec-craft.toml",
+                       "storyloop-custom/spec-craft.user.toml", ".git/info/exclude"):
+            self.assertIn(phrase, api)
+        for phrase in ("--view spec-craft", ".storyloop/skills-view/spec-craft.md"):
+            self.assertIn(phrase, roles)
+
+    def test_batch2_trial_record_exists(self):
+        self.assertTrue((ROOT / "docs/validation/2026-10-24-spec-craft-第2批试用.md").is_file())
+
+
+class Batch2ContentTests(unittest.TestCase):
+    def test_skill_md_tells_the_agent_to_load_the_project_view(self):
+        text = read("SKILL.md")
+        for phrase in ("storyloop skills", "--view spec-craft", "storyloop-custom/"):
+            self.assertIn(phrase, text)
+
+    def test_examples_define_positive_and_negative_by_premise(self):
+        text = read("references/examples.md")
+        for phrase in ("前提成立", "前提不成立", "不误触发", "在旧代码上会不会失败"):
+            self.assertIn(phrase, text)
+        self.assertNotIn("待定", text)
+
+    def test_superseded_statements_live_only_in_the_clarification_log(self):
+        for name in ("references/clarify.md", "references/requirement-template.md"):
+            with self.subTest(file=name):
+                self.assertIn("原说法 → 新说法", read(name))
+
+    def test_every_assumption_goes_into_the_table(self):
+        text = read("references/requirement-template.md")
+        self.assertIn("所有假设都写进", text)
+        self.assertIn("不得在表外", text)
+
+    def test_spec_template_example_uses_the_new_definitions(self):
+        text = read("references/spec-template.md")
+        self.assertIn("前提不成立", text)
+        self.assertIn("regression", text)
