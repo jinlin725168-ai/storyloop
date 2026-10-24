@@ -123,7 +123,6 @@ class ReviewIntegrationTests(unittest.TestCase):
 
 class InvocationTests(unittest.TestCase):
     def test_actual_command_verify_uses_strong_despite_standard_role_and_fake_telemetry(self):
-        import json
         import tempfile
         from pathlib import Path
         from storyloop.project_agents import invoke_project_agent

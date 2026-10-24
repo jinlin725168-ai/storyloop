@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import os
 from pathlib import Path
-import subprocess
 import tempfile
 import unittest
 

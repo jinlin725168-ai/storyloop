@@ -5,14 +5,14 @@ from pathlib import Path
 import time
 
 from .adapter_profiles import model_for, sequential_profile, sequential_instructions
-from .agent_transport import invoke as invoke_transport, conform, _bounded_json
+from .agent_transport import invoke as invoke_transport, conform, _bounded_json  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .baseline import load_project_config
 from .models import StoryLoopError, require
 from .foundation_survey import foundation_payload
 from .skills import selected_snapshots
 from .call_log import close_call, open_call
 from .role_schemas import schema_for, wire_schema
-from .role_instructions import FOUNDATION_NOTE, INSTRUCTIONS
+from .role_instructions import FOUNDATION_NOTE, INSTRUCTIONS  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .telemetry import record_call
 from .role_profiles import build_profile, resolve_adapters
 

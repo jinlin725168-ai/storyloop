@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
-from storyloop.changes import create_change, load_change
+from storyloop.changes import create_change
 from storyloop.models import StoryLoopError
 from storyloop.openspec_docs import validate_with_cli
 from storyloop.project_loop import LoopServices, load_run_state, run_change

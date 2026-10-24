@@ -1,7 +1,7 @@
 """Tier-dependent work decomposition, resolved once from engine-owned routing."""
 from pathlib import Path
 
-from .capability_protocol import lane_metadata
+from .capability_protocol import lane_metadata  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .models import require
 from .storage import load_json
 

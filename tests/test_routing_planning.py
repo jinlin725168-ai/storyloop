@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from storyloop.baseline import load_project_config
-from storyloop.intake import _validate_locations, digest
+from storyloop.intake import _validate_locations
 from storyloop.models import StoryLoopError
 from storyloop.planning import ensure_routing_plan, required_locks, validate_plan
 from storyloop.routing_policy import DEFAULT_POLICY

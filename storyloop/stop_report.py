@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import shlex
 from .cost_limits import stop_fields, render_usage
-from .routing_report import STATUSES, routing_options, routing_view
+from .routing_report import STATUSES, routing_options, routing_view  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 
 
 LAYER_NAMES = ("unit", "integration", "acceptance", "smoke", "checks")

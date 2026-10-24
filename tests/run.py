@@ -1,6 +1,7 @@
 """Run a test suite with one process per module, several modules at a time (standard library only).
 
-    python tests/run.py --suite core            # every pull request and push (see tests/suites.py)
+    python tests/run.py --suite core            # Linux PRs and pushes to main
+    python tests/run.py --suite platform        # Windows PRs
     python tests/run.py --suite full --workers 4 # every tests/test_*.py module
 
 Modules run in separate processes because each test builds its own temporary Git repository;
@@ -18,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from suites import CORE  # noqa: E402  (tests/ is not a package root when run as a script)
+from suites import CORE, PLATFORM_SUITE  # noqa: E402  (tests/ is not a package root when run as a script)
 
 RAN = re.compile(r"^Ran (\d+) tests? in", re.MULTILINE)
 SKIPPED = re.compile(r"(?:^|[,(]\s*)skipped=(\d+)", re.MULTILINE)
@@ -27,6 +28,8 @@ SKIPPED = re.compile(r"(?:^|[,(]\s*)skipped=(\d+)", re.MULTILINE)
 def modules(root: Path, suite: str) -> list[str]:
     if suite == "core":
         return list(CORE)
+    if suite == "platform":
+        return list(PLATFORM_SUITE)
     return sorted("tests." + path.stem for path in (root / "tests").glob("test_*.py"))
 
 
@@ -43,7 +46,7 @@ def run_module(root: Path, module: str) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--suite", choices=("core", "full"), default="core")
+    parser.add_argument("--suite", choices=("core", "platform", "full"), default="core")
     parser.add_argument("--workers", type=int, default=os.cpu_count() or 1)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--list", action="store_true", help="print the suite's modules and exit")

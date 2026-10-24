@@ -6,7 +6,7 @@ from collections import Counter
 from pathlib import Path
 
 from . import baseline
-from .metrics_cost import cost
+from .metrics_cost import cost  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .metrics_compute_support import (
     TIER_ORDER,
     UNRECORDED,

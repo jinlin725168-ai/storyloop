@@ -3,7 +3,7 @@ from copy import deepcopy
 import shlex
 
 
-from .run_state import ROUTING_STATUSES as STATUSES
+from .run_state import ROUTING_STATUSES as STATUSES  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 
 
 def routing_options(project, change_id, status, details):

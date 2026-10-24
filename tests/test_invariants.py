@@ -164,4 +164,9 @@ class InvariantRegistryTests(unittest.TestCase):
             for test_id in item.tests:
                 with self.subTest(invariant=key, test=test_id):
                     self.assertTrue(resolve_test(test_id), "找不到这个测试")
-                    self.assertIn(test_id.split("::")[0], CORE, "守护测试必须在 core 套件里")
+                    module, method = test_id.split("::")
+                    registered = module in CORE or any(
+                        name.startswith(module + ".") and name.endswith("." + method)
+                        for name in CORE
+                    )
+                    self.assertTrue(registered, "守护测试必须在 core 套件里")

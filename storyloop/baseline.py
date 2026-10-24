@@ -7,9 +7,9 @@ import os
 from pathlib import Path
 from typing import Callable
 
-from .models import StoryLoopError, require
+from .models import StoryLoopError, require  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .path_security import safe_target
-from .git_command import GIT_ENVIRONMENT, git as _git, git_failure as _git_failure
+from .git_command import GIT_ENVIRONMENT, git as _git, git_failure as _git_failure  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .project_profile import GENERATED_PATHS, matches_test_root, validate_project_settings
 from .storage import load_json, write_json, write_text_atomic
 
@@ -158,7 +158,7 @@ def verify_baseline(project: Path, resume: bool = False) -> dict:
     baseline = load_baseline(project)
     config = load_project_config(project)
     current = _git(project, "branch", "--show-current").strip()
-    expected = f"feature/" if resume else baseline["source_branch"]
+    expected = "feature/" if resume else baseline["source_branch"]
     require((current.startswith(expected) if resume else current == expected),
             "Run must start on the locked source branch or its saved feature branch")
     if not resume:

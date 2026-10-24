@@ -1,5 +1,4 @@
 """Committed principles and narrowly trusted offline dependency evidence."""
-from copy import deepcopy
 from pathlib import Path
 import json
 import tempfile
@@ -141,8 +140,8 @@ class DependencyTests(unittest.TestCase):
                                    self.dependencies() if dependencies is None else dependencies)
 
     def test_supported_wheel_uses_committed_bytes_and_bound_command(self):
-        argv = self.configured()
-        original = (self.root / 'vendor/demo-1.0-py3-none-any.whl').read_bytes()
+        self.configured()
+        (self.root / 'vendor/demo-1.0-py3-none-any.whl').read_bytes()
         first = self.verify()
         self.assertEqual(first[0]['resolved'], [{'ecosystem': 'python', 'name': 'demo', 'version': '1.0'}])
         self.assertTrue(first[0]['command_digest'])

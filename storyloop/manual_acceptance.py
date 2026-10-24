@@ -8,7 +8,7 @@ from typing import Callable
 
 from .changes import load_change
 from .run_guards import manual_criteria, pending_manual_criteria
-from .models import StoryLoopError, identifier, require, text
+from .models import StoryLoopError, identifier, require, text  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .smoke_runner import implementation_digest
 from .storage import load_json, write_json
 

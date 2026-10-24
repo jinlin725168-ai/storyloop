@@ -1,9 +1,8 @@
 """Test suites for tests/run.py.
 
-`core` runs on every pull request and push: the main flow end to end, the safety boundaries,
-the command line, and every module that finishes in a few seconds. `full` is every
-tests/test_*.py module; CI runs it daily and on demand. A new module belongs to `full` only
-until its author adds it here.
+`core` runs on Linux PRs and pushes to main. `platform` runs on Windows PRs;
+it keeps cross-platform regressions, safety boundaries and the suite runner.
+`full` is every tests/test_*.py module; CI runs it daily and on demand.
 """
 
 # Pure logic and small fixtures: each module took under 3 s on Linux (2026-10-20 timing).
@@ -60,7 +59,11 @@ PLATFORM = [
 # The suite runner and this list.
 RUNNER = ["tests.test_suites"]
 
-# Invariant guards that live in slower modules (design 2026-10-21 §9.2).
-INVARIANTS = ["tests.test_completion_resilience"]
+# Keep I8 in core without running the entire slow completion-resilience module.
+INVARIANTS = [
+    "tests.test_completion_resilience.CompletionResilienceTests."
+    "test_completion_resumes_after_a_crash_following_the_implementation_commit",
+]
 
 CORE = sorted(set(FAST + END_TO_END + SAFETY + COMMAND_LINE + PLATFORM + RUNNER + INVARIANTS))
+PLATFORM_SUITE = sorted(set(PLATFORM + SAFETY + RUNNER))

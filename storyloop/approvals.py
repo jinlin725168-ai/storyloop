@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from .changes import (contract_digest, draft_directory, load_change,
+from .changes import (contract_digest, draft_directory, load_change,  # noqa: F401  # 兼容再导出：保留旧模块导入路径
                       write_change_preview)
 from .models import require, text
 from .path_security import safe_target

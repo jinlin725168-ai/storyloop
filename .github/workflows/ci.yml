@@ -1,11 +1,10 @@
 name: CI
 
-# StoryLoop 引擎自己的 CI：测试（Linux 与 Windows，全部必须通过）、字节码编译、密钥扫描。
-# PR 与 push 只跑核心套件（tests/suites.py：主流程端到端、安全边界、命令行、快速模块）；
-# 每天定时与手动触发跑全量。套件由 tests/run.py 按模块并行执行。
-# Python 统一用 3.11：pyproject 声明的最低版本，也是本地开发版本；两个系统只差操作系统。
-# 只改文档时跳过测试，密钥扫描照常运行。
-# 引擎只用标准库，没有依赖安装步骤；测试会创建临时 Git 仓库，所以需要 git 身份。
+# StoryLoop 引擎自己的 CI：Linux PR 跑 core，Windows PR 跑 platform；push 到 main 跑 core。
+# 每天定时跑 full，手动触发按输入选择；套件由 tests/run.py 按测试项并行执行。
+# 测试同时检查字节码与打包；Python 统一用最低支持的 3.11。
+# 只改文档时跳过测试与 lint，密钥扫描照常运行；CodeQL 在独立工作流观察，不加入必过汇总。
+# 引擎只用标准库；测试会创建临时 Git 仓库，所以需要 git 身份。
 
 on:
   push:
@@ -76,7 +75,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     env:
-      SUITE: ${{ github.event_name == 'schedule' && 'full' || github.event_name == 'workflow_dispatch' && inputs.suite || 'core' }}
+      SUITE: ${{ github.event_name == 'schedule' && 'full' || github.event_name == 'workflow_dispatch' && inputs.suite || github.event_name == 'pull_request' && matrix.os == 'windows-latest' && 'platform' || 'core' }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -98,6 +97,22 @@ jobs:
         run: python -m pip install --quiet .
       - name: 测试（${{ env.SUITE }}）
         run: python tests/run.py --suite ${{ env.SUITE }} --workers 4
+
+  lint:
+    name: 代码规范
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: 安装 ruff
+        run: python -m pip install ruff==0.8.4
+      - name: 检查未定义名字和严重语法错误
+        run: ruff check storyloop tests examples
 
   security:
     name: 密钥扫描
@@ -133,7 +148,7 @@ jobs:
   result:
     name: CI 结果
     if: always()
-    needs: [changes, tests, security]
+    needs: [changes, tests, lint, security]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

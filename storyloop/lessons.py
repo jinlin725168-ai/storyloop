@@ -9,7 +9,7 @@ import re
 
 from .models import StoryLoopError
 from .path_security import forbidden_path_root, repository_relative
-from .state_format import ACTIONS, LANDING_KINDS, MAX_SUMMARY, STATUSES, STRENGTHS, TIERS
+from .state_format import ACTIONS, LANDING_KINDS, MAX_SUMMARY, STATUSES, STRENGTHS, TIERS  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 
 
 LESSONS_ROOT = "openspec/lessons"

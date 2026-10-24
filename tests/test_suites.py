@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.suites import CORE
+from tests.suites import CORE, PLATFORM, RUNNER as RUNNER_MODULES, SAFETY
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "tests" / "run.py"
@@ -17,15 +17,28 @@ def _run(*args: str, root: Path = ROOT) -> subprocess.CompletedProcess:
 
 
 class SuiteListTests(unittest.TestCase):
+    def test_platform_suite_lists_exactly_platform_safety_and_runner_modules(self):
+        result = _run("--suite", "platform", "--list")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.split(), sorted(set(PLATFORM + SAFETY + RUNNER_MODULES)))
+
+    def test_i8_runs_as_one_core_test_id(self):
+        self.assertIn(
+            "tests.test_completion_resilience.CompletionResilienceTests."
+            "test_completion_resumes_after_a_crash_following_the_implementation_commit", CORE,
+        )
+
     def test_every_core_module_exists(self):
-        missing = [name for name in CORE if not (ROOT / (name.replace(".", "/") + ".py")).is_file()]
+        missing = [name for name in CORE
+                   if not (ROOT / ("/".join(name.split(".")[:2]) + ".py")).is_file()]
         self.assertEqual(missing, [])
 
     def test_core_is_a_strict_subset_of_full(self):
         core = _run("--suite", "core", "--list").stdout.split()
         full = _run("--suite", "full", "--list").stdout.split()
         self.assertEqual(core, CORE)
-        self.assertLess(set(core), set(full))
+        core_modules = {".".join(name.split(".")[:2]) for name in core}
+        self.assertLess(core_modules, set(full))
         self.assertIn("tests.test_suites", full)
 
 
