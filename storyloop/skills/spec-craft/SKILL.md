@@ -1,6 +1,6 @@
 ---
 name: spec-craft
-version: 1.1.0
+version: 1.4.0
 description: 与人共创需求和规格，产出需求文档和规格文档交给 StoryLoop；适用于“写需求”“需求共创”“帮我把这个想法写成规格”、write a spec、co-create requirements。AI 只引导和起草，值不值得做及例子的预期结果由人拍板。
 ---
 
@@ -12,7 +12,7 @@ description: 与人共创需求和规格，产出需求文档和规格文档交�
 
 ## 项目定制
 
-项目里有 `storyloop-custom/spec-craft.toml` 或 `storyloop-custom/spec-craft.user.toml` 时，先运行 `storyloop skills <项目> --view spec-craft`，读取生成的 `.storyloop/skills-view/spec-craft.md` 末尾“项目定制”一节，再按追加的分类、模板节、提问偏好和术语表工作。定制只能补充内置内容，不能删除或改写它，也不能改变“只能由人判断的事”。
+优先运行 `storyloop skills <项目> --view spec-craft`，读取 `.storyloop/skills-view/spec-craft.md` 末尾的“生效配置”节；未生成或无法读取视图时，使用下文的内置默认值。项目里有 `storyloop-custom/spec-craft.toml` 或 `storyloop-custom/spec-craft.user.toml` 时，再按追加的分类、模板节、提问偏好和术语表工作。`question_limit` 可调整每步骤提问上限；定制不能删除或改写内置内容，也不能改变“只能由人判断的事”。
 
 ## 五步
 
@@ -28,6 +28,8 @@ description: 与人共创需求和规格，产出需求文档和规格文档交�
 ## 工作方式
 
 快速方式由 AI 起草整份，供人集中审；引导方式逐节与人共创。轻档和标准档默认快速，重档默认引导。人随时可以切换。先根据 nature 与人的声明估计档位，StoryLoop 分流后只向上补足。
+
+步骤 1 评估、2 需求、3 规格、4 澄清、5 交接中向人提出的问句分别计数，不跨步骤累加；每步默认最多 5 个问题，运行过 `--view` 时以“生效配置”节给出的生效上限为准。步骤 0 接入由 StoryLoop 负责；交接后 StoryLoop 命令行的问答不计入技能。评估固定三问，结论仍由人决定。
 
 ## 只能由人判断的事
 
