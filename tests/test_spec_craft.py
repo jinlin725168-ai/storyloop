@@ -16,6 +16,7 @@ from tests.test_baseline_behavior import git, repository
 
 
 SKILL = Path(SKILLS_ROOT) / "spec-craft"
+ROOT = SKILL.parent.parent.parent
 REFERENCES = (
     "assess.md", "requirement-template.md", "spec-template.md", "ears.md",
     "examples.md", "clarify.md", "handoff.md",
@@ -178,3 +179,18 @@ class ClarifyAndHandoffTests(unittest.TestCase):
         text = read("references/handoff.md")
         self.assertIn("批准", text)
         self.assertIn("storyloop approve --change", text)
+
+
+class DocumentationTests(unittest.TestCase):
+    def test_roles_explains_chat_only_usage_and_installation(self):
+        text = (ROOT / "docs/roles.md").read_text(encoding="utf-8")
+        for phrase in ("spec-craft", "Claude Code", "Codex", "storyloop skills", "不下发给任何引擎角色"):
+            self.assertIn(phrase, text)
+
+    def test_testing_map_lists_spec_craft(self):
+        text = (ROOT / "docs/testing.md").read_text(encoding="utf-8")
+        line = next(line for line in text.splitlines() if "命令面与技能" in line)
+        self.assertIn("test_spec_craft", line)
+
+    def test_trial_record_exists(self):
+        self.assertTrue((ROOT / "docs/validation/2026-10-24-spec-craft-第1批试用.md").is_file())
