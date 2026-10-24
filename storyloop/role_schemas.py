@@ -128,6 +128,7 @@ SCHEMAS = {
         "version": {"type": "integer", "enum": [1]}, "goal": STRING, "non_goals": STRINGS,
         "assessment": _nullable(ASSESSMENT),
         "capability": _nullable(STRING),
+        "slug": _nullable(STRING),
         "clarifications": _nullable({"type": "array", "items": _obj(
             {"session": STRING, "question": STRING, "answer": STRING})}),
         "questions": {"type": "array", "items": QUESTION},

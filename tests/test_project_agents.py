@@ -14,7 +14,7 @@ from tests.test_baseline_behavior import git, repository
 
 
 class ProjectAgentTests(unittest.TestCase):
-    def test_legacy_request_and_ledger_have_no_profile_fields(self):
+    def test_legacy_request_has_no_routing_profile_but_ledger_has_execution_profile(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             repository(root)
@@ -31,7 +31,10 @@ class ProjectAgentTests(unittest.TestCase):
                              {"protocol", "role", "project", "payload", "response_schema"})
             self.assertNotIn("role_profile", request)
             entry = ledger_entries(root, "pending")[0]
-            self.assertEqual(set(entry) - {"at", "call", "wall_ms"}, {"role", "skills", "lessons_provided", "lessons_claimed", "lessons_unknown", "lessons_truncated"})
+            self.assertEqual(set(entry) - {"at", "call", "wall_ms"},
+                             {"role", "skills", "lessons_provided", "lessons_claimed",
+                              "lessons_unknown", "lessons_truncated", "engine_version",
+                              "instructions_sha256", "schema_sha256"})
     def test_role_adapter_request_contains_profile_and_engine_ledger_fields(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

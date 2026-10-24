@@ -1,5 +1,6 @@
 """The product contract: validated stories, rules and acceptance criteria."""
 from __future__ import annotations
+import re
 
 from . import change_types
 from .change_types import type_of
@@ -10,6 +11,7 @@ from .state_format import LOCATION, ORACLE_CLASSES, ROW_TYPES, criterion_expects
 
 PRIORITIES = {"P1", "P2", "P3"}
 NATURES = tuple(change_types.CHANGE_TYPES)
+SLUG = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$")
 
 
 def nature_of(product: dict) -> str:
@@ -74,13 +76,16 @@ def validate_product(value: object) -> dict:
     """Validate stories, business outcomes, global IDs, ordered dependencies and the nature blocks."""
     fields(value, {"version", "goal", "non_goals", "questions", "stories"},
            {"capability", "clarifications", "nature", "defect", "refactor", "consumers",
-            "coverage_exemptions", "test_removals", "assessment", "lessons_used", "errata"})
+            "coverage_exemptions", "test_removals", "assessment", "lessons_used", "errata", "slug"})
     require(value["version"] == 1, "Unsupported product version")
     text(value["goal"], "goal")
     strings(value["non_goals"], "non_goals")
     _questions(value["questions"])
     if "capability" in value:
         identifier(value["capability"], "capability")
+    if "slug" in value:
+        require(isinstance(value["slug"], str) and SLUG.fullmatch(value["slug"]) is not None,
+                "Invalid feature slug")
     if "clarifications" in value:
         _clarifications(value["clarifications"])
     _nature_blocks(value)

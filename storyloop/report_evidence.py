@@ -13,7 +13,7 @@ from .telemetry import ledger_entries, summarize
 from .processutil import redact
 from .report_git import git_snapshot
 from .report_commands import execution_commands
-from .telemetry_summary import NUMERIC, _valid
+from .telemetry_summary import NUMERIC, _valid, version_drift
 
 
 MAX_GIT_BYTES = 1_000_000
@@ -39,6 +39,7 @@ ENTRY_FIELDS = frozenset({
     "model", "vendor", "tier_applied", "skills", "tier_requested", "adapter",
     "degraded", "path_guard", "subagents_applied", "lessons_provided",
     "lessons_claimed", "lessons_unknown", "lessons_truncated",
+    "engine_version", "instructions_sha256", "schema_sha256",
 })
 META_FIELDS = frozenset({
     "version", "call", "role", "ledger", "adapter", "started_at", "status", "wall_ms",
@@ -53,6 +54,9 @@ def collect_evidence(project: Path, change: dict, report: dict) -> dict:
     change_id = _identifier(change.get("change_id"))
     run, run_status, run_truncated = _load_run(root, change_id)
     entries, telemetry, entry_status, truncated = _load_entries(root, change_id)
+    versions = (change.get("approval") or {}).get("versions")
+    if telemetry is not None:
+        telemetry = {**telemetry, "version_drift": version_drift(versions, entries)}
     calls, calls_truncated = _load_calls(
         root, change_id, {item.get("call") for item in entries if isinstance(item.get("call"), str)})
     git = git_snapshot(root, run, report, MAX_GIT_BYTES, MAX_ENTRIES)

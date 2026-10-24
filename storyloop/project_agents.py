@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
+import json
 import time
 
 from .adapter_profiles import model_for, sequential_profile, sequential_instructions
@@ -152,9 +154,15 @@ def _execute_call(project, role, payload, schema, request, adapter_config, setti
         failed = result is None and not waiting
         evidence = _diagnostic(_record_memory_evidence, project, call, payload, result) or {}
         try:
+            instructions_sha256 = hashlib.sha256(trace["instructions"].encode("utf-8")).hexdigest()
+            schema_sha256 = hashlib.sha256(json.dumps(
+                request.get("response_schema", schema), sort_keys=True,
+                ensure_ascii=False).encode("utf-8")).hexdigest()
             record_call(project, role, ledger, telemetry, wall_ms, failed=failed,
                         call=call, session=",".join(dict.fromkeys(sessions)),
-                        engine_fields={**evidence, **({"tier_requested": settings["tier"], "adapter": adapter_name,
+                        engine_fields={**evidence, "instructions_sha256": instructions_sha256,
+                                       "schema_sha256": schema_sha256,
+                                       **({"tier_requested": settings["tier"], "adapter": adapter_name,
                                         **({"degraded": degraded} if degraded else {})}
                                        if profile is not None else {})})
         except Exception:
