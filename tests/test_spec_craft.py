@@ -37,7 +37,7 @@ def section(text: str, title: str) -> str:
 class SpecCraftPackageTests(unittest.TestCase):
     def test_spec_craft_is_packaged_with_exactly_its_references(self):
         skill = packaged_skills()["spec-craft"]
-        self.assertEqual(skill["version"], "1.0.0")
+        self.assertEqual(skill["version"], "1.0.1")
         self.assertEqual(skill["files"], sorted(["SKILL.md", *(f"references/{n}" for n in REFERENCES)]))
 
     def test_frontmatter_has_only_name_version_description(self):
@@ -136,6 +136,16 @@ class SpecTemplateTests(unittest.TestCase):
         self.assertIn("oracle-craft", text)
         self.assertIn("acceptance-matrix.md", text)
         self.assertLess(sum(row in text for row in ROW_TYPES), len(ROW_TYPES))
+
+    def test_counterexample_kind_is_independent_of_old_code_row_type(self):
+        text = read("references/examples.md")
+        self.assertNotIn("反例通常是", text)
+        for phrase in ("正反：正例", "正反：反例", "旧代码", "degradation", "regression"):
+            self.assertIn(phrase, text)
+
+    def test_completed_task_boundary_example_is_regression(self):
+        text = read("references/spec-template.md")
+        self.assertIn("正反：反例；行类型见验收矩阵的 `regression`", text)
 
     def test_spec_template_is_organized_per_rule(self):
         text = read("references/spec-template.md")
