@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from storyloop.baseline import bootstrap_project
+from storyloop.skill_custom import DEFAULT_QUESTION_LIMIT
 from storyloop.state_format import ROW_TYPES
 from storyloop.skills import (
     MAX_SKILL_BYTES, SKILLS_ROOT, SKILL_TARGETS, _frontmatter,
@@ -37,7 +38,7 @@ def section(text: str, title: str) -> str:
 class SpecCraftPackageTests(unittest.TestCase):
     def test_spec_craft_is_packaged_with_exactly_its_references(self):
         skill = packaged_skills()["spec-craft"]
-        self.assertEqual(skill["version"], "1.2.0")
+        self.assertEqual(skill["version"], "1.3.0")
         self.assertEqual(skill["files"], sorted(["SKILL.md", *(f"references/{n}" for n in REFERENCES)]))
 
     def test_frontmatter_has_only_name_version_description(self):
@@ -105,6 +106,15 @@ class AssessAndRequirementTests(unittest.TestCase):
         headings = re.findall(r"^### (.+)$", section(read("references/requirement-template.md"), "轻量版"), re.M)
         self.assertEqual([h.split("（")[0] for h in headings], list(LITE_SECTIONS))
 
+    def test_lite_and_full_have_a_renderable_assumptions_table(self):
+        template = read("references/requirement-template.md")
+        lite = section(template, "轻量版")
+        full = section(template, "完整版")
+        for body in (lite, full):
+            self.assertIn("| 编号 | 假设 | 来源 | 状态 |", body)
+            self.assertIn("|---|---|---|---|", body)
+            self.assertRegex(body, r"\| A1 \|[^\n]*10 秒[^\n]*\| 待确认 \|")
+
     def test_requirement_template_forbids_technical_words_and_needs_a_named_person(self):
         text = read("references/requirement-template.md")
         for phrase in ("不出现技术词", "具体人物", "可度量"):
@@ -168,8 +178,9 @@ class ClarifyAndHandoffTests(unittest.TestCase):
 
     def test_question_limits_are_exact(self):
         text = read("references/clarify.md")
-        for phrase in ("最多 3 处", "最多 5 个问题", "一次只问一个"):
+        for phrase in ("最多 3 处", "生效上限", "一次只问一个"):
             self.assertIn(phrase, text)
+        self.assertNotIn("默认最多 5", text)
 
     def test_question_priority_and_format(self):
         text = read("references/clarify.md")
@@ -250,32 +261,43 @@ class Trial2FixTests(unittest.TestCase):
     def test_invalid_date_example_follows_oracle_matrix(self):
         text = read("references/examples.md")
         self.assertIn("无效日期", text)
-        self.assertIn("positive", text)
-        self.assertIn("degradation 只用于依赖失败", text)
-        self.assertNotIn("无效日期被拒绝是 IF…THEN 规则的正例；若旧代码会接受它，选 `degradation`", text)
+        self.assertRegex(text, r"无效日期[^\n]*选 `positive`")
+        self.assertRegex(text, r"`degradation`[^\n]*依赖失败")
+        self.assertNotRegex(text, r"无效日期[^\n]*选 `degradation`")
 
     def test_assumptions_include_human_expectations_and_unambiguous_statuses(self):
         template = read("references/requirement-template.md")
         assess = read("references/assess.md")
-        for phrase in ("人或模型", "10 秒", "来源", "待确认", "试用中暂采纳", "负责人已确认"):
+        for phrase in ("人或模型", "10 秒", "来源", "待确认", "已确认", "试用操作者"):
             self.assertIn(phrase, template)
         self.assertIn("假设表", assess)
+        self.assertIn("轻量版", assess)
         self.assertIn("预期", assess)
-        self.assertNotIn("已确认（试用假设", template)
+        self.assertNotIn("试用中暂采纳", template)
+        self.assertNotIn("负责人已确认", template)
 
-    def test_question_limit_is_per_stage_with_builtin_default(self):
+    def test_question_limit_covers_every_conversation_step_without_hardcoded_value(self):
         skill = read("SKILL.md")
         clarify = read("references/clarify.md")
         design = (ROOT / "docs/superpowers/specs/2026-10-23-需求共创技能-design.md").read_text(
             encoding="utf-8")
+        for name in ("评估", "需求", "规格", "澄清", "交接"):
+            self.assertIn(name, skill)
+        self.assertIn("步骤 1 评估、2 需求、3 规格、4 澄清、5 交接", skill)
         for text in (skill, clarify):
-            for phrase in ("评估", "澄清", "规格核对", "分别计数", "不跨阶段累加", "默认", "5"):
+            for phrase in ("分别计数", "不跨阶段累加", "生效上限"):
                 self.assertIn(phrase, text)
+            self.assertNotIn("默认最多 5", text)
+        self.assertNotIn("规格核对", skill)
         self.assertIn("question_limit", design)
 
     def test_customization_docs_explain_question_limit(self):
         api = (ROOT / "docs/api.md").read_text(encoding="utf-8")
         roles = (ROOT / "docs/roles.md").read_text(encoding="utf-8")
-        for phrase in ("question_limit", "每阶段", "标量", "question_limit_source"):
+        for phrase in ("question_limit", "每步骤", "标量", "question_limit_source"):
             self.assertIn(phrase, api)
         self.assertIn("question_limit", roles)
+        design = (ROOT / "docs/superpowers/specs/2026-10-23-需求共创技能-design.md").read_text(
+            encoding="utf-8")
+        self.assertIn(f"默认 {DEFAULT_QUESTION_LIMIT}", api)
+        self.assertIn(f"默认 {DEFAULT_QUESTION_LIMIT}", design)

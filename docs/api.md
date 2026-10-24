@@ -41,11 +41,11 @@
 
 ### spec-craft 项目定制视图
 
-`storyloop skills PATH --view spec-craft --json` 只生成 `.storyloop/skills-view/spec-craft.md`，不会安装或修改 `.claude/skills/`、`.codex/skills/`。返回 `status: "SKILL_VIEW"`、`skill`、仓库相对 `path`、视图的 `sha256`、`customized`、按合并顺序排列的 `sources`（每项含 `path`、`sha256`）、`warnings`，以及生效的 `question_limit` 和 `question_limit_source`。无定制文件时视图与 `skill_text` 完全相同；有定制时只在技能本体末尾追加项目定制，显示生效上限和来源。
+`storyloop skills PATH --view spec-craft --json` 只生成 `.storyloop/skills-view/spec-craft.md`，不会安装或修改 `.claude/skills/`、`.codex/skills/`。返回 `status: "SKILL_VIEW"`、`skill`、仓库相对 `path`、视图的 `sha256`、`customized`、按合并顺序排列的 `sources`（每项含 `path`、`sha256`）、`warnings`，以及生效的 `question_limit` 和 `question_limit_source`。视图始终在技能本体末尾追加生效配置及来源；无定制文件时 `customized` 为 `false`，`question_limit_source` 为 `null`（显示为“内置默认”），有定制值时该字段为仓库相对路径。
 
-团队定制放在 `storyloop-custom/spec-craft.toml` 并进入 Git；个人定制放在 `storyloop-custom/spec-craft.user.toml`。`storyloop init` 会把 `storyloop-custom/*.user.toml` 写进 `.git/info/exclude`；未初始化仓库先运行视图命令时，也会在写视图前设置忽略规则，保持工作区干净。已经被 Git 跟踪的个人文件会在 `warnings` 中提示，需由人移出版本库。两层都使用 UTF-8 TOML（可带 BOM），`version = 1`。可用顶层键只有 `version`、每阶段提问上限 `question_limit`（整数且至少 3）、字符串数组 `preferences`、仓库内已存在的非符号链接文件相对路径 `glossary`、`[[coverage]]`（`code`、`name`、`check`）和 `[[sections]]`（`code`、`document`、`title`、`guidance`）；`document` 只能是 `requirement` 或 `spec`。未知键、无效路径或格式会报错并指出文件。
+团队定制放在 `storyloop-custom/spec-craft.toml` 并进入 Git；个人定制放在 `storyloop-custom/spec-craft.user.toml`。`storyloop init` 会把 `storyloop-custom/*.user.toml` 写进 `.git/info/exclude`；未初始化仓库先运行视图命令时，也会在写视图前设置忽略规则，保持工作区干净。已经被 Git 跟踪的个人文件会在 `warnings` 中提示，需由人移出版本库。两层都使用 UTF-8 TOML（可带 BOM），`version = 1`。可用顶层键只有 `version`、每步骤提问上限 `question_limit`（整数 3–10）、字符串数组 `preferences`、仓库内已存在的非符号链接文件相对路径 `glossary`、`[[coverage]]`（`code`、`name`、`check`）和 `[[sections]]`（`code`、`document`、`title`、`guidance`）；`document` 只能是 `requirement` 或 `spec`。未知键、无效路径或格式会报错并指出文件。
 
-合并顺序为团队文件、个人文件：`question_limit` 与 `glossary` 是标量，后者覆盖前者；`preferences` 追加；`coverage`、`sections` 按 `code` 合并，同码替换、异码追加。`question_limit` 默认 5，评估、澄清、规格核对各自计数，不跨阶段累加。定制只能追加覆盖地图分类与模板节、调整允许的提问配置，不能删除或改写内置内容、输出格式、引擎约束或“只能由人判断的事”。`spec-craft` 仍只用于对话入口，不下发给任何引擎角色。
+合并顺序为团队文件、个人文件：`question_limit` 与 `glossary` 是标量，后者覆盖前者；`preferences` 追加；`coverage`、`sections` 按 `code` 合并，同码替换、异码追加。`question_limit` 默认 5；步骤 1 评估、2 需求、3 规格、4 澄清、5 交接向人提问时各自计数，不跨步骤累加。定制只能追加覆盖地图分类与模板节、调整允许的提问配置，不能删除或改写内置内容、输出格式、引擎约束或“只能由人判断的事”。`spec-craft` 仍只用于对话入口，不下发给任何引擎角色。
 
 ### 外环指标 JSON
 

@@ -18,6 +18,7 @@ from .storage import locked_file, write_text_atomic
 CUSTOMIZABLE = {"spec-craft"}
 VIEW_ROOT = ".storyloop/skills-view"
 DEFAULT_QUESTION_LIMIT = 5
+MAX_QUESTION_LIMIT = 10
 _TOP_KEYS = {"version", "preferences", "glossary", "coverage", "sections", "question_limit"}
 _ROW_KEYS = {
     "coverage": {"code", "name", "check"},
@@ -102,8 +103,8 @@ def _validated(project: Path, path: str, data: dict) -> dict:
     if type(data.get("version")) is not int or data["version"] != 1:
         raise _error(path, "version", "must be 1")
     question_limit = data.get("question_limit")
-    if question_limit is not None and (type(question_limit) is not int or question_limit < 3):
-        raise _error(path, "question_limit", "must be an integer >= 3")
+    if question_limit is not None and (type(question_limit) is not int or not 3 <= question_limit <= MAX_QUESTION_LIMIT):
+        raise _error(path, "question_limit", "must be an integer from 3 to 10")
     preferences = data.get("preferences", [])
     if not isinstance(preferences, list) or not all(isinstance(item, str) for item in preferences):
         raise _error(path, "preferences", "must be a string array")
@@ -140,7 +141,7 @@ def load_customization(project: Path, name: str) -> dict:
     project = Path(project).resolve()
     value = {"version": 1, "preferences": [], "glossary": None,
              "coverage": [], "sections": [], "sources": [],
-             "question_limit": DEFAULT_QUESTION_LIMIT, "question_limit_source": "内置默认"}
+             "question_limit": DEFAULT_QUESTION_LIMIT, "question_limit_source": None}
     for path in custom_paths(project, name):
         parsed = _read_file(project, path)
         if parsed is None:
@@ -161,15 +162,16 @@ def load_customization(project: Path, name: str) -> dict:
 
 def _render_view(project: Path, name: str, custom: dict) -> str:
     body = skill_text(project, name)
-    if not custom["sources"]:
-        return body
-    lines = ["", "", "## 项目定制（由 storyloop skills --view 生成，请勿手工编辑）", ""]
-    lines.append("来源：" + "、".join(
-        f"{source['path']}（sha256 {source['sha256'][:12]}）" for source in custom["sources"]
-    ))
-    lines.extend(["", "### 每阶段提问上限",
-                  f"评估、澄清、规格核对分别计数，不跨阶段累加；每阶段最多 {custom['question_limit']} 个问题"
-                  f"（来源：{custom['question_limit_source']}）。"])
+    title = "项目定制" if custom["sources"] else "生效配置"
+    lines = ["", "", f"## {title}（由 storyloop skills --view 生成，请勿手工编辑）", ""]
+    if custom["sources"]:
+        lines.append("来源：" + "、".join(
+            f"{source['path']}（sha256 {source['sha256'][:12]}）" for source in custom["sources"]
+        ))
+    limit_source = custom["question_limit_source"] or "内置默认"
+    lines.extend(["", "### 每步骤提问上限",
+                  f"步骤 1 评估、2 需求、3 规格、4 澄清、5 交接分别计数，不跨阶段累加；"
+                  f"每步骤最多 {custom['question_limit']} 个问题（来源：{limit_source}）。"])
     if custom["preferences"]:
         lines.extend(["", "### 提问偏好", *[f"- {_inline(item)}" for item in custom["preferences"]]])
     if custom["coverage"]:

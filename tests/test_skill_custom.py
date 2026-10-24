@@ -38,7 +38,7 @@ class CustomizationTests(_Workspace):
         self.assertEqual(value, {
             "version": 1, "preferences": [], "glossary": None,
             "coverage": [], "sections": [], "sources": [],
-            "question_limit": 5, "question_limit_source": "内置默认",
+            "question_limit": 5, "question_limit_source": None,
         })
 
     def test_personal_question_limit_overrides_team_scalar(self):
@@ -49,12 +49,16 @@ class CustomizationTests(_Workspace):
         self.assertEqual(value["question_limit_source"], "storyloop-custom/spec-craft.user.toml")
 
     def test_question_limit_must_allow_the_three_assessment_questions(self):
-        for invalid in (True, 0, 2, "5"):
+        for invalid in (True, 0, 2, 11, 100000, "5"):
             with self.subTest(invalid=invalid):
                 literal = str(invalid).lower() if not isinstance(invalid, str) else f'"{invalid}"'
                 self.write(self.team, f"version = 1\nquestion_limit = {literal}\n")
-                with self.assertRaisesRegex(StoryLoopError, "question_limit: must be an integer >= 3"):
+                with self.assertRaisesRegex(StoryLoopError, "question_limit: must be an integer from 3 to 10"):
                     load_customization(self.root, "spec-craft")
+
+    def test_ten_is_the_largest_accepted_question_limit(self):
+        self.write(self.team, "version = 1\nquestion_limit = 10\n")
+        self.assertEqual(load_customization(self.root, "spec-craft")["question_limit"], 10)
 
     def test_user_file_overrides_scalar_and_appends_plain_array(self):
         self.write(self.team, 'version = 1\nglossary = "docs/a.md"\npreferences = ["先问范围"]\n')
@@ -153,18 +157,25 @@ class CustomizationTests(_Workspace):
 
 
 class ViewTests(_Workspace):
-    def test_view_without_customization_equals_the_skill_text(self):
-        self.assertEqual(render_view(self.root, "spec-craft"), skill_text(self.root, "spec-craft"))
-        self.assertIn("来源：内置默认", render_view(self.root, "spec-craft"))
+    def test_view_without_customization_renders_the_default_limit(self):
+        view = render_view(self.root, "spec-craft")
+        self.assertTrue(view.startswith(skill_text(self.root, "spec-craft")))
+        self.assertIn("每步骤最多 5 个问题", view[len(skill_text(self.root, "spec-craft")):])
+        self.assertIn("步骤 1 评估、2 需求、3 规格、4 澄清、5 交接", view[len(skill_text(self.root, "spec-craft")):])
+        self.assertIn("来源：内置默认", view[len(skill_text(self.root, "spec-craft")):])
+        result = write_view(self.root, "spec-craft")
+        self.assertFalse(result["customized"])
+        self.assertEqual(result["question_limit"], 5)
+        self.assertIsNone(result["question_limit_source"])
 
     def test_view_shows_effective_question_limit_and_its_source(self):
         self.write(self.team, "version = 1\nquestion_limit = 7\n")
         team_view = render_view(self.root, "spec-craft")
-        self.assertIn("每阶段最多 7 个问题", team_view)
+        self.assertIn("每步骤最多 7 个问题", team_view)
         self.assertIn("来源：storyloop-custom/spec-craft.toml", team_view)
         self.write(self.user, "version = 1\nquestion_limit = 4\n")
         personal_view = render_view(self.root, "spec-craft")
-        self.assertIn("每阶段最多 4 个问题", personal_view)
+        self.assertIn("每步骤最多 4 个问题", personal_view)
         self.assertIn("来源：storyloop-custom/spec-craft.user.toml", personal_view)
         result = write_view(self.root, "spec-craft")
         self.assertEqual(result["question_limit"], 4)
