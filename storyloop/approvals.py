@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from . import __version__
+from .baseline import load_baseline, load_project_config
 from .changes import (contract_digest, draft_directory, load_change,
                       write_change_preview)
 from .models import require, text
@@ -49,12 +51,29 @@ def _approve_locked(project, change_id, approved_by, now, tier) -> dict:
         **binding,
         "revision": state["revision"],
         "contract_digest": digest,
+        "versions": version_snapshot(project),
         "approved_by": approved_by,
         "approved_at": _timestamp(moment),
     }
     state["updated_at"] = _timestamp(moment)
     _write_state(project, state)
     return deepcopy(state)
+
+
+def version_snapshot(project: Path) -> dict:
+    """Freeze the engine, foundation and selected skill copies at approval time."""
+    from .role_instructions import INSTRUCTIONS
+    from .skills import selected_snapshots
+
+    stacks = load_project_config(project)["profile"]["stacks"]
+    skills = {}
+    for role in INSTRUCTIONS:
+        for _, snapshot in selected_snapshots(project, role, stacks):
+            skills[(snapshot["name"], snapshot["path"])] = snapshot
+    return {"version": 1, "engine_version": __version__,
+            "baseline_version": load_baseline(project)["baseline_version"],
+            "map_version": None,
+            "skills": [skills[key] for key in sorted(skills)]}
 
 
 def _intake_approval(project: Path, state: dict, tier: str | None) -> dict:

@@ -8,7 +8,9 @@ import unittest
 from unittest.mock import patch
 
 import storyloop
-from storyloop.baseline import load_project_config
+from storyloop.baseline import load_baseline, load_project_config
+from storyloop.approvals import approve_change
+from storyloop.changes import contract_digest, load_change
 from storyloop.project_agents import invoke_project_agent
 from storyloop.storage import write_json
 from storyloop.telemetry import ledger_entries, record_call
@@ -16,6 +18,8 @@ from storyloop.models import StoryLoopError
 from tests.test_cross_vendor import configured, capabilities
 from tests.test_baseline_behavior import repository
 from storyloop.baseline import bootstrap_project
+from tests.routing_support import legacy_create_change
+from tests.support import product
 
 
 class ExecutionProfileTests(unittest.TestCase):
@@ -81,3 +85,45 @@ class ExecutionProfileTests(unittest.TestCase):
         entries = ledger_entries(self.root, "FEAT-1")
         self.assertTrue(entries)
         self.assertTrue(all(entry.get("engine_version") == storyloop.__version__ for entry in entries))
+
+
+class VersionSnapshotTests(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.root = Path(self.folder.name)
+        repository(self.root)
+        bootstrap_project(self.root)
+        self.change_id = legacy_create_change(self.root, "idea", product())["change_id"]
+
+    def test_approval_records_the_version_snapshot(self):
+        versions = approve_change(self.root, self.change_id)["approval"]["versions"]
+        self.assertEqual(versions["engine_version"], storyloop.__version__)
+        self.assertEqual(versions["baseline_version"], load_baseline(self.root)["baseline_version"])
+        self.assertIsNone(versions["map_version"])
+        self.assertIn("oracle-craft", {skill["name"] for skill in versions["skills"]})
+
+    def test_snapshot_does_not_change_the_contract_digest(self):
+        before = contract_digest(load_change(self.root, self.change_id)["product"])
+        state = approve_change(self.root, self.change_id)
+        self.assertEqual(state["approval"]["contract_digest"], before)
+
+    def test_reapproving_keeps_the_first_snapshot(self):
+        first = approve_change(self.root, self.change_id)["approval"]["versions"]
+        with patch("storyloop.approvals.__version__", "9.9.9"):
+            again = approve_change(self.root, self.change_id)["approval"]["versions"]
+        self.assertEqual(again, first)
+
+    def test_a_project_skill_copy_is_what_the_snapshot_records(self):
+        local = self.root / ".claude/skills/oracle-craft"
+        local.mkdir(parents=True)
+        (local / "SKILL.md").write_text(
+            "---\nname: oracle-craft\nversion: 9.9.9\ndescription: x\n---\nroles: [product]\n",
+            encoding="utf-8")
+        versions = approve_change(self.root, self.change_id)["approval"]["versions"]
+        self.assertIn(("oracle-craft", "9.9.9"),
+                      {(skill["name"], skill["version"]) for skill in versions["skills"]})
+
+    def test_approving_a_legacy_change_records_versions(self):
+        self.assertRegex(self.change_id, r"^FEAT-\d{8}-\d{3}$")
+        self.assertIn("versions", approve_change(self.root, self.change_id)["approval"])
