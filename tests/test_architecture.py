@@ -1,5 +1,6 @@
 """Executable architecture declarations and guards, including hostile synthetic inputs."""
 
+import ast
 from pathlib import Path, PureWindowsPath
 import tempfile
 import unittest
@@ -182,6 +183,12 @@ class LayeringRuleTests(unittest.TestCase):
 
 
 class LayeringTests(unittest.TestCase):
+    def test_base_finalization_function_stays_below_50_lines(self):
+        tree = ast.parse((PACKAGE / "base_finalization.py").read_text(encoding="utf-8"))
+        function = next(node for node in tree.body
+                        if isinstance(node, ast.FunctionDef) and node.name == "finalize_base_baseline")
+        self.assertLessEqual(function.end_lineno - function.lineno + 1, 50)
+
     def test_entry_files_stay_below_450_lines(self):
         for name in ("cli.py", "project_loop.py"):
             with self.subTest(name=name):

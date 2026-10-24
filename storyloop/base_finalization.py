@@ -29,19 +29,8 @@ def finalize_base_baseline(project: Path, change: dict, state: dict) -> dict:
     if receipt_path.exists():
         receipt = load_json(receipt_path)
     else:
-        require(baseline["source_head"] == state["source_head"],
-                "Base finalization source no longer matches the locked baseline")
-        version = _next_version(baseline["baseline_version"])
-        candidate = _next_baseline(project, baseline, config["profile"], head, version)
-        receipt = {"version": 2, "proposal_id": change["change_id"],
-                   "status": "ACCEPTING", "contract_digest": state["contract_digest"],
-                   "integration_commit": head, "source_branch": state["source_branch"],
-                   "baseline_source_head": baseline["source_head"],
-                   "old_baseline_version": baseline["baseline_version"],
-                   "new_baseline_version": version,
-                   "baseline_sha256": hashlib.sha256(baseline_path.read_bytes()).hexdigest(),
-                   "config_sha256": hashlib.sha256(config_path.read_bytes()).hexdigest(),
-                   "candidate_baseline_digest": _dict_digest(candidate)}
+        receipt = _new_receipt(project, change, state, baseline, config, head,
+                               baseline_path, config_path)
         write_json(receipt_path, receipt, max_bytes=4_000_000)
     require(receipt.get("version") == 2 and receipt.get("proposal_id") == change["change_id"]
             and receipt.get("contract_digest") == state["contract_digest"]
@@ -69,6 +58,23 @@ def finalize_base_baseline(project: Path, change: dict, state: dict) -> dict:
         write_json(receipt_path, receipt, max_bytes=4_000_000)
     _finish_memory_landings(project, change["change_id"])
     return receipt
+
+
+def _new_receipt(project: Path, change: dict, state: dict, baseline: dict, config: dict,
+                 head: str, baseline_path: Path, config_path: Path) -> dict:
+    require(baseline["source_head"] == state["source_head"],
+            "Base finalization source no longer matches the locked baseline")
+    version = _next_version(baseline["baseline_version"])
+    candidate = _next_baseline(project, baseline, config["profile"], head, version)
+    return {"version": 2, "proposal_id": change["change_id"],
+            "status": "ACCEPTING", "contract_digest": state["contract_digest"],
+            "integration_commit": head, "source_branch": state["source_branch"],
+            "baseline_source_head": baseline["source_head"],
+            "old_baseline_version": baseline["baseline_version"],
+            "new_baseline_version": version,
+            "baseline_sha256": hashlib.sha256(baseline_path.read_bytes()).hexdigest(),
+            "config_sha256": hashlib.sha256(config_path.read_bytes()).hexdigest(),
+            "candidate_baseline_digest": _dict_digest(candidate)}
 
 
 def _finish_memory_landings(project: Path, change_id: str) -> None:
