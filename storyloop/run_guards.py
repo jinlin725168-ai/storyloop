@@ -10,7 +10,7 @@ from .baseline import _git, load_baseline, load_project_config
 from .oracle_counts import check_layers
 from .project_boundaries import audit_base_scope, audit_project_changes
 from .project_git import changed_paths, current_branch
-from .project_profile import base_commands_digest, layer_commands
+from .project_profile import base_commands_digest, effective_base_profile, layer_commands
 from .project_receipt import _dirty_paths, verify_verified_artifacts, recover_completed_merge  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .smoke import RESULT_EVIDENCE, smoke_digests
 from .smoke_runner import candidate_digest, implementation_digest
@@ -55,7 +55,7 @@ def _guard_base_green(project: Path, state: dict) -> None:
     baseline = load_baseline(project)
     approval = load_json(project / ".storyloop/state/changes" /
                          f"{state['change_id']}.json").get("approval") or {}
-    profile = load_project_config(project)["profile"]
+    profile, _ = effective_base_profile(project, load_project_config(project)["profile"], approval)
     require(evidence.get("change_id") == state["change_id"]
             and evidence.get("status") == "PASSED"
             and evidence.get("contract_digest") == state.get("contract_digest")
@@ -208,7 +208,8 @@ def _guard_base_g2(project: Path, change: dict, state: dict, context: dict) -> N
     require(evidence.get("system_smoke", {}).get("status") == "PASSED"
             and evidence.get("build", {}).get("status") in {"PASSED", "DECLARED_ABSENT"},
             "Base smoke or build did not pass")
-    profile = load_project_config(project)["profile"]
+    profile, _ = effective_base_profile(project, load_project_config(project)["profile"],
+                                        change["approval"])
     require(base_commands_digest(profile) == change["approval"]["base_commands_sha256"],
             "Approved base commands changed before G2")
     layers = evidence.get("layers") or {}

@@ -13,7 +13,7 @@ from .changes import (contract_digest, draft_directory, load_change,  # noqa: F4
                       write_change_preview)
 from .models import require, text
 from .product_contract import nature_of
-from .project_profile import base_commands_digest
+from .project_profile import base_commands_digest, effective_base_profile
 from .path_security import safe_target
 from .requirement_checklist import blocking_items, evaluate_checklist
 from .storage import locked, write_bytes_atomic, write_json
@@ -82,8 +82,11 @@ def version_snapshot(project: Path) -> dict:
 
 def _base_approval(project: Path, tier: str | None) -> dict:
     require(tier in {None, "heavy"}, "Base changes require the heavy tier")
-    profile = load_project_config(project)["profile"]
-    return {"tier": "heavy", "base_commands_sha256": base_commands_digest(profile)}
+    profile, supplement = effective_base_profile(project, load_project_config(project)["profile"])
+    binding = {"tier": "heavy", "base_commands_sha256": base_commands_digest(profile)}
+    if supplement is not None:
+        binding["base_build_config_sha256"] = supplement
+    return binding
 
 
 def _intake_approval(project: Path, state: dict, tier: str | None) -> dict:

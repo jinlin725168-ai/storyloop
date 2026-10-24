@@ -14,7 +14,7 @@ from .models import identifier, require, text
 from .path_security import repository_relative
 from .product_contract import validate_product
 from .project_boundaries import _write_base_proposal, audit_base_scope, base_scope_path_allowed
-from .project_profile import base_commands_digest, is_ci_path
+from .project_profile import base_commands_digest, effective_base_profile, is_ci_path
 from .project_profile import layer_commands
 from .project_git import changed_paths
 from .smoke_runner import run_commands_at_commit, run_commands_isolated
@@ -124,7 +124,7 @@ def establish_old_green(project: Path, change: dict, state: dict) -> dict:
     """Prove the old source commit keeps all configured checks green before implementation."""
     project = Path(project).resolve()
     baseline, config = load_baseline(project), load_project_config(project)
-    profile = config["profile"]
+    profile, _ = effective_base_profile(project, config["profile"], change["approval"])
     require(change["product"]["nature"] == "base", "Old-green proof needs a base change")
     require(base_commands_digest(profile) == change["approval"]["base_commands_sha256"],
             "Approved base commands changed before G1")

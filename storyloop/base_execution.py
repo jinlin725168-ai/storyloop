@@ -14,7 +14,7 @@ from .manual_acceptance import load_manual_acceptance
 from .models import StoryLoopError, require, text
 from .project_git import changed_paths, current_branch, start_base, commit_paths, exact_child_commit, finish_feature
 from .project_loop_support import relative_files
-from .project_profile import base_commands_digest, layer_commands
+from .project_profile import base_commands_digest, effective_base_profile, layer_commands
 from .project_boundaries import audit_base_scope
 from .run_state import run_path, save_run
 from .run_stops import pause
@@ -105,7 +105,8 @@ def _verify_candidate(project: Path, change: dict, state: dict) -> dict:
     report_child = _candidate_scope(project, change, state)
     from .oracle_skill_approval import require_base_confirmation
     config = load_project_config(project)
-    profile, timeout = config["profile"], config["check_timeout_seconds"]
+    profile, _ = effective_base_profile(project, config["profile"], change["approval"])
+    timeout = config["check_timeout_seconds"]
     require(base_commands_digest(profile) == change["approval"]["base_commands_sha256"],
             "Approved base commands changed before candidate verification")
     cached = trusted_base_evidence(project, state)

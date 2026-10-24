@@ -40,6 +40,7 @@ def parser() -> argparse.ArgumentParser:
         "ci": "CI 入口：隔离运行该变更的验收套件和项目级系统冒烟",
         "report": "定位某次变更的验收报告",
         "base-propose": "为计划中的底座改动开一个 BASE 提案（无需先触发功能变更）",
+        "base-build-config": "为旧项目具名确认底座构建命令，不改已冻结的 config.json",
         "base-update": "兼容旧 BASE 提案：待批准提案导入变更草案，历史回执继续恢复",
         "base-review": "由独立的人对已提交的底座候选记录具名审查",
         "answer": "回答代理在 NEEDS_INPUT 停点提出的问题（--answer 可重复，按问题顺序）",
@@ -115,6 +116,10 @@ def _product_arguments(child, command):
         child.add_argument("--change", dest="change_id", required=True)
         child.add_argument("--verdict", choices=("pass", "fail"), required=True)
         child.add_argument("--note", required=True)
+    elif command == "base-build-config":
+        child.add_argument("--commands-json", required=True,
+                           help="构建命令 argv 数组的 JSON；[] 明确表示无构建步骤")
+        child.add_argument("--confirmed-by", required=True, help="具名人工确认人")
 
 
 def _maintenance_arguments(child, command):
@@ -187,6 +192,14 @@ def dispatch(args) -> dict:
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return propose_base_change(project, args.paths, args.reason, allow_mutable=args.allow_mutable,
                                    allow_ci=args.allow_ci)
+    if args.command == "base-build-config":
+        require(_is_product_project(project), "Run storyloop init on this Git project first")
+        from .project_profile import confirm_legacy_base_build
+        try:
+            commands = json.loads(args.commands_json)
+        except ValueError as exc:
+            raise StoryLoopError("--commands-json must be a JSON argv array") from exc
+        return confirm_legacy_base_build(project, commands, args.confirmed_by)
     if args.command == "base-update":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         from .oracle_skill_approval import confirmed_upgrade

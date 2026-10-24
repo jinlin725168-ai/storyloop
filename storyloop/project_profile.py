@@ -8,8 +8,9 @@ import os
 from pathlib import Path
 import shutil
 
-from .models import StoryLoopError, require
-from .path_security import repository_relative
+from .models import StoryLoopError, require, text
+from .path_security import repository_relative, safe_target
+from .storage import load_json, write_json
 
 CI_FILES = (
     ".gitlab-ci.yml", "Jenkinsfile", "azure-pipelines.yml", ".circleci/config.yml",
@@ -17,6 +18,7 @@ CI_FILES = (
 GENERATED_PATHS = ("openspec/changes", "openspec/specs", "acceptance/changes", "acceptance/smoke", "acceptance/ui",
                    "reports/storyloop")
 CUSTOM_ROOT = "storyloop-custom"
+BASE_BUILD_SUPPLEMENT = ".storyloop/base-build-commands.json"
 
 
 SKIP_DIRECTORIES = {"node_modules", "target", "build", "dist", "vendor", "venv", ".venv", "__pycache__"}
@@ -160,6 +162,41 @@ def base_commands_digest(profile: dict) -> str:
     commands["build"] = _commands(profile["base_build_commands"])
     payload = json.dumps(commands, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def confirm_legacy_base_build(project: Path, commands: object, confirmed_by: str) -> dict:
+    """Record a human's build declaration for a config frozen before this setting existed."""
+    from .storage import locked
+
+    project = Path(project).resolve()
+    with locked(project):
+        config = load_json(safe_target(project, ".storyloop/config.json", "project config"))
+        require("base_build_commands" not in config["profile"],
+                "New projects keep base_build_commands in config.json")
+        record = {"version": 1, "base_build_commands": _commands(commands),
+                  "confirmed_by": text(confirmed_by, "build config confirmer")}
+        path = safe_target(project, BASE_BUILD_SUPPLEMENT, "base build supplement")
+        write_json(path, record, max_bytes=64_000)
+        return {"status": "CONFIRMED", "path": str(path),
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+
+
+def effective_base_profile(project: Path, profile: dict,
+                           approval: dict | None = None) -> tuple[dict, str | None]:
+    """Overlay only the missing legacy build setting, with a frozen approval binding."""
+    if "base_build_commands" in profile:
+        return profile, None
+    path = safe_target(project, BASE_BUILD_SUPPLEMENT, "base build supplement")
+    require(path.is_file(), "Confirm legacy base_build_commands with storyloop base-build-config")
+    record = load_json(path)
+    require(record.get("version") == 1 and isinstance(record.get("confirmed_by"), str)
+            and bool(record["confirmed_by"].strip()), "Base build supplement needs human confirmation")
+    commands = _commands(record.get("base_build_commands"))
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if approval is not None:
+        require(approval.get("base_build_config_sha256") == digest,
+                "Confirmed base build supplement changed after approval")
+    return {**profile, "base_build_commands": commands}, digest
 
 
 def is_ci_path(relative_path: str) -> bool:
