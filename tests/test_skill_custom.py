@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
 from storyloop.models import StoryLoopError
-from storyloop.skill_custom import custom_paths, load_customization
+from storyloop.skill_custom import custom_paths, load_customization, render_view, write_view
+from storyloop.skills import skill_text
 
 
-class CustomizationTests(unittest.TestCase):
+class _Workspace(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -25,6 +29,8 @@ class CustomizationTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
 
+
+class CustomizationTests(_Workspace):
     def test_no_files_means_empty_customization(self):
         value = load_customization(self.root, "spec-craft")
         self.assertEqual(value, {
@@ -101,3 +107,44 @@ class CustomizationTests(unittest.TestCase):
         self.assertEqual([item["sha256"] for item in sources], [
             hashlib.sha256(path.read_bytes()).hexdigest() for path in (self.team, self.user)
         ])
+
+
+class ViewTests(_Workspace):
+    def test_view_without_customization_equals_the_skill_text(self):
+        self.assertEqual(render_view(self.root, "spec-craft"), skill_text(self.root, "spec-craft"))
+
+    def test_view_appends_coverage_sections_preferences_and_glossary(self):
+        self.write(self.team, 'version = 1\npreferences = ["先问范围"]\nglossary = "docs/a.md"\n'
+                   '[[coverage]]\ncode = "pay"\nname = "支付合规"\ncheck = "退款时限"\n'
+                   '[[sections]]\ncode = "source"\ndocument = "requirement"\n'
+                   'title = "来源"\nguidance = "记录用户来源"\n')
+        view = render_view(self.root, "spec-craft")
+        self.assertTrue(view.startswith(skill_text(self.root, "spec-craft")))
+        for phrase in (
+            "## 项目定制（由 storyloop skills --view 生成，请勿手工编辑）",
+            "| 11 | 支付合规 | 退款时限 |", "#### 需求文档：来源", "记录用户来源",
+            "- 先问范围", "docs/a.md", "storyloop-custom/spec-craft.toml",
+        ):
+            self.assertIn(phrase, view)
+
+    def test_view_is_deterministic(self):
+        self.write(self.team, 'version = 1\npreferences = ["先问范围"]\n')
+        self.assertEqual(render_view(self.root, "spec-craft"), render_view(self.root, "spec-craft"))
+
+    def test_write_view_reports_digest_and_does_not_install_skills(self):
+        self.write(self.team, 'version = 1\npreferences = ["先问范围"]\n')
+        result = write_view(self.root, "spec-craft")
+        text = (self.root / result["path"]).read_text(encoding="utf-8")
+        self.assertEqual(result["sha256"], hashlib.sha256(text.encode("utf-8")).hexdigest())
+        self.assertEqual(result["status"], "SKILL_VIEW")
+        self.assertEqual(result["path"], ".storyloop/skills-view/spec-craft.md")
+        self.assertTrue(result["customized"])
+        self.assertFalse((self.root / ".claude/skills/spec-craft").exists())
+
+    def test_cli_view_prints_the_result(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "storyloop", "skills", str(self.root), "--view", "spec-craft", "--json"],
+            capture_output=True, text=True, encoding="utf-8", check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["status"], "SKILL_VIEW")

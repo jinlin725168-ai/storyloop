@@ -9,10 +9,12 @@ import tomllib
 
 from .models import StoryLoopError, require
 from .path_security import safe_target
+from .skills import skill_text
 
 
 CUSTOM_ROOT = "storyloop-custom"
 CUSTOMIZABLE = {"spec-craft"}
+VIEW_ROOT = ".storyloop/skills-view"
 _TOP_KEYS = {"version", "preferences", "glossary", "coverage", "sections"}
 _ROW_KEYS = {
     "coverage": {"code", "name", "check"},
@@ -135,3 +137,49 @@ def load_customization(project: Path, name: str) -> dict:
         for key in ("coverage", "sections"):
             _merge_rows(value[key], layer[key])
     return value
+
+
+def _render_view(project: Path, name: str, custom: dict) -> str:
+    body = skill_text(project, name)
+    if not custom["sources"]:
+        return body
+    lines = ["", "", "## 项目定制（由 storyloop skills --view 生成，请勿手工编辑）", ""]
+    lines.append("来源：" + "、".join(
+        f"{source['path']}（sha256 {source['sha256'][:12]}）" for source in custom["sources"]
+    ))
+    if custom["preferences"]:
+        lines.extend(["", "### 提问偏好", *[f"- {item}" for item in custom["preferences"]]])
+    if custom["coverage"]:
+        lines.extend(["", "### 追加的覆盖地图分类", "| 序号 | 类别 | 检查什么 |", "|---|---|---|"])
+        for number, row in enumerate(custom["coverage"], start=11):
+            lines.append(f"| {number} | {row['name']} | {row['check']} |")
+    if custom["sections"]:
+        lines.extend(["", "### 追加的模板节"])
+        for row in custom["sections"]:
+            label = "需求文档" if row["document"] == "requirement" else "规格文档"
+            lines.extend([f"#### {label}：{row['title']}", row["guidance"]])
+    if custom["glossary"]:
+        lines.extend(["", "### 术语表", f"按 `{custom['glossary']}` 中的术语写规则；新术语先登记。"])
+    return body + "\n".join(lines) + "\n"
+
+
+def render_view(project: Path, name: str) -> str:
+    """Render the packaged or installed skill with append-only project guidance."""
+    project = Path(project).resolve()
+    return _render_view(project, name, load_customization(project, name))
+
+
+def write_view(project: Path, name: str) -> dict:
+    """Write a reproducible customization view into the control plane."""
+    project = Path(project).resolve()
+    custom = load_customization(project, name)
+    body = _render_view(project, name, custom)
+    relative = f"{VIEW_ROOT}/{name}.md"
+    target = safe_target(project, relative, "skill view")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body, encoding="utf-8")
+    return {
+        "status": "SKILL_VIEW", "skill": name, "path": relative,
+        "sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+        "customized": bool(custom["sources"]), "sources": custom["sources"], "warnings": [],
+    }
