@@ -169,7 +169,7 @@ class BaseCompatibilityTests(unittest.TestCase):
 
         def crash_after_baseline(path, value, **kwargs):
             original(path, value, **kwargs)
-            if path == baseline_path:
+            if path.name == "baseline.json":
                 raise RuntimeError("baseline write interrupted")
 
         with patch.object(base_finalization, "write_json", side_effect=crash_after_baseline):
