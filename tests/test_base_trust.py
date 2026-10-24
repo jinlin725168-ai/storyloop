@@ -263,9 +263,10 @@ class BaseTrustTests(unittest.TestCase):
         git(self.root, "config", "core.autocrlf", "true")
         change_id = self._accepted_candidate()
         candidate = self.root / "pom.xml"
-        candidate.write_bytes(candidate.read_bytes().replace(b"\n", b"\r\n"))
+        candidate.write_bytes(candidate.read_bytes().replace(b"\r\n", b"\n")
+                              .replace(b"\n", b"\r\n"))
+        git(self.root, "add", "pom.xml")
         self.assertIn(b"\r\n", candidate.read_bytes())
-        git(self.root, "add", "pom.xml")  # refresh Git's index stat after simulated checkout
         self.assertEqual(git(self.root, "status", "--porcelain"), "")
         self.assertEqual(run_change(self.root, change_id)["status"], "FINALIZING")
 
@@ -277,8 +278,10 @@ class BaseTrustTests(unittest.TestCase):
         base_execution.record_base_review(self.root, change_id, "pass", "已核对")
         run_change(self.root, change_id)
         candidate = self.root / "pom.xml"
-        candidate.write_bytes(candidate.read_bytes().replace(b"\n", b"\r\n"))
+        candidate.write_bytes(candidate.read_bytes().replace(b"\r\n", b"\n")
+                              .replace(b"\n", b"\r\n"))
         git(self.root, "add", "pom.xml")
+        self.assertIn(b"\r\n", candidate.read_bytes())
         self.assertEqual(git(self.root, "status", "--porcelain"), "")
         self.assertEqual(record_manual_acceptance(self.root, change_id, ["BASE-ACCEPT"],
                                                   "满足目标")["status"], "ACCEPTED")
