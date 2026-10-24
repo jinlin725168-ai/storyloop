@@ -440,6 +440,23 @@ class BaseG1Tests(unittest.TestCase):
             self.assertEqual(run_change(self.root, change_id)["status"],
                              "BASE_REVIEW_REQUIRED")
 
+    def test_implementing_checkpoint_reuses_matching_candidate_evidence(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                             encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "candidate")
+        run_change(self.root, change_id)
+        path = self.root / ".storyloop/state/runs" / f"{change_id}.json"
+        state = load_json(path)
+        state["status"] = "IMPLEMENTING"
+        write_json(path, state)
+        with mock.patch.object(base_execution, "run_commands_isolated",
+                               side_effect=AssertionError("matching checks reran")):
+            self.assertEqual(run_change(self.root, change_id)["status"],
+                             "BASE_REVIEW_REQUIRED")
+
     def test_merge_commit_before_merged_state_save_is_adopted(self):
         change_id = self._accepted_candidate()
         original = base_execution.save_run
