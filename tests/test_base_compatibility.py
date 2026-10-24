@@ -179,6 +179,44 @@ class BaseCompatibilityTests(unittest.TestCase):
         self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
         self.assertEqual(path.read_bytes(), proposal_bytes)
 
+    def test_oracle_skill_candidate_needs_explicit_confirmation(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        project = Path(folder.name)
+        repository(project)
+        smoke = project / "acceptance/smoke"
+        smoke.mkdir(parents=True)
+        (smoke / "check.py").write_text("print('green')\n", encoding="utf-8")
+        (smoke / "manifest.json").write_text(
+            '{"version":1,"tests":[{"id":"check","description":"check",'
+            '"command":["{python}","acceptance/smoke/check.py"],"timeout_seconds":30}]}',
+            encoding="utf-8")
+        skill = project / ".claude/skills/acceptance/SKILL.md"
+        skill.parent.mkdir(parents=True)
+        skill.write_text("---\nroles: [acceptance]\n---\nold\n", encoding="utf-8")
+        git(project, "add", ".")
+        git(project, "commit", "-q", "-m", "oracle skill")
+        bootstrap_with_project_checks(project, {
+            "unit_commands": [[sys.executable, "-c", "pass"]],
+            "integration_commands": [], "check_commands": [], "base_build_commands": [],
+        })
+        proposed = base_upgrade.propose_base_change(
+            project, [".claude/skills/acceptance/SKILL.md"], "更新 oracle 技能", scope="skills")
+        change_id = proposed["change_id"]
+        approve_change(project, change_id)
+        run_change(project, change_id, implementer="human")
+        skill.write_text("---\nroles: [acceptance]\n---\nnew\n", encoding="utf-8")
+        git(project, "add", ".claude/skills/acceptance/SKILL.md")
+        git(project, "commit", "-q", "-m", "human oracle update")
+        with self.assertRaisesRegex(StoryLoopError, "confirm-oracle-skills"):
+            run_change(project, change_id)
+        from storyloop.oracle_skill_approval import CONFIRMED
+        token = CONFIRMED.set(True)
+        try:
+            self.assertEqual(run_change(project, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        finally:
+            CONFIRMED.reset(token)
+
 
 if __name__ == "__main__":
     unittest.main()

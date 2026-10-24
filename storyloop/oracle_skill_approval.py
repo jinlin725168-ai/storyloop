@@ -21,6 +21,15 @@ def confirmed_upgrade(project: Path, proposal_id: str, confirmed: bool) -> dict:
         CONFIRMED.reset(token)
 
 
+def require_base_confirmation(project: Path, change: dict, state: dict) -> None:
+    """Require explicit confirmation when the committed candidate changes an oracle skill."""
+    proposal = {"changes": [{"path": path} for path in change["product"]["base"]["paths"]]}
+    affected = _oracle_changes(project, proposal, state["contract_commit"],
+                               state["candidate_commit"])
+    require(not affected or CONFIRMED.get(),
+            "Oracle skills changed; run requires --confirm-oracle-skills")
+
+
 def require_confirmation(project: Path, proposal: dict, receipt: dict) -> None:
     """Bind the authorization to both proposal and committed candidate, before regression."""
     affected = _oracle_changes(project, proposal, receipt['baseline_source_head'], receipt['source_head'])

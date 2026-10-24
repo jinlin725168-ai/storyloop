@@ -148,6 +148,8 @@ def _maintenance_arguments(child, command):
         child.add_argument("--change", dest="change_id", required=True)
         child.add_argument("--implementer", choices=("human",),
                            help="人工提交 base 变更；代理通道留待 E2")
+        child.add_argument("--confirm-oracle-skills", action="store_true",
+                           help="明确确认本次 base 候选对生效 Oracle 技能的修改")
         child.add_argument("--overrule", help="不同意审查对 ORACLE_DEFECT / NEEDS_SPEC_FIX 的判定：写明理由")
         child.add_argument("--no-interactive", action="store_true",
                            help="停在 NEEDS_INPUT 时不在终端提问")
@@ -228,7 +230,12 @@ def dispatch(args) -> dict:
                 return {"status": "APPROVED", "change_id": args.change_id,
                         "approval": approved["approval"],
                         "next": f"storyloop run <project> --change {args.change_id} --implementer human"}
-            return run_change(project, args.change_id, implementer=args.implementer)
+            from .oracle_skill_approval import CONFIRMED
+            token = CONFIRMED.set(args.confirm_oracle_skills)
+            try:
+                return run_change(project, args.change_id, implementer=args.implementer)
+            finally:
+                CONFIRMED.reset(token)
     return _product_dispatch(project, args)
 
 

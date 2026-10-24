@@ -87,6 +87,8 @@ def _verify_candidate(project: Path, change: dict, state: dict) -> dict:
     base_candidate_paths(project, change, state)
     require(_git(project, "rev-parse", "HEAD").strip() == state["candidate_commit"],
             "Base candidate changed after review")
+    from .oracle_skill_approval import require_base_confirmation
+    require_base_confirmation(project, change, state)
     config = load_project_config(project)
     profile, timeout = config["profile"], config["check_timeout_seconds"]
     require(base_commands_digest(profile) == change["approval"]["base_commands_sha256"],
