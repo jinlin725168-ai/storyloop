@@ -355,6 +355,8 @@ class LandingTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 approve_draft(self.project, ref)
         self.assertEqual(self.snapshot(), before)
+        self.assertEqual(list((self.project / '.storyloop/state/changes').glob('BASE-*.json')), [])
+        self.assertEqual(approve_draft(self.project, ref)['status'], 'BASE_APPROVAL_REQUIRED')
 
     def test_trailing_summary_whitespace_approves_once(self):
         for suffix in (' ', '\t'):

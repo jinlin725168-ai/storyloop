@@ -235,7 +235,18 @@ def _restore(project, originals, parent, proposal):
         else:
             write_bytes_atomic(path, raw)
     if proposal:
-        Path(proposal['proposal']).unlink(missing_ok=True)
+        proposal_path = Path(proposal['proposal'])
+        state_path = safe_target(project, f".storyloop/state/changes/{proposal['change_id']}.json",
+                                 'BASE draft')
+        if state_path.exists():
+            state = load_json(state_path)
+            require(state.get('status') == 'DRAFT'
+                    and state.get('product', {}).get('base', {}).get('paths') == proposal['paths']
+                    and (not proposal_path.exists() or state.get('base_proposal_sha256')
+                         == hashlib.sha256(proposal_path.read_bytes()).hexdigest()),
+                    '回滚受阻：BASE 草案已变化，保留提案与草案')
+            state_path.unlink()
+        proposal_path.unlink(missing_ok=True)
 
 
 def _approve_lesson(project, ref, draft):
