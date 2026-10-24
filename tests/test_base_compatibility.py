@@ -10,6 +10,7 @@ from storyloop import base_upgrade
 from storyloop.approvals import approve_change
 from storyloop.baseline import load_baseline
 from storyloop.manual_acceptance import record_manual_acceptance
+from storyloop.project_boundaries import _write_base_proposal
 from storyloop.onboarding_cli import bootstrap_with_project_checks
 from storyloop.project_loop import run_change
 from storyloop.storage import load_json
@@ -159,6 +160,24 @@ class BaseCompatibilityTests(unittest.TestCase):
         git(self.root, "mv", "a.md", "b.md")
         git(self.root, "commit", "-q", "-m", "rename source")
         self.assertEqual(base_upgrade._changed_since(self.root, source), {"a.md", "b.md"})
+
+    def test_legacy_ci_protected_proposal_imports_as_ci_scope(self):
+        path = _write_base_proposal(
+            self.root, "FEAT-20261024-001",
+            [{"path": ".github/workflows/ci.yml", "category": "CI_PROTECTED"}], self.before)
+        proposal_bytes = path.read_bytes()
+        change_id = path.stem
+        self.assertEqual(base_upgrade.upgrade_baseline(self.root, change_id)["status"],
+                         "APPROVAL_REQUIRED")
+        state = load_json(self.root / ".storyloop/state/changes" / f"{change_id}.json")
+        self.assertEqual(state["product"]["base"]["scope"], "ci")
+        approve_change(self.root, change_id)
+        run_change(self.root, change_id, implementer="human")
+        (self.root / ".github/workflows/ci.yml").write_text("name: reviewed\n", encoding="utf-8")
+        git(self.root, "add", ".github/workflows/ci.yml")
+        git(self.root, "commit", "-q", "-m", "human CI update")
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        self.assertEqual(path.read_bytes(), proposal_bytes)
 
 
 if __name__ == "__main__":

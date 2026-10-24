@@ -21,7 +21,7 @@ def audit_base_scope(project: Path, change: dict, paths: set[str]) -> None:
     proposal = load_json(proposal_path)
     categories = {item["path"]: item["category"] for item in proposal["changes"]}
     allowed = {"foundation": {"FOUNDATION_CHANGE", "INTEGRATION_CHANGE"},
-               "ci": {"CI_CHANGE", "FOUNDATION_CHANGE", "INTEGRATION_CHANGE"},
+               "ci": {"CI_CHANGE", "CI_PROTECTED", "FOUNDATION_CHANGE", "INTEGRATION_CHANGE"},
                "upstream": {"UPSTREAM_MUTABLE", "FOUNDATION_CHANGE", "INTEGRATION_CHANGE"},
                "skills": {"FOUNDATION_CHANGE"}, "knowledge": {"FOUNDATION_CHANGE"}}[scope]
     profile = load_project_config(project)["profile"]
@@ -30,6 +30,8 @@ def audit_base_scope(project: Path, change: dict, paths: set[str]) -> None:
     for path in paths:
         require(categories.get(path) in allowed and base_scope_path_allowed(scope, path),
                 f"Base scope {scope} cannot write {path}")
+        require(categories.get(path) != "CI_PROTECTED" or _is_ci_path(path),
+                f"Legacy CI category has a non-CI path: {path}")
         require(not (is_system_smoke_path(path) or path.startswith("acceptance/changes/")
                      or matches_test_root(path, profile.get("test_roots") or [])
                      or path == "acceptance/storyloop-settings.json"),
