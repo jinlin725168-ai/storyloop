@@ -455,6 +455,7 @@ class BaseG1Tests(unittest.TestCase):
                              "BASE_REVIEW_REQUIRED")
 
     def test_merge_commit_before_merged_state_save_is_adopted(self):
+        git(self.root, "config", "core.autocrlf", "true")
         change_id = self._accepted_candidate()
         original = base_execution.save_run
 

@@ -63,8 +63,11 @@ def _require_receipt_bytes(source: dict, merge_commit: str,
 
 def verify_verified_artifacts(project: Path, state: dict) -> None:
     report = Path(state["report"])
-    require(report.is_file()
-            and hashlib.sha256(report.read_bytes()).hexdigest() == state["report_sha256"],
+    report_path = report.relative_to(project).as_posix()
+    committed = _git(project, "show", f"{state['report_commit']}:{report_path}").encode("utf-8")
+    require(report.is_file() and report_path not in _dirty_paths(project)
+            and (hashlib.sha256(committed).hexdigest() == state["report_sha256"]
+                 or hashlib.sha256(report.read_bytes()).hexdigest() == state["report_sha256"]),
             "Verified acceptance report changed before merge")
     verify_evidence_digest(project, state)
 
