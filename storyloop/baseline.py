@@ -10,7 +10,7 @@ from typing import Callable
 from .models import StoryLoopError, require  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .path_security import safe_target
 from .git_command import GIT_ENVIRONMENT, git as _git, git_failure as _git_failure  # noqa: F401  # 兼容再导出：保留旧模块导入路径
-from .project_profile import GENERATED_PATHS, matches_test_root, validate_project_settings
+from .project_profile import CUSTOM_ROOT, GENERATED_PATHS, matches_test_root, validate_project_settings
 from .storage import load_json, write_json, write_text_atomic
 
 BASELINE_PATH = Path(".storyloop/baseline.json")
@@ -199,7 +199,7 @@ def _verify_tracked_scope(project: Path, baseline: dict, profile: dict) -> None:
                if path not in known and not any(_inside(path, root) for root in roots)
                and not matches_test_root(path, tests)
                and not _inside(path, "openspec/lessons")
-               and not _inside(path, "storyloop-custom")]
+               and not _inside(path, CUSTOM_ROOT)]
     require(not escaped, "Tracked files outside feature modules require a base iteration")
 
 
@@ -214,7 +214,7 @@ def _foundation_paths(tracked: list[str], profile: dict) -> list[str]:
     protected = set(profile["integration_paths"]) | set(profile["protected_paths"])
     return sorted(path for path in tracked
                   if not _inside(path, "openspec/lessons")
-                  if not _inside(path, "storyloop-custom")
+                  if not _inside(path, CUSTOM_ROOT)
                   if not any(_inside(path, root) for root in mutable_roots)
                   and (path in protected or not matches_test_root(path, test_roots)))
 
@@ -249,7 +249,7 @@ def _exclude_control_plane(project: Path) -> None:
     except (OSError, UnicodeDecodeError) as exc:
         raise StoryLoopError("Cannot read Git exclude as UTF-8") from exc
     entries = {line.strip() for line in current.splitlines()}
-    missing = [entry for entry in (".storyloop/", "storyloop-custom/*.user.toml")
+    missing = [entry for entry in (".storyloop/", f"{CUSTOM_ROOT}/*.user.toml")
                if entry not in entries]
     if missing:
         prefix = current + ("\n" if current and not current.endswith("\n") else "")

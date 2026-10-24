@@ -10,11 +10,11 @@ import tomllib
 from .baseline import BASELINE_PATH, _exclude_control_plane, _git
 from .models import StoryLoopError, require
 from .path_security import safe_target
+from .project_profile import CUSTOM_ROOT
 from .skills import skill_text
 from .storage import locked_file, write_text_atomic
 
 
-CUSTOM_ROOT = "storyloop-custom"
 CUSTOMIZABLE = {"spec-craft"}
 VIEW_ROOT = ".storyloop/skills-view"
 _TOP_KEYS = {"version", "preferences", "glossary", "coverage", "sections"}
@@ -25,6 +25,7 @@ _ROW_KEYS = {
 
 
 def custom_paths(project: Path, name: str) -> tuple[Path, Path]:
+    """Return the team and personal TOML paths for a customizable skill."""
     require(name in CUSTOMIZABLE, f"Skill {name!r} cannot be customized")
     root = Path(project) / CUSTOM_ROOT
     return root / f"{name}.toml", root / f"{name}.user.toml"
@@ -44,20 +45,27 @@ def _read_file(project: Path, path: Path) -> tuple[dict, dict] | None:
     except (OSError, StoryLoopError) as exc:
         raise _error(relative, "file", str(exc)) from None
     try:
-        content = raw.decode("utf-8")
+        content = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         line = raw[:exc.start].count(b"\n") + 1
         raise StoryLoopError(f"{relative} line {line}: invalid UTF-8") from None
     try:
         data = tomllib.loads(content)
     except tomllib.TOMLDecodeError as exc:
-        line = getattr(exc, "lineno", None)
-        if line is None:
-            match = re.search(r"line (\d+)", str(exc))
-            line = int(match.group(1)) if match else max(1, len(content.rstrip("\n").splitlines()))
+        line = _toml_error_line(content, exc)
         raise StoryLoopError(f"{relative} line {line}: invalid TOML: {exc}") from None
     source = {"path": relative, "sha256": hashlib.sha256(raw).hexdigest()}
     return data, source
+
+
+def _toml_error_line(content: str, error: tomllib.TOMLDecodeError) -> int:
+    if "end of document" in str(error):
+        return max(1, len(content.rstrip("\n").splitlines()))
+    line = getattr(error, "lineno", None)
+    if line is not None:
+        return line
+    match = re.search(r"line (\d+)", str(error))
+    return int(match.group(1)) if match else max(1, len(content.rstrip("\n").splitlines()))
 
 
 def _validate_rows(path: str, key: str, value: object) -> list[dict]:
@@ -100,7 +108,8 @@ def _validated(project: Path, path: str, data: dict) -> dict:
         if not isinstance(glossary, str):
             raise _error(path, "glossary", "must be a repository-relative path")
         try:
-            safe_target(project, glossary, "glossary")
+            target = safe_target(project, glossary, "glossary")
+            require(target.is_file(), "Glossary must be an existing file")
         except StoryLoopError as exc:
             raise _error(path, "glossary", str(exc)) from None
     return {
@@ -150,19 +159,32 @@ def _render_view(project: Path, name: str, custom: dict) -> str:
         f"{source['path']}（sha256 {source['sha256'][:12]}）" for source in custom["sources"]
     ))
     if custom["preferences"]:
-        lines.extend(["", "### 提问偏好", *[f"- {item}" for item in custom["preferences"]]])
+        lines.extend(["", "### 提问偏好", *[f"- {_inline(item)}" for item in custom["preferences"]]])
     if custom["coverage"]:
         lines.extend(["", "### 追加的覆盖地图分类", "| 序号 | 类别 | 检查什么 |", "|---|---|---|"])
-        for number, row in enumerate(custom["coverage"], start=11):
-            lines.append(f"| {number} | {row['name']} | {row['check']} |")
+        for number, row in enumerate(custom["coverage"], start=_next_coverage_number(body)):
+            lines.append(f"| {number} | {_inline(row['name'])} | {_inline(row['check'])} |")
     if custom["sections"]:
         lines.extend(["", "### 追加的模板节"])
         for row in custom["sections"]:
             label = "需求文档" if row["document"] == "requirement" else "规格文档"
-            lines.extend([f"#### {label}：{row['title']}", row["guidance"]])
+            lines.extend([f"#### {label}：{_inline(row['title']).replace('<br>', ' ')}", row["guidance"]])
     if custom["glossary"]:
         lines.extend(["", "### 术语表", f"按 `{custom['glossary']}` 中的术语写规则；新术语先登记。"])
     return body + "\n".join(lines) + "\n"
+
+
+def _inline(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("|", "\\|").replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
+
+
+def _next_coverage_number(body: str) -> int:
+    marker = "<!-- references/clarify.md -->"
+    require(marker in body, "spec-craft clarification reference is missing")
+    clarify = body.split(marker, 1)[1].split("<!-- references/", 1)[0]
+    numbers = [int(value) for value in re.findall(r"^\|\s*(\d+)\s*\|", clarify, re.M)]
+    require(numbers, "spec-craft coverage map is missing")
+    return max(numbers) + 1
 
 
 def render_view(project: Path, name: str) -> str:

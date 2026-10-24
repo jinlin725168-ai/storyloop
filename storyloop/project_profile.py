@@ -15,6 +15,7 @@ CI_FILES = (
 )
 GENERATED_PATHS = ("openspec/changes", "openspec/specs", "acceptance/changes", "acceptance/smoke", "acceptance/ui",
                    "reports/storyloop")
+CUSTOM_ROOT = "storyloop-custom"
 
 
 SKIP_DIRECTORIES = {"node_modules", "target", "build", "dist", "vendor", "venv", ".venv", "__pycache__"}

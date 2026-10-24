@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from unittest.mock import patch
 from pathlib import Path
 import subprocess
 import sys
@@ -13,6 +14,7 @@ import unittest
 from storyloop.models import StoryLoopError
 from storyloop.skill_custom import custom_paths, load_customization, render_view, write_view
 from storyloop.skills import skill_text
+from storyloop.skills import install_skills
 
 
 class _Workspace(unittest.TestCase):
@@ -86,10 +88,35 @@ class CustomizationTests(_Workspace):
         with self.assertRaisesRegex(StoryLoopError, "glossary"):
             load_customization(self.root, "spec-craft")
 
+    def test_glossary_must_exist_as_a_file(self):
+        for value in ("docs/missing.md", "docs"):
+            with self.subTest(value=value):
+                self.write(self.team, f'version = 1\nglossary = "{value}"\n')
+                with self.assertRaisesRegex(StoryLoopError, "glossary"):
+                    load_customization(self.root, "spec-craft")
+
+    def test_utf8_bom_toml_is_accepted(self):
+        self.team.parent.mkdir(parents=True)
+        self.team.write_bytes(b"\xef\xbb\xbfversion = 1\n")
+        self.assertEqual(load_customization(self.root, "spec-craft")["version"], 1)
+
     def test_invalid_toml_and_utf8_name_the_file_and_line(self):
         self.write(self.team, 'version = 1\npreferences = [\n')
         with self.assertRaisesRegex(StoryLoopError, r"spec-craft\.toml.*2"):
             load_customization(self.root, "spec-craft")
+
+    def test_eof_toml_line_is_stable_when_parser_reports_next_line(self):
+        self.write(self.team, 'version = 1\npreferences = [\n')
+        import tomllib
+        class ParserError(tomllib.TOMLDecodeError):
+            @property
+            def lineno(self):
+                return 3
+
+        error = ParserError("Invalid value (at end of document)")
+        with patch("storyloop.skill_custom.tomllib.loads", side_effect=error):
+            with self.assertRaisesRegex(StoryLoopError, r"spec-craft\.toml line 2"):
+                load_customization(self.root, "spec-craft")
         self.team.write_bytes(b"version = 1\npreferences = \xff\n")
         with self.assertRaisesRegex(StoryLoopError, r"spec-craft\.toml.*2"):
             load_customization(self.root, "spec-craft")
@@ -131,6 +158,26 @@ class ViewTests(_Workspace):
         self.write(self.team, 'version = 1\npreferences = ["先问范围"]\n')
         self.assertEqual(render_view(self.root, "spec-craft"), render_view(self.root, "spec-craft"))
 
+    def test_view_escapes_markdown_table_cells_and_heading_line_breaks(self):
+        self.write(self.team, 'version = 1\n[[coverage]]\ncode = "ops"\n'
+                   'name = "工单|分类"\ncheck = "第一行\\n第二行|检查"\n'
+                   '[[sections]]\ncode = "proof"\ndocument = "spec"\n'
+                   'title = "证据\\n清单|表"\nguidance = "列出来源"\n')
+        view = render_view(self.root, "spec-craft")
+        self.assertIn("| 11 | 工单\\|分类 | 第一行<br>第二行\\|检查 |", view)
+        self.assertIn("#### 规格文档：证据 清单\\|表\n", view)
+
+    def test_new_coverage_number_follows_the_installed_clarify_table(self):
+        install_skills(self.root)
+        clarify = self.root / ".claude/skills/spec-craft/references/clarify.md"
+        clarify.write_text(clarify.read_text(encoding="utf-8").replace(
+            "| 10 | 占位与含糊词 | 待定、快速、友好等含糊表达 |",
+            "| 10 | 占位与含糊词 | 待定、快速、友好等含糊表达 |\n| 11 | 新增内置项 | 示例 |"
+        ), encoding="utf-8")
+        self.write(self.team, 'version = 1\n[[coverage]]\ncode = "time"\n'
+                   'name = "时间"\ncheck = "时区"\n')
+        self.assertIn("| 12 | 时间 | 时区 |", render_view(self.root, "spec-craft"))
+
     def test_write_view_reports_digest_and_does_not_install_skills(self):
         self.write(self.team, 'version = 1\npreferences = ["先问范围"]\n')
         result = write_view(self.root, "spec-craft")
@@ -148,3 +195,11 @@ class ViewTests(_Workspace):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["status"], "SKILL_VIEW")
+
+    def test_empty_cli_view_does_not_install_skills(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "storyloop", "skills", str(self.root), "--view", "", "--json"],
+            capture_output=True, text=True, encoding="utf-8", check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / ".claude/skills/spec-craft").exists())

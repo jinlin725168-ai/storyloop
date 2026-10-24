@@ -183,7 +183,10 @@ def dispatch(args) -> dict:
         from .oracle_skill_approval import confirmed_upgrade
         return confirmed_upgrade(project, args.proposal, args.confirm_oracle_skills)
     if args.command == "skills":
-        return write_view(project, args.view) if args.view else install_skills(project)
+        if args.view is not None:
+            require(bool(args.view), "Skill view name must not be empty")
+            return write_view(project, args.view)
+        return install_skills(project)
     if args.command == "smoke-propose":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return propose_smoke_update(project, args.change_id)
