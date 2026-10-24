@@ -319,3 +319,8 @@ tests = ["tests.test_architecture::test_no_unexempted_violations", "tests.test_a
 title = "判定者与被判定者分离"
 status = "pending"
 stage = "T6"
+
+[invariants.T3]
+title = "每个合入的变更都带版本快照；每条账本记录都带执行画像"
+status = "guarded"
+tests = ["tests.test_execution_profile::test_every_entry_carries_the_engine_version", "tests.test_execution_profile::test_approval_records_the_version_snapshot", "tests.test_execution_profile::test_entries_without_profile_are_unknown_not_drift"]

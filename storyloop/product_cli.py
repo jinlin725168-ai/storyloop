@@ -1,11 +1,14 @@
 """Product change creation and product command orchestration."""
+from datetime import datetime, timezone
 from pathlib import Path
+import sys
 
 from .acceptance_repair import repair_smoke
 from .answers import pending_questions, record_answers
 from .approvals import approve_change
 from .change_log import change_log
 from .changes import create_change, load_change, revise_change
+from .product_contract import SLUG
 from .guarded_calls import read_only_call
 from .manual_acceptance import record_manual_acceptance
 from .models import StoryLoopError, require
@@ -53,7 +56,12 @@ def change(project: Path, args, product_answer, revise_with_agent,
         from .readiness import require_readiness
         require_readiness(project)
         product = product_answer(project, {"idea": args.idea})
-        created = create_change(project, args.idea, product)
+        from .change_types import definition_for
+        from .product_contract import nature_of
+        prefix = definition_for(nature_of(product)).id_prefix
+        slug = choose_slug(args, product.get("slug"), interactive and sys.stdin.isatty(),
+                           prefix=prefix)
+        created = create_change(project, args.idea, product, slug=slug)
         adopt_pending(project, created["change_id"])
         state = clarify_interactively(project, created["change_id"], revise_with_agent, interactive)
         return draft_result(project, state)
@@ -62,6 +70,28 @@ def change(project: Path, args, product_answer, revise_with_agent,
     revise_with_agent(project, args.change_id, args.message, [])
     state = clarify_interactively(project, args.change_id, revise_with_agent, interactive)
     return draft_result(project, state)
+
+
+def choose_slug(args, proposed: str | None, interactive: bool, ask=input,
+                *, prefix: str = "FEAT") -> str | None:
+    """Choose a safe ID suffix from the flag, human answer, or agent proposal."""
+    explicit = getattr(args, "slug", None)
+    if explicit is not None:
+        require(SLUG.fullmatch(explicit) is not None, "Invalid --slug")
+        return explicit
+    proposed = proposed if isinstance(proposed, str) and SLUG.fullmatch(proposed) else None
+    if not interactive:
+        return proposed
+    day = datetime.now(timezone.utc).strftime("%Y%m%d")
+    prompt = f"将创建变更 {prefix}-{day}-{proposed or '<功能短名>'}，直接回车确认，或输入新的功能短名："
+    for _ in range(2):
+        answer = ask(prompt).strip()
+        if not answer:
+            return proposed
+        if SLUG.fullmatch(answer):
+            return answer
+        prompt = "功能短名须为 3–40 个小写字母、数字或连字符，请重新输入："
+    raise StoryLoopError("Invalid feature slug; use --slug to choose a valid value")
 
 
 def dispatch(project: Path, args, run_with_answers, draft_result, load_run_state) -> dict:
@@ -139,6 +169,9 @@ def product_answer(project: Path, payload: dict, call, invoke_project_agent) -> 
     payload = {**payload, "routing_version": 1,
                "source_commit": _git(project, "rev-parse", "HEAD").strip()}
     def validate(value):
+        if isinstance(value, dict) and "current_product" not in payload and "slug" in value:
+            if not isinstance(value["slug"], str) or not SLUG.fullmatch(value["slug"]):
+                value.pop("slug")
         validate_product(value)
         require(isinstance(value.get("assessment"), dict), "Product assessment is required")
     operation = lambda: answer_with_repair(

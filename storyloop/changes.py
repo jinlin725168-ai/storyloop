@@ -11,7 +11,7 @@ from typing import Callable
 
 from .baseline import load_baseline, load_project_config
 from .models import identifier, require, text
-from .product_contract import nature_of, validate_product
+from .product_contract import SLUG, nature_of, validate_product
 from .openspec_docs import capability_of, render_delta_spec
 from .requirement_checklist import evaluate_checklist, render_checklist
 from .storage import load_json, write_json, write_text_atomic
@@ -21,7 +21,7 @@ Clock = Callable[[], datetime]
 
 def create_change(
     project: Path, idea: str, product: dict, now: Clock | None = None,
-    supersedes: dict | None = None,
+    supersedes: dict | None = None, slug: str | None = None,
 ) -> dict:
     """Create a local ignored draft from one short product idea."""
     project = Path(project).resolve()
@@ -31,8 +31,10 @@ def create_change(
         ensure_checked(project)
     idea = text(idea, "product idea")
     canonical = _validated_copy(product)
+    proposed = canonical.pop("slug", None)
+    slug = slug if slug is not None else proposed
     moment = (now or _utc_now)()
-    change_id = _next_id(project, moment, nature_of(canonical))
+    change_id = _next_id(project, moment, nature_of(canonical), slug)
     timestamp = _timestamp(moment)
     state = {
         "version": 1,
@@ -117,6 +119,7 @@ def revise_change(
     require(not run_path.exists(),
             "A change cannot be revised after execution starts; create a new product change")
     canonical = _validated_copy(product)
+    canonical.pop("slug", None)
     moment = (now or _utc_now)()
     canonical["clarifications"] = _merge_clarifications(
         current["product"].get("clarifications", []), canonical.get("clarifications", []),
@@ -242,10 +245,19 @@ def _write_text(path: Path, content: str) -> None:
     write_text_atomic(path, content)
 
 
-def _next_id(project: Path, moment: datetime, nature: str = "feature") -> str:
+def _next_id(project: Path, moment: datetime, nature: str = "feature",
+             slug: str | None = None) -> str:
     from .change_types import definition_for
     prefix = definition_for(nature).id_prefix + "-" + moment.astimezone(timezone.utc).strftime("%Y%m%d") + "-"
     root = project / ".storyloop" / "state" / "changes"
+    if slug is not None:
+        require(isinstance(slug, str) and SLUG.fullmatch(slug) is not None,
+                "Invalid feature slug; use --slug with 3–40 lowercase letters, digits, or hyphens")
+        candidate = prefix + slug
+        if _state_path(project, candidate).exists() or (project / "openspec/changes" / candidate).exists():
+            from .models import StoryLoopError
+            raise StoryLoopError(f"Change ID {candidate} is taken; choose another --slug")
+        return candidate
     existing = {path.stem for path in root.glob(prefix + "*.json")} if root.is_dir() else set()
     for number in range(1, 1000):
         candidate = prefix + f"{number:03d}"

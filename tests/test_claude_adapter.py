@@ -356,7 +356,8 @@ class ClaudeProfileTests(unittest.TestCase):
             self.assertEqual(set(ledger_entries(root, 'FEAT-1')[0]),
                              {'lessons_provided', 'lessons_claimed', 'lessons_unknown', 'lessons_truncated',
                               'role', 'wall_ms', 'at', 'call', 'skills', 'model', 'cost_usd',
-                              'turns', 'duration_ms', 'input_tokens', 'output_tokens', 'segments'})
+                              'turns', 'duration_ms', 'input_tokens', 'output_tokens', 'segments',
+                              'engine_version', 'instructions_sha256', 'schema_sha256'})
             prompt = load_json(root / 'cli-request.json')['prompt']
             self.assertNotIn('role_profile', json.loads(prompt.split('Request:\n')[-1]))
 

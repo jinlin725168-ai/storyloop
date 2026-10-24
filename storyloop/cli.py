@@ -77,6 +77,7 @@ def _product_arguments(child, command):
         add_init_arguments(child)
     elif command == "change":
         child.add_argument("--idea")
+        child.add_argument("--slug", help="新变更 ID 中的功能短名（3–40 个小写字母、数字、连字符）")
         child.add_argument("--change", dest="change_id")
         child.add_argument("--message")
         child.add_argument("--supersede",

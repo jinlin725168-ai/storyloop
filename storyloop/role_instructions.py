@@ -64,6 +64,7 @@ INSTRUCTIONS = {
         "`clarifications` entry; when the request carries answers, apply them to rules and "
         "criteria, drop the answered questions, and keep the decisions in `clarifications`. "
         "Exact shape: {version:1, goal:string, non_goals:[string], capability?:slug, "
+        "slug?:kebab-case 3-40 chars naming this feature, used in the change id, "
         "nature?:'feature'|'fix'|'refactor', defect?:{observed,expected,reproduction:[string],"
         "reporter_hypothesis?,root_cause:[{statement,location:'path:line'}],confirmed:[string],"
         "unconfirmed:[string],sibling_entries?:[string],origin_change?}, refactor?:{subtype:'structure'|"
