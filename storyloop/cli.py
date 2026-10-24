@@ -194,7 +194,7 @@ def dispatch(args) -> dict:
                                    allow_ci=args.allow_ci)
     if args.command == "base-build-config":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
-        from .project_profile import confirm_legacy_base_build
+        from .base_build_config import confirm_legacy_base_build
         try:
             commands = json.loads(args.commands_json)
         except ValueError as exc:

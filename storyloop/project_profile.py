@@ -8,9 +8,9 @@ import os
 from pathlib import Path
 import shutil
 
-from .models import StoryLoopError, require, text
+from .models import StoryLoopError, require
 from .path_security import repository_relative, safe_target
-from .storage import load_json, write_json
+from .storage import load_json
 
 CI_FILES = (
     ".gitlab-ci.yml", "Jenkinsfile", "azure-pipelines.yml", ".circleci/config.yml",
@@ -162,23 +162,6 @@ def base_commands_digest(profile: dict) -> str:
     commands["build"] = _commands(profile["base_build_commands"])
     payload = json.dumps(commands, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode()).hexdigest()
-
-
-def confirm_legacy_base_build(project: Path, commands: object, confirmed_by: str) -> dict:
-    """Record a human's build declaration for a config frozen before this setting existed."""
-    from .storage import locked
-
-    project = Path(project).resolve()
-    with locked(project):
-        config = load_json(safe_target(project, ".storyloop/config.json", "project config"))
-        require("base_build_commands" not in config["profile"],
-                "New projects keep base_build_commands in config.json")
-        record = {"version": 1, "base_build_commands": _commands(commands),
-                  "confirmed_by": text(confirmed_by, "build config confirmer")}
-        path = safe_target(project, BASE_BUILD_SUPPLEMENT, "base build supplement")
-        write_json(path, record, max_bytes=64_000)
-        return {"status": "CONFIRMED", "path": str(path),
-                "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
 def effective_base_profile(project: Path, profile: dict,
