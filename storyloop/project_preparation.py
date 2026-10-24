@@ -90,12 +90,9 @@ def _ensure_contract_commit(project: Path, state: dict, paths: list[str]) -> str
         )
         return result["commit"]
     head = _git(project, "rev-parse", "HEAD").strip()
-    parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
-    changed = set(filter(None, _git(
-        project, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", head
-    ).split("\0")))
-    require(len(parents) == 2 and parents[1] == state["source_head"]
-            and changed == set(paths), "Cannot recover the contract commit safely")
+    from .project_git import exact_child_commit
+    require(exact_child_commit(project, state["source_head"], set(paths), head),
+            "Cannot recover the contract commit safely")
     return head
 
 

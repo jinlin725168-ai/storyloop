@@ -76,6 +76,19 @@ def commit_paths(project: Path, paths: list[str], message: str, *, details: bool
     return {"status": "COMMITTED", "commit": commit, "branch": branch}
 
 
+def exact_child_commit(project: Path, parent: str, paths: set[str],
+                       head: str | None = None) -> bool:
+    """Check a single-parent commit's complete path set without rename elision."""
+    head = head or _git(project, "rev-parse", "HEAD").strip()
+    parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
+    if len(parents) != 2 or parents[1] != parent:
+        return False
+    changed = {path for path in _git(project, "diff-tree", "--no-commit-id",
+                                    "--no-renames", "--name-only", "-r", "-z",
+                                    head).split("\0") if path}
+    return changed == paths
+
+
 def finish_feature(project: Path, feature_branch: str, target_branch: str) -> dict:
     """Switch to the original branch and perform a local no-fast-forward merge."""
     project = Path(project).resolve()

@@ -9,7 +9,7 @@ from pathlib import Path
 from .baseline import _git
 from .models import require
 from .smoke import RESULT_EVIDENCE
-from .project_git import commit_paths, current_branch
+from .project_git import commit_paths, current_branch, exact_child_commit
 from .storage import write_bytes_atomic
 
 
@@ -94,14 +94,10 @@ def verify_evidence_digest(project: Path, state: dict) -> None:
 def _verify_existing_receipt(
     project: Path, state: dict, head: str, paths: list[str], receipt_bytes: tuple[bytes, bytes],
 ) -> None:
-    parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
-    changed = set(filter(None, _git(
-        project, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", head
-    ).split("\0")))
     actual = (Path(state["report"]).read_bytes(),
               Path(state["report"]).with_suffix(".md").read_bytes())
-    require(len(parents) == 2 and parents[1] == state["merge_commit"]
-            and changed == set(paths) and not _dirty_paths(project)
+    require(exact_child_commit(project, state["merge_commit"], set(paths), head)
+            and not _dirty_paths(project)
             and actual == receipt_bytes,
             "Cannot recover the merge receipt safely")
 

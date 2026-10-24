@@ -12,7 +12,7 @@ from .base_upgrade import _changed_since, base_candidate_paths, establish_old_gr
 from .baseline import _git, load_baseline, load_project_config, verify_baseline
 from .manual_acceptance import load_manual_acceptance
 from .models import StoryLoopError, require, text
-from .project_git import current_branch, start_base, commit_paths, finish_feature
+from .project_git import current_branch, start_base, commit_paths, exact_child_commit, finish_feature
 from .project_loop_support import relative_files
 from .project_profile import base_commands_digest, layer_commands
 from .project_boundaries import audit_base_scope
@@ -403,9 +403,6 @@ def _ensure_base_contract_commit(project: Path, state: dict, paths: list[str]) -
     if head == state["source_head"]:
         return commit_paths(project, paths,
                             f"test({state['change_id']}): lock approved contract and smoke acceptance")["commit"]
-    parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
-    changed = {item for item in _git(project, "diff-tree", "--no-commit-id", "--no-renames",
-                                     "--name-only", "-r", "-z", head).split("\0") if item}
-    require(len(parents) == 2 and parents[1] == state["source_head"]
-            and changed == set(paths), "Cannot recover the base contract commit safely")
+    require(exact_child_commit(project, state["source_head"], set(paths), head),
+            "Cannot recover the base contract commit safely")
     return head

@@ -8,7 +8,7 @@ from .storage import load_json
 from .baseline import _git, load_baseline, load_project_config
 from .oracle_counts import check_layers
 from .project_boundaries import audit_base_scope, audit_project_changes
-from .project_git import current_branch
+from .project_git import current_branch, exact_child_commit
 from .project_profile import base_commands_digest, layer_commands
 from .project_receipt import _dirty_paths, verify_verified_artifacts, recover_completed_merge  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .smoke import RESULT_EVIDENCE, smoke_digests
@@ -231,11 +231,7 @@ def base_report_commit(project: Path, state: dict) -> str | None:
     head = _git(project, "rev-parse", "HEAD").strip()
     if head == state.get("candidate_commit"):
         return None
-    parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
-    paths = {item for item in _git(project, "diff-tree", "--no-commit-id", "--no-renames",
-                                   "--name-only", "-r", "-z", head).split("\0") if item}
-    if len(parents) == 2 and parents[1] == state.get("candidate_commit") \
-            and paths == base_report_paths(state):
+    if exact_child_commit(project, state.get("candidate_commit"), base_report_paths(state), head):
         return head
     return None
 
