@@ -22,7 +22,7 @@ class CostLimitsTests(unittest.TestCase):
             command_project(root, 'print("{}")')
             for index in range(80):
                 record_call(root, 'review', 'FEAT-1', {}, 1, failed=True)
-            with patch('storyloop.project_agents._command') as call:
+            with patch('storyloop.agent_transport._command') as call:
                 with self.assertRaises(StoryLoopError) as caught:
                     invoke_project_agent(root, 'review', {'change_id': 'FEAT-1'})
             self.assertEqual(caught.exception.code, 'COST_LIMIT_REACHED')

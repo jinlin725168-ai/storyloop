@@ -9,7 +9,7 @@ from typing import Callable
 from .changes import _save, contract_digest, create_change, load_change, write_change_preview
 from .run_transitions import transition, set_change_status, SUPERSEDABLE
 from .models import identifier, require, text
-from .project_loop_guards import read_only_call
+from .guarded_calls import read_only_call
 from .project_loop_support import run_path, save_run
 from .stop_report import stop_of
 from .storage import load_json, locked

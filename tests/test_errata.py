@@ -12,7 +12,7 @@ from storyloop.baseline import bootstrap_project
 from storyloop.foundation_survey import foundation_payload
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import invoke_project_agent
-from storyloop.project_loop_guards import read_only_call, write_safely
+from storyloop.guarded_calls import read_only_call, write_safely
 from storyloop.storage import load_json, write_json
 from tests.lesson_support import git_repo, _git, head
 

@@ -53,7 +53,7 @@ class ChangeTypeTests(unittest.TestCase):
                 product = base_product()
                 product["nature"] = invalid
                 with self.assertRaises(StoryLoopError):
-                    from storyloop.models import validate_product
+                    from storyloop.product_contract import validate_product
                     validate_product(product)
                 with self.assertRaises(StoryLoopError):
                     definition_for(invalid)

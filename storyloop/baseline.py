@@ -5,11 +5,11 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
-import shutil
+from typing import Callable
 
 from .models import StoryLoopError, require
 from .path_security import safe_target
-from .processutil import run_process
+from .git_command import GIT_ENVIRONMENT, git as _git, git_failure as _git_failure
 from .project_profile import GENERATED_PATHS, matches_test_root, validate_project_settings
 from .storage import load_json, write_json, write_text_atomic
 
@@ -17,7 +17,12 @@ BASELINE_PATH = Path(".storyloop/baseline.json")
 CONFIG_PATH = Path(".storyloop/config.json")
 
 
-def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
+def bootstrap_project(
+    project: Path, overrides: dict | None = None, *,
+    smoke_preflight: Callable[[Path], None] | None = None,
+    smoke_adoption: Callable[[Path], object] | None = None,
+    adapter_check: Callable[[Path], object] | None = None,
+) -> dict:
     """Capture a clean repository atomically; restore only this attempt's control writes."""
     from .initialization_transaction import initialization_transaction
     from .onboarding_manifest import validate_onboarding
@@ -32,7 +37,8 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
     require(baseline["source_head"] == original_head and baseline["source_branch"] == original_branch,
             "Repository HEAD or branch changed during initialization validation")
     config = _initial_config(profile, budget, role_config)
-    _preflight_system_smoke(project)
+    if smoke_preflight is not None:
+        smoke_preflight(project)
     with initialization_transaction(project):
         _require_initializable(project)
         require(_git(project, "rev-parse", "HEAD").strip() == original_head
@@ -42,11 +48,10 @@ def bootstrap_project(project: Path, overrides: dict | None = None) -> dict:
         _exclude_control_plane(project)
         write_json(project / CONFIG_PATH, config, max_bytes=512_000)
         write_json(project / BASELINE_PATH, baseline, max_bytes=8_000_000)
-        from .system_smoke import adopt_system_smoke
-        adopt_system_smoke(project)
-        if config.get("adapters") or config.get("roles"):
-            from .adapter_capabilities import check
-            check(project)
+        if smoke_adoption is not None:
+            smoke_adoption(project)
+        if (config.get("adapters") or config.get("roles")) and adapter_check is not None:
+            adapter_check(project)
         require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
                 "StoryLoop control files must stay outside Git changes")
         require(_git(project, "rev-parse", "HEAD").strip() == original_head
@@ -97,13 +102,6 @@ def _initial_config(profile: dict, budget: dict, role_config: dict) -> dict:
         "agent_timeout_seconds": 14400, "check_timeout_seconds": 300,
         "design_min_stories": 2, "profile": profile, **budget, **role_config,
     }
-
-
-def _preflight_system_smoke(project: Path) -> None:
-    from .system_smoke import SYSTEM_SMOKE_DIR, validate_manifest
-    path = safe_target(project, SYSTEM_SMOKE_DIR + "/manifest.json", "system smoke manifest")
-    if path.is_file():
-        validate_manifest(load_json(path))
 
 
 def _bootstrap_settings(overrides: dict | None) -> tuple[dict, dict, dict]:
@@ -251,35 +249,3 @@ def _exclude_control_plane(project: Path) -> None:
         if prefix and not prefix.endswith("\n"):
             prefix += "\n"
         write_text_atomic(exclude, prefix + ".storyloop/\n")
-
-
-# The home variables let git read the user's global config (identity, safe.directory) as it would
-# outside the loop; hooks stay disabled via core.hooksPath below.
-GIT_ENVIRONMENT = ["PATH", "SYSTEMROOT", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "XDG_CONFIG_HOME"]
-
-
-def _git_failure(stderr: str) -> str:
-    """Git's own reason, so a stop says what to fix (e.g. a missing user.email)."""
-    lines = [line.strip() for line in stderr.splitlines() if line.strip() and not line.startswith("***")]
-    reason = " ".join(lines)[:400]
-    return f"Git operation failed: {reason}" if reason else "Git operation failed"
-
-
-def _git(project: Path, *arguments: str) -> str:
-    executable = shutil.which("git")
-    require(bool(executable), "Git executable is unavailable")
-    result = run_process(
-        [executable, "-c", f"core.hooksPath={os.devnull}", *arguments],
-        project,
-        30,
-        environment_allowlist=GIT_ENVIRONMENT,
-        source_environment=os.environ,
-    )
-    if (result.get("contained") is not True or result.get("timed_out")
-            or result.get("truncated") or result.get("error")):
-        raise StoryLoopError("Git process failed safely", code="GIT_BLOCKED")
-    if result.get("returncode") != 0:
-        raise StoryLoopError(_git_failure(result.get("stderr", "")), code="GIT_BLOCKED")
-    stdout = result.get("stdout")
-    require(isinstance(stdout, str) and len(stdout) <= 8_000_000, "Git output is invalid")
-    return stdout

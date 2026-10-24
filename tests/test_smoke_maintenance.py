@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 from storyloop.approvals import approve_change
-from storyloop.baseline import bootstrap_project
+from storyloop.onboarding_cli import bootstrap_with_project_checks as bootstrap_project
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, run_change

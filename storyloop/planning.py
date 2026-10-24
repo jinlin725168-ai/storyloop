@@ -7,7 +7,7 @@ from .facts import merge_facts
 from .intake import digest, _signals, _role_evidence
 from .principles import check_principles, load_principles
 from .planning_validation import option_scope, validate_plan
-from .project_loop_guards import read_only_call
+from .guarded_calls import read_only_call
 from .project_loop_support import save_run
 from .run_stops import pause
 from .routing_evidence import measure_scope

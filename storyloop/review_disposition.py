@@ -7,7 +7,7 @@ from .call_log import _redacted
 from .finding_disposition import check_checklist, dispose
 from .models import StoryLoopError, require
 from .project_contracts import validate_review
-from .project_loop_guards import read_only_call
+from .guarded_calls import read_only_call
 from .project_loop_support import save_run
 from .review_context import strong_verification
 from .role_profiles import enabled, role_settings

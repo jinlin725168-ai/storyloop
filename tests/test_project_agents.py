@@ -166,6 +166,7 @@ class LessonInjectionTests(unittest.TestCase):
         self.assertEqual(entry['lessons_provided'], ['L-0001'])
         self.assertEqual(entry['lessons_claimed'], ['L-0001'])
         self.assertEqual(entry['lessons_unknown'], ['L-0404'])
+        self.assertEqual(request['payload']['lessons']['relevant'][0]['id'], 'L-0001')
         path = 'openspec/lessons/L-0001.md'
         self.assertEqual(meta['context']['lessons'], [{'path': path, 'sha256': hashlib.sha256(git_blob(root, path)).hexdigest()}])
 

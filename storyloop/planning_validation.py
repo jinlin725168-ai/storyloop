@@ -38,7 +38,7 @@ def validate_plan(answer: object, project: Path, change: dict, state: dict) -> d
     binding = {'product_digest': digest(change['product']),
                'source_commit': state['contract_commit'],
                'scope_digest': digest([{ 'id': o['id'], **option_scope(o)} for o in options]),
-               'suite_digest': digest(smoke_digests(project, change['change_id'])),
+               'suite_digest': digest(smoke_digests(project, change)),
                'policy_digest': state['routing']['policy_digest'],
                'principles_digest': load_principles(project)['digest'],
                'baseline_digest': digest(load_baseline(project))}

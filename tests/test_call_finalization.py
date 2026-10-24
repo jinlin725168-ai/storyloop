@@ -25,7 +25,7 @@ class CallFinalizationTests(unittest.TestCase):
 
     def test_memory_failure_preserves_original_error_and_closes_record(self):
         original = StoryLoopError('original adapter failure', code='AGENT_UNAVAILABLE')
-        with patch('storyloop.project_agents._command', side_effect=original), \
+        with patch('storyloop.agent_transport._command', side_effect=original), \
                 patch('storyloop.project_agents._record_memory_evidence', side_effect=OSError('diagnostic')):
             with self.assertRaises(StoryLoopError) as raised:
                 self.execute()
@@ -38,7 +38,7 @@ class CallFinalizationTests(unittest.TestCase):
         for failing in ('_record_memory_evidence', 'close_call'):
             self.call = open_call(self.root, 'implement', 'FEAT-1', 'command', {})
             with self.subTest(failing=failing), \
-                    patch('storyloop.project_agents._command', return_value={'summary': 'ok'}), \
+                    patch('storyloop.agent_transport._command', return_value={'summary': 'ok'}), \
                     patch('storyloop.project_agents.' + failing, side_effect=OSError('diagnostic')), \
                     patch('storyloop.errata.capture_errata', side_effect=OSError('errata')) as capture:
                 self.assertEqual(self.execute(), {'summary': 'ok'})
@@ -50,7 +50,7 @@ class CallFinalizationTests(unittest.TestCase):
 
     def test_ledger_failure_after_success_propagates_and_closes_record(self):
         failure = OSError('ledger unavailable')
-        with patch('storyloop.project_agents._command', return_value={'summary': 'ok'}),                 patch('storyloop.project_agents.record_call', side_effect=failure):
+        with patch('storyloop.agent_transport._command', return_value={'summary': 'ok'}),                 patch('storyloop.project_agents.record_call', side_effect=failure):
             with self.assertRaises(OSError) as raised:
                 self.execute()
         self.assertIs(raised.exception, failure)
@@ -58,14 +58,14 @@ class CallFinalizationTests(unittest.TestCase):
 
     def test_ledger_failure_preserves_any_original_adapter_error(self):
         for original in (StoryLoopError('adapter failed'), OSError('adapter IO failed')):
-            with self.subTest(error=type(original).__name__),                     patch('storyloop.project_agents._command', side_effect=original),                     patch('storyloop.project_agents.record_call', side_effect=ValueError('ledger')):
+            with self.subTest(error=type(original).__name__),                     patch('storyloop.agent_transport._command', side_effect=original),                     patch('storyloop.project_agents.record_call', side_effect=ValueError('ledger')):
                 with self.assertRaises(type(original)) as raised:
                     self.execute()
                 self.assertIs(raised.exception, original)
                 self.assertEqual(load_meta(self.root, self.call)['status'], 'FAILED')
 
     def test_errata_failure_keeps_success_and_closed_record(self):
-        with patch('storyloop.project_agents._command', return_value={'summary': 'ok'}), \
+        with patch('storyloop.agent_transport._command', return_value={'summary': 'ok'}), \
                 patch('storyloop.errata.capture_errata', side_effect=ValueError('errata')):
             self.assertEqual(self.execute(), {'summary': 'ok'})
         self.assertEqual(load_meta(self.root, self.call)['status'], 'OK')

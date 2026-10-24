@@ -108,7 +108,7 @@ class MemoryCompatibilityTests(unittest.TestCase):
         self.assertIs(raised.exception, failure)
 
     def test_product_entrypoint_accepts_memory_metadata(self):
-        from storyloop.models import validate_product
+        from storyloop.product_contract import validate_product
         from tests.support import product
         answer = {**product(), 'lessons_used': [{'id': 'L-0001', 'how': 'checked'}], 'errata': []}
         validate_product(answer)

@@ -54,8 +54,8 @@ class CodexAdapterTests(unittest.TestCase):
             root = Path(folder)
             project(root)
             fake = FakeCodex(['{"summary": "done", "questions": []}'])
-            with patch("storyloop.project_agents.run_process", fake), \
-                    patch("storyloop.project_agents._codex_executable", return_value=["codex"]):
+            with patch("storyloop.agent_transport.run_process", fake), \
+                    patch("storyloop.agent_transport._codex_executable", return_value=["codex"]):
                 result = invoke_project_agent(root, "implement", {"change": {"change_id": "FEAT-1"}})
             self.assertEqual(result, {"summary": "done", "questions": []})
             command = fake.calls[0][0]
@@ -80,8 +80,8 @@ class CodexAdapterTests(unittest.TestCase):
             project(root)
             fake = FakeCodex(["I finished the work, here is a summary in prose.",
                               '{"summary": "done", "questions": []}'])
-            with patch("storyloop.project_agents.run_process", fake), \
-                    patch("storyloop.project_agents._codex_executable", return_value=["codex"]):
+            with patch("storyloop.agent_transport.run_process", fake), \
+                    patch("storyloop.agent_transport._codex_executable", return_value=["codex"]):
                 result = invoke_project_agent(root, "implement", {"change": {"change_id": "FEAT-2"}})
             self.assertEqual(result["summary"], "done")
             self.assertEqual(len(fake.calls), 2)
@@ -96,8 +96,8 @@ class CodexAdapterTests(unittest.TestCase):
             root = Path(folder)
             project(root)
             fake = FakeCodex(["prose", "still prose", "and again", "never json"])
-            with patch("storyloop.project_agents.run_process", fake), \
-                    patch("storyloop.project_agents._codex_executable", return_value=["codex"]), \
+            with patch("storyloop.agent_transport.run_process", fake), \
+                    patch("storyloop.agent_transport._codex_executable", return_value=["codex"]), \
                     self.assertRaises(StoryLoopError):
                 invoke_project_agent(root, "review", {"change": {"change_id": "FEAT-3"}})
             self.assertEqual(len(fake.calls), 3)  # one run plus two repairs
@@ -113,8 +113,8 @@ class CodexProfileTests(unittest.TestCase):
                 'strong': 'mapped-strong', 'standard': 'mapped-standard'}}}, roles={'default_adapter': 'primary'})
             write_json(root / '.storyloop/config.json', config)
             fake = FakeCodex(['{"summary":"done","questions":[]}'])
-            with patch('storyloop.project_agents.run_process', fake), \
-                    patch('storyloop.project_agents._codex_executable', return_value=['codex']):
+            with patch('storyloop.agent_transport.run_process', fake), \
+                    patch('storyloop.agent_transport._codex_executable', return_value=['codex']):
                 invoke_project_agent(root, 'implement', {'change_id': 'FEAT-1', 'routing_tier': 'light'})
             argv = fake.calls[0][0]
             self.assertEqual(argv[argv.index('-m') + 1], 'mapped-standard')
@@ -147,8 +147,8 @@ class CodexProfileTests(unittest.TestCase):
             config.update(adapters={'primary': {'kind': 'codex'}}, roles={'default_adapter': 'primary'})
             write_json(root / '.storyloop/config.json', config)
             fake = FakeCodex(['{"summary":"done","questions":[]}'])
-            with patch('storyloop.project_agents.run_process', fake), \
-                    patch('storyloop.project_agents._codex_executable', return_value=['codex']):
+            with patch('storyloop.agent_transport.run_process', fake), \
+                    patch('storyloop.agent_transport._codex_executable', return_value=['codex']):
                 invoke_project_agent(root, 'implement', {'change_id': 'FEAT-2'})
             self.assertNotIn('-m', fake.calls[0][0])
             entry = ledger_entries(root, 'FEAT-2')[0]

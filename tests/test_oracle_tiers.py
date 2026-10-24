@@ -8,6 +8,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from storyloop.changes import load_change
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
 from tests.routing_support import legacy_create_change as create_change
@@ -53,9 +54,9 @@ class ManifestTierTests(unittest.TestCase):
             change_id = approved(root, two_row_product())
             files = [{"path": "t.py", "content": "pass\n"}]
             with self.assertRaisesRegex(StoryLoopError, "expected"):
-                install_smoke_suite(root, change_id, files, {"version": 1, "tests": [
+                install_smoke_suite(root, load_change(root, change_id), files, {"version": 1, "tests": [
                     test_entry("T1", ["AC-1", "AC-2"])]})
-            install_smoke_suite(root, change_id, files, {"version": 1, "tests": [
+            install_smoke_suite(root, load_change(root, change_id), files, {"version": 1, "tests": [
                 test_entry("T1", ["AC-1"]), test_entry("T2", ["AC-2"])]})
 
     def test_a_heavy_criterion_needs_a_heavy_test(self):
@@ -66,8 +67,8 @@ class ManifestTierTests(unittest.TestCase):
             change_id = approved(root, value)
             files = [{"path": "t.py", "content": "pass\n"}]
             with self.assertRaisesRegex(StoryLoopError, "tier"):
-                install_smoke_suite(root, change_id, files, {"version": 1, "tests": [test_entry("T1", ["AC-1"])]})
-            install_smoke_suite(root, change_id, files, {"version": 1, "tests": [
+                install_smoke_suite(root, load_change(root, change_id), files, {"version": 1, "tests": [test_entry("T1", ["AC-1"])]})
+            install_smoke_suite(root, load_change(root, change_id), files, {"version": 1, "tests": [
                 test_entry("T1", ["AC-1"], "heavy")]})
 
 
@@ -93,30 +94,30 @@ class RedByRowTypeTests(unittest.TestCase):
         root = Path(folder.name)
         change_id = approved(root, two_row_product())
         payload = suite(change_id, red_exit, green_exit, red_output)
-        install_smoke_suite(root, change_id, payload["files"], payload["manifest"])
+        install_smoke_suite(root, load_change(root, change_id), payload["files"], payload["manifest"])
         return root, change_id
 
     def test_new_rows_red_and_kept_rows_green_prove_red(self):
         root, change_id = self._prove(1, 0)
-        self.assertEqual(run_smoke(root, change_id, expect_red=True)["status"], "RED")
+        self.assertEqual(run_smoke(root, load_change(root, change_id), expect_red=True)["status"], "RED")
 
     def test_a_kept_row_failing_on_old_code_is_an_oracle_defect(self):
         root, change_id = self._prove(1, 1)
         with self.assertRaises(StoryLoopError) as raised:
-            run_smoke(root, change_id, expect_red=True)
+            run_smoke(root, load_change(root, change_id), expect_red=True)
         self.assertEqual(raised.exception.code, "ORACLE_DEFECT")
         self.assertEqual(raised.exception.details["criteria_failing"], ["AC-2"])
 
     def test_a_new_row_passing_on_old_code_is_existing_green(self):
         root, change_id = self._prove(0, 0)
         with self.assertRaises(StoryLoopError) as raised:
-            run_smoke(root, change_id, expect_red=True)
+            run_smoke(root, load_change(root, change_id), expect_red=True)
         self.assertEqual(raised.exception.code, "EXISTING_GREEN")
 
     def test_a_failure_with_zero_executed_tests_is_not_red(self):
         root, change_id = self._prove(1, 0, "Ran 0 tests in 0.000s")
         with self.assertRaisesRegex(StoryLoopError, "environment error"):
-            run_smoke(root, change_id, expect_red=True)
+            run_smoke(root, load_change(root, change_id), expect_red=True)
 
 
 class OracleDefectLoopTests(unittest.TestCase):
@@ -175,12 +176,12 @@ class TieredRunTests(unittest.TestCase):
              "timeout_seconds": 10},
             {"id": "HEAVY", "criteria": ["AC-2"], "tier": "heavy",
              "command": ["{python}", f"acceptance/changes/{change_id}/heavy.py"], "timeout_seconds": 10}]}
-        install_smoke_suite(root, change_id, files, manifest)
+        install_smoke_suite(root, load_change(root, change_id), files, manifest)
         return root, change_id
 
     def test_heavy_runs_only_after_fast_is_green(self):
         root, change_id = self._suite(fast_exit=1)
-        result = run_smoke(root, change_id)
+        result = run_smoke(root, load_change(root, change_id))
         self.assertEqual(result["status"], "FAILED")
         heavy = next(item for item in result["results"] if item["id"] == "HEAVY")
         self.assertEqual((heavy["status"], heavy["tier"]), ("NOT_RUN", "heavy"))
@@ -188,7 +189,7 @@ class TieredRunTests(unittest.TestCase):
 
     def test_heavy_runs_when_fast_is_green(self):
         root, change_id = self._suite(fast_exit=0)
-        result = run_smoke(root, change_id)
+        result = run_smoke(root, load_change(root, change_id))
         heavy = next(item for item in result["results"] if item["id"] == "HEAVY")
         self.assertEqual(heavy["status"], "PASS")
 

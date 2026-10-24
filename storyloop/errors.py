@@ -9,3 +9,9 @@ class StoryLoopError(RuntimeError):
         super().__init__(message)
         self.code = code
         self.details = {} if details is None else details
+
+
+def require(condition: bool, message: str) -> None:
+    """Reject a failed deterministic check with the shared safe error type."""
+    if not condition:
+        raise StoryLoopError(message)

@@ -11,7 +11,8 @@ from storyloop.cli import dispatch, parser
 from storyloop.call_log import CALLS_ROOT
 from storyloop.change_log import change_log, render_log
 from storyloop.changes import create_change
-from storyloop.models import StoryLoopError, validate_product
+from storyloop.models import StoryLoopError
+from storyloop.product_contract import validate_product
 from storyloop.project_agents import instructions_for, invoke_project_agent
 from storyloop.project_loop import load_run_state, run_change
 from storyloop.role_schemas import normalize, schema_errors, schema_for

@@ -2,9 +2,18 @@
 from pathlib import Path
 
 from .baseline import bootstrap_project
+from . import adapter_capabilities, system_smoke
 from .models import require
 from .onboarding import scaffold_project
 from .storage import load_json
+
+
+def bootstrap_with_project_checks(project: Path, settings: dict | None = None) -> dict:
+    """Bind business preflight and transaction effects to the pure baseline capture."""
+    return bootstrap_project(project, settings,
+                             smoke_preflight=system_smoke.preflight_system_smoke,
+                             smoke_adoption=system_smoke.adopt_system_smoke,
+                             adapter_check=adapter_capabilities.check)
 
 
 def initialize(project: Path, args) -> dict:
@@ -15,7 +24,7 @@ def initialize(project: Path, args) -> dict:
         return scaffold_project(project, args.stack)
     require(args.stack is None, "--stack requires --scaffold")
     settings = load_json(args.settings.resolve()) if args.settings else None
-    return bootstrap_project(project, settings)
+    return bootstrap_with_project_checks(project, settings)
 
 
 def add_init_arguments(child) -> None:

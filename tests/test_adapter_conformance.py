@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 from storyloop.adapter_capabilities import probe
 from storyloop.models import StoryLoopError
-from storyloop import project_agents as agents
+from storyloop import agent_transport as agents
+from storyloop.adapter_profiles import model_for, sequential_instructions, sequential_profile
 from storyloop.role_schemas import schema_for, wire_schema
 from storyloop.storage import load_json, write_json
 
@@ -65,6 +66,10 @@ class Conformance:
                        {'request_id': envelope['request_id'], 'result': answer})
             return agents._manual(self.root, self.request, self.schema, self.trace)
         if self.kind == 'codex':
+            model = model_for(self.request, self.config.get('models'))
+            self.trace.update(codex_model=model,
+                              codex_profile=sequential_profile(self.request, 'openai', model),
+                              codex_instructions=sequential_instructions(self.request))
             with patch.object(agents, '_codex_executable', return_value=[sys.executable, str(FIXTURES / 'codex.py')]):
                 return agents._codex(self.root, self.request, self.config, self.schema, self.trace)
         return agents._command(self.root, self.request, self.config, self.schema, self.trace)
