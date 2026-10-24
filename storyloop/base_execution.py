@@ -8,8 +8,8 @@ import json
 
 from . import __version__
 from .approvals import materialize_approved_change
-from .base_upgrade import base_candidate_paths, establish_old_green
-from .baseline import _git, load_project_config, verify_baseline
+from .base_upgrade import _changed_since, base_candidate_paths, establish_old_green
+from .baseline import _git, load_baseline, load_project_config, verify_baseline
 from .manual_acceptance import load_manual_acceptance
 from .models import StoryLoopError, require, text
 from .project_git import current_branch, start_base, commit_paths, finish_feature
@@ -318,6 +318,11 @@ def _open_state(project: Path, change: dict, implementer: str | None, new_run_st
     allowed = {item[3:].replace("\\", "/") for item in records}
     require(all(item[:2] in {" M", " D", "??"} for item in records)
             and allowed <= expected, "Prepared base files exceed approved paths")
+    baseline = load_baseline(project)
+    committed = _changed_since(project, baseline["source_head"])
+    require(not committed.intersection(expected),
+            "Committed proposal paths already exist on the source branch; "
+            "revert them with a new commit, then replay the change on the new base branch")
     verify_baseline(project, allowed_base_paths=allowed)
     state = new_run_state(project, change_id, start_base(project, change_id, allowed),
                           change["approval"]["contract_digest"])

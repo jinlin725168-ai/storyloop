@@ -217,6 +217,26 @@ class BaseCompatibilityTests(unittest.TestCase):
         finally:
             CONFIRMED.reset(token)
 
+    def test_legacy_source_commit_requires_explicit_replay_before_starting_run(self):
+        proposed = base_upgrade.propose_base_change(self.root, ["pom.xml"], "旧底座候选")
+        change_id = proposed["change_id"]
+        (self.root / "pom.xml").write_text("<project/>\n<!-- old candidate -->\n", encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "old source candidate")
+        old_candidate = git(self.root, "rev-parse", "HEAD")
+        base_upgrade.upgrade_baseline(self.root, change_id)
+        approve_change(self.root, change_id)
+        with self.assertRaisesRegex(StoryLoopError, "replay.*base branch"):
+            run_change(self.root, change_id, implementer="human")
+        self.assertFalse((self.root / ".storyloop/state/runs" / f"{change_id}.json").exists())
+        self.assertFalse(git(self.root, "branch", "--list", f"storyloop/{change_id}"))
+        git(self.root, "revert", "--no-edit", old_candidate)
+        self.assertEqual(run_change(self.root, change_id, implementer="human")["status"],
+                         "HUMAN_IMPLEMENTATION_REQUIRED")
+        git(self.root, "cherry-pick", "-n", old_candidate)
+        git(self.root, "commit", "-q", "-m", "replayed candidate")
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+
 
 if __name__ == "__main__":
     unittest.main()
