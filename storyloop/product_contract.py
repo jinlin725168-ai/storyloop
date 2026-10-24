@@ -6,6 +6,7 @@ from . import change_types
 from .change_types import type_of
 from .errors import require
 from .models import fields, identifier, strings, text
+from .path_security import repository_relative
 from .state_format import LOCATION, ORACLE_CLASSES, ROW_TYPES, criterion_expects_red
 
 
@@ -75,7 +76,7 @@ def _criterion_extras(criterion: dict, consumers: set) -> None:
 def validate_product(value: object) -> dict:
     """Validate stories, business outcomes, global IDs, ordered dependencies and the nature blocks."""
     fields(value, {"version", "goal", "non_goals", "questions", "stories"},
-           {"capability", "clarifications", "nature", "defect", "refactor", "consumers",
+           {"capability", "clarifications", "nature", "defect", "refactor", "base", "consumers",
             "coverage_exemptions", "test_removals", "assessment", "lessons_used", "errata", "slug"})
     require(value["version"] == 1, "Unsupported product version")
     text(value["goal"], "goal")
@@ -89,6 +90,9 @@ def validate_product(value: object) -> dict:
     if "clarifications" in value:
         _clarifications(value["clarifications"])
     _nature_blocks(value)
+    if nature_of(value) == "base":
+        require(value["stories"] == [], "A base contract has no user stories")
+        return value
     consumers = _consumers(value.get("consumers", []))
     _exemptions(value.get("coverage_exemptions", []))
     _removals(value.get("test_removals", []))
@@ -105,17 +109,33 @@ def validate_product(value: object) -> dict:
 def _nature_blocks(value: dict) -> None:
     nature = value.get("nature", "feature")
     require(isinstance(nature, str) and nature in change_types.CHANGE_TYPES,
-            "nature must be feature, fix or refactor")
+            "Invalid change nature")
     floor = change_types.definition_for(nature).criteria_floor
     defect = "defect_reproduction_red" in floor
     refactor = "structural_red" in floor
     require(("defect" in value) == defect, "A fix needs a defect block; other natures have none")
     require(("refactor" in value) == refactor,
             "A refactor needs a refactor block; other natures have none")
+    require(("base" in value) == (nature == "base"),
+            "A base change needs a base block; other natures have none")
+    if nature == "base":
+        _base(value["base"])
     if defect:
         _defect(value["defect"])
     if refactor:
         _refactor(value["refactor"])
+
+
+def _base(value: object) -> None:
+    fields(value, {"scope", "paths", "must_stay_green"})
+    require(value["scope"] in {"foundation", "upstream", "ci", "skills", "knowledge"},
+            "Invalid base scope")
+    require(isinstance(value["paths"], list) and bool(value["paths"]),
+            "Base contract needs paths")
+    paths = [repository_relative(path, "base path") for path in value["paths"]]
+    require(len(paths) == len(set(paths)), "Duplicate base path")
+    require(value["must_stay_green"] == ["full_regression", "system_smoke", "build"],
+            "Base contract must keep full regression, system smoke and build green")
 
 
 def _defect(value: object) -> None:

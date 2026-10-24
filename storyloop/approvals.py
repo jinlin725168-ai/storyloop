@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+import hashlib
+import json
 from pathlib import Path
 from typing import Callable
 
@@ -12,6 +14,8 @@ from .baseline import load_baseline, load_project_config
 from .changes import (contract_digest, draft_directory, load_change,  # noqa: F401  # 兼容再导出：保留旧模块导入路径
                       write_change_preview)
 from .models import require, text
+from .product_contract import nature_of
+from .project_profile import _commands, layer_commands
 from .path_security import safe_target
 from .requirement_checklist import blocking_items, evaluate_checklist
 from .storage import locked, write_bytes_atomic, write_json
@@ -33,13 +37,15 @@ def _approve_locked(project, change_id, approved_by, now, tier) -> dict:
     state = load_change(project, change_id)
     product = state["product"]
     require(not product["questions"], "Resolve all product questions before approval")
-    require(bool(product["stories"]), "Approval requires at least one user story")
-    blocking = blocking_items(evaluate_checklist(product, project))
-    require(not blocking, "Requirement checklist has blocking items; revise the contract: "
-            + "; ".join(item["text"] for item in blocking[:3]))
+    base = nature_of(product) == "base"
+    if not base:
+        require(bool(product["stories"]), "Approval requires at least one user story")
+        blocking = blocking_items(evaluate_checklist(product, project))
+        require(not blocking, "Requirement checklist has blocking items; revise the contract: "
+                + "; ".join(item["text"] for item in blocking[:3]))
     approved_by = text(approved_by, "approver")
     digest = contract_digest(product)
-    binding = _intake_approval(project, state, tier)
+    binding = _base_approval(project, tier) if base else _intake_approval(project, state, tier)
     if state["status"] == "APPROVED":
         require(state["approval"]["contract_digest"] == digest,
                 "Approved product contract is stale")
@@ -74,6 +80,17 @@ def version_snapshot(project: Path) -> dict:
             "baseline_version": load_baseline(project)["baseline_version"],
             "map_version": None,
             "skills": [skills[key] for key in sorted(skills)]}
+
+
+def _base_approval(project: Path, tier: str | None) -> dict:
+    require(tier in {None, "heavy"}, "Base changes require the heavy tier")
+    profile = load_project_config(project)["profile"]
+    require("base_build_commands" in profile,
+            "Set base_build_commands in acceptance/storyloop-settings.json before base approval")
+    commands = {name: layer_commands(profile, name) for name in ("unit", "integration", "checks")}
+    commands["build"] = _commands(profile["base_build_commands"])
+    payload = json.dumps(commands, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return {"tier": "heavy", "base_commands_sha256": hashlib.sha256(payload.encode()).hexdigest()}
 
 
 def _intake_approval(project: Path, state: dict, tier: str | None) -> dict:

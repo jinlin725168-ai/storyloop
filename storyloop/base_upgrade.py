@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
 from .baseline import (_foundation_paths, _git, _sha256, _tracked_files,
                        load_baseline, load_project_config)
+from .changes import _save, load_change
 from .models import identifier, require, text
 from .path_security import repository_relative
+from .product_contract import validate_product
 from .project_boundaries import _write_base_proposal
 from .project_profile import is_ci_path
 from .project_profile import layer_commands
@@ -56,15 +59,41 @@ def propose_base_change(project: Path, paths: list[str], reason: str,
             category = "FOUNDATION_CHANGE"
         changes.append({"path": relative, "category": category})
     path = _write_base_proposal(project, "manual", changes, baseline, reason)
+    scope = "ci" if allow_ci else "upstream" if allow_mutable else "foundation"
+    draft_from_proposal(project, path.stem, scope=scope)
     return {"status": "PROPOSED", "change_id": path.stem, "proposal": str(path),
             "paths": [item["path"] for item in changes],
-            "next": f"commit exactly these paths on {baseline['source_branch']}, then "
-                    f"storyloop base-update <project> --proposal {path.stem}"}
+            "next": f"storyloop approve <project> --change {path.stem}"}
 
 
 def _inside(relative: str, root: str) -> bool:
     normalized = root.rstrip("/")
     return relative == normalized or relative.startswith(normalized + "/")
+
+
+def draft_from_proposal(project: Path, proposal_id: str, *, scope: str) -> dict:
+    """Create the matching change state once; leave historical proposal bytes alone."""
+    project = Path(project).resolve()
+    proposal = load_json(project / ".storyloop/base-proposals" / f"{proposal_id}.json")
+    require(proposal.get("change_id") == proposal_id, "Base proposal identity mismatch")
+    state_path = project / ".storyloop/state/changes" / f"{proposal_id}.json"
+    if state_path.exists():
+        existing = load_change(project, proposal_id)
+        require(existing["product"]["nature"] == "base", "Base ID belongs to another change")
+        return existing
+    product = {"version": 1, "goal": proposal.get("reason") or "更新项目底座",
+               "non_goals": [], "questions": [], "stories": [], "nature": "base",
+               "base": {"scope": scope,
+                        "paths": [item["path"] for item in proposal["changes"]],
+                        "must_stay_green": ["full_regression", "system_smoke", "build"]}}
+    validate_product(product)
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    state = {"version": 1, "change_id": proposal_id, "status": "DRAFT",
+             "revision": 1, "idea": product["goal"], "product": product,
+             "created_at": timestamp, "updated_at": timestamp,
+             "history": [], "approval": None}
+    _save(project, state)
+    return state
 
 
 

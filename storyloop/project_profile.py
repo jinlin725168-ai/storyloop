@@ -60,7 +60,7 @@ def validate_project_settings(root: Path, overrides: dict | None = None) -> dict
     overrides = overrides or {}
     allowed = {"test_commands", "unit_commands", "integration_commands", "check_commands", "test_roots",
                "module_roots", "integration_paths", "candidate_allow", "scratch_paths",
-               "test_count_patterns", "stacks"}
+               "test_count_patterns", "stacks", "base_build_commands"}
     require(set(overrides) <= allowed, "Unknown project setting")
     require(not ("test_commands" in overrides and "unit_commands" in overrides),
             "test_commands is the old name of unit_commands; give one of them")
@@ -69,6 +69,8 @@ def validate_project_settings(root: Path, overrides: dict | None = None) -> dict
     for key in ("unit_commands", "integration_commands", "check_commands"):
         if key in overrides:
             profile[key] = _commands(overrides[key])
+    if "base_build_commands" in overrides:
+        profile["base_build_commands"] = _commands(overrides["base_build_commands"])
     if "test_roots" in overrides:
         profile["test_roots"] = _relative_paths(overrides["test_roots"], "test_roots")
     for key in ("module_roots", "integration_paths", "candidate_allow"):
