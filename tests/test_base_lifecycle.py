@@ -138,13 +138,10 @@ class BaseG1Tests(unittest.TestCase):
         draft["product"]["base"]["scope"] = "skills"
         write_json(path, draft)
         approved = approve_change(self.root, proposed["change_id"])
-        run_change(self.root, approved["change_id"], implementer="human")
-        (self.root / "docs").mkdir()
-        (self.root / "docs/base.md").write_text("base\n", encoding="utf-8")
-        git(self.root, "add", "docs/base.md")
-        git(self.root, "commit", "-q", "-m", "base")
         with self.assertRaisesRegex(StoryLoopError, "scope"):
-            run_change(self.root, approved["change_id"])
+            run_change(self.root, approved["change_id"], implementer="human")
+        self.assertEqual(git(self.root, "branch", "--show-current"),
+                         load_baseline(self.root)["source_branch"])
 
     def test_human_candidate_requires_independent_review_and_fixed_acceptance(self):
         change_id = self.change["change_id"]
