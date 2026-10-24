@@ -152,8 +152,11 @@ class InvariantGuardTests(unittest.TestCase):
 
 
 class InvariantRegistryTests(unittest.TestCase):
-    def test_all_fifteen_invariants_are_registered(self):
-        self.assertEqual(sorted(DECL.invariants, key=lambda k: int(k[1:])), [f"I{n}" for n in range(1, 16)])
+    def test_registered_invariants_are_i1_to_i15_plus_trace_series(self):
+        keys = set(DECL.invariants)
+        self.assertEqual(sorted(k for k in keys if k.startswith("I")),
+                         sorted(f"I{n}" for n in range(1, 16)))
+        self.assertEqual(sorted(k for k in keys if k.startswith("T")), ["T3"])
 
     def test_pending_invariants_are_exactly_i13_i15(self):
         pending = {k: v.stage for k, v in DECL.invariants.items() if v.status == "pending"}
