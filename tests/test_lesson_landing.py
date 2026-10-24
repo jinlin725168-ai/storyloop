@@ -11,7 +11,7 @@ from storyloop.lesson_landing import approve_draft, prove_check
 from storyloop.lesson_store import load_lessons_at
 from storyloop.models import StoryLoopError
 from storyloop.storage import load_json, write_json
-from tests.lesson_support import initialized_project, sample, head, _git, commit_file
+from tests.lesson_support import initialized_project, git_repo, sample, head, _git, commit_file
 
 
 class LandingTests(unittest.TestCase):
@@ -46,6 +46,19 @@ class LandingTests(unittest.TestCase):
 
     def foundation(self, path='openspec/foundation/runtime.md'):
         return dict(kind='foundation', path=path, append='## 时钟\n先校时。')
+
+    def test_base_proposal_paths_detect_renamed_foundation_source(self):
+        from storyloop.baseline import bootstrap_project
+        project = git_repo(files={"README.md": "repo\n",
+                                  "openspec/foundation/x.md": "same content\n"})
+        self.addCleanup(cleanup_repo, project)
+        bootstrap_project(project, {"test_commands": [[sys.executable, "-c", "pass"]]})
+        _git(project, "config", "diff.renames", "true")
+        (project / "openspec/lessons").mkdir(parents=True, exist_ok=True)
+        _git(project, "mv", "openspec/foundation/x.md", "openspec/lessons/x.md")
+        _git(project, "commit", "-q", "-m", "rename foundation into lessons")
+        with self.assertRaisesRegex(StoryLoopError, "非经验变更"):
+            lesson_landing._proposal_paths(project, {"openspec/lessons/L-0001.md": b"lesson"})
 
     def test_prose_create_and_consecutive_ids(self):
         for number in (1, 2):

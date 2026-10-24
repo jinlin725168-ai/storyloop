@@ -199,7 +199,8 @@ def land_knowledge(project, draft, entry) -> dict:
 
 def _proposal_paths(project, writes):
     source = load_baseline(project)['source_head']
-    changed = set(filter(None, _git(project, 'diff', '--name-only', '-z', source, 'HEAD').split('\0')))
+    changed = set(filter(None, _git(project, 'diff', '--no-renames', '--name-only', '-z',
+                                     source, 'HEAD').split('\0')))
     require(all(p.startswith('openspec/lessons/') for p in changed), 'BASE 后存在非经验变更，请先处理 BASE')
     return sorted(changed | set(writes))
 
