@@ -86,21 +86,22 @@ def _verify_candidate(project: Path, change: dict, state: dict) -> dict:
     require(_git(project, "rev-parse", "HEAD").strip() == state["candidate_commit"],
             "Base candidate changed after review")
     from .oracle_skill_approval import require_base_confirmation
-    require_base_confirmation(project, change, state)
     config = load_project_config(project)
     profile, timeout = config["profile"], config["check_timeout_seconds"]
     require(base_commands_digest(profile) == change["approval"]["base_commands_sha256"],
             "Approved base commands changed before candidate verification")
     evidence_path = _evidence_path(project, change["change_id"])
-    if evidence_path.is_file():
-        cached = load_json(evidence_path)
+    cached = load_json(evidence_path) if evidence_path.is_file() else None
+    approval = require_base_confirmation(project, change, state, cached)
+    if cached is not None:
         if cached.get("candidate_commit") == state["candidate_commit"]:
             require(cached.get("status") == "PASSED"
                     and cached.get("candidate_sha256") == implementation_digest(project)
                     and cached.get("contract_digest") == state["contract_digest"]
                     and cached.get("engine_version") == state["engine_version"]
                     and cached.get("engine_source") == state["engine_source"]
-                    and cached.get("target_tree_oid") == _git(project, "rev-parse", "HEAD^{tree}").strip(),
+                    and cached.get("target_tree_oid") == _git(project, "rev-parse", "HEAD^{tree}").strip()
+                    and cached.get("oracle_skills_approval") == approval,
                     "Saved base candidate evidence is invalid")
             return cached
     layers = {name: run_commands_isolated(project, layer_commands(profile, name), timeout)
@@ -123,6 +124,8 @@ def _verify_candidate(project: Path, change: dict, state: dict) -> dict:
                 "target_tree_oid": _git(project, "rev-parse", "HEAD^{tree}").strip(),
                 "contract_digest": state["contract_digest"], "layers": layers,
                 "system_smoke": smoke, "build": build}
+    if approval is not None:
+        evidence["oracle_skills_approval"] = approval
     write_json(_evidence_path(project, change["change_id"]), evidence, max_bytes=4_000_000)
     return evidence
 
@@ -217,8 +220,10 @@ def _complete_base(project: Path, change: dict, state: dict, records: list[dict]
     evidence_path = _evidence_path(project, change["change_id"])
     evidence = load_json(evidence_path)
     review = load_json(_review_path(project, change["change_id"]))
+    from .oracle_skill_approval import base_confirmation_record
     transition(project, state, "VERIFIED", event="verified", change=change,
-               context={"base_evidence": evidence},
+               context={"base_evidence": evidence,
+                        "oracle_skills_approval": base_confirmation_record(project, change, state)},
                effect=lambda: _verified_report(project, change, state, evidence, review, records))
     save_run(project, state)
     return _finish_verified(project, change, state)
@@ -254,6 +259,8 @@ def _verified_report(project: Path, change: dict, state: dict, evidence: dict,
               "verification": evidence, "review": review,
               "manual_acceptance": records,
               "build_note": "项目声明无构建步骤" if evidence["build"]["status"] == "DECLARED_ABSENT" else None}
+    if evidence.get("oracle_skills_approval") is not None:
+        report["oracle_skills_approval"] = evidence["oracle_skills_approval"]
     path = project / "reports/storyloop" / change["change_id"] / "report.json"
     write_json(path, report, max_bytes=8_000_000)
     write_text_atomic(path.with_suffix(".md"), _base_markdown(report))
@@ -280,6 +287,9 @@ def _base_markdown(report: dict) -> str:
              f"人工验收：{report['manual_acceptance'][0]['note']}"]
     if report.get("build_note"):
         lines += ["", report["build_note"]]
+    if report.get("oracle_skills_approval"):
+        paths = report["oracle_skills_approval"]["paths"]
+        lines += ["", "Oracle 技能确认：" + "、".join(f"`{path}`" for path in paths)]
     if report.get("merge_commit"):
         lines += ["", f"合并提交：`{report['merge_commit']}`"]
     return "\n".join(lines) + "\n"

@@ -150,7 +150,7 @@ def _manual_records(project: Path, change_id: str) -> list[dict]:
 def guard_g2(project: Path, change: dict, state: dict, context: dict) -> None:
     """Read authoritative evidence before any implementation/report delivery commit."""
     if type_of(change["product"]) == "base":
-        _guard_base_g2(project, change, state)
+        _guard_base_g2(project, change, state, context)
         return
     layers, review = context.get("layers"), context.get("review") or {}
     require(isinstance(layers, dict) and set(layers) == set(LAYER_ORDER),
@@ -178,7 +178,7 @@ def guard_g2(project: Path, change: dict, state: dict, context: dict) -> None:
     _acceptance_binding(project, change, layers["acceptance"])
 
 
-def _guard_base_g2(project: Path, change: dict, state: dict) -> None:
+def _guard_base_g2(project: Path, change: dict, state: dict, context: dict) -> None:
     change_id = change["change_id"]
     head = _git(project, "rev-parse", "HEAD").strip()
     require(head == state.get("candidate_commit") or base_report_commit(project, state),
@@ -199,6 +199,8 @@ def _guard_base_g2(project: Path, change: dict, state: dict) -> None:
             and evidence.get("target_tree_oid")
             == _git(project, "rev-parse", f"{state['candidate_commit']}^{{tree}}").strip(),
             "Base candidate engine source or target tree changed")
+    require(evidence.get("oracle_skills_approval") == context.get("oracle_skills_approval"),
+            "Oracle skills confirmation evidence is missing or stale")
     require(evidence.get("system_smoke", {}).get("status") == "PASSED"
             and evidence.get("build", {}).get("status") in {"PASSED", "DECLARED_ABSENT"},
             "Base smoke or build did not pass")

@@ -217,7 +217,7 @@ class BaseCompatibilityTests(unittest.TestCase):
         self.assertFalse((self.root / ".storyloop/state/runs" / f"{change_id}.json").exists())
         self.assertEqual(git(self.root, "branch", "--show-current"), self.before["source_branch"])
 
-    def test_oracle_skill_candidate_needs_explicit_confirmation(self):
+    def _oracle_candidate(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         project = Path(folder.name)
@@ -246,6 +246,10 @@ class BaseCompatibilityTests(unittest.TestCase):
         skill.write_text("---\nroles: [acceptance]\n---\nnew\n", encoding="utf-8")
         git(project, "add", ".claude/skills/acceptance/SKILL.md")
         git(project, "commit", "-q", "-m", "human oracle update")
+        return project, change_id
+
+    def test_oracle_skill_candidate_needs_explicit_confirmation(self):
+        project, change_id = self._oracle_candidate()
         with self.assertRaisesRegex(StoryLoopError, "confirm-oracle-skills"):
             run_change(project, change_id)
         from storyloop.oracle_skill_approval import CONFIRMED
@@ -254,6 +258,59 @@ class BaseCompatibilityTests(unittest.TestCase):
             self.assertEqual(run_change(project, change_id)["status"], "BASE_REVIEW_REQUIRED")
         finally:
             CONFIRMED.reset(token)
+
+    def test_oracle_confirmation_survives_candidate_evidence_crash_and_reaches_report(self):
+        from storyloop import base_execution
+        from storyloop.oracle_skill_approval import CONFIRMED
+        project, change_id = self._oracle_candidate()
+        original = base_execution.transition
+
+        def interrupt(*args, **kwargs):
+            if kwargs.get("event") == "human_candidate_ready":
+                raise RuntimeError("evidence crash")
+            return original(*args, **kwargs)
+
+        token = CONFIRMED.set(True)
+        try:
+            with patch.object(base_execution, "transition", side_effect=interrupt):
+                with self.assertRaisesRegex(RuntimeError, "evidence crash"):
+                    run_change(project, change_id)
+        finally:
+            CONFIRMED.reset(token)
+        evidence = load_json(project / ".storyloop/evidence" / change_id /
+                             "base-candidate-green.json")
+        approval = evidence["oracle_skills_approval"]
+        self.assertEqual(approval["candidate_commit"], git(project, "rev-parse", "HEAD"))
+        self.assertEqual(run_change(project, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        git(project, "config", "user.name", "Independent Reviewer")
+        base_execution.record_base_review(project, change_id, "pass", "已核对")
+        self.assertEqual(run_change(project, change_id)["status"], "MANUAL_ACCEPTANCE_REQUIRED")
+        record_manual_acceptance(project, change_id, ["BASE-ACCEPT"], "目标满足")
+        self.assertEqual(run_change(project, change_id)["status"], "FINALIZING")
+        report = load_json(project / "reports/storyloop" / change_id / "report.json")
+        self.assertEqual(report["oracle_skills_approval"], approval)
+        self.assertIn("Oracle 技能确认", (project / "reports/storyloop" / change_id /
+                                    "report.md").read_text(encoding="utf-8"))
+
+    def test_g2_rejects_missing_oracle_confirmation_in_candidate_evidence(self):
+        from storyloop import base_execution
+        from storyloop.oracle_skill_approval import CONFIRMED
+        project, change_id = self._oracle_candidate()
+        token = CONFIRMED.set(True)
+        try:
+            self.assertEqual(run_change(project, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        finally:
+            CONFIRMED.reset(token)
+        git(project, "config", "user.name", "Independent Reviewer")
+        base_execution.record_base_review(project, change_id, "pass", "已核对")
+        run_change(project, change_id)
+        record_manual_acceptance(project, change_id, ["BASE-ACCEPT"], "目标满足")
+        evidence_path = project / ".storyloop/evidence" / change_id / "base-candidate-green.json"
+        evidence = load_json(evidence_path)
+        evidence.pop("oracle_skills_approval", None)
+        write_json(evidence_path, evidence)
+        with self.assertRaisesRegex(StoryLoopError, "Oracle.*confirmation"):
+            run_change(project, change_id)
 
     def test_legacy_source_commit_requires_explicit_replay_before_starting_run(self):
         proposed = base_upgrade.propose_base_change(self.root, ["pom.xml"], "旧底座候选")
