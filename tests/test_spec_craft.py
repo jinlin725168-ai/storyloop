@@ -25,6 +25,13 @@ def read(name: str) -> str:
     return (SKILL / name).read_text(encoding="utf-8")
 
 
+def section(text: str, title: str) -> str:
+    match = re.search(rf"^## {re.escape(title)}\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+    if match is None:
+        raise AssertionError(f"Missing section: {title}")
+    return match.group(1)
+
+
 class SpecCraftPackageTests(unittest.TestCase):
     def test_spec_craft_is_packaged_with_exactly_its_references(self):
         skill = packaged_skills()["spec-craft"]
@@ -71,3 +78,32 @@ class SpecCraftPackageTests(unittest.TestCase):
             result = install_skills(root)
             self.assertIn("proposal", result)
             self.assertTrue(any("spec-craft/" in path for path in result["written"]))
+
+
+ASSESS_QUESTIONS = ("谁遇到了什么问题", "凭什么知道问题解决了", "不做会怎样")
+REQUIREMENT_SECTIONS = ("目标", "非目标", "用户场景", "成功标准", "业务规则", "边界情况",
+                        "关键实体与术语", "假设", "澄清记录", "所属模块")
+LITE_SECTIONS = ("目标", "非目标", "用户场景", "业务规则")
+
+
+class AssessAndRequirementTests(unittest.TestCase):
+    def test_assess_has_the_three_questions_and_three_outcomes(self):
+        text = read("references/assess.md")
+        for phrase in (*ASSESS_QUESTIONS, "做", "需澄清", "放弃", "由人决定"):
+            self.assertIn(phrase, text)
+
+    def test_assess_says_abandoning_is_a_success(self):
+        self.assertIn("放弃也算成功", read("references/assess.md"))
+
+    def test_full_template_has_every_section_in_order(self):
+        headings = re.findall(r"^### (.+)$", section(read("references/requirement-template.md"), "完整版"), re.M)
+        self.assertEqual([h.split("（")[0] for h in headings], list(REQUIREMENT_SECTIONS))
+
+    def test_lite_template_has_only_the_starred_sections(self):
+        headings = re.findall(r"^### (.+)$", section(read("references/requirement-template.md"), "轻量版"), re.M)
+        self.assertEqual([h.split("（")[0] for h in headings], list(LITE_SECTIONS))
+
+    def test_requirement_template_forbids_technical_words_and_needs_a_named_person(self):
+        text = read("references/requirement-template.md")
+        for phrase in ("不出现技术词", "具体人物", "可度量"):
+            self.assertIn(phrase, text)
