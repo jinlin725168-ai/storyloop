@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from storyloop.baseline import bootstrap_project
+from storyloop import skill_custom
 from storyloop.skill_custom import DEFAULT_QUESTION_LIMIT
 from storyloop.state_format import ROW_TYPES
 from storyloop.skills import (
@@ -38,7 +39,7 @@ def section(text: str, title: str) -> str:
 class SpecCraftPackageTests(unittest.TestCase):
     def test_spec_craft_is_packaged_with_exactly_its_references(self):
         skill = packaged_skills()["spec-craft"]
-        self.assertEqual(skill["version"], "1.3.0")
+        self.assertEqual(skill["version"], "1.4.0")
         self.assertEqual(skill["files"], sorted(["SKILL.md", *(f"references/{n}" for n in REFERENCES)]))
 
     def test_frontmatter_has_only_name_version_description(self):
@@ -114,6 +115,8 @@ class AssessAndRequirementTests(unittest.TestCase):
             self.assertIn("| 编号 | 假设 | 来源 | 状态 |", body)
             self.assertIn("|---|---|---|---|", body)
             self.assertRegex(body, r"\| A1 \|[^\n]*10 秒[^\n]*\| 待确认 \|")
+            self.assertRegex(body, r"\| A1 \|[^\n]*\| 产品负责人：评估第 2 问 \| 待确认 \|")
+            self.assertNotRegex(body, r"\| A1 \|[^\n]*\| 试用操作者：")
 
     def test_requirement_template_forbids_technical_words_and_needs_a_named_person(self):
         text = read("references/requirement-template.md")
@@ -180,7 +183,8 @@ class ClarifyAndHandoffTests(unittest.TestCase):
         text = read("references/clarify.md")
         for phrase in ("最多 3 处", "生效上限", "一次只问一个"):
             self.assertIn(phrase, text)
-        self.assertNotIn("默认最多 5", text)
+        self.assertIn(f"每步默认最多 {DEFAULT_QUESTION_LIMIT} 个问题", text)
+        self.assertNotIn("跨阶段", text)
 
     def test_question_priority_and_format(self):
         text = read("references/clarify.md")
@@ -276,7 +280,7 @@ class Trial2FixTests(unittest.TestCase):
         self.assertNotIn("试用中暂采纳", template)
         self.assertNotIn("负责人已确认", template)
 
-    def test_question_limit_covers_every_conversation_step_without_hardcoded_value(self):
+    def test_question_limit_covers_every_conversation_step_with_default_fallback(self):
         skill = read("SKILL.md")
         clarify = read("references/clarify.md")
         design = (ROOT / "docs/superpowers/specs/2026-10-23-需求共创技能-design.md").read_text(
@@ -285,9 +289,10 @@ class Trial2FixTests(unittest.TestCase):
             self.assertIn(name, skill)
         self.assertIn("步骤 1 评估、2 需求、3 规格、4 澄清、5 交接", skill)
         for text in (skill, clarify):
-            for phrase in ("分别计数", "不跨阶段累加", "生效上限"):
+            for phrase in ("分别计数", "不跨步骤累加", "生效上限"):
                 self.assertIn(phrase, text)
-            self.assertNotIn("默认最多 5", text)
+            self.assertIn(f"每步默认最多 {DEFAULT_QUESTION_LIMIT} 个问题", text)
+            self.assertNotIn("跨阶段", text)
         self.assertNotIn("规格核对", skill)
         self.assertIn("question_limit", design)
 
@@ -301,3 +306,8 @@ class Trial2FixTests(unittest.TestCase):
             encoding="utf-8")
         self.assertIn(f"默认 {DEFAULT_QUESTION_LIMIT}", api)
         self.assertIn(f"默认 {DEFAULT_QUESTION_LIMIT}", design)
+        minimum = getattr(skill_custom, "MIN_QUESTION_LIMIT", None)
+        self.assertIsInstance(minimum, int)
+        self.assertIn(f"{minimum}–{skill_custom.MAX_QUESTION_LIMIT}", api)
+        self.assertIn(f"{minimum}–{skill_custom.MAX_QUESTION_LIMIT}", design)
+        self.assertNotIn("跨阶段", design)

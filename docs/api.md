@@ -41,7 +41,7 @@
 
 ### spec-craft 项目定制视图
 
-`storyloop skills PATH --view spec-craft --json` 只生成 `.storyloop/skills-view/spec-craft.md`，不会安装或修改 `.claude/skills/`、`.codex/skills/`。返回 `status: "SKILL_VIEW"`、`skill`、仓库相对 `path`、视图的 `sha256`、`customized`、按合并顺序排列的 `sources`（每项含 `path`、`sha256`）、`warnings`，以及生效的 `question_limit` 和 `question_limit_source`。视图始终在技能本体末尾追加生效配置及来源；无定制文件时 `customized` 为 `false`，`question_limit_source` 为 `null`（显示为“内置默认”），有定制值时该字段为仓库相对路径。
+`storyloop skills PATH --view spec-craft --json` 只生成 `.storyloop/skills-view/spec-craft.md`，不会安装或修改 `.claude/skills/`、`.codex/skills/`。返回 `status: "SKILL_VIEW"`、`skill`、仓库相对 `path`、视图的 `sha256`、`customized`、按合并顺序排列的 `sources`（每项含 `path`、`sha256`）、`warnings`，以及生效的 `question_limit` 和 `question_limit_source`。视图始终在技能本体末尾的“生效配置”标题下追加生效上限及来源；未生成视图时技能正文的默认上限仍生效。无定制文件时 `customized` 为 `false`，`question_limit_source` 为 `null`（显示为“内置默认”），有定制值时该字段为仓库相对路径。
 
 团队定制放在 `storyloop-custom/spec-craft.toml` 并进入 Git；个人定制放在 `storyloop-custom/spec-craft.user.toml`。`storyloop init` 会把 `storyloop-custom/*.user.toml` 写进 `.git/info/exclude`；未初始化仓库先运行视图命令时，也会在写视图前设置忽略规则，保持工作区干净。已经被 Git 跟踪的个人文件会在 `warnings` 中提示，需由人移出版本库。两层都使用 UTF-8 TOML（可带 BOM），`version = 1`。可用顶层键只有 `version`、每步骤提问上限 `question_limit`（整数 3–10）、字符串数组 `preferences`、仓库内已存在的非符号链接文件相对路径 `glossary`、`[[coverage]]`（`code`、`name`、`check`）和 `[[sections]]`（`code`、`document`、`title`、`guidance`）；`document` 只能是 `requirement` 或 `spec`。未知键、无效路径或格式会报错并指出文件。
 

@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 
+from storyloop import skill_custom
 from storyloop.models import StoryLoopError
 from storyloop.skill_custom import custom_paths, load_customization, render_view, write_view
 from storyloop.skills import skill_text
@@ -49,11 +50,16 @@ class CustomizationTests(_Workspace):
         self.assertEqual(value["question_limit_source"], "storyloop-custom/spec-craft.user.toml")
 
     def test_question_limit_must_allow_the_three_assessment_questions(self):
+        minimum = getattr(skill_custom, "MIN_QUESTION_LIMIT", None)
+        self.assertIsInstance(minimum, int)
         for invalid in (True, 0, 2, 11, 100000, "5"):
             with self.subTest(invalid=invalid):
                 literal = str(invalid).lower() if not isinstance(invalid, str) else f'"{invalid}"'
                 self.write(self.team, f"version = 1\nquestion_limit = {literal}\n")
-                with self.assertRaisesRegex(StoryLoopError, "question_limit: must be an integer from 3 to 10"):
+                with self.assertRaisesRegex(
+                    StoryLoopError,
+                    f"question_limit: must be an integer from {minimum} to {skill_custom.MAX_QUESTION_LIMIT}",
+                ):
                     load_customization(self.root, "spec-craft")
 
     def test_ten_is_the_largest_accepted_question_limit(self):
@@ -163,6 +169,8 @@ class ViewTests(_Workspace):
         self.assertIn("每步骤最多 5 个问题", view[len(skill_text(self.root, "spec-craft")):])
         self.assertIn("步骤 1 评估、2 需求、3 规格、4 澄清、5 交接", view[len(skill_text(self.root, "spec-craft")):])
         self.assertIn("来源：内置默认", view[len(skill_text(self.root, "spec-craft")):])
+        self.assertIn("## 生效配置（由 storyloop skills --view 生成，请勿手工编辑）", view)
+        self.assertNotIn("跨阶段", view[len(skill_text(self.root, "spec-craft")):])
         result = write_view(self.root, "spec-craft")
         self.assertFalse(result["customized"])
         self.assertEqual(result["question_limit"], 5)
@@ -171,6 +179,8 @@ class ViewTests(_Workspace):
     def test_view_shows_effective_question_limit_and_its_source(self):
         self.write(self.team, "version = 1\nquestion_limit = 7\n")
         team_view = render_view(self.root, "spec-craft")
+        self.assertIn("## 生效配置（由 storyloop skills --view 生成，请勿手工编辑）", team_view)
+        self.assertNotIn("跨阶段", team_view[len(skill_text(self.root, "spec-craft")):])
         self.assertIn("每步骤最多 7 个问题", team_view)
         self.assertIn("来源：storyloop-custom/spec-craft.toml", team_view)
         self.write(self.user, "version = 1\nquestion_limit = 4\n")
@@ -189,7 +199,7 @@ class ViewTests(_Workspace):
         view = render_view(self.root, "spec-craft")
         self.assertTrue(view.startswith(skill_text(self.root, "spec-craft")))
         for phrase in (
-            "## 项目定制（由 storyloop skills --view 生成，请勿手工编辑）",
+            "## 生效配置（由 storyloop skills --view 生成，请勿手工编辑）",
             "| 11 | 支付合规 | 退款时限 |", "#### 需求文档：来源", "记录用户来源",
             "- 先问范围", "docs/a.md", "storyloop-custom/spec-craft.toml",
         ):
