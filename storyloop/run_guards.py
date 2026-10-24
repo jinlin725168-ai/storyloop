@@ -180,6 +180,11 @@ def guard_g2(project: Path, change: dict, state: dict, context: dict) -> None:
 
 def _guard_base_g2(project: Path, change: dict, state: dict) -> None:
     change_id = change["change_id"]
+    head = _git(project, "rev-parse", "HEAD").strip()
+    require(head == state.get("candidate_commit") or base_report_commit(project, state),
+            "Base candidate changed before G2")
+    require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
+            "Base candidate worktree changed before G2")
     evidence_path = project / ".storyloop/evidence" / change_id / "base-candidate-green.json"
     evidence = load_json(evidence_path)
     digest = implementation_digest(project)
@@ -212,11 +217,26 @@ def _guard_base_g2(project: Path, change: dict, state: dict) -> None:
             "Independent base review is missing")
     require(not pending_manual_criteria(change, _manual_records(project, change_id), digest),
             "Base manual acceptance is missing")
-    actual = {item for item in _git(project, "diff", "--name-only", "-z",
-                                    state["contract_commit"], "HEAD").split("\0") if item}
+    actual = {item for item in _git(project, "diff", "--no-renames", "--name-only", "-z",
+                                    state["contract_commit"], state["candidate_commit"]).split("\0") if item}
     require(actual == set(change["product"]["base"]["paths"]),
             "Base committed paths differ from the approved contract")
     audit_base_scope(project, change, actual)
+
+
+def base_report_commit(project: Path, state: dict) -> str | None:
+    """Identify only the expected report child of a locked human candidate."""
+    head = _git(project, "rev-parse", "HEAD").strip()
+    if head == state.get("candidate_commit"):
+        return None
+    parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
+    paths = {item for item in _git(project, "diff-tree", "--no-commit-id", "--no-renames",
+                                   "--name-only", "-r", "-z", head).split("\0") if item}
+    root = f"reports/storyloop/{state['change_id']}/report"
+    if len(parents) == 2 and parents[1] == state.get("candidate_commit") \
+            and paths == {root + ".json", root + ".md"}:
+        return head
+    return None
 
 
 def _acceptance_binding(project: Path, change: dict, smoke: dict) -> None:

@@ -11,14 +11,14 @@ from .approvals import materialize_approved_change
 from .base_upgrade import base_candidate_paths, establish_old_green
 from .baseline import _git, load_project_config, verify_baseline
 from .manual_acceptance import load_manual_acceptance
-from .models import require, text
+from .models import StoryLoopError, require, text
 from .project_git import current_branch, start_base, commit_paths, finish_feature
 from .project_loop_support import relative_files
-from .project_preparation import _ensure_contract_commit
 from .project_profile import base_commands_digest, layer_commands
 from .run_state import run_path, save_run
 from .run_stops import pause
 from .run_transitions import transition
+from .run_guards import base_report_commit
 from .smoke_runner import implementation_digest, run_commands_isolated
 from .storage import load_json, write_json, write_text_atomic
 from .system_smoke import run_system_smoke_isolated
@@ -30,14 +30,18 @@ def run_base_change(project: Path, change: dict, implementer: str | None, new_ru
     if state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED"}:
         return _prepare(project, change, state)
     if state["status"] == "HUMAN_IMPLEMENTATION_REQUIRED":
-        base_candidate_paths(project, change, state)
-        candidate = _git(project, "rev-parse", "HEAD").strip()
-        transition(project, state, "IMPLEMENTING", event="human_candidate_ready",
-                   updates={"candidate_commit": candidate})
-        save_run(project, state)
-        return {"status": "IMPLEMENTING", "change_id": change["change_id"]}
-    if state["status"] in {"IMPLEMENTING", "BASE_REVIEW_REQUIRED"}:
-        return _verify_and_pause(project, change, state)
+        return _candidate_to_review(project, change, state)
+    if state["status"] == "IMPLEMENTING":
+        if _git(project, "rev-parse", "HEAD").strip() != state.get("candidate_commit"):
+            return _reopen_human(project, change, state)
+        try:
+            _verify_candidate(project, change, state)
+        except StoryLoopError:
+            _reopen_human(project, change, state)
+            raise
+        return _review_stop(project, change, state)
+    if state["status"] == "BASE_REVIEW_REQUIRED":
+        return _review_stop(project, change, state)
     if state["status"] == "MANUAL_ACCEPTANCE_REQUIRED":
         return _finish_after_acceptance(project, change, state)
     if state["status"] == "VERIFIED":
@@ -115,17 +119,55 @@ def _evidence_path(project: Path, change_id: str) -> Path:
     return project / ".storyloop/evidence" / change_id / "base-candidate-green.json"
 
 
-def _verify_and_pause(project: Path, change: dict, state: dict) -> dict:
-    evidence = _verify_candidate(project, change, state)
+def _candidate_to_review(project: Path, change: dict, state: dict) -> dict:
+    base_candidate_paths(project, change, state)
+    candidate = _git(project, "rev-parse", "HEAD").strip()
+    require(candidate != state.get("rejected_candidate_commit"),
+            "Rejected base candidate needs a new implementation commit")
+    state["candidate_commit"] = candidate
+    try:
+        evidence = _verify_candidate(project, change, state)
+    except Exception:
+        state.pop("candidate_commit", None)
+        raise
+    transition(project, state, "IMPLEMENTING", event="human_candidate_ready",
+               updates={"candidate_commit": candidate, "base_evidence": evidence})
+    return _pause_review(project, change, state)
+
+
+def _pause_review(project: Path, change: dict, state: dict) -> dict:
+    return pause(project, state, "BASE_REVIEW_REQUIRED",
+                 next=f"storyloop base-review <project> --change {change['change_id']} "
+                      "--verdict pass --note '<核对内容>', then storyloop run")
+
+
+def _reopen_human(project: Path, change: dict, state: dict, *, rejected: bool = False) -> dict:
+    old_candidate = state.get("candidate_commit")
+    transition(project, state, "HUMAN_IMPLEMENTATION_REQUIRED", event="base_revise")
+    for key in ("candidate_commit", "candidate_sha256", "base_review", "base_evidence"):
+        state.pop(key, None)
+    if rejected:
+        state["rejected_candidate_commit"] = old_candidate
+    save_run(project, state)
+    return pause(project, state, "HUMAN_IMPLEMENTATION_REQUIRED",
+                 next=f"Revise the approved paths and commit on {state['feature_branch']}, "
+                      f"then storyloop run <project> --change {change['change_id']}")
+
+
+def _review_stop(project: Path, change: dict, state: dict) -> dict:
+    if _git(project, "rev-parse", "HEAD").strip() != state.get("candidate_commit"):
+        return _reopen_human(project, change, state)
     path = _review_path(project, change["change_id"])
     if not path.is_file():
-        return pause(project, state, "BASE_REVIEW_REQUIRED",
-                     next=f"storyloop base-review <project> --change {change['change_id']} "
-                          "--verdict pass --note '<核对内容>', then storyloop run")
+        return _pause_review(project, change, state)
     review = load_json(path)
-    require(review.get("verdict") == "pass" and review.get("candidate_commit") == state["candidate_commit"]
-            and review.get("candidate_sha256") == evidence["candidate_sha256"],
-            "Independent base review did not pass for this candidate")
+    evidence = load_json(_evidence_path(project, change["change_id"]))
+    if (review.get("candidate_commit") != state["candidate_commit"]
+            or review.get("candidate_sha256") != evidence["candidate_sha256"]):
+        return _pause_review(project, change, state)
+    if review.get("verdict") == "fail":
+        return _reopen_human(project, change, state, rejected=True)
+    require(review.get("verdict") == "pass", "Independent base review is invalid")
     require(review.get("reviewer") != _git(project, "show", "-s", "--format=%an",
                                            state["candidate_commit"]).strip(),
             "Base reviewer must differ from implementation author")
@@ -140,8 +182,12 @@ def _verify_and_pause(project: Path, change: dict, state: dict) -> dict:
 
 
 def _finish_after_acceptance(project: Path, change: dict, state: dict) -> dict:
+    head = _git(project, "rev-parse", "HEAD").strip()
+    if head != state.get("candidate_commit") and not base_report_commit(project, state):
+        return _reopen_human(project, change, state)
     digest = implementation_digest(project)
-    require(digest == state.get("candidate_sha256"), "Base candidate changed during manual acceptance")
+    if digest != state.get("candidate_sha256"):
+        return _reopen_human(project, change, state)
     records = load_manual_acceptance(project, change["change_id"])
     require(any(row.get("criterion_id") == "BASE-ACCEPT" and row.get("candidate_sha256") == digest
                 for row in records), "Base manual acceptance is missing")
@@ -192,9 +238,15 @@ def _verified_report(project: Path, change: dict, state: dict, evidence: dict,
     path = project / "reports/storyloop" / change["change_id"] / "report.json"
     write_json(path, report, max_bytes=8_000_000)
     write_text_atomic(path.with_suffix(".md"), _base_markdown(report))
-    commit = commit_paths(project, [path.relative_to(project).as_posix(),
-                                    path.with_suffix(".md").relative_to(project).as_posix()],
-                          f"docs({change['change_id']}): record base verification")["commit"]
+    paths = [path.relative_to(project).as_posix(),
+             path.with_suffix(".md").relative_to(project).as_posix()]
+    commit = base_report_commit(project, state)
+    if commit:
+        require(not _git(project, "diff", "--", *paths).strip(),
+                "Committed base report differs from approved verification")
+    else:
+        commit = commit_paths(project, paths,
+                              f"docs({change['change_id']}): record base verification")["commit"]
     return {"implementation_commit": state["candidate_commit"], "report_commit": commit,
             "report": str(path), "report_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             "acceptance_evidence_sha256": hashlib.sha256(_evidence_path(project, change["change_id"]).read_bytes()).hexdigest(),
@@ -284,7 +336,7 @@ def _prepare(project: Path, change: dict, state: dict) -> dict:
         transition(project, state, "CONTRACT_READY", event="contract_ready")
         save_run(project, state)
     if state["status"] == "CONTRACT_READY":
-        commit = _ensure_contract_commit(project, state, paths)
+        commit = _ensure_base_contract_commit(project, state, paths)
         transition(project, state, "CONTRACT_COMMITTED", event="contract_committed",
                    updates={"contract_commit": commit})
         save_run(project, state)
@@ -294,3 +346,17 @@ def _prepare(project: Path, change: dict, state: dict) -> dict:
     return pause(project, state, "HUMAN_IMPLEMENTATION_REQUIRED",
                  next=f"Commit the approved paths on {state['feature_branch']}, then "
                       f"storyloop run <project> --change {change_id}")
+
+
+def _ensure_base_contract_commit(project: Path, state: dict, paths: list[str]) -> str:
+    """Recognize a completed contract commit even when approved base files remain dirty."""
+    head = _git(project, "rev-parse", "HEAD").strip()
+    if head == state["source_head"]:
+        return commit_paths(project, paths,
+                            f"test({state['change_id']}): lock approved contract and smoke acceptance")["commit"]
+    parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
+    changed = {item for item in _git(project, "diff-tree", "--no-commit-id", "--no-renames",
+                                     "--name-only", "-r", "-z", head).split("\0") if item}
+    require(len(parents) == 2 and parents[1] == state["source_head"]
+            and changed == set(paths), "Cannot recover the base contract commit safely")
+    return head

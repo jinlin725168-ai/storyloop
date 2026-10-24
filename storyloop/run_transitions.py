@@ -70,6 +70,10 @@ TRANSITIONS = {
         "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}),
     "base_green_ready": frozenset({("CONTRACT_COMMITTED", "IMPLEMENTING")}),
     "human_candidate_ready": frozenset({("HUMAN_IMPLEMENTATION_REQUIRED", "IMPLEMENTING")}),
+    # A rejected or changed base candidate returns to the human stop; later evidence must
+    # be bound to a new commit. This edge also recovers pre-E1-review IMPLEMENTING runs.
+    "base_revise": frozenset((source, "HUMAN_IMPLEMENTATION_REQUIRED") for source in {
+        "IMPLEMENTING", "BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED"}),
     "begin_attempt": frozenset((source, "IMPLEMENTING") for source in PLANNING_SOURCES),
     "characterization_resumed": frozenset({("CHARACTERIZATION_FAILED", "IMPLEMENTING")}),
     "contract_ready": frozenset({("PREPARING", "CONTRACT_READY")}),

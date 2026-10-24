@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from storyloop import base_upgrade
 from storyloop import base_execution
@@ -136,7 +137,7 @@ class BaseG1Tests(unittest.TestCase):
         (self.root / "pom.xml").write_text("<project><version>2</version></project>\n", encoding="utf-8")
         git(self.root, "add", "pom.xml")
         git(self.root, "commit", "-q", "-m", "base: update pom")
-        self.assertEqual(run_change(self.root, change_id)["status"], "IMPLEMENTING")
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
         git(self.root, "config", "user.name", "Independent Reviewer")
         base_execution.record_base_review(self.root, change_id, "pass", "已核对底座修改")
         self.assertEqual(run_change(self.root, change_id)["status"], "MANUAL_ACCEPTANCE_REQUIRED")
@@ -214,6 +215,68 @@ class BaseG1Tests(unittest.TestCase):
         write_json(path, proposal)
         with self.assertRaisesRegex(StoryLoopError, "scope"):
             run_change(self.root, change_id)
+
+    def test_rejected_review_reopens_human_implementation(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project><version>2</version></project>\n", encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "first candidate")
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        git(self.root, "config", "user.name", "Independent Reviewer")
+        base_execution.record_base_review(self.root, change_id, "fail", "需要修订")
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "HUMAN_IMPLEMENTATION_REQUIRED")
+        git(self.root, "config", "user.name", "StoryLoop Test")
+        (self.root / "pom.xml").write_text("<project><version>3</version></project>\n", encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "revised candidate")
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+
+    def test_report_commit_crash_resumes_without_revalidating_report_paths(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project><version>2</version></project>\n", encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "candidate")
+        run_change(self.root, change_id)
+        git(self.root, "config", "user.name", "Independent Reviewer")
+        base_execution.record_base_review(self.root, change_id, "pass", "已核对")
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "MANUAL_ACCEPTANCE_REQUIRED")
+        record_manual_acceptance(self.root, change_id, ["BASE-ACCEPT"], "满足目标")
+        original = base_execution.save_run
+
+        def fail_after_report(project, state):
+            if state["status"] == "VERIFIED":
+                raise RuntimeError("crash after report commit")
+            return original(project, state)
+
+        with mock.patch.object(base_execution, "save_run", side_effect=fail_after_report):
+            with self.assertRaisesRegex(RuntimeError, "crash after report commit"):
+                run_change(self.root, change_id)
+        report_head = git(self.root, "rev-parse", "HEAD")
+        self.assertEqual(run_change(self.root, change_id)["status"], "FINALIZING")
+        self.assertEqual(git(self.root, "show", "--format=%s", "--no-patch", report_head),
+                         f"docs({change_id}): record base verification")
+
+    def test_contract_commit_crash_recovers_with_prepared_base_file_dirty(self):
+        change_id = self.change["change_id"]
+        (self.root / "pom.xml").write_text("<project><version>2</version></project>\n", encoding="utf-8")
+        original = base_execution.save_run
+
+        def fail_after_contract(project, state):
+            if state["status"] == "CONTRACT_COMMITTED":
+                raise RuntimeError("crash after contract commit")
+            return original(project, state)
+
+        with mock.patch.object(base_execution, "save_run", side_effect=fail_after_contract):
+            with self.assertRaisesRegex(RuntimeError, "crash after contract commit"):
+                run_change(self.root, change_id, implementer="human")
+        contract_head = git(self.root, "rev-parse", "HEAD")
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "HUMAN_IMPLEMENTATION_REQUIRED")
+        self.assertEqual(git(self.root, "rev-parse", "HEAD"), contract_head)
 
 
 if __name__ == "__main__":
