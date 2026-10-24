@@ -108,6 +108,7 @@
 |  | `readiness` | 可变区 | 独立于变更及运行收集项目测试底座门状态 | `approve_readiness`、`inspect_readiness`、`readiness_status`、`require_readiness` |
 |  | `readiness_lineage` | 可变区 | 以回执、实际报告与不变输入维护准备度沿革 | `advance_readiness` |
 |  | `skills` | 可变区 | 把引擎随包技能安装到项目供 Claude Code 与 Codex 使用 | `install_skills`、`role_skill_versions`、`selected_snapshots` |
+|  | `skill_custom` | 可变区 | 校验并合并团队与个人的技能定制 | `load_customization` |
 | 记忆 | `drafts` | 可变区 | 统一、安全寻址的经验与勘误草案 | `create_draft`、`list_drafts`、`load_draft`、`reject_draft`、`set_draft_status` |
 |  | `errata` | 可变区 | 校验底座更正，生成草案并通过 BASE 审批落地 | `capture_errata`、`defer_errata`、`land_errata`、`release_errata` |
 |  | `lesson_landing` | 可变区 | 以限定路径的 Git 事务审批人工记忆草案 | `approve_draft`、`land_transaction` |

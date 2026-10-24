@@ -164,6 +164,7 @@ rank = 7
 "base_upgrade" = { module = "onboarding", zone = "mutable" }
 "foundation_survey" = { module = "onboarding", zone = "mutable" }
 "skills" = { module = "onboarding", zone = "mutable" }
+"skill_custom" = { module = "onboarding", zone = "mutable" }
 "lessons" = { module = "memory", zone = "mutable" }
 "lesson_store" = { module = "memory", zone = "mutable" }
 "lesson_retrieval" = { module = "memory", zone = "mutable" }
