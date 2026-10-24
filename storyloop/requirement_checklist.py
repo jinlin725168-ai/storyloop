@@ -12,7 +12,8 @@ import re
 from pathlib import Path
 
 from .change_types import definition_for
-from .models import ROW_TYPES, criterion_expects_red, nature_of
+from .product_contract import nature_of
+from .state_format import ROW_TYPES, criterion_expects_red
 
 NEEDS_CLARIFICATION = re.compile(r"\[NEEDS CLARIFICATION[^\]]*\]", re.I)
 VAGUE_WORDS = ("appropriate", "fast", "quickly", "user-friendly", "etc", "tbd", "todo", "as needed",

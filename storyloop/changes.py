@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Callable
 
 from .baseline import load_baseline, load_project_config
-from .models import identifier, nature_of, require, text, validate_product
+from .models import identifier, require, text
+from .product_contract import nature_of, validate_product
 from .openspec_docs import capability_of, render_delta_spec
 from .requirement_checklist import evaluate_checklist, render_checklist
 from .storage import load_json, write_json, write_text_atomic

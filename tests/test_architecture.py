@@ -4,6 +4,7 @@ from pathlib import Path, PureWindowsPath
 import tempfile
 import unittest
 
+from tests import architecture_rules
 from tests.architecture_rules import (
     DECLARATION, PACKAGE, ArchModule, Declaration, Entry, classify, code_modules, load_declaration,
     Exemption, Violation, cycle_members, import_graph, module_name, stale_entries,
@@ -98,6 +99,19 @@ class DeclarationTests(unittest.TestCase):
 
 
 class LayeringRuleTests(unittest.TestCase):
+    def test_base_cycle_graph_excludes_mutable_detours_but_layering_still_rejects_them(self):
+        architecture = {"root": ArchModule("root", "基础", 0)}
+        entries = {name: Entry(name, "root", "mutable" if name == "m" else "base", None)
+                   for name in ("a", "b", "m")}
+        decl = Declaration(architecture, entries, (), frozenset(), {})
+        graph = {"a": {"b", "m"}, "b": {"a"}, "m": {"a"}}
+        self.assertTrue(hasattr(architecture_rules, "base_graph"))
+        self.assertEqual(architecture_rules.base_graph(decl, graph),
+                         {"a": {"b"}, "b": {"a"}})
+        self.assertEqual(cycle_members(architecture_rules.base_graph(decl, graph)), {"a", "b"})
+        self.assertEqual([(v.source, v.target, v.rules) for v in violations(decl, graph)],
+                         [("a", "m", ("base_imports_mutable",))])
+
     def test_every_import_form_is_counted(self):
         sources = {
             "top.py": ("from .low import f\nimport storyloop.other as o\n"
@@ -168,6 +182,69 @@ class LayeringRuleTests(unittest.TestCase):
 
 
 class LayeringTests(unittest.TestCase):
+    def test_entry_files_stay_below_450_lines(self):
+        for name in ("cli.py", "project_loop.py"):
+            with self.subTest(name=name):
+                self.assertLess(len((PACKAGE / name).read_text(encoding="utf-8").splitlines()), 450)
+
+    def test_stage_d_has_no_exemptions_violations_or_base_cycles(self):
+        graph = import_graph(PACKAGE)
+        self.assertEqual(DECL.exemptions, ())
+        self.assertEqual(violations(DECL, graph), [])
+        self.assertEqual(cycle_members(architecture_rules.base_graph(DECL, graph)), set())
+
+    def test_agent_transport_has_no_business_context_imports(self):
+        graph = import_graph(PACKAGE)
+        self.assertTrue("agent_transport" in graph, "缺少代理传输模块")
+        forbidden = {"adapter_profiles", "call_context", "call_log", "cost_limits", "cross_vendor",
+                     "errata", "foundation_survey", "lesson_retrieval", "role_instructions",
+                     "role_profiles", "role_subagents", "skills", "telemetry"}
+        self.assertEqual(sorted(graph["agent_transport"] & forbidden), [])
+
+    def test_capability_protocol_does_not_depend_on_role_policy(self):
+        graph = import_graph(PACKAGE)
+        self.assertTrue("capability_protocol" in graph, "缺少能力协议模块")
+        self.assertEqual(sorted(graph["capability_protocol"]
+                                & {"cross_vendor", "role_profiles", "role_subagents"}), [])
+        self.assertNotIn("adapter_capabilities", graph["role_schemas"])
+
+    def test_evidence_kernels_receive_business_facts_from_callers(self):
+        graph = import_graph(PACKAGE)
+        forbidden = {"baseline": {"adapter_capabilities", "system_smoke"},
+                     "project_boundaries": {"system_smoke"},
+                     "smoke_runner": {"system_smoke"},
+                     "project_loop_guards": {"errata"}}
+        self.assertEqual({source: sorted(graph[source] & targets)
+                          for source, targets in forbidden.items()},
+                         {source: [] for source in forbidden})
+
+    def test_git_and_evidence_kernels_do_not_import_upper_owners(self):
+        graph = import_graph(PACKAGE)
+        forbidden = {"project_git": {"baseline"},
+                     "evidence_locations": {"failure_attribution"},
+                     "project_receipt": {"change_report"}}
+        self.assertEqual({source: sorted(graph[source] & targets)
+                          for source, targets in forbidden.items()},
+                         {source: [] for source in forbidden})
+
+    def test_product_and_smoke_bases_do_not_read_mutable_contract_owners(self):
+        graph = import_graph(PACKAGE)
+        forbidden = {"models": {"assessment"}, "smoke": {"changes"},
+                     "smoke_runner": {"changes"}}
+        self.assertEqual({source: sorted(graph[source] & targets)
+                          for source, targets in forbidden.items()},
+                         {source: [] for source in forbidden})
+
+    def test_contract_format_consumers_do_not_import_mutable_owners(self):
+        graph = import_graph(PACKAGE)
+        old_edges = {
+            "role_schemas": {"lessons", "routing_policy"},
+            "project_profile": {"oracle_counts"},
+            "onboarding_manifest": {"onboarding_templates"},
+        }
+        self.assertEqual({source: sorted(graph[source] & targets) for source, targets in old_edges.items()},
+                         {source: [] for source in old_edges})
+
     def test_no_unexempted_violations(self):
         found = violations(DECL, import_graph(PACKAGE))
         self.assertEqual(unexempted(DECL, found), [],

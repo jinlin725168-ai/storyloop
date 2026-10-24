@@ -13,8 +13,8 @@ from __future__ import annotations
 import copy
 
 from . import change_types
-from .adapter_capabilities import ROLES
-from .lessons import ACTIONS, LANDING_KINDS, MAX_SUMMARY, STATUSES, STRENGTHS, TIERS
+from .capability_protocol import ROLES
+from .state_format import ACTIONS, LANDING_KINDS, MAX_SUMMARY, RISK_FIELDS, STATUSES, STRENGTHS, TIERS
 
 MAX_ERRORS = 12
 
@@ -90,7 +90,6 @@ ASSESSMENT_CRITERION = _obj({
     'feasibility': {'type': 'string', 'enum': ['local_automated', 'manual', 'infeasible', 'unknown']},
     'existence': {'type': 'string', 'enum': ['exists', 'partial', 'absent', 'unknown']},
     'method': METHOD, 'evidence': EVIDENCE})
-from .routing_policy import RISK_FIELDS
 ASSESSMENT = _obj({
     'verifiable_goal': {'type': 'boolean'},
     'scope': _obj({'touched': STRINGS, 'creates': STRINGS, 'interfaces': STRINGS,

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .answers import load_answers
 from .baseline import _git, advance_repository_head
-from .change_report import correction_view, generate_change_report
+from .change_report import correction_view, generate_change_report, merge_receipt_bytes
 from .manual_acceptance import load_manual_acceptance, pending_manual_criteria
 from .models import require
 from .openspec_docs import capability_of, merge_into_main_spec, render_decisions, validate_with_cli
@@ -24,7 +24,7 @@ from .project_loop_support import save_run
 from .run_transitions import set_change_status, transition
 from .run_guards import (_engine_output_roots, _without_engine_outputs, _implementation_already_committed,
                          guard_g3)
-from .project_receipt import ensure_merge_receipt, verify_verified_artifacts
+from .project_receipt import authoritative_report, ensure_merge_receipt, verify_verified_artifacts
 from .smoke_runner import implementation_digest
 from .storage import load_json, write_json
 from .telemetry import summarize
@@ -107,7 +107,8 @@ def finish_merged(project: Path, change: dict, state: dict) -> dict:
 
 
 def finish_receipting(project: Path, change: dict, state: dict) -> dict:
-    integration = ensure_merge_receipt(project, state)
+    bytes_to_commit = merge_receipt_bytes(authoritative_report(project, state), state["merge_commit"])
+    integration = ensure_merge_receipt(project, state, bytes_to_commit)
     advance_repository_head(project, integration)
     from .readiness_lineage import advance_readiness
     advance_readiness(project, {**state, "integration_commit": integration})

@@ -15,13 +15,13 @@ from .changes import load_change
 from .models import StoryLoopError, identifier, require, text
 from .oracle_counts import ensure_baseline
 from .project_git import commit_paths, current_branch
-from .project_loop_guards import read_only_call
+from .guarded_calls import read_only_call
 from .project_loop_support import relative_files, run_path, save_run
 from .run_stops import pause
 from .run_transitions import transition, REPAIRABLE
 from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, without_manifest_echo
 from .smoke import suite_relative, suite_root as acceptance_suite_root
-from .smoke_runner import run_smoke_isolated
+from .smoke_runner import run_commands_at_commit, run_smoke_isolated
 from .storage import load_json
 
 if TYPE_CHECKING:  # the loop imports this module; the services type is only an annotation
@@ -65,7 +65,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
             "Smoke agent returned an invalid contract")
     files = without_manifest_echo(generated["files"])
     previous = _tracked_under(project, suite_relative(project, change_id))  # replaced files are committed as deletions
-    install_smoke_suite(project, change_id, files, generated["manifest"], replace=True)
+    install_smoke_suite(project, change, files, generated["manifest"], replace=True)
     for name in (RED_EVIDENCE, RESULT_EVIDENCE):
         (project / ".storyloop/evidence" / change_id / name).unlink(missing_ok=True)
     paths = sorted(set(relative_files(project, [suite_root])) | set(previous))
@@ -83,7 +83,7 @@ def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict
     try:
         red = read_only_call(
             project, change_id,
-            lambda: run_smoke_isolated(project, change_id, expect_red=True, at_commit=state["contract_commit"]),
+            lambda: run_smoke_isolated(project, change, expect_red=True, at_commit=state["contract_commit"]),
             allowed_evidence=RED_EVIDENCE,
         )
     except StoryLoopError as exc:
@@ -92,7 +92,7 @@ def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict
         return _unproven_suite(project, state, exc)
     for key in ("questions", "error", "pending", "acceptance", "next", "routed", "stop", "mode"):
         state.pop(key, None)
-    ensure_baseline(project, state, change["product"])  # a stop before RED never sampled one
+    ensure_baseline(project, state, change["product"], run_commands_at_commit)
     transition(project, state, "IMPLEMENTING", event="repair_red",
                updates={"attempt": 0, "red_evidence_sha256": red["evidence_sha256"]})
     save_run(project, state)

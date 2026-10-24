@@ -3,7 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 from tests.support import product
-from storyloop.models import StoryLoopError, validate_product
+from storyloop.models import StoryLoopError
+from storyloop.product_contract import validate_product
 from storyloop.storage import locked
 
 

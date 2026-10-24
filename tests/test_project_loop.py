@@ -54,7 +54,7 @@ class ProjectLoopTests(unittest.TestCase):
         return temporary, root, state["change_id"]
 
     def setUp(self):
-        blocker = patch('storyloop.project_agents._codex', side_effect=AssertionError('Real CLI forbidden'))
+        blocker = patch('storyloop.agent_transport._codex', side_effect=AssertionError('Real CLI forbidden'))
         self.real_adapter = blocker.start()
         self.addCleanup(blocker.stop)
 

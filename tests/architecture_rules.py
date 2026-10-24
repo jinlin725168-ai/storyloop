@@ -295,6 +295,12 @@ def cycle_members(graph: dict[str, set[str]]) -> set[str]:
             for member in component}
 
 
+def base_graph(declaration: Declaration, graph: dict[str, set[str]]) -> dict[str, set[str]]:
+    """Keep only base modules and their mutual imports for the foundation cycle gate."""
+    base = {name for name in graph if classify(declaration, name).zone == "base"}
+    return {name: targets & base for name, targets in graph.items() if name in base}
+
+
 def _invariants(values):
     result = {}
     for key, raw in _table(values, "invariants").items():

@@ -7,7 +7,7 @@ import unittest
 
 from storyloop.approvals import approve_change, materialize_approved_change
 from storyloop.baseline import bootstrap_project, verify_baseline
-from storyloop.changes import draft_directory
+from storyloop.changes import draft_directory, load_change
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, load_run_state, run_change
@@ -98,7 +98,7 @@ class ProjectSecurityGateTests(unittest.TestCase):
             state = create_change(root, "two paths", value, now=lambda: NOW)
             approve_change(root, state["change_id"], now=lambda: NOW)
             change_id = state["change_id"]
-            install_smoke_suite(root, change_id, [
+            install_smoke_suite(root, load_change(root, change_id), [
                 {"path": "fail.py", "content": "raise SystemExit(1)\n"},
                 {"path": "pass.py", "content": "raise SystemExit(0)\n"},
             ], {"version": 1, "tests": [
@@ -111,7 +111,7 @@ class ProjectSecurityGateTests(unittest.TestCase):
             ]})
             # A criterion that already passes is the same stop as a wholly green suite: it is repairable.
             with self.assertRaisesRegex(StoryLoopError, "criteria passing: AC-2") as raised:
-                run_smoke(root, change_id, expect_red=True)
+                run_smoke(root, load_change(root, change_id), expect_red=True)
             self.assertEqual(raised.exception.code, "EXISTING_GREEN")
             self.assertEqual(raised.exception.details["criteria_green"], ["AC-2"])
 

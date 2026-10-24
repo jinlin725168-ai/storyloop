@@ -11,8 +11,8 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from .changes import load_change
-from .models import StoryLoopError, criterion_expects_red, criterion_tier, fields, identifier, require
+from .models import StoryLoopError, fields, identifier, require
+from .state_format import criterion_expects_red, criterion_tier
 from .path_security import repository_relative, safe_target
 from .project_profile import is_ci_path
 from .storage import load_json, write_json, write_text_atomic
@@ -57,7 +57,7 @@ def validate_suite(change: dict, files: object, manifest: object) -> None:
 
 
 def install_smoke_suite(
-    project: Path, change_id: str, files: list[dict], manifest: dict, replace: bool = False,
+    project: Path, change: dict, files: list[dict], manifest: dict, replace: bool = False,
 ) -> dict:
     """Validate then atomically install an externally owned smoke suite.
 
@@ -65,7 +65,7 @@ def install_smoke_suite(
     the caller must re-prove RED for the new suite before any green run counts.
     """
     project = Path(project).resolve()
-    change = load_change(project, change_id)
+    change_id = identifier(change["change_id"], "change id")
     require(change["status"] in {"APPROVED", "RUNNING"} and change["approval"],
             "Change must be approved before smoke generation")
     normalized = _validate_manifest(manifest, change)
@@ -100,9 +100,10 @@ def install_smoke_suite(
     return {"status": "SMOKE_INSTALLED", "change_id": change_id, "digests": digests}
 
 
-def load_smoke_manifest(project: Path, change_id: str) -> dict:
+def load_smoke_manifest(project: Path, change: dict) -> dict:
     """Load a smoke manifest only when every protected byte still matches."""
     project = Path(project).resolve()
+    change_id = identifier(change["change_id"], "change id")
     root = _suite_root(project, change_id)
     protection = load_json(_protection_path(project, change_id))
     require(protection.get("version") == 1 and protection.get("change_id") == change_id,
@@ -117,11 +118,12 @@ def load_smoke_manifest(project: Path, change_id: str) -> dict:
             f"missing={sorted(set(digests) - set(current))} extra={sorted(set(current) - set(digests))} "
             f"changed={sorted(k for k in set(digests) & set(current) if digests[k] != current[k])}")
     manifest = load_json(root / "manifest.json")
-    return _validate_manifest(manifest, load_change(project, change_id))
+    return _validate_manifest(manifest, change)
 
 
-def smoke_digests(project: Path, change_id: str) -> dict[str, str]:
-    load_smoke_manifest(project, change_id)
+def smoke_digests(project: Path, change: dict) -> dict[str, str]:
+    change_id = identifier(change["change_id"], "change id")
+    load_smoke_manifest(project, change)
     value = load_json(_protection_path(Path(project).resolve(), change_id))
     return dict(value["digests"])
 

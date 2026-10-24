@@ -71,7 +71,7 @@ def rebind_after_locks(project, change, state):
     planning = state['planning']
     plan = planning['plan']
     live = {'candidate_digest': implementation_digest(project),
-            'suite_digest': digest(smoke_digests(project, change['change_id']))}
+            'suite_digest': digest(smoke_digests(project, change))}
     if planning.get('execution_digest') == live['candidate_digest']:
         return None
     if all(plan['binding'].get(k) == v for k, v in live.items()):
