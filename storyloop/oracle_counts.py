@@ -11,8 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from .models import StoryLoopError, require
-from .state_format import validate_test_count_patterns as validate_patterns
+from .models import StoryLoopError, require  # noqa: F401  # 兼容再导出：保留旧模块导入路径
+from .state_format import validate_test_count_patterns as validate_patterns  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 
 
 def _last(pattern: str, text: str):

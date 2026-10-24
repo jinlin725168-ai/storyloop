@@ -11,7 +11,7 @@ from storyloop.project_agents import instructions_for
 from storyloop.skills import select_skills, used_skills
 from storyloop.baseline import bootstrap_project
 from storyloop.models import StoryLoopError
-from storyloop.project_agents import instructions_for, invoke_project_agent
+from storyloop.project_agents import invoke_project_agent
 from storyloop.skills import (SKILL_TARGETS, install_skills, packaged_skills, skill_status, skill_text)
 from storyloop.storage import load_json, write_json
 from tests.test_baseline_behavior import git, repository

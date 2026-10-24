@@ -1,0 +1,24 @@
+name: CodeQL
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 20 * * 1"  # 每周一 UTC 20:00
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Python 分析
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+      - uses: github/codeql-action/analyze@v3

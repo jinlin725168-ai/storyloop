@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from .models import StoryLoopError, fields, identifier, require
+from .models import StoryLoopError, fields, identifier, require  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .state_format import criterion_expects_red, criterion_tier
 from .path_security import repository_relative, safe_target
 from .project_profile import is_ci_path

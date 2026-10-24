@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .errors import StoryLoopError, require
+from .errors import StoryLoopError, require  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 
 
 def text(value: object, label: str) -> str:

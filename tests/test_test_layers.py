@@ -17,7 +17,7 @@ from storyloop.project_loop import LoopServices, load_run_state, run_change
 from storyloop.project_profile import layer_commands, validate_project_settings
 from storyloop.storage import load_json
 from tests.support import product
-from tests.test_baseline_behavior import git, repository
+from tests.test_baseline_behavior import repository
 from tests.test_project_loop import smoke_payload
 
 NOW = datetime(2026, 9, 23, tzinfo=timezone.utc)

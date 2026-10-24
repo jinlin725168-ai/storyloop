@@ -3,11 +3,10 @@ from contextlib import contextmanager
 from unittest.mock import patch
 from dataclasses import replace
 from datetime import datetime, timezone
-from pathlib import Path
 
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project, load_project_config
-from storyloop.project_loop import LoopServices, load_run_state, run_change
+from storyloop.project_loop import LoopServices, run_change
 from storyloop.storage import write_json
 from tests.routing_support import legacy_create_change, routed_case
 from tests.support import product

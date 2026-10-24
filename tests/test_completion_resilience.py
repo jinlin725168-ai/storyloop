@@ -14,9 +14,8 @@ from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.manual_acceptance import record_manual_acceptance
-from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, load_run_state, run_change
-from storyloop.smoke_runner import candidate_digest, git_visible_digest, implementation_digest
+from storyloop.smoke_runner import git_visible_digest, implementation_digest
 from tests.test_baseline_behavior import git, repository
 from tests.test_project_loop import smoke_payload
 from tests.test_product_spec import rich_product

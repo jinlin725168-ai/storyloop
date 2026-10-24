@@ -4,7 +4,7 @@ from pathlib import Path
 from .baseline import BASELINE_PATH, _git, _require_local_git_directory
 from .models import require
 from .onboarding_templates import HINTS, MANIFEST, render
-from .onboarding_manifest import validate_onboarding
+from .onboarding_manifest import validate_onboarding  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .onboarding_install import install as _install
 from .path_security import safe_target
 from .onboarding_discovery import safe_discovery

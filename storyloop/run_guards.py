@@ -10,7 +10,7 @@ from .oracle_counts import check_layers
 from .project_boundaries import audit_project_changes
 from .project_git import current_branch
 from .project_profile import layer_commands
-from .project_receipt import verify_verified_artifacts, recover_completed_merge
+from .project_receipt import verify_verified_artifacts, recover_completed_merge  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .smoke import RESULT_EVIDENCE, smoke_digests
 from .smoke_runner import candidate_digest, implementation_digest
 

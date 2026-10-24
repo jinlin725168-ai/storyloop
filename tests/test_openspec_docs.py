@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import json
 from pathlib import Path
 import subprocess
 import tempfile
@@ -16,7 +15,6 @@ from tests.routing_support import legacy_create_change as create_change
 from storyloop.openspec_docs import document_change, merge_into_main_spec, render_decisions, render_delta_spec
 from storyloop.project_contracts import validate_agent_summary
 from storyloop.project_loop import LoopServices, run_change
-from tests.support import product
 from tests.test_baseline_behavior import repository
 from tests.test_project_loop import smoke_payload
 from tests.test_product_spec import rich_product

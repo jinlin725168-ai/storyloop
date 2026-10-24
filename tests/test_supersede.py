@@ -5,7 +5,6 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from storyloop.approvals import approve_change
 from storyloop.changes import load_change, revise_change
 from storyloop.models import StoryLoopError
 from storyloop.cli import run_with_answers

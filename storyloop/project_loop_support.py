@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .baseline import _git
 from .smoke import RED_EVIDENCE, RESULT_EVIDENCE
-from .run_state import run_path, save_run
+from .run_state import run_path, save_run  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 
 
 def control_digest(

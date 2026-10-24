@@ -1,16 +1,13 @@
-from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from storyloop.baseline import bootstrap_project
 from storyloop.cli import dispatch, parser
 from storyloop.changes import load_change
 from tests.test_intake import assessed_product as product
 from tests.routing_support import readiness_repository
 from storyloop.readiness import inspect_readiness, approve_readiness
-from tests.test_baseline_behavior import repository
 
 
 class ProductCliTests(unittest.TestCase):

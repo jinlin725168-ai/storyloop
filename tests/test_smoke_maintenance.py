@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -13,7 +12,6 @@ from storyloop.onboarding_cli import bootstrap_with_project_checks as bootstrap_
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, run_change
-from storyloop.storage import load_json
 from storyloop.system_smoke import (SYSTEM_SMOKE_DIR, apply_smoke_update, load_system_smoke,
                                     propose_smoke_update)
 from tests.support import product

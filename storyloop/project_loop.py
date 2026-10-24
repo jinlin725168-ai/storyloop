@@ -22,40 +22,40 @@ from .cross_vendor import prepare_run
 from .cost_limits import check_before_call
 from .answers import _pending as _unanswered, load_answers
 from .baseline import _git, load_baseline, load_project_config, verify_baseline
-from .boundaries import capture_snapshot
+from .boundaries import capture_snapshot  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .changes import load_change
 from .intake import require_intake
 from .routing_state import is_routed, open_routing, run_config
-from .manual_acceptance import load_manual_acceptance, pending_manual_criteria
+from .manual_acceptance import load_manual_acceptance, pending_manual_criteria  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .failure_attribution import layer_attribution, next_mode
 from .facts import merge_facts
 from .models import StoryLoopError, require, text
 from .project_boundaries import audit_project_changes
-from .project_contracts import validate_agent_summary, validate_review
+from .project_contracts import validate_agent_summary, validate_review  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .project_git import current_branch, start_feature
 from .project_loop_finish import (complete_change, finalize_change, finish_merged, finish_receipting,
                                   finish_verified, passed_result)
-from .planning import review_focus
+from .planning import review_focus  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .routing_execution import prepare_execution, candidate_l3
 from .routing_risks import merge_routing_risks
 from .routing_upgrade import enforce_forbidden_paths
 from .project_loop_gates import characterize_paths, design_plan, uncharacterized_paths
-from .guarded_calls import read_only_call, write_safely
-from .project_loop_guards import (require_control_unchanged, require_git_visible,
+from .guarded_calls import read_only_call, write_safely  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
+from .project_loop_guards import (require_control_unchanged, require_git_visible,  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
                                   verify_read_only_snapshot)
 from .project_loop_failures import (apply_overrule, epoch_of, record_boundary, record_failure,
                                     require_routed_choice, route_review)
-from .project_loop_support import control_digest, run_path, save_run
+from .project_loop_support import control_digest, run_path, save_run  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .run_stops import pause
 from .oracle_counts import check_layers
 from .project_preparation import _prepare_acceptance
 from .project_profile import layer_commands
 from .processutil import redact
-from .system_smoke import run_system_smoke_isolated
-from .smoke import RESULT_EVIDENCE
-from .smoke import suite_relative
+from .system_smoke import run_system_smoke_isolated  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
+from .smoke import RESULT_EVIDENCE  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
+from .smoke import suite_relative  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .skills import role_skill_versions
-from .smoke_runner import implementation_digest, run_commands_isolated, run_smoke_isolated
+from .smoke_runner import implementation_digest, run_commands_isolated, run_smoke_isolated  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .storage import load_json, locked
 
 
@@ -291,7 +291,6 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
 
 
 def _verify_attempt(project, change, state, services, config, boundary):
-    change_id = change['change_id']
     layers, boundary = _run_checks_safely(project, change, config, boundary)
     layers = check_layers(layers, state.get("oracle"))
     if boundary["violations"]:

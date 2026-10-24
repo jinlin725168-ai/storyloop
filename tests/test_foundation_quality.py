@@ -1,5 +1,4 @@
 """Execute the packaged survey's sampling recipe against independent vectors."""
-from pathlib import Path
 import json
 import re
 import subprocess
