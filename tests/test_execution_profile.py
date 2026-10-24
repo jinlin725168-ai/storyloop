@@ -105,6 +105,15 @@ class VersionSnapshotTests(unittest.TestCase):
         self.assertIsNone(versions["map_version"])
         self.assertIn("oracle-craft", {skill["name"] for skill in versions["skills"]})
 
+    def test_approval_works_when_the_config_has_no_stacks(self):
+        config = load_project_config(self.root)
+        del config["profile"]["stacks"]
+        write_json(self.root / ".storyloop/config.json", config)
+
+        approval = approve_change(self.root, self.change_id)["approval"]
+        self.assertIn("versions", approval)
+        self.assertEqual(approval["versions"]["engine_version"], storyloop.__version__)
+
     def test_snapshot_does_not_change_the_contract_digest(self):
         before = contract_digest(load_change(self.root, self.change_id)["product"])
         state = approve_change(self.root, self.change_id)

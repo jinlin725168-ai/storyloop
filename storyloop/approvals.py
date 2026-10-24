@@ -65,7 +65,7 @@ def version_snapshot(project: Path) -> dict:
     from .role_instructions import INSTRUCTIONS
     from .skills import selected_snapshots
 
-    stacks = load_project_config(project)["profile"]["stacks"]
+    stacks = load_project_config(project).get("profile", {}).get("stacks", [])
     skills = {}
     for role in INSTRUCTIONS:
         for _, snapshot in selected_snapshots(project, role, stacks):
