@@ -2,6 +2,7 @@
 from pathlib import Path
 
 from .baseline import _git
+from .project_git import changed_paths
 from .lesson_store import effective_status, lesson_source_commit, load_lessons_at, stale_ids
 from .lessons import scope_matches
 from .models import StoryLoopError, identifier
@@ -31,8 +32,7 @@ def change_paths(project: Path, change_id: str | None) -> list[str]:
         branch = f"refs/heads/{state['feature_branch']}"
         refs = _git(project, 'for-each-ref', '--format=%(refname)', branch).splitlines()
         if branch in refs:
-            paths.extend(filter(None, _git(project, 'diff', '--name-only', '-z',
-                              f"{state['source_head']}...{branch}", '--').split('\0')))
+            paths.extend(sorted(changed_paths(project, f"{state['source_head']}...{branch}", '--')))
     return list(dict.fromkeys(paths))
 
 

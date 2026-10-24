@@ -105,6 +105,12 @@ class ProjectBoundaryTests(unittest.TestCase):
             self.assertEqual(violations[contract.relative_to(root).as_posix()], "CONTRACT_PROTECTED")
             self.assertEqual(violations[smoke.relative_to(root).as_posix()], "CONTRACT_PROTECTED")
             self.assertEqual(violations[".github/workflows/ci.yml"], "CI_PROTECTED")
+            self.assertTrue(result["ci_requires_human_proposal"])
+            from storyloop.run_hints import next_step
+            hint = next_step(result["status"], "FEAT-20260916-001", root, result)
+            self.assertIn("base-propose", hint)
+            self.assertIn("--allow-ci", hint)
+            self.assertNotIn("base-update", hint)
 
     def test_rename_detection_does_not_hide_deleted_protected_path(self):
         with tempfile.TemporaryDirectory() as folder:

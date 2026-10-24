@@ -36,7 +36,8 @@ def _command(*tokens: object) -> str:
     return shlex.join(str(token) for token in tokens)
 
 
-def _options(status: str, project: str, change_id: str, routed: bool) -> list[dict]:
+def _options(status: str, project: str, change_id: str, routed: bool,
+             ci_requires_human_proposal: bool = False) -> list[dict]:
     where = (project, "--change", change_id)
     repair = {"action": "修正判据", "command": _command(
         "storyloop", "acceptance-repair", *where, "--reason", "<原因>")}
@@ -76,6 +77,10 @@ def _options(status: str, project: str, change_id: str, routed: bool) -> list[di
         "NEEDS_SPEC_FIX": [supersede, *([overrule] if routed else [])],
         "AGENT_UNAVAILABLE": [run],
     }
+    if status == "BASE_CHANGE_REQUIRED" and ci_requires_human_proposal:
+        return [{"action": "人工授权 CI 底座改动", "command": _command(
+            "storyloop", "base-propose", project, "--path", "<CI路径>",
+            "--reason", "<原因>", "--allow-ci")}]
     return table.get(status, [])
 
 
@@ -203,7 +208,9 @@ def build_stop(project: Path | str, state: dict, status: str, details: dict) -> 
     change_id = str(state["change_id"])
     failures = state.get("failures") or []
     routed_options = routing_options(project, change_id, status, {**state, **details})
-    options = routed_options or _options(status, project_text, change_id, bool(state.get("routed")))
+    options = routed_options or _options(
+        status, project_text, change_id, bool(state.get("routed")),
+        details.get("ci_requires_human_proposal", False))
     return {
         **stop_fields(project, change_id, details),
         "status": status,

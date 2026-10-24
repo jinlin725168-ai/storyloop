@@ -11,6 +11,7 @@ def pause_for_boundary(
     details = {
         "violations": boundary["violations"],
         "base_proposal": boundary["base_proposal"],
+        "ci_requires_human_proposal": boundary.get("ci_requires_human_proposal", False),
     }
     if phase is not None:
         details["phase"] = phase

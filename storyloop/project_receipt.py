@@ -9,7 +9,8 @@ from pathlib import Path
 from .baseline import _git
 from .models import require
 from .smoke import RESULT_EVIDENCE
-from .project_git import commit_paths, current_branch, exact_child_commit
+from .project_git import (changed_paths, commit_paths, current_branch,
+                          exact_child_commit, safe_changed_path)
 from .storage import write_bytes_atomic
 
 
@@ -66,8 +67,7 @@ def verify_verified_artifacts(project: Path, state: dict) -> None:
     report_path = report.relative_to(project).as_posix()
     committed = _git(project, "show", f"{state['report_commit']}:{report_path}").encode("utf-8")
     require(report.is_file() and report_path not in _dirty_paths(project)
-            and (hashlib.sha256(committed).hexdigest() == state["report_sha256"]
-                 or hashlib.sha256(report.read_bytes()).hexdigest() == state["report_sha256"]),
+            and hashlib.sha256(committed).hexdigest() == state["report_sha256"],
             "Verified acceptance report changed before merge")
     verify_evidence_digest(project, state)
 
@@ -130,7 +130,6 @@ def _report_paths(project: Path, state: dict) -> list[str]:
 
 
 def _dirty_paths(project: Path) -> set[str]:
-    outputs = [_git(project, "diff", "--no-renames", "--name-only", "-z", "HEAD"),
-               _git(project, "ls-files", "--others", "--exclude-standard", "-z")]
-    return {item.replace("\\", "/") for output in outputs
-            for item in output.split("\0") if item}
+    other = _git(project, "ls-files", "--others", "--exclude-standard", "-z")
+    return changed_paths(project, "HEAD") | {safe_changed_path(item)
+                                            for item in other.split("\0") if item}

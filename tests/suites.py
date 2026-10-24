@@ -40,6 +40,7 @@ END_TO_END = [
 SAFETY = [
     "tests.test_custom_protection",
     "tests.test_base_contract", "tests.test_base_lifecycle", "tests.test_base_compatibility",
+    "tests.test_base_trust", "tests.test_git_diff_paths",
     "tests.test_lesson_landing.LandingTests.test_base_proposal_paths_detect_renamed_foundation_source",
     "tests.test_landing_recovery",
     "tests.test_boundaries", "tests.test_project_boundaries", "tests.test_project_security_gates",

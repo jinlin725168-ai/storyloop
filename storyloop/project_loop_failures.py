@@ -45,7 +45,8 @@ def record_boundary(project: Path, state: dict, boundary: dict) -> dict:
     if stopped is not None:
         return stopped
     return pause(project, state, boundary["status"], violations=boundary["violations"],
-                 base_proposal=boundary["base_proposal"])
+                 base_proposal=boundary["base_proposal"],
+                 ci_requires_human_proposal=boundary.get("ci_requires_human_proposal", False))
 
 
 def oracle_paths(project: Path, state: dict) -> list[str]:

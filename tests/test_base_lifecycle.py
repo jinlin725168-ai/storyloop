@@ -1,6 +1,7 @@
 """The base G1 gate uses green checks on the locked old foundation."""
 
 from pathlib import Path
+import hashlib
 import sys
 import tempfile
 import unittest
@@ -61,8 +62,13 @@ class BaseG1Tests(unittest.TestCase):
         record_manual_acceptance(self.root, change_id, ["BASE-ACCEPT"], "满足目标")
         return change_id
 
+    def _lock_old_green(self):
+        path = self.root / ".storyloop/evidence" / self.change["change_id"] / "base-old-green.json"
+        self.state["old_green_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+
     def test_old_green_evidence_opens_base_g1(self):
         evidence = base_upgrade.establish_old_green(self.root, self.change, self.state)
+        self._lock_old_green()
         self.assertEqual(evidence["status"], "PASSED")
         self.assertEqual(evidence["build"]["status"], "DECLARED_ABSENT")
         self.assertEqual(evidence["layers"]["unit"]["status"], "PASSED")
@@ -70,6 +76,7 @@ class BaseG1Tests(unittest.TestCase):
 
     def test_tampered_old_green_evidence_cannot_open_g1(self):
         base_upgrade.establish_old_green(self.root, self.change, self.state)
+        self._lock_old_green()
         path = self.root / ".storyloop/evidence" / self.state["change_id"] / "base-old-green.json"
         value = load_json(path)
         value["contract_digest"] = "0" * 64
@@ -80,10 +87,12 @@ class BaseG1Tests(unittest.TestCase):
 
     def test_g1_rejects_changed_approved_command_digest(self):
         base_upgrade.establish_old_green(self.root, self.change, self.state)
+        self._lock_old_green()
         path = self.root / ".storyloop/evidence" / self.state["change_id"] / "base-old-green.json"
         evidence = load_json(path)
         evidence["commands_sha256"] = "0" * 64
         write_json(path, evidence)
+        self._lock_old_green()
         with self.assertRaisesRegex(StoryLoopError, "commands"):
             guard_g1(self.root, self.state, {})
 
@@ -206,8 +215,7 @@ class BaseG1Tests(unittest.TestCase):
         review = load_json(path)
         review["candidate_sha256"] = "0" * 64
         write_json(path, review)
-        with self.assertRaisesRegex(StoryLoopError, "review.*candidate"):
-            run_change(self.root, change_id)
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
         base_execution.record_base_review(self.root, change_id, "pass", "已重新核对")
         self.assertEqual(run_change(self.root, change_id)["status"],
                          "MANUAL_ACCEPTANCE_REQUIRED")
@@ -232,8 +240,7 @@ class BaseG1Tests(unittest.TestCase):
         review = load_json(path)
         review["reviewer"] = git(self.root, "show", "-s", "--format=%an", "HEAD")
         write_json(path, review)
-        with self.assertRaisesRegex(StoryLoopError, "reviewer"):
-            run_change(self.root, change_id)
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
 
     def test_review_rejects_author_of_earlier_candidate_commit(self):
         change_id = self.change["change_id"]
@@ -415,7 +422,7 @@ class BaseG1Tests(unittest.TestCase):
         self.assertEqual(run_change(self.root, change_id)["status"],
                          "HUMAN_IMPLEMENTATION_REQUIRED")
 
-    def test_candidate_evidence_before_review_state_save_is_reused(self):
+    def test_candidate_evidence_before_review_state_save_is_reverified(self):
         change_id = self.change["change_id"]
         run_change(self.root, change_id, implementer="human")
         (self.root / "pom.xml").write_text("<project><version>2</version></project>\n",
@@ -434,8 +441,10 @@ class BaseG1Tests(unittest.TestCase):
                 run_change(self.root, change_id)
         with mock.patch.object(base_execution, "run_commands_isolated",
                                side_effect=AssertionError("candidate checks reran")):
-            self.assertEqual(run_change(self.root, change_id)["status"],
-                             "BASE_REVIEW_REQUIRED")
+            with self.assertRaisesRegex(AssertionError, "candidate checks reran"):
+                run_change(self.root, change_id)
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "BASE_REVIEW_REQUIRED")
 
     def test_implementing_checkpoint_reuses_matching_candidate_evidence(self):
         change_id = self.change["change_id"]

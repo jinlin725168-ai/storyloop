@@ -69,6 +69,71 @@ class BaseCompatibilityTests(unittest.TestCase):
         receipt = load_json(self.root / ".storyloop/state/base-upgrades" / f"{change_id}.json")
         self.assertEqual(receipt["status"], "ACCEPTED")
 
+    def test_finalizing_rejects_baseline_older_than_approved_version(self):
+        change_id = self._merged_candidate()
+        path = self.root / ".storyloop/baseline.json"
+        baseline = load_json(path)
+        write_json(path, {**baseline, "baseline_version": "0.9.9"})
+        result = run_change(self.root, change_id)
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        self.assertIn("baseline", result["next"])
+        write_json(path, baseline)
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+
+    def test_finalizing_checks_ancestry_without_listing_history(self):
+        change_id = self._merged_candidate()
+        from storyloop import base_finalization
+        original = base_finalization._git
+
+        def bounded_git(project, *arguments):
+            if arguments and arguments[0] == "rev-list":
+                raise AssertionError("unbounded history enumeration")
+            return original(project, *arguments)
+
+        with patch.object(base_finalization, "_git", side_effect=bounded_git):
+            self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+
+    def test_unbound_finalization_receipt_cannot_choose_new_version(self):
+        change_id = self._merged_candidate()
+        from storyloop import base_finalization
+        from storyloop.baseline import load_project_config
+        state = load_json(self.root / ".storyloop/state/runs" / f"{change_id}.json")
+        change = load_json(self.root / ".storyloop/state/changes" / f"{change_id}.json")
+        baseline = load_baseline(self.root)
+        config = load_project_config(self.root)
+        head = state["integration_commit"]
+        receipt = base_finalization._new_receipt(
+            self.root, change, state, baseline, config, head,
+            self.root / ".storyloop/baseline.json", self.root / ".storyloop/config.json")
+        receipt["new_baseline_version"] = "9.9.9"
+        candidate = base_upgrade._next_baseline(self.root, baseline, config["profile"], head,
+                                                "9.9.9")
+        receipt["candidate_baseline_digest"] = base_upgrade._dict_digest(candidate)
+        path = self.root / ".storyloop/state/base-upgrades" / f"{change_id}.json"
+        write_json(path, receipt)
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+        self.assertEqual(load_baseline(self.root)["baseline_version"], "1.0.1")
+
+    def test_legacy_finalizing_state_after_baseline_write_is_revalidated(self):
+        change_id = self._merged_candidate()
+        from storyloop import base_finalization
+        original = base_finalization.write_json
+
+        def interrupt(path, value, **kwargs):
+            original(path, value, **kwargs)
+            if path.name == "baseline.json" and value["baseline_version"] == "1.0.1":
+                raise RuntimeError("baseline write crash")
+
+        with patch.object(base_finalization, "write_json", side_effect=interrupt):
+            with self.assertRaisesRegex(RuntimeError, "baseline write crash"):
+                run_change(self.root, change_id)
+        state_path = self.root / ".storyloop/state/runs" / f"{change_id}.json"
+        state = load_json(state_path)
+        state.pop("base_finalization_receipt")
+        state.pop("base_finalization_receipt_sha256")
+        write_json(state_path, state)
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+
     def test_proposed_base_update_imports_without_changing_old_file(self):
         proposed = base_upgrade.propose_base_change(self.root, ["pom.xml"], "刷新构建配置")
         path = Path(proposed["proposal"])
@@ -212,7 +277,7 @@ class BaseCompatibilityTests(unittest.TestCase):
         base_upgrade.draft_from_proposal(self.root, change_id, scope="ci")
         approve_change(self.root, change_id)
         (self.root / ".github/workflows/ci.yml").write_text("name: reviewed\n", encoding="utf-8")
-        with self.assertRaisesRegex(StoryLoopError, "base-propose --allow-ci"):
+        with self.assertRaisesRegex(StoryLoopError, "撤回.*base-propose --allow-ci"):
             run_change(self.root, change_id, implementer="human")
         self.assertFalse((self.root / ".storyloop/state/runs" / f"{change_id}.json").exists())
         self.assertEqual(git(self.root, "branch", "--show-current"), self.before["source_branch"])
@@ -259,7 +324,7 @@ class BaseCompatibilityTests(unittest.TestCase):
         finally:
             CONFIRMED.reset(token)
 
-    def test_oracle_confirmation_survives_candidate_evidence_crash_and_reaches_report(self):
+    def test_unbound_oracle_evidence_crash_requires_reconfirmation_and_reaches_report(self):
         from storyloop import base_execution
         from storyloop.oracle_skill_approval import CONFIRMED
         project, change_id = self._oracle_candidate()
@@ -281,7 +346,13 @@ class BaseCompatibilityTests(unittest.TestCase):
                              "base-candidate-green.json")
         approval = evidence["oracle_skills_approval"]
         self.assertEqual(approval["candidate_commit"], git(project, "rev-parse", "HEAD"))
-        self.assertEqual(run_change(project, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        with self.assertRaisesRegex(StoryLoopError, "confirm-oracle-skills"):
+            run_change(project, change_id)
+        token = CONFIRMED.set(True)
+        try:
+            self.assertEqual(run_change(project, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        finally:
+            CONFIRMED.reset(token)
         git(project, "config", "user.name", "Independent Reviewer")
         base_execution.record_base_review(project, change_id, "pass", "已核对")
         self.assertEqual(run_change(project, change_id)["status"], "MANUAL_ACCEPTANCE_REQUIRED")
@@ -292,7 +363,7 @@ class BaseCompatibilityTests(unittest.TestCase):
         self.assertIn("Oracle 技能确认", (project / "reports/storyloop" / change_id /
                                     "report.md").read_text(encoding="utf-8"))
 
-    def test_g2_rejects_missing_oracle_confirmation_in_candidate_evidence(self):
+    def test_tampered_oracle_evidence_rechecks_from_state_confirmation(self):
         from storyloop import base_execution
         from storyloop.oracle_skill_approval import CONFIRMED
         project, change_id = self._oracle_candidate()
@@ -309,8 +380,11 @@ class BaseCompatibilityTests(unittest.TestCase):
         evidence = load_json(evidence_path)
         evidence.pop("oracle_skills_approval", None)
         write_json(evidence_path, evidence)
-        with self.assertRaisesRegex(StoryLoopError, "Oracle.*confirmation"):
-            run_change(project, change_id)
+        self.assertEqual(run_change(project, change_id)["status"], "FINALIZING")
+        repaired = load_json(evidence_path)
+        self.assertEqual(repaired["oracle_skills_approval"],
+                         load_json(project / ".storyloop/state/runs" / f"{change_id}.json")
+                         ["base_evidence"]["oracle_skills_approval"])
 
     def test_legacy_source_commit_requires_explicit_replay_before_starting_run(self):
         proposed = base_upgrade.propose_base_change(self.root, ["pom.xml"], "旧底座候选")

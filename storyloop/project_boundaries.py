@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import hashlib
 
 from .change_types import definition_for, type_for_change_id, type_of
 from .baseline import _git, load_baseline, load_project_config
 from .models import identifier, require
 from .project_profile import CI_FILES, CUSTOM_ROOT, matches_test_root
+from .project_git import changed_paths, safe_changed_path
 from .state_format import is_system_smoke_path
 from .storage import load_json, write_json
 
@@ -28,7 +29,8 @@ def audit_base_scope(project: Path, change: dict, paths: set[str]) -> None:
     require(set(categories) == set(change["product"]["base"]["paths"]),
             "Base proposal paths differ from approved contract")
     require("CI_PROTECTED" not in categories.values(),
-            "Agent-generated CI proposal needs a new human base-propose --allow-ci authorization")
+            "已批准的代理 CI 提案不可继续；先撤回候选上的 CI 改动并作废旧 BASE，"
+            "再由人运行 base-propose --allow-ci 建立新提案并重放")
     for path in paths:
         require(categories.get(path) in allowed and base_scope_path_allowed(scope, path),
                 f"Base scope {scope} cannot write {path}")
@@ -103,21 +105,15 @@ def audit_project_changes(project: Path, change_id: str, *, nature: str | None =
     return {
         "status": status, "change_id": change_id, "allowed": allowed,
         "violations": violations, "base_proposal": str(proposal) if proposal else None,
+        "ci_requires_human_proposal": any(item["category"] == "CI_PROTECTED"
+                                          for item in base_changes),
     }
 
 
 def _changed_paths(project: Path) -> list[str]:
-    outputs = [
-        _git(project, "diff", "--no-renames", "--name-only", "-z", "HEAD"),
-        _git(project, "ls-files", "--others", "--exclude-standard", "-z"),
-    ]
-    result: set[str] = set()
-    for raw in [item for output in outputs for item in output.split("\0") if item]:
-        normalized = raw.replace("\\", "/")
-        pure = PurePosixPath(normalized)
-        require(normalized and not pure.is_absolute() and ".." not in pure.parts,
-                "Git reported an unsafe changed path")
-        result.add(normalized)
+    other = _git(project, "ls-files", "--others", "--exclude-standard", "-z")
+    result = changed_paths(project, "HEAD")
+    result.update(safe_changed_path(item) for item in other.split("\0") if item)
     return sorted(result, key=str.casefold)
 
 

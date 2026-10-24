@@ -42,6 +42,11 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
         return (f"逐条人工核对后 storyloop accept {where} --criterion <ID> --note <核对了什么>，"
                 f"全部记录后 {run}")
     if status == "BASE_CHANGE_REQUIRED":
+        if details.get("ci_requires_human_proposal") or any(
+                item.get("category") == "CI_PROTECTED" for item in details.get("violations", [])):
+            return (f"代理触碰了 CI 路径；先撤回越界改动，再由人运行 storyloop base-propose "
+                    f"{project} --path <CI路径> --reason '<原因>' --allow-ci，批准新 BASE 后在底座分支重放；"
+                    f"完成底座变更后再 {run}")
         proposal = details.get("base_proposal")
         named = f"（提案 {Path(str(proposal)).stem}）" if proposal else ""
         return (f"底座改动要独立迭代{named}：storyloop base-update {project} --proposal <BASE-ID> "

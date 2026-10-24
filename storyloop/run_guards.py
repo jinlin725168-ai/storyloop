@@ -1,14 +1,15 @@
 """Deterministic lifecycle checks; G1–G3 move here in Tasks 4 and 5."""
 import hashlib
+import json
 from pathlib import Path
 from .change_types import definition_for, type_for_change_id, type_of
-from .models import require
+from .models import StoryLoopError, require
 from .smoke import RED_EVIDENCE
 from .storage import load_json
 from .baseline import _git, load_baseline, load_project_config
 from .oracle_counts import check_layers
 from .project_boundaries import audit_base_scope, audit_project_changes
-from .project_git import current_branch, exact_child_commit
+from .project_git import changed_paths, current_branch
 from .project_profile import base_commands_digest, layer_commands
 from .project_receipt import _dirty_paths, verify_verified_artifacts, recover_completed_merge  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .smoke import RESULT_EVIDENCE, smoke_digests
@@ -47,6 +48,9 @@ def guard_g1(project: Path, state: dict, context: dict) -> None:
 def _guard_base_green(project: Path, state: dict) -> None:
     path = project / ".storyloop/evidence" / state["change_id"] / "base-old-green.json"
     require(path.is_file(), "Old-base green evidence is missing")
+    require(isinstance(state.get("old_green_sha256"), str)
+            and hashlib.sha256(path.read_bytes()).hexdigest() == state["old_green_sha256"],
+            "Old-base green evidence does not match the saved digest")
     evidence = load_json(path)
     baseline = load_baseline(project)
     approval = load_json(project / ".storyloop/state/changes" /
@@ -186,9 +190,9 @@ def _guard_base_g2(project: Path, change: dict, state: dict, context: dict) -> N
     allowed_dirty = base_report_paths(state) if head == state.get("candidate_commit") else set()
     require(_dirty_paths(project) <= allowed_dirty,
             "Base candidate worktree changed before G2")
-    evidence_path = project / ".storyloop/evidence" / change_id / "base-candidate-green.json"
-    evidence = load_json(evidence_path)
-    digest = implementation_digest(project)
+    evidence = trusted_base_evidence(project, state)
+    require(evidence is not None, "Base verification evidence is stale")
+    digest = state.get("candidate_sha256")
     require(evidence.get("status") == "PASSED"
             and evidence.get("candidate_commit") == state.get("candidate_commit")
             and evidence.get("candidate_sha256") == digest
@@ -212,27 +216,94 @@ def _guard_base_g2(project: Path, change: dict, state: dict, context: dict) -> N
     for name in layers:
         require(not layer_commands(profile, name) or layers[name]["status"] == "PASSED",
                 f"Base {name} regression did not pass")
-    review = load_json(project / ".storyloop/state/base-reviews" / f"{change_id}.json")
-    require(review.get("verdict") == "pass" and review.get("candidate_sha256") == digest
+    review = trusted_base_review(project, state)
+    require(review is not None and review.get("verdict") == "pass" and review.get("candidate_sha256") == digest
             and review.get("candidate_commit") == state.get("candidate_commit")
             and review.get("reviewer") not in base_candidate_authors(project, state),
             "Independent base review is missing")
+    require(trusted_base_acceptance(project, state),
+            "Base manual acceptance does not match the saved digest")
     require(not pending_manual_criteria(change, _manual_records(project, change_id), digest),
             "Base manual acceptance is missing")
-    actual = {item for item in _git(project, "diff", "--no-renames", "--name-only", "-z",
-                                    state["contract_commit"], state["candidate_commit"]).split("\0") if item}
+    actual = changed_paths(project, state["contract_commit"], state["candidate_commit"])
     require(actual == set(change["product"]["base"]["paths"]),
             "Base committed paths differ from the approved contract")
     audit_base_scope(project, change, actual)
 
 
+def trusted_base_evidence(project: Path, state: dict) -> dict | None:
+    """Only a candidate proof locked by the engine's saved run state may be reused."""
+    path = project / ".storyloop/evidence" / state["change_id"] / "base-candidate-green.json"
+    expected = state.get("base_evidence_sha256")
+    if not isinstance(expected, str) or not path.is_file():
+        return None
+    try:
+        if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            return None
+        evidence = load_json(path)
+    except (OSError, ValueError, StoryLoopError):
+        return None
+    return evidence if evidence == saved_base_evidence(state) else None
+
+
+def saved_base_evidence(state: dict) -> dict | None:
+    evidence = state.get("base_evidence")
+    expected = state.get("base_evidence_sha256")
+    if not isinstance(evidence, dict) or not isinstance(expected, str):
+        return None
+    content = (json.dumps(evidence, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    return evidence if hashlib.sha256(content).hexdigest() == expected else None
+
+
+def trusted_base_review(project: Path, state: dict) -> dict | None:
+    path = project / ".storyloop/state/base-reviews" / f"{state['change_id']}.json"
+    expected = state.get("base_review_sha256")
+    if not isinstance(expected, str) or not path.is_file():
+        return None
+    try:
+        if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            return None
+        review = load_json(path)
+    except (OSError, StoryLoopError):
+        return None
+    return review if review == state.get("base_review") else None
+
+
+def base_candidate_matches(project: Path, state: dict) -> bool:
+    """Compare the accepted Git object, allowing Git's clean checkout conversion."""
+    return (current_branch(project) == state.get("feature_branch")
+            and (_git(project, "rev-parse", "HEAD").strip() == state.get("candidate_commit")
+                 or base_report_commit(project, state))
+            and not _dirty_paths(project)
+            and (proof := trusted_base_evidence(project, state)) is not None
+            and proof.get("status") == "PASSED"
+            and proof.get("candidate_sha256") == state.get("candidate_sha256"))
+
+
+def trusted_base_acceptance(project: Path, state: dict) -> bool:
+    path = project / ".storyloop/state/acceptance" / f"{state['change_id']}.json"
+    expected = state.get("manual_acceptance_sha256")
+    return (isinstance(expected, str) and path.is_file()
+            and hashlib.sha256(path.read_bytes()).hexdigest() == expected)
+
+
 def base_report_commit(project: Path, state: dict) -> str | None:
-    """Identify only the expected report child of a locked human candidate."""
+    """Identify a bounded chain containing only report commits above the candidate."""
     head = _git(project, "rev-parse", "HEAD").strip()
     if head == state.get("candidate_commit"):
         return None
-    if exact_child_commit(project, state.get("candidate_commit"), base_report_paths(state), head):
-        return head
+    current = head
+    for _ in range(8):
+        parents = _git(project, "rev-list", "--parents", "-n", "1", current).split()
+        if len(parents) != 2:
+            return None
+        changed = changed_paths(project, parents[1], current)
+        allowed = base_report_paths(state)
+        if not changed or not changed <= allowed:
+            return None
+        if parents[1] == state.get("candidate_commit"):
+            return head if changed == allowed else None
+        current = parents[1]
     return None
 
 

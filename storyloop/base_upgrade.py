@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from .baseline import (_foundation_paths, _git, _sha256, _tracked_files,
                        load_baseline, load_project_config)
@@ -16,6 +16,7 @@ from .product_contract import validate_product
 from .project_boundaries import _write_base_proposal, audit_base_scope, base_scope_path_allowed
 from .project_profile import base_commands_digest, is_ci_path
 from .project_profile import layer_commands
+from .project_git import changed_paths
 from .smoke_runner import run_commands_at_commit, run_commands_isolated
 from .system_smoke import adopt_system_smoke, load_system_smoke, run_system_smoke_isolated
 from .storage import load_json, locked, write_json
@@ -211,7 +212,8 @@ def _upgrade_locked(project: Path, proposal_id: str) -> dict:
     require(proposal["status"] == "PROPOSED", "Base proposal is already handled")
     categories = {item["category"] for item in proposal["changes"]}
     require("CI_PROTECTED" not in categories,
-            "Agent-generated CI proposal needs a new human base-propose --allow-ci authorization")
+            "代理生成的 CI 提案不可导入；先撤回越界改动，"
+            "再由人运行 base-propose --allow-ci 建立新提案")
     paths = [item["path"] for item in proposal["changes"]]
     scope = ("ci" if "CI_CHANGE" in categories else
              "upstream" if "UPSTREAM_MUTABLE" in categories else
@@ -255,16 +257,7 @@ def _require_candidate(project: Path, baseline: dict, proposal: dict) -> None:
 
 
 def _changed_since(project: Path, source_head: str) -> set[str]:
-    output = _git(project, "diff", "--no-renames", "--name-only", "-z", source_head, "HEAD")
-    result = set()
-    for raw in output.split("\0"):
-        if raw:
-            normalized = raw.replace("\\", "/")
-            pure = PurePosixPath(normalized)
-            require(not pure.is_absolute() and ".." not in pure.parts,
-                    "Git reported an unsafe base path")
-            result.add(normalized)
-    return result
+    return changed_paths(project, source_head, "HEAD")
 
 
 def _next_baseline(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 
 from .git_command import git as _git
@@ -87,6 +87,26 @@ def exact_child_commit(project: Path, parent: str, paths: set[str],
                                     "--no-renames", "--name-only", "-r", "-z",
                                     head).split("\0") if path}
     return changed == paths
+
+
+def changed_paths(project: Path, *revisions: str) -> set[str]:
+    """Return both sides of renames in a bounded, normalized Git diff."""
+    output = _git(project, "diff", "--no-renames", "--name-only", "-z", *revisions)
+    paths = set()
+    for raw in output.split("\0"):
+        if not raw:
+            continue
+        paths.add(safe_changed_path(raw))
+    return paths
+
+
+def safe_changed_path(raw: str) -> str:
+    """Normalize one Git-reported path without accepting traversal."""
+    path = raw.replace("\\", "/")
+    pure = PurePosixPath(path)
+    require(bool(path) and not pure.is_absolute() and ".." not in pure.parts,
+            "Git reported an unsafe changed path")
+    return path
 
 
 def finish_feature(project: Path, feature_branch: str, target_branch: str) -> dict:

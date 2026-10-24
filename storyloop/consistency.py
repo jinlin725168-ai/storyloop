@@ -13,7 +13,7 @@ from .models import StoryLoopError, require, text
 from .path_security import safe_target
 from .planning import selected_option
 from .principles import load_principles
-from .project_git import commit_paths
+from .project_git import changed_paths, commit_paths
 from .guarded_calls import read_only_call
 from .project_loop_support import save_run
 from .run_transitions import transition
@@ -130,7 +130,7 @@ def ensure_consistency(project: Path, change: dict, state: dict, services) -> di
 
 def _write_artifact(project: Path, relative: str, plan: dict) -> None:
     # Engine-owned control documents must be committed before workspace boundary audits.
-    require(not _git(project, 'diff', '--cached', '--name-only').strip(),
+    require(not changed_paths(project, '--cached'),
             'Routing artifact requires an unstaged index')
     write_json(safe_target(project, relative, 'routing plan artifact'), plan, max_bytes=2_000_000)
     if _git(project, 'status', '--porcelain', '--', relative).strip():

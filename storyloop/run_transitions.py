@@ -74,6 +74,9 @@ TRANSITIONS = {
     # be bound to a new commit. This edge also recovers pre-E1-review IMPLEMENTING runs.
     "base_revise": frozenset((source, "HUMAN_IMPLEMENTATION_REQUIRED") for source in {
         "IMPLEMENTING", "BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED"}),
+    # A saved review file that no longer matches its run-state digest must be re-recorded.
+    "base_review_recheck": frozenset({("MANUAL_ACCEPTANCE_REQUIRED", "BASE_REVIEW_REQUIRED")}),
+    "base_baseline_recheck": frozenset({("WORKSPACE_TAINTED", "FINALIZING")}),
     "begin_attempt": frozenset((source, "IMPLEMENTING") for source in PLANNING_SOURCES),
     "characterization_resumed": frozenset({("CHARACTERIZATION_FAILED", "IMPLEMENTING")}),
     "contract_ready": frozenset({("PREPARING", "CONTRACT_READY")}),

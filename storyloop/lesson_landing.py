@@ -17,7 +17,7 @@ from .path_security import safe_target, repository_relative
 from .principles import validate_principles
 from .processutil import run_process
 from .project_profile import validate_project_settings
-from .project_git import commit_paths
+from .project_git import changed_paths, commit_paths
 from .storage import load_json, locked, write_bytes_atomic, write_json
 
 
@@ -199,8 +199,7 @@ def land_knowledge(project, draft, entry) -> dict:
 
 def _proposal_paths(project, writes):
     source = load_baseline(project)['source_head']
-    changed = set(filter(None, _git(project, 'diff', '--no-renames', '--name-only', '-z',
-                                     source, 'HEAD').split('\0')))
+    changed = changed_paths(project, source, 'HEAD')
     require(all(p.startswith('openspec/lessons/') for p in changed), 'BASE 后存在非经验变更，请先处理 BASE')
     return sorted(changed | set(writes))
 
