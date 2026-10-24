@@ -44,6 +44,11 @@ class BaseContractTests(unittest.TestCase):
         schema = schema_for("product", {})
         self.assertNotIn("base", schema["properties"]["nature"]["enum"])
 
+    def test_control_plane_path_cannot_enter_base_proposal(self):
+        bootstrap_project(self.root, {"test_commands": [], "base_build_commands": []})
+        with self.assertRaises(StoryLoopError):
+            propose_base_change(self.root, [".storyloop/config.json"], "改内部状态")
+
 
 if __name__ == "__main__":
     unittest.main()

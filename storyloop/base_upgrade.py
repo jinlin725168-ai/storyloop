@@ -14,11 +14,12 @@ from .models import identifier, require, text
 from .path_security import repository_relative
 from .product_contract import validate_product
 from .project_boundaries import _write_base_proposal
-from .project_profile import is_ci_path
+from .project_profile import is_ci_path, matches_test_root
 from .project_profile import layer_commands
 from .smoke_runner import run_commands_at_commit, run_commands_isolated
 from .system_smoke import adopt_system_smoke, load_system_smoke, run_system_smoke_isolated
 from .storage import load_json, locked, write_json
+from .state_format import is_system_smoke_path
 from .lesson_store import load_lessons_at
 from .lessons import scope_matches
 
@@ -39,6 +40,9 @@ def propose_base_change(project: Path, paths: list[str], reason: str,
     changes = []
     for item in paths:
         relative = repository_relative(item, "base path")
+        require(not (relative.startswith(".storyloop/") or relative == ".storyloop"
+                     or relative.startswith(".git/") or relative == ".git"),
+                "Base proposal cannot change the control plane")
         ci = is_ci_path(relative)
         require(allow_ci or not ci, "CI configuration paths change only through a human BASE proposal "
                                     "(storyloop base-propose --allow-ci)")
@@ -131,6 +135,53 @@ def establish_old_green(project: Path, change: dict, state: dict) -> dict:
     path = project / ".storyloop/evidence" / change["change_id"] / "base-old-green.json"
     write_json(path, evidence, max_bytes=4_000_000)
     return evidence
+
+
+def base_candidate_paths(project: Path, change: dict, state: dict) -> list[str]:
+    """Validate every committed human path against the approved base contract."""
+    project = Path(project).resolve()
+    require(_git(project, "branch", "--show-current").strip() == state["feature_branch"],
+            "Resume the saved StoryLoop base branch")
+    require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
+            "Commit or discard all workspace changes before resuming the base run")
+    start = state["contract_commit"]
+    require(start in _git(project, "rev-list", "HEAD").splitlines(),
+            "Base candidate does not descend from the locked contract commit")
+    actual = _changed_since(project, start)
+    expected = set(change["product"]["base"]["paths"])
+    extra, missing = sorted(actual - expected), sorted(expected - actual)
+    require(not extra and not missing,
+            "Base committed paths differ from approved contract; extra: " + ", ".join(extra)
+            + "; missing: " + ", ".join(missing))
+    profile = load_project_config(project)["profile"]
+    scope = change["product"]["base"]["scope"]
+    proposal = load_json(project / ".storyloop/base-proposals" / f"{change['change_id']}.json")
+    categories = {item["path"]: item["category"] for item in proposal["changes"]}
+    allowed = {"foundation": {"FOUNDATION_CHANGE", "INTEGRATION_CHANGE"},
+               "ci": {"CI_CHANGE", "FOUNDATION_CHANGE", "INTEGRATION_CHANGE"},
+               "upstream": {"UPSTREAM_MUTABLE", "FOUNDATION_CHANGE", "INTEGRATION_CHANGE"},
+               "skills": {"FOUNDATION_CHANGE"}, "knowledge": {"FOUNDATION_CHANGE"}}[scope]
+    for path in actual:
+        require(categories.get(path) in allowed, f"Base scope {scope} cannot write {path}")
+        require(_scope_path_allowed(scope, path), f"Base scope {scope} cannot write {path}")
+        require(not _oracle_path(path, profile), f"Base oracle path requires E2: {path}")
+        require(not _git(project, "ls-tree", "HEAD", "--", path).startswith("120000 "),
+                f"Base candidate contains unsafe symlink: {path}")
+    return sorted(actual)
+
+
+def _oracle_path(path: str, profile: dict) -> bool:
+    return (is_system_smoke_path(path) or path.startswith("acceptance/changes/")
+            or matches_test_root(path, profile.get("test_roots") or [])
+            or path == "acceptance/storyloop-settings.json")
+
+
+def _scope_path_allowed(scope: str, path: str) -> bool:
+    if scope == "skills":
+        return path.startswith((".claude/skills/", ".codex/skills/"))
+    if scope == "knowledge":
+        return path.startswith(("openspec/foundation/", "openspec/lessons/"))
+    return True
 
 
 

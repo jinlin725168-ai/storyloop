@@ -30,6 +30,7 @@ STOP_SOURCES = {
     "EXISTING_GREEN": REPAIRABLE,
     "ORACLE_DEFECT": REPAIRABLE | PLANNING_SOURCES,
     "MANUAL_ACCEPTANCE_REQUIRED": {"IMPLEMENTING", "MANUAL_ACCEPTANCE_REQUIRED"},
+    "HUMAN_IMPLEMENTATION_REQUIRED": {"IMPLEMENTING", "HUMAN_IMPLEMENTATION_REQUIRED"},
     "NO_PROGRESS": {"IMPLEMENTING", "NO_PROGRESS", "BASE_CHANGE_REQUIRED", "BOUNDARY_VIOLATION"},
     # The existing planning API may pause on its committed contract, before RED.
     "NEEDS_INPUT": PLANNING_SOURCES | {"CONTRACT_COMMITTED"},
@@ -66,6 +67,7 @@ TRANSITIONS = {
     "red_ready": frozenset((source, "IMPLEMENTING") for source in {
         "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}),
     "base_green_ready": frozenset({("CONTRACT_COMMITTED", "IMPLEMENTING")}),
+    "human_candidate_ready": frozenset({("HUMAN_IMPLEMENTATION_REQUIRED", "IMPLEMENTING")}),
     "begin_attempt": frozenset((source, "IMPLEMENTING") for source in PLANNING_SOURCES),
     "characterization_resumed": frozenset({("CHARACTERIZATION_FAILED", "IMPLEMENTING")}),
     "contract_ready": frozenset({("PREPARING", "CONTRACT_READY")}),

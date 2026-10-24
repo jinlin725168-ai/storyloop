@@ -141,6 +141,8 @@ def _maintenance_arguments(child, command):
         child.add_argument("--replan", action="store_true")
         child.add_argument("--reason")
         child.add_argument("--change", dest="change_id", required=True)
+        child.add_argument("--implementer", choices=("human",),
+                           help="人工提交 base 变更；代理通道留待 E2")
         child.add_argument("--overrule", help="不同意审查对 ORACLE_DEFECT / NEEDS_SPEC_FIX 的判定：写明理由")
         child.add_argument("--no-interactive", action="store_true",
                            help="停在 NEEDS_INPUT 时不在终端提问")
@@ -208,6 +210,17 @@ def dispatch(args) -> dict:
             result["written"] = save_metrics(project, result)
         return result
     require(_is_product_project(project), "Run storyloop init on this Git project first")
+    if args.command in {"approve", "run"} and getattr(args, "change_id", None):
+        from .changes import load_change
+        from .change_types import type_of
+        if type_of(load_change(project, args.change_id)["product"]) == "base":
+            if args.command == "approve":
+                from .approvals import approve_change
+                approved = approve_change(project, args.change_id)
+                return {"status": "APPROVED", "change_id": args.change_id,
+                        "approval": approved["approval"],
+                        "next": f"storyloop run <project> --change {args.change_id} --implementer human"}
+            return run_change(project, args.change_id, implementer=args.implementer)
     return _product_dispatch(project, args)
 
 

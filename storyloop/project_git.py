@@ -10,6 +10,7 @@ from .models import StoryLoopError, identifier, require, text
 from .path_security import repository_relative
 
 FEATURE = re.compile(r"feature/[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
+BASE_BRANCH = re.compile(r"storyloop/BASE-[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 BRANCH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,199}")
 
 
@@ -24,6 +25,22 @@ def start_feature(project: Path, change_id: str) -> dict:
     require(FEATURE.fullmatch(branch) is not None, "Invalid feature branch")
     existing = _git(project, "branch", "--list", branch).strip()
     require(not existing, "Feature branch already exists; resume it explicitly")
+    _git(project, "switch", "-c", branch)
+    return {"status": "STARTED", "branch": branch, "source_branch": source,
+            "source_head": _git(project, "rev-parse", "HEAD").strip()}
+
+
+def start_base(project: Path, change_id: str) -> dict:
+    """Create the local branch on which a human commits one approved base change."""
+    project = Path(project).resolve()
+    change_id = identifier(change_id, "change id")
+    _require_clean(project)
+    source = _git(project, "branch", "--show-current").strip()
+    require(_valid_branch(source), "Git repository must be on a safe named branch")
+    branch = f"storyloop/{change_id}"
+    require(BASE_BRANCH.fullmatch(branch) is not None, "Invalid base branch")
+    require(not _git(project, "branch", "--list", branch).strip(),
+            "Base branch already exists; resume it explicitly")
     _git(project, "switch", "-c", branch)
     return {"status": "STARTED", "branch": branch, "source_branch": source,
             "source_head": _git(project, "rev-parse", "HEAD").strip()}
@@ -54,7 +71,8 @@ def commit_paths(project: Path, paths: list[str], message: str, *, details: bool
 def finish_feature(project: Path, feature_branch: str, target_branch: str) -> dict:
     """Switch to the original branch and perform a local no-fast-forward merge."""
     project = Path(project).resolve()
-    require(isinstance(feature_branch, str) and FEATURE.fullmatch(feature_branch) is not None,
+    require(isinstance(feature_branch, str) and (FEATURE.fullmatch(feature_branch)
+            or BASE_BRANCH.fullmatch(feature_branch)) is not None,
             "Invalid feature branch")
     require(_valid_branch(target_branch), "Invalid target branch")
     _require_clean(project)
