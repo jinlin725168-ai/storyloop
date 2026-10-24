@@ -5,7 +5,7 @@ from .change_types import definition_for, type_for_change_id, type_of
 from .models import require
 from .smoke import RED_EVIDENCE
 from .storage import load_json
-from .baseline import _git, load_project_config
+from .baseline import _git, load_baseline, load_project_config
 from .oracle_counts import check_layers
 from .project_boundaries import audit_project_changes
 from .project_git import current_branch
@@ -36,9 +36,34 @@ def guard_g1(project: Path, state: dict, context: dict) -> None:
     """Fresh RED is judged by the controlled runner; cached RED keeps its old weak check."""
     require(bool(state.get("contract_commit")), "Contract must be committed before implementation")
     floor = definition_for(type_for_change_id(state["change_id"])).criteria_floor
+    if "full_regression_green" in floor:
+        _guard_base_green(project, state)
+        return
     require(bool(set(floor) & {"acceptance_red", "defect_reproduction_red", "structural_red"}),
             "Change type lacks a supported RED floor")
     read_red_evidence(project, state["change_id"])
+
+
+def _guard_base_green(project: Path, state: dict) -> None:
+    path = project / ".storyloop/evidence" / state["change_id"] / "base-old-green.json"
+    require(path.is_file(), "Old-base green evidence is missing")
+    evidence = load_json(path)
+    baseline = load_baseline(project)
+    require(evidence.get("change_id") == state["change_id"]
+            and evidence.get("status") == "PASSED"
+            and evidence.get("contract_digest") == state.get("contract_digest")
+            and evidence.get("contract_commit") == state["contract_commit"]
+            and evidence.get("source_head") == state.get("source_head", baseline["source_head"])
+            and evidence.get("baseline_version") == baseline["baseline_version"],
+            "Old-base green evidence does not match the approved run")
+    require(evidence.get("system_smoke", {}).get("status") == "PASSED"
+            and evidence.get("build", {}).get("status") in {"PASSED", "DECLARED_ABSENT"},
+            "Old-base green evidence has missing checks")
+    layers = evidence.get("layers") or {}
+    require(set(layers) == {"unit", "integration", "checks"}
+            and all(row.get("status") in {"PASSED", "SKIPPED"} for row in layers.values())
+            and any(row.get("status") == "PASSED" for row in layers.values()),
+            "Old-base regression evidence is incomplete")
 
 
 def manual_criteria(change: dict) -> list[str]:

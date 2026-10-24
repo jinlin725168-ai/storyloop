@@ -16,8 +16,8 @@ from .product_contract import validate_product
 from .project_boundaries import _write_base_proposal
 from .project_profile import is_ci_path
 from .project_profile import layer_commands
-from .smoke_runner import run_commands_isolated
-from .system_smoke import adopt_system_smoke, run_system_smoke_isolated
+from .smoke_runner import run_commands_at_commit, run_commands_isolated
+from .system_smoke import adopt_system_smoke, load_system_smoke, run_system_smoke_isolated
 from .storage import load_json, locked, write_json
 from .lesson_store import load_lessons_at
 from .lessons import scope_matches
@@ -94,6 +94,43 @@ def draft_from_proposal(project: Path, proposal_id: str, *, scope: str) -> dict:
              "history": [], "approval": None}
     _save(project, state)
     return state
+
+
+def establish_old_green(project: Path, change: dict, state: dict) -> dict:
+    """Prove the old source commit keeps all configured checks green before implementation."""
+    project = Path(project).resolve()
+    baseline, config = load_baseline(project), load_project_config(project)
+    profile = config["profile"]
+    require(change["product"]["nature"] == "base", "Old-green proof needs a base change")
+    source = state.get("source_head", baseline["source_head"])
+    timeout = config["check_timeout_seconds"]
+    layers = {}
+    for name in ("unit", "integration", "checks"):
+        commands = layer_commands(profile, name)
+        layers[name] = run_commands_at_commit(project, source, commands, timeout)
+        require(not commands or layers[name]["status"] == "PASSED",
+                f"Old base {name} layer is not green")
+    require(any(layer_commands(profile, name) for name in layers),
+            "Old base has no configured regression commands")
+    manifest = load_system_smoke(project)
+    require(manifest is not None, "Old base has no installed system smoke suite")
+    smoke = run_commands_at_commit(project, source,
+                                   [item["command"] for item in manifest["tests"]], timeout)
+    require(smoke["status"] == "PASSED", "Old base system smoke is not green")
+    build_commands = profile["base_build_commands"]
+    build = (run_commands_at_commit(project, source, build_commands, timeout)
+             if build_commands else {"status": "DECLARED_ABSENT", "results": []})
+    require(build["status"] in {"PASSED", "DECLARED_ABSENT"}, "Old base build is not green")
+    evidence = {"version": 1, "change_id": change["change_id"], "status": "PASSED",
+                "contract_digest": change["approval"]["contract_digest"],
+                "contract_commit": state["contract_commit"], "source_head": source,
+                "baseline_version": baseline["baseline_version"],
+                "commands_sha256": change["approval"]["base_commands_sha256"],
+                "engine_version": change["approval"]["versions"]["engine_version"],
+                "layers": layers, "system_smoke": smoke, "build": build}
+    path = project / ".storyloop/evidence" / change["change_id"] / "base-old-green.json"
+    write_json(path, evidence, max_bytes=4_000_000)
+    return evidence
 
 
 

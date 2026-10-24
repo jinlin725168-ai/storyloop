@@ -65,6 +65,7 @@ TRANSITIONS = {
     "start": frozenset({(None, "PREPARING")}),
     "red_ready": frozenset((source, "IMPLEMENTING") for source in {
         "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}),
+    "base_green_ready": frozenset({("CONTRACT_COMMITTED", "IMPLEMENTING")}),
     "begin_attempt": frozenset((source, "IMPLEMENTING") for source in PLANNING_SOURCES),
     "characterization_resumed": frozenset({("CHARACTERIZATION_FAILED", "IMPLEMENTING")}),
     "contract_ready": frozenset({("PREPARING", "CONTRACT_READY")}),
@@ -92,7 +93,7 @@ def transition(project: Path, state: dict, target: str, *, event: str,
     require(legal,
             f"Illegal run transition: {event} {source} -> {target}")
     guard_updates(updates if updates is not None else {})
-    if event in {"red_ready", "begin_attempt", "characterization_resumed", "repair_red"}:
+    if event in {"red_ready", "base_green_ready", "begin_attempt", "characterization_resumed", "repair_red"}:
         guard_g1(project, state, context or {})
     if event == "verified":
         require(isinstance(change, dict), "Verification transition needs its approved change")
