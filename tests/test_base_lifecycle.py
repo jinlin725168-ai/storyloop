@@ -46,6 +46,21 @@ class BaseG1Tests(unittest.TestCase):
                       "contract_digest": self.change["approval"]["contract_digest"],
                       "contract_commit": load_baseline(self.root)["source_head"]}
 
+    def _accepted_candidate(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                             encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "candidate")
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        git(self.root, "config", "user.name", "Independent Reviewer")
+        base_execution.record_base_review(self.root, change_id, "pass", "已核对")
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "MANUAL_ACCEPTANCE_REQUIRED")
+        record_manual_acceptance(self.root, change_id, ["BASE-ACCEPT"], "满足目标")
+        return change_id
+
     def test_old_green_evidence_opens_base_g1(self):
         evidence = base_upgrade.establish_old_green(self.root, self.change, self.state)
         self.assertEqual(evidence["status"], "PASSED")
@@ -276,6 +291,43 @@ class BaseG1Tests(unittest.TestCase):
         self.assertEqual(git(self.root, "show", "--format=%s", "--no-patch", report_head),
                          f"docs({change_id}): record base verification")
 
+    def test_report_files_written_before_commit_are_recovered(self):
+        change_id = self._accepted_candidate()
+        original = base_execution.commit_paths
+
+        def fail_before_report_commit(project, paths, message, **kwargs):
+            if message.startswith("docs("):
+                raise RuntimeError("crash before report commit")
+            return original(project, paths, message, **kwargs)
+
+        with mock.patch.object(base_execution, "commit_paths", side_effect=fail_before_report_commit):
+            with self.assertRaisesRegex(RuntimeError, "crash before report commit"):
+                run_change(self.root, change_id)
+        self.assertEqual(git(self.root, "rev-parse", "HEAD"),
+                         load_json(self.root / ".storyloop/state/runs" / f"{change_id}.json")
+                         ["candidate_commit"])
+        self.assertEqual(run_change(self.root, change_id)["status"], "FINALIZING")
+
+    def test_dirty_report_commit_recovery_preserves_manual_acceptance_state(self):
+        change_id = self._accepted_candidate()
+        original = base_execution.save_run
+
+        def fail_after_report(project, state):
+            if state["status"] == "VERIFIED":
+                raise RuntimeError("crash after report commit")
+            return original(project, state)
+
+        with mock.patch.object(base_execution, "save_run", side_effect=fail_after_report):
+            with self.assertRaisesRegex(RuntimeError, "crash after report commit"):
+                run_change(self.root, change_id)
+        (self.root / "notes.txt").write_text("unrelated\n", encoding="utf-8")
+        with self.assertRaisesRegex(StoryLoopError, "worktree"):
+            run_change(self.root, change_id)
+        state_path = self.root / ".storyloop/state/runs" / f"{change_id}.json"
+        self.assertEqual(load_json(state_path)["status"], "MANUAL_ACCEPTANCE_REQUIRED")
+        (self.root / "notes.txt").unlink()
+        self.assertEqual(run_change(self.root, change_id)["status"], "FINALIZING")
+
     def test_contract_commit_crash_recovers_with_prepared_base_file_dirty(self):
         change_id = self.change["change_id"]
         (self.root / "pom.xml").write_text("<project><version>2</version></project>\n", encoding="utf-8")
@@ -293,6 +345,89 @@ class BaseG1Tests(unittest.TestCase):
         self.assertEqual(run_change(self.root, change_id)["status"],
                          "HUMAN_IMPLEMENTATION_REQUIRED")
         self.assertEqual(git(self.root, "rev-parse", "HEAD"), contract_head)
+
+    def test_branch_creation_crash_before_first_state_save_recovers(self):
+        change_id = self.change["change_id"]
+        with mock.patch.object(base_execution, "save_run", side_effect=RuntimeError("branch crash")):
+            with self.assertRaisesRegex(RuntimeError, "branch crash"):
+                run_change(self.root, change_id, implementer="human")
+        self.assertEqual(git(self.root, "branch", "--show-current"), f"storyloop/{change_id}")
+        self.assertEqual(run_change(self.root, change_id, implementer="human")["status"],
+                         "HUMAN_IMPLEMENTATION_REQUIRED")
+
+    def test_contract_files_written_before_commit_are_recovered(self):
+        change_id = self.change["change_id"]
+        with mock.patch.object(base_execution, "commit_paths", side_effect=RuntimeError("contract crash")):
+            with self.assertRaisesRegex(RuntimeError, "contract crash"):
+                run_change(self.root, change_id, implementer="human")
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "HUMAN_IMPLEMENTATION_REQUIRED")
+
+    def test_old_green_evidence_before_stop_save_recovers(self):
+        change_id = self.change["change_id"]
+        original = base_execution.save_run
+
+        def fail_after_green(project, state):
+            if state["status"] == "IMPLEMENTING":
+                raise RuntimeError("old green crash")
+            return original(project, state)
+
+        with mock.patch.object(base_execution, "save_run", side_effect=fail_after_green):
+            with self.assertRaisesRegex(RuntimeError, "old green crash"):
+                run_change(self.root, change_id, implementer="human")
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "HUMAN_IMPLEMENTATION_REQUIRED")
+
+    def test_candidate_evidence_before_review_state_save_is_reused(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                             encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "candidate")
+        original = base_execution.transition
+
+        def fail_before_review(*args, **kwargs):
+            if kwargs.get("event") == "human_candidate_ready":
+                raise RuntimeError("candidate evidence crash")
+            return original(*args, **kwargs)
+
+        with mock.patch.object(base_execution, "transition", side_effect=fail_before_review):
+            with self.assertRaisesRegex(RuntimeError, "candidate evidence crash"):
+                run_change(self.root, change_id)
+        with mock.patch.object(base_execution, "run_commands_isolated",
+                               side_effect=AssertionError("candidate checks reran")):
+            self.assertEqual(run_change(self.root, change_id)["status"],
+                             "BASE_REVIEW_REQUIRED")
+
+    def test_merge_commit_before_merged_state_save_is_adopted(self):
+        change_id = self._accepted_candidate()
+        original = base_execution.save_run
+
+        def fail_after_merge(project, state):
+            if state["status"] == "MERGED":
+                raise RuntimeError("merge state crash")
+            return original(project, state)
+
+        with mock.patch.object(base_execution, "save_run", side_effect=fail_after_merge):
+            with self.assertRaisesRegex(RuntimeError, "merge state crash"):
+                run_change(self.root, change_id)
+        self.assertEqual(run_change(self.root, change_id)["status"], "FINALIZING")
+
+    def test_receipt_commit_before_finalizing_state_save_is_adopted(self):
+        change_id = self._accepted_candidate()
+        original = base_execution.save_run
+
+        def fail_after_receipt(project, state):
+            if state["status"] == "FINALIZING":
+                raise RuntimeError("receipt state crash")
+            return original(project, state)
+
+        with mock.patch.object(base_execution, "save_run", side_effect=fail_after_receipt):
+            with self.assertRaisesRegex(RuntimeError, "receipt state crash"):
+                run_change(self.root, change_id)
+        self.assertEqual(run_change(self.root, change_id)["status"], "FINALIZING")
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
 
 
 if __name__ == "__main__":

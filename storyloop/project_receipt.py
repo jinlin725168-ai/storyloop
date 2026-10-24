@@ -131,7 +131,7 @@ def _report_paths(project: Path, state: dict) -> list[str]:
 
 
 def _dirty_paths(project: Path) -> set[str]:
-    outputs = [_git(project, "diff", "--name-only", "-z", "HEAD"),
+    outputs = [_git(project, "diff", "--no-renames", "--name-only", "-z", "HEAD"),
                _git(project, "ls-files", "--others", "--exclude-standard", "-z")]
     return {item.replace("\\", "/") for output in outputs
             for item in output.split("\0") if item}

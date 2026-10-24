@@ -10,7 +10,7 @@ from .oracle_counts import check_layers
 from .project_boundaries import audit_base_scope, audit_project_changes
 from .project_git import current_branch
 from .project_profile import base_commands_digest, layer_commands
-from .project_receipt import verify_verified_artifacts, recover_completed_merge  # noqa: F401  # 兼容再导出：保留旧模块导入路径
+from .project_receipt import _dirty_paths, verify_verified_artifacts, recover_completed_merge  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .smoke import RESULT_EVIDENCE, smoke_digests
 from .smoke_runner import candidate_digest, implementation_digest
 
@@ -183,7 +183,8 @@ def _guard_base_g2(project: Path, change: dict, state: dict) -> None:
     head = _git(project, "rev-parse", "HEAD").strip()
     require(head == state.get("candidate_commit") or base_report_commit(project, state),
             "Base candidate changed before G2")
-    require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
+    allowed_dirty = base_report_paths(state) if head == state.get("candidate_commit") else set()
+    require(_dirty_paths(project) <= allowed_dirty,
             "Base candidate worktree changed before G2")
     evidence_path = project / ".storyloop/evidence" / change_id / "base-candidate-green.json"
     evidence = load_json(evidence_path)
@@ -231,11 +232,15 @@ def base_report_commit(project: Path, state: dict) -> str | None:
     parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
     paths = {item for item in _git(project, "diff-tree", "--no-commit-id", "--no-renames",
                                    "--name-only", "-r", "-z", head).split("\0") if item}
-    root = f"reports/storyloop/{state['change_id']}/report"
     if len(parents) == 2 and parents[1] == state.get("candidate_commit") \
-            and paths == {root + ".json", root + ".md"}:
+            and paths == base_report_paths(state):
         return head
     return None
+
+
+def base_report_paths(state: dict) -> set[str]:
+    root = f"reports/storyloop/{state['change_id']}/report"
+    return {root + ".json", root + ".md"}
 
 
 def base_candidate_authors(project: Path, state: dict) -> set[str]:

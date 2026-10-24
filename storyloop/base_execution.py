@@ -18,7 +18,8 @@ from .project_profile import base_commands_digest, layer_commands
 from .run_state import run_path, save_run
 from .run_stops import pause
 from .run_transitions import transition
-from .run_guards import base_candidate_authors, base_report_commit
+from .run_guards import base_candidate_authors, base_report_commit, base_report_paths
+from .project_receipt import _dirty_paths
 from .smoke_runner import implementation_digest, run_commands_isolated
 from .storage import load_json, write_json, write_text_atomic
 from .system_smoke import run_system_smoke_isolated
@@ -34,12 +35,7 @@ def run_base_change(project: Path, change: dict, implementer: str | None, new_ru
     if state["status"] == "IMPLEMENTING":
         if _git(project, "rev-parse", "HEAD").strip() != state.get("candidate_commit"):
             return _reopen_human(project, change, state)
-        try:
-            _verify_candidate(project, change, state)
-        except StoryLoopError:
-            _reopen_human(project, change, state)
-            raise
-        return _review_stop(project, change, state)
+        return _candidate_to_review(project, change, state)
     if state["status"] == "BASE_REVIEW_REQUIRED":
         return _review_stop(project, change, state)
     if state["status"] == "MANUAL_ACCEPTANCE_REQUIRED":
@@ -93,6 +89,18 @@ def _verify_candidate(project: Path, change: dict, state: dict) -> dict:
     profile, timeout = config["profile"], config["check_timeout_seconds"]
     require(base_commands_digest(profile) == change["approval"]["base_commands_sha256"],
             "Approved base commands changed before candidate verification")
+    evidence_path = _evidence_path(project, change["change_id"])
+    if evidence_path.is_file():
+        cached = load_json(evidence_path)
+        if cached.get("candidate_commit") == state["candidate_commit"]:
+            require(cached.get("status") == "PASSED"
+                    and cached.get("candidate_sha256") == implementation_digest(project)
+                    and cached.get("contract_digest") == state["contract_digest"]
+                    and cached.get("engine_version") == state["engine_version"]
+                    and cached.get("engine_source") == state["engine_source"]
+                    and cached.get("target_tree_oid") == _git(project, "rev-parse", "HEAD^{tree}").strip(),
+                    "Saved base candidate evidence is invalid")
+            return cached
     layers = {name: run_commands_isolated(project, layer_commands(profile, name), timeout)
               for name in ("unit", "integration", "checks")}
     for name, result in layers.items():
@@ -130,10 +138,14 @@ def _candidate_to_review(project: Path, change: dict, state: dict) -> dict:
     try:
         evidence = _verify_candidate(project, change, state)
     except Exception:
-        state.pop("candidate_commit", None)
+        if state["status"] == "HUMAN_IMPLEMENTATION_REQUIRED":
+            state.pop("candidate_commit", None)
         raise
-    transition(project, state, "IMPLEMENTING", event="human_candidate_ready",
-               updates={"candidate_commit": candidate, "base_evidence": evidence})
+    if state["status"] == "HUMAN_IMPLEMENTATION_REQUIRED":
+        transition(project, state, "IMPLEMENTING", event="human_candidate_ready",
+                   updates={"candidate_commit": candidate, "base_evidence": evidence})
+    else:
+        state["base_evidence"] = evidence
     return _pause_review(project, change, state)
 
 
@@ -184,11 +196,15 @@ def _review_stop(project: Path, change: dict, state: dict) -> dict:
 
 def _finish_after_acceptance(project: Path, change: dict, state: dict) -> dict:
     head = _git(project, "rev-parse", "HEAD").strip()
-    if head != state.get("candidate_commit") and not base_report_commit(project, state):
+    report_commit = base_report_commit(project, state)
+    if head != state.get("candidate_commit") and not report_commit:
         return _reopen_human(project, change, state)
+    allowed_dirty = base_report_paths(state) if head == state["candidate_commit"] else set()
+    require(_dirty_paths(project) <= allowed_dirty,
+            "Base candidate worktree changed during report recovery")
     digest = implementation_digest(project)
     if digest != state.get("candidate_sha256"):
-        return _reopen_human(project, change, state)
+        raise StoryLoopError("Base candidate digest changed during report recovery")
     records = load_manual_acceptance(project, change["change_id"])
     require(any(row.get("criterion_id") == "BASE-ACCEPT" and row.get("candidate_sha256") == digest
                 for row in records), "Base manual acceptance is missing")
@@ -323,8 +339,8 @@ def _open_state(project: Path, change: dict, implementer: str | None, new_run_st
     require(not committed.intersection(expected),
             "Committed proposal paths already exist on the source branch; "
             "revert them with a new commit, then replay the change on the new base branch")
-    verify_baseline(project, allowed_base_paths=allowed)
-    state = new_run_state(project, change_id, start_base(project, change_id, allowed),
+    start = _base_start_context(project, change_id, baseline, allowed)
+    state = new_run_state(project, change_id, start,
                           change["approval"]["contract_digest"])
     state["implementer"] = "human"
     state["engine_version"] = __version__
@@ -332,6 +348,20 @@ def _open_state(project: Path, change: dict, implementer: str | None, new_run_st
     state["target_tree_oid"] = _git(project, "rev-parse", f"{state['source_head']}^{{tree}}").strip()
     save_run(project, state)
     return state
+
+
+def _base_start_context(project: Path, change_id: str, baseline: dict,
+                        allowed: set[str]) -> dict:
+    branch = f"storyloop/{change_id}"
+    if current_branch(project) == branch:
+        head = _git(project, "rev-parse", "HEAD").strip()
+        require(head == _git(project, "rev-parse", baseline["source_branch"]).strip(),
+                "Unrecorded base branch no longer matches the locked source")
+        verify_baseline(project, resume=True, allowed_base_paths=allowed)
+        return {"status": "STARTED", "branch": branch,
+                "source_branch": baseline["source_branch"], "source_head": head}
+    verify_baseline(project, allowed_base_paths=allowed)
+    return start_base(project, change_id, allowed)
 
 
 def _prepare(project: Path, change: dict, state: dict) -> dict:

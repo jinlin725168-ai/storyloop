@@ -100,6 +100,38 @@ class BaseCompatibilityTests(unittest.TestCase):
         self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
         self.assertEqual(load_baseline(self.root)["baseline_version"], "1.0.1")
 
+    def test_crash_after_accepting_receipt_write_resumes_finalization(self):
+        change_id = self._merged_candidate()
+        from storyloop import base_finalization
+        original = base_finalization.write_json
+
+        def interrupt(path, value, **kwargs):
+            original(path, value, **kwargs)
+            if path.name == f"{change_id}.json" and value.get("status") == "ACCEPTING":
+                raise RuntimeError("accepting receipt crash")
+
+        with patch("storyloop.base_finalization.write_json", side_effect=interrupt):
+            with self.assertRaisesRegex(RuntimeError, "accepting receipt crash"):
+                run_change(self.root, change_id)
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+        self.assertEqual(load_baseline(self.root)["baseline_version"], "1.0.1")
+
+    def test_crash_after_accepted_receipt_write_does_not_increment_again(self):
+        change_id = self._merged_candidate()
+        from storyloop import base_finalization
+        original = base_finalization.write_json
+
+        def interrupt(path, value, **kwargs):
+            original(path, value, **kwargs)
+            if path.name == f"{change_id}.json" and value.get("status") == "ACCEPTED":
+                raise RuntimeError("accepted receipt crash")
+
+        with patch("storyloop.base_finalization.write_json", side_effect=interrupt):
+            with self.assertRaisesRegex(RuntimeError, "accepted receipt crash"):
+                run_change(self.root, change_id)
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+        self.assertEqual(load_baseline(self.root)["baseline_version"], "1.0.1")
+
     def test_repeated_import_rejects_changed_legacy_proposal(self):
         proposed = base_upgrade.propose_base_change(self.root, ["pom.xml"], "刷新构建配置")
         path = Path(proposed["proposal"])
@@ -236,6 +268,15 @@ class BaseCompatibilityTests(unittest.TestCase):
         git(self.root, "cherry-pick", "-n", old_candidate)
         git(self.root, "commit", "-q", "-m", "replayed candidate")
         self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        git(self.root, "config", "user.name", "Independent Reviewer")
+        from storyloop.base_execution import record_base_review
+        record_base_review(self.root, change_id, "pass", "已复核重放候选")
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "MANUAL_ACCEPTANCE_REQUIRED")
+        record_manual_acceptance(self.root, change_id, ["BASE-ACCEPT"], "目标满足")
+        self.assertEqual(run_change(self.root, change_id)["status"], "FINALIZING")
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+        self.assertEqual(load_baseline(self.root)["baseline_version"], "1.0.1")
 
 
 if __name__ == "__main__":

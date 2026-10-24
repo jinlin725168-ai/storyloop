@@ -62,8 +62,9 @@ def finalize_base_baseline(project: Path, change: dict, state: dict) -> dict:
 
 def _new_receipt(project: Path, change: dict, state: dict, baseline: dict, config: dict,
                  head: str, baseline_path: Path, config_path: Path) -> dict:
-    require(baseline["source_head"] == state["source_head"],
-            "Base finalization source no longer matches the locked baseline")
+    require(baseline["source_branch"] == state["source_branch"]
+            and baseline["source_head"] in _git(project, "rev-list", state["source_head"]).splitlines(),
+            "Base finalization source no longer descends from the locked baseline")
     version = _next_version(baseline["baseline_version"])
     candidate = _next_baseline(project, baseline, config["profile"], head, version)
     return {"version": 2, "proposal_id": change["change_id"],

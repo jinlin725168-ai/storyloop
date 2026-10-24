@@ -159,8 +159,10 @@ def verify_baseline(project: Path, resume: bool = False,
     baseline = load_baseline(project)
     config = load_project_config(project)
     current = _git(project, "branch", "--show-current").strip()
-    expected = "feature/" if resume else baseline["source_branch"]
-    require((current.startswith(expected) if resume else current == expected),
+    base_resume = (resume and allowed_base_paths is not None
+                   and current.startswith("storyloop/BASE-"))
+    require(((current.startswith("feature/") or base_resume) if resume
+             else current == baseline["source_branch"]),
             "Run must start on the locked source branch or its saved feature branch")
     dirty = _git(project, "status", "--porcelain=v1", "--untracked-files=all", "-z")
     if not resume:
@@ -171,7 +173,7 @@ def verify_baseline(project: Path, resume: bool = False,
                 "Git worktree has changes outside the approved base paths")
     _verify_foundation_files(project, baseline, skip=allowed_base_paths or set())
     _verify_index_flags(project, baseline)
-    if not resume:
+    if not resume or base_resume:
         _verify_tracked_scope(project, baseline, config["profile"])
     history = set(_git(project, "rev-list", "HEAD").splitlines())
     require(baseline["source_head"] in history, "Locked baseline commit is not an ancestor")
