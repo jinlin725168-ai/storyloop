@@ -190,6 +190,31 @@ class BaseG1Tests(unittest.TestCase):
         self.assertEqual(run_change(self.root, change_id)["status"],
                          "MANUAL_ACCEPTANCE_REQUIRED")
 
+    def test_review_record_rejects_dirty_workspace_and_diagnoses_stale_digest(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                             encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "candidate")
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        git(self.root, "config", "user.name", "Independent Reviewer")
+        note = self.root / "notes.txt"
+        note.write_text("review notes\n", encoding="utf-8")
+        with self.assertRaisesRegex(StoryLoopError, "worktree"):
+            base_execution.record_base_review(self.root, change_id, "pass", "已核对")
+        note.unlink()
+        base_execution.record_base_review(self.root, change_id, "pass", "已核对")
+        path = self.root / ".storyloop/state/base-reviews" / f"{change_id}.json"
+        review = load_json(path)
+        review["candidate_sha256"] = "0" * 64
+        write_json(path, review)
+        with self.assertRaisesRegex(StoryLoopError, "review.*candidate"):
+            run_change(self.root, change_id)
+        base_execution.record_base_review(self.root, change_id, "pass", "已重新核对")
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "MANUAL_ACCEPTANCE_REQUIRED")
+
     def test_approved_commands_cannot_change_before_old_green(self):
         config = load_project_config(self.root)
         config["profile"]["unit_commands"] = [[sys.executable, "-c", "print('changed')"]]

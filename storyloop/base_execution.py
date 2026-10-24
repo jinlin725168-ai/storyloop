@@ -65,6 +65,7 @@ def record_base_review(project: Path, change_id: str, verdict: str, note: str) -
     require(verdict in {"pass", "fail"}, "Base review verdict must be pass or fail")
     require(_git(project, "rev-parse", "HEAD").strip() == state.get("candidate_commit"),
             "Base candidate changed before review")
+    require(not _dirty_paths(project), "Base review needs a clean candidate worktree")
     reviewer = text(_git(project, "config", "user.name").strip(), "reviewer")
     require(reviewer not in base_candidate_authors(project, state),
             "Base reviewer must differ from every implementation author")
@@ -177,9 +178,9 @@ def _review_stop(project: Path, change: dict, state: dict) -> dict:
         return _pause_review(project, change, state)
     review = load_json(path)
     evidence = load_json(_evidence_path(project, change["change_id"]))
-    if (review.get("candidate_commit") != state["candidate_commit"]
-            or review.get("candidate_sha256") != evidence["candidate_sha256"]):
-        return _pause_review(project, change, state)
+    require(review.get("candidate_commit") == state["candidate_commit"]
+            and review.get("candidate_sha256") == evidence["candidate_sha256"],
+            "Independent base review does not match this candidate; record base-review again")
     if review.get("verdict") == "fail":
         return _reopen_human(project, change, state, rejected=True)
     require(review.get("verdict") == "pass", "Independent base review is invalid")
