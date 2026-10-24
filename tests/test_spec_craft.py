@@ -37,7 +37,7 @@ def section(text: str, title: str) -> str:
 class SpecCraftPackageTests(unittest.TestCase):
     def test_spec_craft_is_packaged_with_exactly_its_references(self):
         skill = packaged_skills()["spec-craft"]
-        self.assertEqual(skill["version"], "1.1.0")
+        self.assertEqual(skill["version"], "1.2.0")
         self.assertEqual(skill["files"], sorted(["SKILL.md", *(f"references/{n}" for n in REFERENCES)]))
 
     def test_frontmatter_has_only_name_version_description(self):
@@ -244,3 +244,38 @@ class Batch2ContentTests(unittest.TestCase):
         text = read("references/spec-template.md")
         self.assertIn("前提不成立", text)
         self.assertIn("regression", text)
+
+
+class Trial2FixTests(unittest.TestCase):
+    def test_invalid_date_example_follows_oracle_matrix(self):
+        text = read("references/examples.md")
+        self.assertIn("无效日期", text)
+        self.assertIn("positive", text)
+        self.assertIn("degradation 只用于依赖失败", text)
+        self.assertNotIn("无效日期被拒绝是 IF…THEN 规则的正例；若旧代码会接受它，选 `degradation`", text)
+
+    def test_assumptions_include_human_expectations_and_unambiguous_statuses(self):
+        template = read("references/requirement-template.md")
+        assess = read("references/assess.md")
+        for phrase in ("人或模型", "10 秒", "来源", "待确认", "试用中暂采纳", "负责人已确认"):
+            self.assertIn(phrase, template)
+        self.assertIn("假设表", assess)
+        self.assertIn("预期", assess)
+        self.assertNotIn("已确认（试用假设", template)
+
+    def test_question_limit_is_per_stage_with_builtin_default(self):
+        skill = read("SKILL.md")
+        clarify = read("references/clarify.md")
+        design = (ROOT / "docs/superpowers/specs/2026-10-23-需求共创技能-design.md").read_text(
+            encoding="utf-8")
+        for text in (skill, clarify):
+            for phrase in ("评估", "澄清", "规格核对", "分别计数", "不跨阶段累加", "默认", "5"):
+                self.assertIn(phrase, text)
+        self.assertIn("question_limit", design)
+
+    def test_customization_docs_explain_question_limit(self):
+        api = (ROOT / "docs/api.md").read_text(encoding="utf-8")
+        roles = (ROOT / "docs/roles.md").read_text(encoding="utf-8")
+        for phrase in ("question_limit", "每阶段", "标量", "question_limit_source"):
+            self.assertIn(phrase, api)
+        self.assertIn("question_limit", roles)

@@ -38,7 +38,23 @@ class CustomizationTests(_Workspace):
         self.assertEqual(value, {
             "version": 1, "preferences": [], "glossary": None,
             "coverage": [], "sections": [], "sources": [],
+            "question_limit": 5, "question_limit_source": "内置默认",
         })
+
+    def test_personal_question_limit_overrides_team_scalar(self):
+        self.write(self.team, "version = 1\nquestion_limit = 7\n")
+        self.write(self.user, "version = 1\nquestion_limit = 4\n")
+        value = load_customization(self.root, "spec-craft")
+        self.assertEqual(value["question_limit"], 4)
+        self.assertEqual(value["question_limit_source"], "storyloop-custom/spec-craft.user.toml")
+
+    def test_question_limit_must_allow_the_three_assessment_questions(self):
+        for invalid in (True, 0, 2, "5"):
+            with self.subTest(invalid=invalid):
+                literal = str(invalid).lower() if not isinstance(invalid, str) else f'"{invalid}"'
+                self.write(self.team, f"version = 1\nquestion_limit = {literal}\n")
+                with self.assertRaisesRegex(StoryLoopError, "question_limit: must be an integer >= 3"):
+                    load_customization(self.root, "spec-craft")
 
     def test_user_file_overrides_scalar_and_appends_plain_array(self):
         self.write(self.team, 'version = 1\nglossary = "docs/a.md"\npreferences = ["先问范围"]\n')
@@ -139,6 +155,20 @@ class CustomizationTests(_Workspace):
 class ViewTests(_Workspace):
     def test_view_without_customization_equals_the_skill_text(self):
         self.assertEqual(render_view(self.root, "spec-craft"), skill_text(self.root, "spec-craft"))
+        self.assertIn("来源：内置默认", render_view(self.root, "spec-craft"))
+
+    def test_view_shows_effective_question_limit_and_its_source(self):
+        self.write(self.team, "version = 1\nquestion_limit = 7\n")
+        team_view = render_view(self.root, "spec-craft")
+        self.assertIn("每阶段最多 7 个问题", team_view)
+        self.assertIn("来源：storyloop-custom/spec-craft.toml", team_view)
+        self.write(self.user, "version = 1\nquestion_limit = 4\n")
+        personal_view = render_view(self.root, "spec-craft")
+        self.assertIn("每阶段最多 4 个问题", personal_view)
+        self.assertIn("来源：storyloop-custom/spec-craft.user.toml", personal_view)
+        result = write_view(self.root, "spec-craft")
+        self.assertEqual(result["question_limit"], 4)
+        self.assertEqual(result["question_limit_source"], "storyloop-custom/spec-craft.user.toml")
 
     def test_view_appends_coverage_sections_preferences_and_glossary(self):
         self.write(self.team, 'version = 1\npreferences = ["先问范围"]\nglossary = "docs/a.md"\n'

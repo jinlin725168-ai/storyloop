@@ -17,7 +17,8 @@ from .storage import locked_file, write_text_atomic
 
 CUSTOMIZABLE = {"spec-craft"}
 VIEW_ROOT = ".storyloop/skills-view"
-_TOP_KEYS = {"version", "preferences", "glossary", "coverage", "sections"}
+DEFAULT_QUESTION_LIMIT = 5
+_TOP_KEYS = {"version", "preferences", "glossary", "coverage", "sections", "question_limit"}
 _ROW_KEYS = {
     "coverage": {"code", "name", "check"},
     "sections": {"code", "document", "title", "guidance"},
@@ -100,6 +101,9 @@ def _validated(project: Path, path: str, data: dict) -> dict:
         raise _error(path, sorted(unexpected)[0], "unknown key")
     if type(data.get("version")) is not int or data["version"] != 1:
         raise _error(path, "version", "must be 1")
+    question_limit = data.get("question_limit")
+    if question_limit is not None and (type(question_limit) is not int or question_limit < 3):
+        raise _error(path, "question_limit", "must be an integer >= 3")
     preferences = data.get("preferences", [])
     if not isinstance(preferences, list) or not all(isinstance(item, str) for item in preferences):
         raise _error(path, "preferences", "must be a string array")
@@ -113,6 +117,7 @@ def _validated(project: Path, path: str, data: dict) -> dict:
         except StoryLoopError as exc:
             raise _error(path, "glossary", str(exc)) from None
     return {
+        "question_limit": question_limit,
         "preferences": preferences,
         "glossary": glossary,
         "coverage": _validate_rows(path, "coverage", data.get("coverage", [])),
@@ -134,7 +139,8 @@ def load_customization(project: Path, name: str) -> dict:
     """Return a validated, stable merge of team then personal customization."""
     project = Path(project).resolve()
     value = {"version": 1, "preferences": [], "glossary": None,
-             "coverage": [], "sections": [], "sources": []}
+             "coverage": [], "sections": [], "sources": [],
+             "question_limit": DEFAULT_QUESTION_LIMIT, "question_limit_source": "内置默认"}
     for path in custom_paths(project, name):
         parsed = _read_file(project, path)
         if parsed is None:
@@ -142,6 +148,9 @@ def load_customization(project: Path, name: str) -> dict:
         data, source = parsed
         layer = _validated(project, source["path"], data)
         value["sources"].append(source)
+        if layer["question_limit"] is not None:
+            value["question_limit"] = layer["question_limit"]
+            value["question_limit_source"] = source["path"]
         value["preferences"].extend(layer["preferences"])
         if layer["glossary"] is not None:
             value["glossary"] = layer["glossary"]
@@ -158,6 +167,9 @@ def _render_view(project: Path, name: str, custom: dict) -> str:
     lines.append("来源：" + "、".join(
         f"{source['path']}（sha256 {source['sha256'][:12]}）" for source in custom["sources"]
     ))
+    lines.extend(["", "### 每阶段提问上限",
+                  f"评估、澄清、规格核对分别计数，不跨阶段累加；每阶段最多 {custom['question_limit']} 个问题"
+                  f"（来源：{custom['question_limit_source']}）。"])
     if custom["preferences"]:
         lines.extend(["", "### 提问偏好", *[f"- {_inline(item)}" for item in custom["preferences"]]])
     if custom["coverage"]:
@@ -211,6 +223,8 @@ def write_view(project: Path, name: str) -> dict:
         "status": "SKILL_VIEW", "skill": name, "path": relative,
         "sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
         "customized": bool(custom["sources"]), "sources": custom["sources"], "warnings": warnings,
+        "question_limit": custom["question_limit"],
+        "question_limit_source": custom["question_limit_source"],
     }
 
 
