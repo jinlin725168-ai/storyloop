@@ -66,6 +66,8 @@ def _render_item(entry: dict, report: dict) -> list[str]:
         lines.extend(_role_calls(data))
     elif identifier == "cost" and isinstance(data, dict):
         lines.extend(_cost(data))
+    elif identifier == "cost" and data is None:
+        lines.extend(["未提供", "- 版本漂移：未知（缺少版本快照或执行画像）"])
     elif identifier in {"baseline", "executed", "uncounted"}:
         lines.extend(_oracle(identifier, data))
     else:
@@ -115,6 +117,22 @@ def _cost(data: dict) -> list[str]:
     coverage = (data.get("coverage") or {}).get("cost_usd")
     if coverage:
         lines.append(f"- 费用覆盖：{_text(coverage.get('known'))}/{_text(coverage.get('total'))}")
+    if (drift := data.get("version_drift")):
+        status = drift.get("status")
+        if status == "unchanged":
+            detail = "无"
+        elif status == "changed":
+            parts = []
+            if drift.get("engine_versions"):
+                parts.append("引擎 " + "、".join(drift["engine_versions"]))
+            if drift.get("skills_changed"):
+                parts.append("技能 " + "、".join(drift["skills_changed"]))
+            detail = "运行中版本有变化（" + "；".join(parts) + "）"
+        else:
+            detail = "未知（缺少版本快照或执行画像）"
+        if drift.get("unprofiled_calls", 0) > 0:
+            detail += f"，其中 {drift['unprofiled_calls']} 次调用没有执行画像"
+        lines.append(f"- 版本漂移：{detail}")
     for key in ("by_role", "input_tokens", "output_tokens", "turns", "models", "vendors", "tiers"):
         if key in data:
             lines.extend([f"- {_text(key)}：", *["  " + line for line in _value(data[key])]])

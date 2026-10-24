@@ -13,6 +13,30 @@ NUMERIC = ("cost_usd", "input_tokens", "output_tokens", "turns", "duration_ms",
 CATEGORICAL = {"models": "model", "vendors": "vendor", "tiers": "tier_applied", "skills": "skills"}
 
 
+def version_drift(versions: dict | None, entries: list[dict]) -> dict:
+    """Compare profiled calls with the immutable approval snapshot."""
+    profiled = [entry for entry in entries if isinstance(entry, dict)
+                and isinstance(entry.get("engine_version"), str) and entry["engine_version"]]
+    engine_versions = sorted({entry["engine_version"] for entry in profiled})
+    unprofiled_calls = len(entries) - len(profiled)
+    changed = set()
+    if isinstance(versions, dict):
+        expected = {(skill.get("name"), skill.get("sha256"))
+                    for skill in versions.get("skills", []) if isinstance(skill, dict)}
+        for entry in profiled:
+            for skill in entry.get("skills", []) if isinstance(entry.get("skills"), list) else []:
+                if isinstance(skill, dict) and (skill.get("name"), skill.get("sha256")) not in expected:
+                    changed.add(f"{skill.get('name', '?')}@{skill.get('version', '?')}")
+    if not isinstance(versions, dict) or not profiled:
+        status = "unknown"
+    elif any(value != versions.get("engine_version") for value in engine_versions) or changed:
+        status = "changed"
+    else:
+        status = "unchanged"
+    return {"status": status, "engine_versions": engine_versions,
+            "skills_changed": sorted(changed), "unprofiled_calls": unprofiled_calls}
+
+
 def summarize_entries(entries: list[dict]) -> dict:
     entries = [entry if isinstance(entry, dict) else {} for entry in entries]
     result = _summary(entries)

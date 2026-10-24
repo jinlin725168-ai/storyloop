@@ -15,6 +15,8 @@ from storyloop.project_agents import invoke_project_agent
 from storyloop.storage import write_json
 from storyloop.telemetry import ledger_entries, record_call
 from storyloop.models import StoryLoopError
+from storyloop import telemetry_summary, report_markdown
+from storyloop.report_evidence import collect_evidence
 from tests.test_cross_vendor import configured, capabilities
 from tests.test_baseline_behavior import repository
 from storyloop.baseline import bootstrap_project
@@ -127,3 +129,64 @@ class VersionSnapshotTests(unittest.TestCase):
     def test_approving_a_legacy_change_records_versions(self):
         self.assertRegex(self.change_id, r"^FEAT-\d{8}-\d{3}$")
         self.assertIn("versions", approve_change(self.root, self.change_id)["approval"])
+
+
+SNAP = {"version": 1, "engine_version": "0.1.0", "baseline_version": "1.0.0",
+        "map_version": None, "skills": [{"name": "oracle-craft", "path": "storyloop/skills/oracle-craft/SKILL.md",
+                                         "version": "1.1.1", "sha256": "a" * 64}]}
+SKILL = SNAP["skills"][0]
+
+
+class VersionDriftTests(unittest.TestCase):
+    def test_same_versions_are_unchanged(self):
+        drift = telemetry_summary.version_drift(SNAP, [{"engine_version": "0.1.0", "skills": [SKILL]}])
+        self.assertEqual(drift["status"], "unchanged")
+
+    def test_a_different_engine_version_is_changed(self):
+        drift = telemetry_summary.version_drift(
+            SNAP, [{"engine_version": "0.1.0"}, {"engine_version": "0.2.0"}])
+        self.assertEqual((drift["status"], drift["engine_versions"]),
+                         ("changed", ["0.1.0", "0.2.0"]))
+
+    def test_a_skill_digest_outside_the_snapshot_is_changed(self):
+        other = {**SKILL, "version": "1.2.0", "sha256": "b" * 64}
+        drift = telemetry_summary.version_drift(SNAP, [{"engine_version": "0.1.0", "skills": [other]}])
+        self.assertEqual((drift["status"], drift["skills_changed"]),
+                         ("changed", ["oracle-craft@1.2.0"]))
+
+    def test_entries_without_profile_are_unknown_not_drift(self):
+        self.assertEqual(telemetry_summary.version_drift(SNAP, [{"role": "product"}])["status"],
+                         "unknown")
+        drift = telemetry_summary.version_drift(
+            SNAP, [{"role": "product"}, {"engine_version": "0.1.0"}])
+        self.assertEqual((drift["status"], drift["unprofiled_calls"]), ("unchanged", 1))
+
+    def test_no_snapshot_is_unknown(self):
+        self.assertEqual(telemetry_summary.version_drift(
+            None, [{"engine_version": "0.1.0"}])["status"], "unknown")
+
+    def test_report_shows_the_drift_line(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            state = legacy_create_change(root, "idea", product())
+            state = approve_change(root, state["change_id"])
+            change_id = state["change_id"]
+            write_json(root / f".storyloop/state/telemetry/{change_id}.json",
+                       {"version": 1, "change_id": change_id,
+                        "entries": [{"role": "product", "wall_ms": 1, "engine_version": "0.2.0"}]})
+            evidence = collect_evidence(root, state, {"layers": {}, "traceability": []})
+            lines = report_markdown._cost(evidence["telemetry"])
+            self.assertIn("- 版本漂移：运行中版本有变化（引擎 0.2.0）", lines)
+
+    def test_missing_ledger_preserves_its_unavailable_status(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            state = legacy_create_change(root, "idea", product())
+            state = approve_change(root, state["change_id"])
+            evidence = collect_evidence(root, state, {"layers": {}, "traceability": []})
+            self.assertIsNone(evidence["telemetry"])
+            self.assertEqual(evidence["availability"]["telemetry"], "NOT_AVAILABLE")
