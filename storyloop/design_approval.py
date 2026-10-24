@@ -5,7 +5,7 @@ from pathlib import Path
 import json
 
 from .baseline import _git, load_baseline, load_project_config, verify_baseline
-from .project_git import current_branch
+from .project_git import changed_paths, current_branch
 from .changes import contract_digest, load_change
 from .intake import digest
 from .principles import load_principles
@@ -55,8 +55,8 @@ def _frozen_lesson_source(project: Path, state: dict, baseline: str, source: str
         return False
     if _git(project, 'merge-base', baseline, source).strip() != baseline:
         return False
-    paths = _git(project, 'diff', '--name-only', '-z', baseline, source).split('\0')
-    return all(path.startswith('openspec/lessons/') for path in paths if path)
+    return all(path.startswith('openspec/lessons/')
+               for path in changed_paths(project, baseline, source))
 
 
 def current_binding(project: Path, change: dict, state: dict) -> dict:

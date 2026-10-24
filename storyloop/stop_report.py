@@ -24,6 +24,8 @@ BLOCKERS = {
     "BUDGET_EXHAUSTED": "实现轮次用完了",
     "NO_PROGRESS": "根因调查后失败特征仍不变",
     "MANUAL_ACCEPTANCE_REQUIRED": "有验收条件需要人工核对",
+    "HUMAN_IMPLEMENTATION_REQUIRED": "等待人在 StoryLoop 底座分支提交批准的路径",
+    "BASE_REVIEW_REQUIRED": "等待另一名人员审查底座候选提交",
     "NEEDS_SPEC_FIX": "合同按现在的写法做不出来",
     "AGENT_UNAVAILABLE": "代理进程没有给出回答",
 }
@@ -34,7 +36,8 @@ def _command(*tokens: object) -> str:
     return shlex.join(str(token) for token in tokens)
 
 
-def _options(status: str, project: str, change_id: str, routed: bool) -> list[dict]:
+def _options(status: str, project: str, change_id: str, routed: bool,
+             ci_requires_human_proposal: bool = False) -> list[dict]:
     where = (project, "--change", change_id)
     repair = {"action": "修正判据", "command": _command(
         "storyloop", "acceptance-repair", *where, "--reason", "<原因>")}
@@ -58,7 +61,7 @@ def _options(status: str, project: str, change_id: str, routed: bool) -> list[di
             {"action": "确需扩大范围时发起底座提案", "command": _command(
                 "storyloop", "base-propose", project, "--path", "<路径>", "--reason", "<原因>")},
         ],
-        "BASE_CHANGE_REQUIRED": [{"action": "升级底座", "command": _command(
+        "BASE_CHANGE_REQUIRED": [{"action": "导入底座草案", "command": _command(
             "storyloop", "base-update", project, "--proposal", "<BASE-ID>")}],
         "WORKSPACE_TAINTED": [{"action": "清理后复位", "command": _command(
             "storyloop", "reset", *where, "--reason", "<原因>")}],
@@ -67,9 +70,17 @@ def _options(status: str, project: str, change_id: str, routed: bool) -> list[di
         "NO_PROGRESS": [repair, supersede_with_reason, run],
         "MANUAL_ACCEPTANCE_REQUIRED": [{"action": "逐条人工验收", "command": _command(
             "storyloop", "accept", *where, "--criterion", "<ID>", "--note", "<核对内容>")}],
+        "HUMAN_IMPLEMENTATION_REQUIRED": [{**run, "action": "提交批准路径后继续"}],
+        "BASE_REVIEW_REQUIRED": [{"action": "具名独立审查", "command": _command(
+            "storyloop", "base-review", project, "--change", change_id,
+            "--verdict", "pass", "--note", "<核对内容>")}],
         "NEEDS_SPEC_FIX": [supersede, *([overrule] if routed else [])],
         "AGENT_UNAVAILABLE": [run],
     }
+    if status == "BASE_CHANGE_REQUIRED" and ci_requires_human_proposal:
+        return [{"action": "人工授权 CI 底座改动", "command": _command(
+            "storyloop", "base-propose", project, "--path", "<CI路径>",
+            "--reason", "<原因>", "--allow-ci")}]
     return table.get(status, [])
 
 
@@ -197,7 +208,12 @@ def build_stop(project: Path | str, state: dict, status: str, details: dict) -> 
     change_id = str(state["change_id"])
     failures = state.get("failures") or []
     routed_options = routing_options(project, change_id, status, {**state, **details})
-    options = routed_options or _options(status, project_text, change_id, bool(state.get("routed")))
+    options = routed_options or _options(
+        status, project_text, change_id, bool(state.get("routed")),
+        details.get("ci_requires_human_proposal", False))
+    if status == "WORKSPACE_TAINTED" and details.get("base_resume_status") == "FINALIZING":
+        options = [{"action": "恢复已批准 baseline 后继续", "command": _command(
+            "storyloop", "run", project_text, "--change", change_id)}]
     return {
         **stop_fields(project, change_id, details),
         "status": status,

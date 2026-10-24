@@ -105,6 +105,23 @@ class ProjectBoundaryTests(unittest.TestCase):
             self.assertEqual(violations[contract.relative_to(root).as_posix()], "CONTRACT_PROTECTED")
             self.assertEqual(violations[smoke.relative_to(root).as_posix()], "CONTRACT_PROTECTED")
             self.assertEqual(violations[".github/workflows/ci.yml"], "CI_PROTECTED")
+            self.assertTrue(result["ci_requires_human_proposal"])
+            from storyloop.run_hints import next_step
+            hint = next_step(result["status"], "FEAT-20260916-001", root, result)
+            self.assertIn("base-propose", hint)
+            self.assertIn("--allow-ci", hint)
+            self.assertNotIn("base-update", hint)
+
+    def test_rename_detection_does_not_hide_deleted_protected_path(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            git(root, "config", "diff.renames", "true")
+            git(root, "mv", ".github/workflows/ci.yml", ".github/workflows/new.yml")
+            result = audit_project_changes(root, "FEAT-20261024-001")
+            paths = {item["path"] for item in result["violations"]}
+            self.assertEqual(paths, {".github/workflows/ci.yml", ".github/workflows/new.yml"})
 
 
 if __name__ == "__main__":

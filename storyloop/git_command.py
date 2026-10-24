@@ -39,3 +39,20 @@ def git(project: Path, *arguments: str) -> str:
     stdout = result.get("stdout")
     require(isinstance(stdout, str) and len(stdout) <= 8_000_000, "Git output is invalid")
     return stdout
+
+
+def git_is_ancestor(project: Path, ancestor: str, descendant: str) -> bool:
+    """Use Git's bounded exit status instead of enumerating a possibly long history."""
+    executable = shutil.which("git")
+    require(bool(executable), "Git executable is unavailable")
+    result = run_process(
+        [executable, "-c", f"core.hooksPath={os.devnull}", "merge-base", "--is-ancestor",
+         ancestor, descendant],
+        project, 30, environment_allowlist=GIT_ENVIRONMENT, source_environment=os.environ,
+    )
+    if (result.get("contained") is not True or result.get("timed_out")
+            or result.get("truncated") or result.get("error")):
+        raise StoryLoopError("Git process failed safely", code="GIT_BLOCKED")
+    if result.get("returncode") not in {0, 1}:
+        raise StoryLoopError(git_failure(result.get("stderr", "")), code="GIT_BLOCKED")
+    return result["returncode"] == 0

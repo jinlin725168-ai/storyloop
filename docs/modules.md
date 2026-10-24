@@ -99,7 +99,8 @@
 |  | `routing_risks` | 可变区 | 校验实现与审查角色提供的正向分流风险事实 | `merge_routing_risks`、`validate_routing_risks` |
 |  | `routing_state` | 可变区 | 提供纯分流快照及按版本区分的执行预算 | `advance_tier`、`is_routed`、`open_routing`、`run_config` |
 |  | `routing_upgrade` | 可变区 | 单调升级 L3 范围评估并使旧方案失效 | `check_l3`、`enforce_forbidden_paths` |
-| 接入与底座 | `base_upgrade` | 可变区 | 通过显式回归门控升级项目逻辑底座 | `propose_base_change`、`upgrade_baseline` |
+| 接入与底座 | `base_upgrade` | 可变区 | 生成 base 草案、旧底座 G1 与历史回执兼容读取 | `propose_base_change`、`upgrade_baseline` |
+|  | `base_build_config` | 可变区 | 在无在途批准时记录旧项目构建命令的人工确认 | `confirm_legacy_base_build` |
 |  | `foundation_survey` | 可变区 | 受保护的底座知识库摸底与扩展说明 | `foundation_payload`、`survey_foundation` |
 |  | `onboarding` | 可变区 | 两阶段仓库接入：先草案，再建立干净且已提交的底座 | `scaffold_project` |
 |  | `onboarding_discovery` | 可变区 | 拒绝不安全显式构建标记后复用工程探测 | `safe_discovery` |
@@ -148,6 +149,8 @@
 |  | `run_stops` | 可变区 | 构造停止报告、保存停点并返回恢复命令 | `pause`、`pause_for_boundary` |
 |  | `stop_report` | 可变区 | 构造并渲染各显式停点共用的证据报告 | `build_entry_stop`、`build_stop`、`failure_view`、`render_stop`、`stop_of` |
 | 变更生命周期 | `project_loop` | 可变区 | 已批准产品变更的外部自治闭环 | `load_run_state`、`run_change` |
+|  | `base_execution` | 可变区 | 在统一状态机上编排 base 人工实现与恢复 | `run_base_change` |
+|  | `base_finalization` | 可变区 | 合并后幂等推进底座版本并恢复断点 | `finalize_base_baseline` |
 |  | `run_attempts` | 可变区 | 编排每轮校验、审查与人工验收 | `run_checks_safely`、`perform_review`、`manual_acceptance_gate` |
 |  | `project_preparation` | 可变区 | 物化合同并建立实现前不可变证据 | — |
 |  | `routing_execution` | 可变区 | 按序执行分流中的方案、批准、一致性及锁迁移 | `candidate_l3`、`prepare_execution` |

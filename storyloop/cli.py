@@ -40,7 +40,9 @@ def parser() -> argparse.ArgumentParser:
         "ci": "CI 入口：隔离运行该变更的验收套件和项目级系统冒烟",
         "report": "定位某次变更的验收报告",
         "base-propose": "为计划中的底座改动开一个 BASE 提案（无需先触发功能变更）",
-        "base-update": "按 BASE 提案校验独立底座提交并升级底座版本",
+        "base-build-config": "为旧项目具名确认底座构建命令，不改已冻结的 config.json",
+        "base-update": "兼容旧 BASE 提案：待批准提案导入变更草案，历史回执继续恢复",
+        "base-review": "由独立的人对已提交的底座候选记录具名审查",
         "answer": "回答代理在 NEEDS_INPUT 停点提出的问题（--answer 可重复，按问题顺序）",
         "accept": "记录人工验收：--change 与 --criterion（仅在 MANUAL_ACCEPTANCE_REQUIRED 停点可用）",
         "log": "查看一个变更的全过程：每次代理调用（结果、耗时、费用、会话、调用记录目录）、每轮失败原因和下一步",
@@ -51,7 +53,7 @@ def parser() -> argparse.ArgumentParser:
         "smoke-propose": "变更合并后，让 acceptance 角色提议把哪些核心链路并入 / 更新项目级系统冒烟，草案写到 .storyloop/drafts/smoke/<id>/，由人审核",
         "smoke-apply": "把审核过的系统冒烟草案安装到 acceptance/smoke/，隔离跑绿后提交；红的草案不会留下任何改动",
         "skills": "把引擎自带的技能（foundation-survey 等）安装或刷新到项目的 .claude/skills 与 .codex/skills；已初始化的项目会自动开 BASE 提案",
-        "survey": "底座摸底：代理只读探索仓库，写出 openspec/foundation/ 知识库并开 BASE 提案；提交后 base-update 即受保护",
+        "survey": "底座摸底：生成 openspec/foundation/ 候选与 BASE 草案；批准后走人工 base 通道",
         "lessons": "列出、确认或退休仓库经验", "lessons-propose": "复盘已结束的变更并提议经验草案",
         "drafts": "列出或驳回待批草案",
         "metrics": "跨变更汇总指标与调整建议（只读）",
@@ -110,6 +112,14 @@ def _product_arguments(child, command):
     elif command == "skills":
         child.add_argument("--view", metavar="NAME",
                            help="生成技能的项目定制视图，写到 .storyloop/skills-view/")
+    elif command == "base-review":
+        child.add_argument("--change", dest="change_id", required=True)
+        child.add_argument("--verdict", choices=("pass", "fail"), required=True)
+        child.add_argument("--note", required=True)
+    elif command == "base-build-config":
+        child.add_argument("--commands-json", required=True,
+                           help="构建命令 argv 数组的 JSON；[] 明确表示无构建步骤")
+        child.add_argument("--confirmed-by", required=True, help="具名人工确认人")
 
 
 def _maintenance_arguments(child, command):
@@ -141,6 +151,10 @@ def _maintenance_arguments(child, command):
         child.add_argument("--replan", action="store_true")
         child.add_argument("--reason")
         child.add_argument("--change", dest="change_id", required=True)
+        child.add_argument("--implementer", choices=("human",),
+                           help="人工提交 base 变更；代理通道留待 E2")
+        child.add_argument("--confirm-oracle-skills", action="store_true",
+                           help="明确确认本次 base 候选对生效 Oracle 技能的修改")
         child.add_argument("--overrule", help="不同意审查对 ORACLE_DEFECT / NEEDS_SPEC_FIX 的判定：写明理由")
         child.add_argument("--no-interactive", action="store_true",
                            help="停在 NEEDS_INPUT 时不在终端提问")
@@ -178,10 +192,21 @@ def dispatch(args) -> dict:
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return propose_base_change(project, args.paths, args.reason, allow_mutable=args.allow_mutable,
                                    allow_ci=args.allow_ci)
+    if args.command == "base-build-config":
+        require(_is_product_project(project), "Run storyloop init on this Git project first")
+        from .base_build_config import confirm_legacy_base_build
+        try:
+            commands = json.loads(args.commands_json)
+        except ValueError as exc:
+            raise StoryLoopError("--commands-json must be a JSON argv array") from exc
+        return confirm_legacy_base_build(project, commands, args.confirmed_by)
     if args.command == "base-update":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         from .oracle_skill_approval import confirmed_upgrade
         return confirmed_upgrade(project, args.proposal, args.confirm_oracle_skills)
+    if args.command == "base-review":
+        from .base_execution import record_base_review
+        return record_base_review(project, args.change_id, args.verdict, args.note)
     if args.command == "skills":
         if args.view is not None:
             require(bool(args.view), "Skill view name must not be empty")
@@ -208,6 +233,22 @@ def dispatch(args) -> dict:
             result["written"] = save_metrics(project, result)
         return result
     require(_is_product_project(project), "Run storyloop init on this Git project first")
+    if args.command in {"approve", "run"} and getattr(args, "change_id", None):
+        from .changes import load_change
+        from .change_types import type_of
+        if type_of(load_change(project, args.change_id)["product"]) == "base":
+            if args.command == "approve":
+                from .approvals import approve_change
+                approved = approve_change(project, args.change_id)
+                return {"status": "APPROVED", "change_id": args.change_id,
+                        "approval": approved["approval"],
+                        "next": f"storyloop run <project> --change {args.change_id} --implementer human"}
+            from .oracle_skill_approval import CONFIRMED
+            token = CONFIRMED.set(args.confirm_oracle_skills)
+            try:
+                return run_change(project, args.change_id, implementer=args.implementer)
+            finally:
+                CONFIRMED.reset(token)
     return _product_dispatch(project, args)
 
 

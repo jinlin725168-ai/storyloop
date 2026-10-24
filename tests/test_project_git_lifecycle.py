@@ -9,6 +9,22 @@ from tests.test_baseline_behavior import git, repository
 
 
 class ProjectGitLifecycleTests(unittest.TestCase):
+    def test_exact_child_commit_counts_both_rename_paths(self):
+        from storyloop.project_git import exact_child_commit
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            (root / "a.md").write_text("same content\n", encoding="utf-8")
+            git(root, "add", "a.md")
+            git(root, "commit", "-q", "-m", "source")
+            parent = git(root, "rev-parse", "HEAD")
+            git(root, "config", "diff.renames", "true")
+            git(root, "mv", "a.md", "b.md")
+            git(root, "commit", "-q", "-m", "rename")
+            self.assertTrue(exact_child_commit(root, parent, {"a.md", "b.md"}))
+            self.assertFalse(exact_child_commit(root, parent, {"b.md"}))
+            self.assertFalse(exact_child_commit(root, "0" * 40, {"a.md", "b.md"}))
+
     def test_local_branch_commit_ignores_hooks_and_no_ff_merges(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

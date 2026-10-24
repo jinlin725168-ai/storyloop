@@ -67,6 +67,8 @@ class ResumeAfterBaseUpgradeTests(unittest.TestCase):
             git(root, "checkout", "-q", load_run_state(root, change_id)["source_branch"])
             (root / "README.md").write_text("usage: add | list | done\n", encoding="utf-8")
             git(root, "commit", "-q", "-am", "docs: README mentions done")
+            from tests.test_base_upgrade import begin_legacy_receipt
+            begin_legacy_receipt(root, root / ".storyloop/base-proposals" / f"{proposal}.json")
             self.assertEqual(upgrade_baseline(root, proposal)["status"], "BASELINE_UPGRADED")
             upgraded_head = load_baseline(root)["source_head"]
             git(root, "checkout", "-q", f"feature/{change_id}")

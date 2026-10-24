@@ -64,6 +64,9 @@ class MemoryDesignApprovalTests(unittest.TestCase):
         proposal = propose_base_change(root, ['core.py'], 'Reviewed foundation improvement')
         git(root, 'checkout', '-q', state['source_branch'])
         commit_file(root, 'core.py', 'STABLE = True\n# Reviewed foundation improvement\n')
+        from tests.test_base_upgrade import begin_legacy_receipt
+        begin_legacy_receipt(root, root / '.storyloop/base-proposals' /
+                             f"{proposal['change_id']}.json")
         self.assertEqual(upgrade_baseline(root, proposal['change_id'])['status'],
                          'BASELINE_UPGRADED')
         git(root, 'checkout', '-q', state['feature_branch'])

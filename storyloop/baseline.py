@@ -152,29 +152,39 @@ def advance_repository_head(project: Path, expected_head: str) -> None:
     write_json(project / BASELINE_PATH, baseline, max_bytes=8_000_000)
 
 
-def verify_baseline(project: Path, resume: bool = False) -> dict:
+def verify_baseline(project: Path, resume: bool = False,
+                    allowed_base_paths: set[str] | None = None) -> dict:
     """Reject foundation drift and hidden index flags before an iteration runs."""
     project = Path(project).resolve()
     baseline = load_baseline(project)
     config = load_project_config(project)
     current = _git(project, "branch", "--show-current").strip()
-    expected = "feature/" if resume else baseline["source_branch"]
-    require((current.startswith(expected) if resume else current == expected),
+    base_resume = (resume and allowed_base_paths is not None
+                   and current.startswith("storyloop/BASE-"))
+    require(((current.startswith("feature/") or base_resume) if resume
+             else current == baseline["source_branch"]),
             "Run must start on the locked source branch or its saved feature branch")
+    dirty = _git(project, "status", "--porcelain=v1", "--untracked-files=all", "-z")
     if not resume:
-        require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
-                "Git worktree must be clean before starting a change")
-    _verify_foundation_files(project, baseline)
+        allowed = allowed_base_paths or set()
+        records = [item for item in dirty.split("\0") if item]
+        require(all(len(item) > 3 and item[:2] in {" M", " D", "??"}
+                    and item[3:].replace("\\", "/") in allowed for item in records),
+                "Git worktree has changes outside the approved base paths")
+    _verify_foundation_files(project, baseline, skip=allowed_base_paths or set())
     _verify_index_flags(project, baseline)
-    if not resume:
+    if not resume or base_resume:
         _verify_tracked_scope(project, baseline, config["profile"])
     history = set(_git(project, "rev-list", "HEAD").splitlines())
     require(baseline["source_head"] in history, "Locked baseline commit is not an ancestor")
     return {"status": "BASELINE_VERIFIED", "branch": current}
 
 
-def _verify_foundation_files(project: Path, baseline: dict) -> None:
+def _verify_foundation_files(project: Path, baseline: dict,
+                             skip: set[str] | None = None) -> None:
     for relative in baseline["foundation_paths"]:
+        if relative in (skip or set()):
+            continue
         path = safe_target(project, relative, "tracked path")
         require(path.is_file() and not path.is_symlink(),
                 f"Foundation file is missing or unsafe: {relative}")

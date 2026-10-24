@@ -12,6 +12,8 @@ from .baseline import load_baseline, load_project_config
 from .changes import (contract_digest, draft_directory, load_change,  # noqa: F401  # 兼容再导出：保留旧模块导入路径
                       write_change_preview)
 from .models import require, text
+from .product_contract import nature_of
+from .project_profile import base_commands_digest, effective_base_profile
 from .path_security import safe_target
 from .requirement_checklist import blocking_items, evaluate_checklist
 from .storage import locked, write_bytes_atomic, write_json
@@ -33,13 +35,15 @@ def _approve_locked(project, change_id, approved_by, now, tier) -> dict:
     state = load_change(project, change_id)
     product = state["product"]
     require(not product["questions"], "Resolve all product questions before approval")
-    require(bool(product["stories"]), "Approval requires at least one user story")
-    blocking = blocking_items(evaluate_checklist(product, project))
-    require(not blocking, "Requirement checklist has blocking items; revise the contract: "
-            + "; ".join(item["text"] for item in blocking[:3]))
+    base = nature_of(product) == "base"
+    if not base:
+        require(bool(product["stories"]), "Approval requires at least one user story")
+        blocking = blocking_items(evaluate_checklist(product, project))
+        require(not blocking, "Requirement checklist has blocking items; revise the contract: "
+                + "; ".join(item["text"] for item in blocking[:3]))
     approved_by = text(approved_by, "approver")
     digest = contract_digest(product)
-    binding = _intake_approval(project, state, tier)
+    binding = _base_approval(project, tier) if base else _intake_approval(project, state, tier)
     if state["status"] == "APPROVED":
         require(state["approval"]["contract_digest"] == digest,
                 "Approved product contract is stale")
@@ -74,6 +78,15 @@ def version_snapshot(project: Path) -> dict:
             "baseline_version": load_baseline(project)["baseline_version"],
             "map_version": None,
             "skills": [skills[key] for key in sorted(skills)]}
+
+
+def _base_approval(project: Path, tier: str | None) -> dict:
+    require(tier in {None, "heavy"}, "Base changes require the heavy tier")
+    profile, supplement = effective_base_profile(project, load_project_config(project)["profile"])
+    binding = {"tier": "heavy", "base_commands_sha256": base_commands_digest(profile)}
+    if supplement is not None:
+        binding["base_build_config_sha256"] = supplement
+    return binding
 
 
 def _intake_approval(project: Path, state: dict, tier: str | None) -> dict:

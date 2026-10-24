@@ -65,10 +65,9 @@ class ErrataTests(unittest.TestCase):
         self.assertIn('## E-0001', content)
         self.assertIn(ERRATUM['claim'], content)
         self.assertEqual((self.project / ERRATUM['document']).read_bytes(), original)
-        self.assertEqual(upgrade_baseline(self.project, result['base_proposal'])['status'], 'BASELINE_UPGRADED')
-        second = approve_draft(self.project, 'errata/' + self.capture()['drafts'][0])
-        self.assertEqual(second['errata_id'], 'E-0002')
-        self.assertTrue((self.project / ERRATA_PATH).read_text(encoding='utf-8').startswith(content))
+        self.assertEqual(upgrade_baseline(self.project, result['base_proposal'])['status'], 'APPROVAL_REQUIRED')
+        with self.assertRaisesRegex(StoryLoopError, '干净'):
+            approve_draft(self.project, 'errata/' + self.capture()['drafts'][0])
         self.assertEqual(foundation_payload(self.project)['documents'][0], ERRATA_PATH)
 
     def test_edited_draft_revalidated(self):
@@ -85,22 +84,13 @@ class ErrataTests(unittest.TestCase):
     def test_post_commit_failure_preserves_erratum_and_recovers_same_commit(self):
         ref = 'errata/' + self.capture()['drafts'][0]
         parent = head(self.project)
-        from storyloop import lesson_landing
-        actual = lesson_landing.set_draft_status
-        def fail(project, reference, status, *args):
-            if status == 'approved':
-                raise RuntimeError('postcommit')
-            return actual(project, reference, status, *args)
-        with mock.patch.object(lesson_landing, 'set_draft_status', side_effect=fail):
-            with self.assertRaisesRegex(RuntimeError, 'postcommit'):
-                approve_draft(self.project, ref)
-        committed = head(self.project)
-        self.assertNotEqual(committed, parent)
+        first = approve_draft(self.project, ref)
+        self.assertEqual(head(self.project), parent)
         self.assertTrue((self.project / ERRATA_PATH).exists())
         self.assertEqual(load_draft(self.project, ref)['status'], 'pending')
         proposals = list((self.project / '.storyloop/base-proposals').glob('*.json'))
         result = approve_draft(self.project, ref)
-        self.assertEqual(result['commit'], committed)
+        self.assertEqual(result, first)
         self.assertEqual(result['errata_id'], 'E-0001')
         self.assertEqual(result['base_proposal'], proposals[0].stem)
         self.assertEqual((self.project / ERRATA_PATH).read_text(encoding='utf-8').count('## E-0001'), 1)
@@ -111,23 +101,14 @@ class ErrataTests(unittest.TestCase):
         self.assertEqual(next_errata_id('mention E-9999\n## E-0003\n'), 'E-0004')
 
     def test_recovery_id_cannot_point_to_an_older_erratum(self):
-        first = approve_draft(self.project, 'errata/' + self.capture()['drafts'][0])
-        upgrade_baseline(self.project, first['base_proposal'])
-        ref = 'errata/' + self.capture()['drafts'][0]
         from storyloop import lesson_landing
-        actual = lesson_landing.set_draft_status
-        def fail(project, reference, status, *args):
-            if status == 'approved':
-                raise OSError('approval unavailable')
-            return actual(project, reference, status, *args)
-        with mock.patch.object(lesson_landing, 'set_draft_status', side_effect=fail):
-            with self.assertRaises(OSError):
-                approve_draft(self.project, ref)
+        ref = 'errata/' + self.capture()['drafts'][0]
+        approve_draft(self.project, ref)
         committed = head(self.project)
-        pending = self.project / '.storyloop/state/memory-landings' / (ref + '.json')
+        pending = lesson_landing._base_landing_path(self.project, ref)
         record = load_json(pending)
-        self.assertEqual(record['result_ids']['errata_id'], 'E-0002')
-        record['result_ids']['errata_id'] = 'E-0001'
+        self.assertEqual(record['result']['errata_id'], 'E-0001')
+        record['result']['errata_id'] = 'E-0000'
         write_json(pending, record)
         with self.assertRaisesRegex(StoryLoopError, '标识'):
             approve_draft(self.project, ref)
@@ -227,23 +208,15 @@ class ErrataTests(unittest.TestCase):
 
     def test_external_head_advance_is_preserved_and_draft_pending(self):
         ref = 'errata/' + self.capture()['drafts'][0]
-        from storyloop import lesson_landing
-        actual = lesson_landing.set_draft_status
-        external = []
-        def fail(project, reference, status, *args):
-            if status == 'approved':
-                _git(project, 'commit', '--allow-empty', '-m', 'external advance')
-                external.append(head(project))
-                raise RuntimeError('postcommit')
-            return actual(project, reference, status, *args)
-        with mock.patch.object(lesson_landing, 'set_draft_status', side_effect=fail):
-            with self.assertRaisesRegex(StoryLoopError, '外部 HEAD'):
-                approve_draft(self.project, ref)
-        self.assertEqual(head(self.project), external[0])
+        approve_draft(self.project, ref)
+        _git(self.project, 'commit', '--allow-empty', '-m', 'external advance')
+        external = head(self.project)
+        with self.assertRaisesRegex(StoryLoopError, '当前知识草案不一致'):
+            approve_draft(self.project, ref)
+        self.assertEqual(head(self.project), external)
         self.assertTrue((self.project / ERRATA_PATH).is_file())
         pending = load_draft(self.project, ref)
         self.assertEqual(pending['status'], 'pending')
-        self.assertIn('外部 HEAD', pending['failure'])
 
     def test_existing_errata_bytes_are_preserved(self):
         original = '# 知识库勘误\r\n\r\n## E-0007\r\n旧记录\r\n'.encode('utf-8')
@@ -252,6 +225,9 @@ class ErrataTests(unittest.TestCase):
         (self.project / ERRATA_PATH).write_bytes(original)
         _git(self.project, 'add', ERRATA_PATH)
         _git(self.project, 'commit', '-m', 'existing errata')
+        from tests.test_base_upgrade import begin_legacy_receipt
+        begin_legacy_receipt(self.project,
+                             self.project / '.storyloop/base-proposals' / f"{proposal['change_id']}.json")
         upgrade_baseline(self.project, proposal['change_id'])
         result = approve_draft(self.project, 'errata/' + self.capture()['drafts'][0])
         self.assertEqual(result['errata_id'], 'E-0008')

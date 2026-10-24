@@ -24,6 +24,7 @@ from .answers import _pending as _unanswered, load_answers
 from .baseline import _git, load_baseline, load_project_config, verify_baseline
 from .boundaries import capture_snapshot  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .changes import load_change
+from .change_types import type_of
 from .intake import require_intake
 from .routing_state import is_routed, open_routing, run_config
 from .manual_acceptance import load_manual_acceptance, pending_manual_criteria  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
@@ -60,14 +61,14 @@ from .storage import load_json, locked
 
 
 def run_change(project: Path, change_id: str, services: LoopServices | None = None,
-               overrule: str | None = None) -> dict:
+               overrule: str | None = None, implementer: str | None = None) -> dict:
     """Run or resume an approved change until pass or an explicit pause state."""
     if overrule is not None:
         overrule = text(overrule, "overrule reason")
     project = Path(project).resolve()
     with locked(project):
         try:
-            return _run_change_locked(project, change_id, services, overrule)
+            return _run_change_locked(project, change_id, services, overrule, implementer)
         except StoryLoopError as exc:
             if exc.code == "WORKSPACE_TAINTED":
                 path = run_path(project, change_id)
@@ -80,9 +81,15 @@ def run_change(project: Path, change_id: str, services: LoopServices | None = No
 
 def _run_change_locked(
     project: Path, change_id: str, services: LoopServices | None, overrule: str | None = None,
+    implementer: str | None = None,
 ) -> dict:
     project = Path(project).resolve()
     change = load_change(project, change_id)
+    if type_of(change["product"]) == "base":
+        require(overrule is None, "Base changes do not use review overrules")
+        from .base_execution import run_base_change
+        return run_base_change(project, change, implementer, _new_run_state)
+    require(implementer is None, "--implementer is only for base changes")
     saved_path = run_path(project, change_id)
     saved = load_json(saved_path) if saved_path.exists() else None
     if overrule:

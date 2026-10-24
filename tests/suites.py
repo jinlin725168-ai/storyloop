@@ -39,6 +39,10 @@ END_TO_END = [
 # Safety boundaries: out-of-scope writes, tampering, path and process containment.
 SAFETY = [
     "tests.test_custom_protection",
+    "tests.test_base_contract", "tests.test_base_lifecycle", "tests.test_base_compatibility",
+    "tests.test_base_trust", "tests.test_base_restart", "tests.test_base_supplement",
+    "tests.test_git_diff_paths",
+    "tests.test_lesson_landing.LandingTests.test_base_proposal_paths_detect_renamed_foundation_source",
     "tests.test_landing_recovery",
     "tests.test_boundaries", "tests.test_project_boundaries", "tests.test_project_security_gates",
     "tests.test_project_loop_tampering", "tests.test_process_containment", "tests.test_workspace_scratch",

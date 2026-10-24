@@ -133,15 +133,16 @@ my-project/
 | `init PATH --scaffold [--stack STACK …]` | 生成待人工补全的接入草案；不初始化、不构建、不提交 |
 | `change PATH --idea TEXT [--no-interactive]` | 从一句产品意图创建草案；终端里逐条澄清待决问题 |
 | `change PATH --change ID --message TEXT` | 与 AI 继续修订同一变更 |
-| `approve PATH --change ID [--no-interactive]` | 批准并自动跑完后续闭环 |
+| `approve PATH --change ID [--no-interactive]` | 批准变更；base 批准后由人显式运行 |
 | `approve PATH --draft KIND/ID` | 审批 `lesson` 或 `errata` 草案；与 `--change` 互斥 |
-| `run PATH --change ID [--no-interactive]` | 继续一个已批准的变更；终端里遇到 `NEEDS_INPUT` 会直接提问 |
+| `run PATH --change ID [--implementer human] [--no-interactive]` | 继续已批准变更；E1 的 base 必须首次指定 `--implementer human` |
 | `status PATH --change ID --json` | 查看合同和外部 Loop 状态，含下一步命令 `next` |
 | `log PATH --change ID [--json]` | 排障视图：每次代理调用的结果、耗时、费用、会话 ID 与调用记录目录，每轮失败原因，下一步命令 |
 | `ci PATH --change ID` | CI 入口：隔离运行该变更的验收套件和项目级系统冒烟 |
 | `report PATH --change ID` | 定位最终验收报告 |
 | `base-propose PATH --path P [--path P2] --reason TEXT [--allow-mutable] [--allow-ci]` | 为计划中的底座改动开 BASE 提案（无需先触发功能变更）；`--allow-ci` 是 CI 配置进入或修改底座的唯一通道，由人决定，代理永远不能 |
-| `base-update PATH --proposal BASE-ID [--confirm-oracle-skills]` | 校验独立底座提交、完整回归并提升底座版本 |
+| `base-update PATH --proposal BASE-ID [--confirm-oracle-skills]` | 兼容旧提案：`PROPOSED` 导入同 ID 草案，历史回执照旧恢复；新 base 由 `run` 完成版本推进 |
+| `base-review PATH --change BASE-ID --verdict pass\|fail --note TEXT` | 由不同于实现提交者的人具名审查当前 base 候选 |
 | `accept PATH --change ID --criterion A1 --note TEXT` | 记录人工验收条件已由人确认（仅在 `MANUAL_ACCEPTANCE_REQUIRED` 停点可用） |
 | `answer PATH --change ID --answer TEXT [--answer TEXT]` | 回答 `NEEDS_INPUT` 停点的问题（按顺序；只给一个答案则适用于全部）。在终端里 `run`/`approve` 会直接提问，无需此命令 |
 | `reset PATH --change ID --reason TEXT` | 人工复位卡住的运行（`WORKSPACE_TAINTED`，或人工验收等待期间工作区已变）；不动文件，被中断的一轮不计预算，理由留痕 |
@@ -153,7 +154,7 @@ my-project/
 | `lessons-propose PATH --change ID` | 对已结束或停点的变更执行一次只读复盘并提议草案 |
 | `adapters check PATH [--json]` | 检查角色适配器能力与档次映射 |
 | `skills PATH` | 把引擎自带的技能包（`foundation-survey`）安装或刷新到项目的 `.claude/skills/` 与 `.codex/skills/`，Claude Code 与 Codex 都能直接用；已初始化的项目自动开 BASE 提案 |
-| `survey PATH [--reason TEXT] [--from FILE]` | 底座摸底：survey 角色只读探索仓库，写出 `openspec/foundation/` 知识库（模块、架构、扩展机制、接口、能力、积木、测试）并开 BASE 提案；提交后 `base-update` 即受保护，之后每个角色起手先读它。产物校验失败时原始回答保存在 `.storyloop/state/foundation/last-survey.json`，人工修正后用 `--from` 安装，不再调用代理 |
+| `survey PATH [--reason TEXT] [--from FILE]` | 底座摸底：生成 `openspec/foundation/` 候选和 BASE 草案；批准后由人工 base 通道提交并验证。产物校验失败时原始回答保存在 `.storyloop/state/foundation/last-survey.json`，人工修正后用 `--from` 安装 |
 | `document PATH --change ID [--design FILE] [--capability NAME]` | 为已 PASSED 的变更补生成 design.md、decisions.md 和活规格（配合 `base-propose`/`base-update` 提交） |
 
 退出码 `0` 表示命令正常结束，其中包括停在 `MANUAL_ACCEPTANCE_REQUIRED`：自动验收已全部通过，只是在等人逐条确认，不算失败；`2` 表示失败、受阻或等人回答（如 `NEEDS_INPUT`、`WORKSPACE_TAINTED`、`BUDGET_EXHAUSTED`、`BASE_CHANGE_REQUIRED`、`BOUNDARY_VIOLATION`、`CHARACTERIZATION_FAILED`、`EXISTING_GREEN`、`smoke-apply` 的 `SMOKE_UPDATE_FAILED`）；`130` 表示中断。报错时 stderr 输出 `{status, message, next}` JSON。脚本判断停点请读输出里的 `status` 与 `next`（加 `--json`），不要只看退出码。
@@ -172,7 +173,7 @@ my-project/
 
 完成阶段（实现提交、报告、文档归档与活规格并入、no-ff 合并、回执）是幂等的：中途崩溃后再次 `storyloop run` 会采纳已存在的实现提交、丢弃上次留下的引擎产物并重新生成，不会重复调用实现代理。
 
-出现 `BASE_CHANGE_REQUIRED` 后，先在原分支把该 `BASE-*` 涉及的路径作为独立变更实现、审核并提交；工作树干净后执行 `storyloop base-update PATH --proposal BASE-ID`。命令要求提交路径与提案完全一致；CI 文件只有在提案以 `--allow-ci` 开出时才允许；单元、集成、系统冒烟三层都不能失败且至少一层真实通过，然后将底座版本从例如 `1.0.0` 提升到 `1.0.1`。它不会替你丢弃或搬移功能分支上的未提交修改。
+E1 的人工底座通道：`base-propose` 生成草案（旧 `PROPOSED` 提案先用 `base-update --proposal` 导入）；`approve --change BASE-ID` 批准合同；`run --change BASE-ID --implementer human` 建 `storyloop/BASE-*` 分支并证明旧底座全绿。停在 `HUMAN_IMPLEMENTATION_REQUIRED` 后，人只提交合同列出的路径；再次 `run` 验证全部已配置的 unit/integration/checks、系统冒烟及声明的构建步骤。另一名人执行 `base-review --verdict pass --note ...`，随后 `accept --criterion BASE-ACCEPT --note ...`，最后 `run` 本地合并、写回执并把底座 patch 版本加一。`base_build_commands: []` 表示项目声明无构建步骤；缺少该键不能批准。E1 拒绝系统冒烟和其他判据路径的 base 修改，代理实现与跨厂商审查留给 E2。
 
 默认使用本机已安装并登录的 Codex CLI。也可在 `.storyloop/config.json` 选择 `command` 或 `manual` 适配器；`examples/claude-code/` 提供驱动 Claude Code 的 `command` 适配器（按角色收窄工具、Bash 前缀白名单、项目规范文件、圈数到上限自动续会话、回报成本；review 默认拆成正确性、安全、架构、测试四个并行视角再由主评审合并，implement 可用 `--implement-lanes` 按层拆通道并行，引擎协议不变）。每个角色的返回结构有 JSON Schema（`storyloop/role_schemas.py`），随请求下发，Codex 用 `--output-schema`、Claude 适配器用 `--json-schema` 由 CLI 原生约束；结构不符时在同一会话带着具体问题修复。每次代理调用的耗时、轮数和费用记入 `.storyloop/state/telemetry/`，汇总进验收报告；请求、回答、完整 stderr 与会话 ID 落在 `.storyloop/state/telemetry/calls/<调用>/`，`storyloop log` 汇总查看。工具不保存 API 密钥；不要把生产凭证、PII、数据库连接或商业秘密放进目标仓库和 Agent 输入。
 

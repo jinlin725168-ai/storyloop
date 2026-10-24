@@ -103,7 +103,7 @@ class RetrospectiveProtocolTests(unittest.TestCase):
         self.assertEqual(load_draft(project, ref)['proposer'], 'call-test')
         approved = approve_draft(project, ref)
         self.assertEqual(approved['lesson_id'], 'L-0001')
-        self.assertEqual(upgrade_baseline(project, approved['base_proposal'])['status'], 'BASELINE_UPGRADED')
+        self.assertEqual(upgrade_baseline(project, approved['base_proposal'])['status'], 'APPROVAL_REQUIRED')
         self.assertIn('Retry policy', (project / 'openspec/foundation/runtime.md').read_text())
 
 

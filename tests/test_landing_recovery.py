@@ -129,27 +129,28 @@ class LandingRecoveryTests(unittest.TestCase):
     def test_recovery_validates_proposal_before_changing_approval_or_removing_record(self):
         ref = self.draft(strength='knowledge', landing={
             'kind': 'foundation', 'path': 'openspec/foundation/runtime.md', 'append': '校准时钟。'})
-        self.fail_after_commit(ref)
+        approve_draft(self.project, ref)
         committed = head(self.project)
-        record = load_json(self.pending(ref))
-        record['proposal'] = {'change_id': 'BASE-invalid'}
-        write_json(self.pending(ref), record)
+        pending = lesson_landing._base_landing_path(self.project, ref)
+        record = load_json(pending)
+        record['result']['base_proposal'] = 'BASE-invalid'
+        write_json(pending, record)
         with self.assertRaisesRegex(StoryLoopError, '提案'):
             approve_draft(self.project, ref)
         self.assertEqual(head(self.project), committed)
         self.assertEqual(load_draft(self.project, ref)['status'], 'pending')
-        self.assertTrue(self.pending(ref).is_file())
+        self.assertTrue(pending.is_file())
 
     def test_recovery_refuses_a_deleted_base_proposal(self):
         ref = self.draft(strength='knowledge', landing={
             'kind': 'foundation', 'path': 'openspec/foundation/runtime.md', 'append': '校准时钟。'})
-        self.fail_after_commit(ref)
-        record = load_json(self.pending(ref))
-        Path(record['proposal']['proposal']).unlink()
+        result = approve_draft(self.project, ref)
+        pending = lesson_landing._base_landing_path(self.project, ref)
+        (self.project / '.storyloop/base-proposals' / f"{result['base_proposal']}.json").unlink()
         with self.assertRaisesRegex(StoryLoopError, '提案'):
             approve_draft(self.project, ref)
         self.assertEqual(load_draft(self.project, ref)['status'], 'pending')
-        self.assertTrue(self.pending(ref).is_file())
+        self.assertTrue(pending.is_file())
 
     def test_recovery_refuses_an_edited_draft(self):
         ref = self.draft()
@@ -271,14 +272,14 @@ class LandingRecoveryTests(unittest.TestCase):
     def test_first_approval_also_checks_base_proposal_after_commit(self):
         ref = self.draft(strength='knowledge', landing={
             'kind': 'foundation', 'path': 'openspec/foundation/runtime.md', 'append': '校准时钟。'})
-        actual = lesson_landing.commit_paths
-        def remove(*args, **kwargs):
-            result = actual(*args, **kwargs)
-            for path in (self.project / '.storyloop/base-proposals').glob('*.json'):
-                path.unlink()
-            return result
-        with mock.patch.object(lesson_landing, 'commit_paths', side_effect=remove):
+        actual = lesson_landing.write_json
+        def remove(path, value, **kwargs):
+            actual(path, value, **kwargs)
+            if 'base-landings' in str(path):
+                for proposal in (self.project / '.storyloop/base-proposals').glob('*.json'):
+                    proposal.unlink()
+        with mock.patch.object(lesson_landing, 'write_json', side_effect=remove):
             with self.assertRaisesRegex(StoryLoopError, '提案'):
                 approve_draft(self.project, ref)
         self.assertEqual(load_draft(self.project, ref)['status'], 'pending')
-        self.assertTrue(self.pending(ref).is_file())
+        self.assertFalse(lesson_landing._base_landing_path(self.project, ref).is_file())

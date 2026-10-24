@@ -17,7 +17,7 @@ from .path_security import safe_target, repository_relative
 from .principles import validate_principles
 from .processutil import run_process
 from .project_profile import validate_project_settings
-from .project_git import commit_paths
+from .project_git import changed_paths, commit_paths
 from .storage import load_json, locked, write_bytes_atomic, write_json
 
 
@@ -33,6 +33,14 @@ def approve_draft(project: Path, ref: str) -> dict:
     project = Path(project).resolve()
     with locked(project):
         draft = load_draft(project, ref)
+        base_pending = _base_landing_path(project, ref)
+        if base_pending.is_file():
+            record = load_json(base_pending)
+            require(record.get('draft_digest') == _draft_digest(draft)
+                    and record.get('source_head') == _git(project, 'rev-parse', 'HEAD').strip(),
+                    '待处理的 BASE 草案与当前知识草案不一致')
+            _validate_base_landing(project, record)
+            return record['result']
         pending = _landing_path(project, ref)
         _require_no_other_landing(project, pending)
         require(draft.get('status') == 'pending' or (
@@ -191,7 +199,7 @@ def land_knowledge(project, draft, entry) -> dict:
 
 def _proposal_paths(project, writes):
     source = load_baseline(project)['source_head']
-    changed = set(filter(None, _git(project, 'diff', '--name-only', '-z', source, 'HEAD').split('\0')))
+    changed = changed_paths(project, source, 'HEAD')
     require(all(p.startswith('openspec/lessons/') for p in changed), 'BASE 后存在非经验变更，请先处理 BASE')
     return sorted(changed | set(writes))
 
@@ -227,7 +235,18 @@ def _restore(project, originals, parent, proposal):
         else:
             write_bytes_atomic(path, raw)
     if proposal:
-        Path(proposal['proposal']).unlink(missing_ok=True)
+        proposal_path = Path(proposal['proposal'])
+        state_path = safe_target(project, f".storyloop/state/changes/{proposal['change_id']}.json",
+                                 'BASE draft')
+        if state_path.exists():
+            state = load_json(state_path)
+            require(state.get('status') == 'DRAFT'
+                    and state.get('product', {}).get('base', {}).get('paths') == proposal['paths']
+                    and (not proposal_path.exists() or state.get('base_proposal_sha256')
+                         == hashlib.sha256(proposal_path.read_bytes()).hexdigest()),
+                    '回滚受阻：BASE 草案已变化，保留提案与草案')
+            state_path.unlink()
+        proposal_path.unlink(missing_ok=True)
 
 
 def _approve_lesson(project, ref, draft):
@@ -256,9 +275,19 @@ def land_transaction(project, ref, writes, message, result_ids,
     message = message.rstrip(' \t\r\n\v\f')
     try:
         if base_reason is not None:
-            proposal = propose_base_change(project, _proposal_paths(project, writes), base_reason)
+            proposal = propose_base_change(project, _proposal_paths(project, writes), base_reason,
+                                           scope="knowledge")
         for relative, content in writes.items():
             write_bytes_atomic(safe_target(project, relative, 'lesson landing'), content)
+        if proposal is not None:
+            result = dict(status='BASE_APPROVAL_REQUIRED', **result_ids, commit=None,
+                          paths=sorted(writes), base_proposal=proposal['change_id'],
+                          next=proposal['next'])
+            write_json(_base_landing_path(project, ref),
+                       {'version': 1, 'ref': ref, 'draft_digest': _draft_digest(draft),
+                        'source_head': parent, 'result': result}, max_bytes=512_000)
+            _validate_base_landing(project, {'result': result})
+            return result
         _git(project, 'add', '--', *writes)
         tree = _git(project, 'write-tree').strip()
         _require_landing_source(project, ref, draft, branch)
@@ -279,7 +308,33 @@ def land_transaction(project, ref, writes, message, result_ids,
         else:
             _restore(project, originals, parent, proposal)
             pending.unlink(missing_ok=True)
+            _base_landing_path(project, ref).unlink(missing_ok=True)
         raise
+
+
+def _base_landing_path(project: Path, ref: str) -> Path:
+    return project / '.storyloop/state/base-landings' / (hashlib.sha256(ref.encode('utf-8')).hexdigest() + '.json')
+
+
+def _validate_base_landing(project: Path, record: dict) -> None:
+    result = record.get('result') or {}
+    require(result.get('status') == 'BASE_APPROVAL_REQUIRED'
+            and isinstance(result.get('paths'), list)
+            and isinstance(result.get('base_proposal'), str), '待处理的 BASE 落点记录无效')
+    proposal_id = identifier(result['base_proposal'], 'BASE 提案标识')
+    proposal_path = safe_target(project, f'.storyloop/base-proposals/{proposal_id}.json', 'BASE 提案')
+    require(proposal_path.is_file(), 'BASE 提案已变化或丢失')
+    proposal = load_json(proposal_path)
+    approved = {item['path'] for item in proposal.get('changes') or []}
+    require(proposal.get('change_id') == proposal_id
+            and set(result['paths']) <= approved, 'BASE 提案与知识候选路径不一致')
+    if 'errata_id' in result:
+        content = (project / 'openspec/foundation/errata.md').read_text(encoding='utf-8')
+        ids = [line[3:] for line in content.splitlines() if line.startswith('## E-')]
+        require(bool(ids) and ids[-1] == result['errata_id'], '勘误标识与待处理的 BASE 候选不一致')
+    if 'lesson_id' in result:
+        require((project / 'openspec/lessons' / f"{result['lesson_id']}.md").is_file(),
+                '经验标识与待处理的 BASE 候选不一致')
 
 
 def _landing_path(project, ref):

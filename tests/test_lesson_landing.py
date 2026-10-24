@@ -11,7 +11,7 @@ from storyloop.lesson_landing import approve_draft, prove_check
 from storyloop.lesson_store import load_lessons_at
 from storyloop.models import StoryLoopError
 from storyloop.storage import load_json, write_json
-from tests.lesson_support import initialized_project, sample, head, _git, commit_file
+from tests.lesson_support import initialized_project, git_repo, sample, head, _git, commit_file
 
 
 class LandingTests(unittest.TestCase):
@@ -46,6 +46,19 @@ class LandingTests(unittest.TestCase):
 
     def foundation(self, path='openspec/foundation/runtime.md'):
         return dict(kind='foundation', path=path, append='## 时钟\n先校时。')
+
+    def test_base_proposal_paths_detect_renamed_foundation_source(self):
+        from storyloop.baseline import bootstrap_project
+        project = git_repo(files={"README.md": "repo\n",
+                                  "openspec/foundation/x.md": "same content\n"})
+        self.addCleanup(cleanup_repo, project)
+        bootstrap_project(project, {"test_commands": [[sys.executable, "-c", "pass"]]})
+        _git(project, "config", "diff.renames", "true")
+        (project / "openspec/lessons").mkdir(parents=True, exist_ok=True)
+        _git(project, "mv", "openspec/foundation/x.md", "openspec/lessons/x.md")
+        _git(project, "commit", "-q", "-m", "rename foundation into lessons")
+        with self.assertRaisesRegex(StoryLoopError, "非经验变更"):
+            lesson_landing._proposal_paths(project, {"openspec/lessons/L-0001.md": b"lesson"})
 
     def test_prose_create_and_consecutive_ids(self):
         for number in (1, 2):
@@ -113,15 +126,19 @@ class LandingTests(unittest.TestCase):
 
     def test_knowledge_exact_paths_and_actual_base_update_after_prose(self):
         approve_draft(self.project, self.draft())
+        source_head = head(self.project)
         result = approve_draft(self.project, self.draft(strength='knowledge', landing=self.foundation()))
-        changed = _git(self.project, 'show', '--name-only', '--format=', 'HEAD').splitlines()
-        self.assertEqual(sorted(changed), ['openspec/foundation/runtime.md', 'openspec/lessons/L-0002.md'])
-        self.assertIn('base-update', result['next'])
-        self.assertEqual(upgrade_baseline(self.project, result['base_proposal'])['status'], 'BASELINE_UPGRADED')
+        self.assertEqual(head(self.project), source_head)
+        self.assertEqual(result['status'], 'BASE_APPROVAL_REQUIRED')
+        self.assertEqual(sorted(result['paths']),
+                         ['openspec/foundation/runtime.md', 'openspec/lessons/L-0002.md'])
+        self.assertIn('storyloop approve', result['next'])
+        self.assertEqual(upgrade_baseline(self.project, result['base_proposal'])['status'], 'APPROVAL_REQUIRED')
 
     def test_unicode_foundation_snapshot(self):
         approve_draft(self.project, self.draft(strength='knowledge', landing=self.foundation('openspec/foundation/运行时.md')))
-        self.assertEqual(load_lessons_at(self.project, 'HEAD')[0]['strength'], 'knowledge')
+        self.assertEqual(load_lessons_at(self.project, 'HEAD'), [])
+        self.assertTrue((self.project / 'openspec/foundation/运行时.md').is_file())
 
     def test_config_refused(self):
         with self.assertRaises(StoryLoopError) as caught:
@@ -243,7 +260,7 @@ class LandingTests(unittest.TestCase):
     def test_commit_failure_restores_exact_snapshot(self):
         ref = self.draft(strength='knowledge', landing=self.foundation())
         before = self.snapshot()
-        with mock.patch('storyloop.lesson_landing.commit_paths', side_effect=StoryLoopError('boom')):
+        with mock.patch('storyloop.lesson_landing.write_json', side_effect=StoryLoopError('boom')):
             with self.assertRaisesRegex(StoryLoopError, 'boom'):
                 approve_draft(self.project, ref)
         self.assertEqual(self.snapshot(), before)
@@ -251,23 +268,16 @@ class LandingTests(unittest.TestCase):
     def test_postcommit_failure_preserves_knowledge_and_reuses_base_proposal(self):
         ref = self.draft(strength='knowledge', landing=self.foundation())
         before = self.snapshot()
-        def fail_approval(project, reference, status, failure=None):
-            if status == 'approved':
-                raise StoryLoopError('postcommit')
-            set_draft_status(project, reference, status, failure)
-        with mock.patch('storyloop.lesson_landing.set_draft_status', side_effect=fail_approval):
-            with self.assertRaisesRegex(StoryLoopError, 'postcommit'):
-                approve_draft(self.project, ref)
-        committed = head(self.project)
-        self.assertNotEqual(committed, before[0])
+        first = approve_draft(self.project, ref)
+        self.assertEqual(head(self.project), before[0])
         proposals = list((self.project / '.storyloop/base-proposals').glob('*.json'))
         self.assertEqual(len(proposals), 1)
         self.assertTrue((self.project / 'openspec/foundation/runtime.md').is_file())
         result = approve_draft(self.project, ref)
-        self.assertEqual(result['commit'], committed)
+        self.assertEqual(result, first)
         self.assertEqual(result['base_proposal'], proposals[0].stem)
         self.assertEqual(list((self.project / '.storyloop/base-proposals').glob('*.json')), proposals)
-        self.assertEqual(upgrade_baseline(self.project, result['base_proposal'])['status'], 'BASELINE_UPGRADED')
+        self.assertEqual(upgrade_baseline(self.project, result['base_proposal'])['status'], 'APPROVAL_REQUIRED')
 
     def test_external_commit_is_preserved(self):
         ref = self.draft()
@@ -332,7 +342,7 @@ class LandingTests(unittest.TestCase):
         upgrade_baseline(self.project, proposal['change_id'])
         before = (self.project / 'openspec/foundation/runtime.md').read_bytes()
         ref = self.draft(strength='knowledge', landing=self.foundation())
-        with mock.patch('storyloop.lesson_landing.commit_paths', side_effect=StoryLoopError('boom')):
+        with mock.patch('storyloop.lesson_landing.write_json', side_effect=StoryLoopError('boom')):
             with self.assertRaises(StoryLoopError):
                 approve_draft(self.project, ref)
         self.assertEqual((self.project / 'openspec/foundation/runtime.md').read_bytes(), before)
@@ -358,6 +368,8 @@ class LandingTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 approve_draft(self.project, ref)
         self.assertEqual(self.snapshot(), before)
+        self.assertEqual(list((self.project / '.storyloop/state/changes').glob('BASE-*.json')), [])
+        self.assertEqual(approve_draft(self.project, ref)['status'], 'BASE_APPROVAL_REQUIRED')
 
     def test_trailing_summary_whitespace_approves_once(self):
         for suffix in (' ', '\t'):
@@ -375,23 +387,16 @@ class LandingTests(unittest.TestCase):
                 self.assertEqual(head(self.project), before)
 
     def test_trailing_summary_whitespace_postcommit_failure_recovers_same_commit(self):
-        def fail_approval(project, reference, status, failure=None):
-            if status == 'approved':
-                raise StoryLoopError('postcommit whitespace')
-            set_draft_status(project, reference, status, failure)
         for suffix in (' ', '\t'):
             with self.subTest(suffix=repr(suffix)):
                 self.project = initialized_project()
                 self.addCleanup(cleanup_repo, self.project)
                 ref = self.draft(summary='经验' + suffix, strength='knowledge', landing=self.foundation())
                 before = self.snapshot()
-                with mock.patch('storyloop.lesson_landing.set_draft_status', side_effect=fail_approval):
-                    with self.assertRaisesRegex(StoryLoopError, 'postcommit whitespace'):
-                        approve_draft(self.project, ref)
-                committed = head(self.project)
-                self.assertNotEqual(committed, before[0])
+                result = approve_draft(self.project, ref)
+                self.assertEqual(head(self.project), before[0])
                 self.assertEqual(load_draft(self.project, ref)['status'], 'pending')
-                self.assertEqual(approve_draft(self.project, ref)['commit'], committed)
+                self.assertEqual(approve_draft(self.project, ref), result)
 
     def test_unicode_summary_separator_preserves_commit_identity(self):
         summary = '经验\u2028继续'
