@@ -67,7 +67,7 @@ I12在B守护唯一迁移入口与阶段跳层，类型定义来源在C集中。
 | 纠偏 | `test_failure_attribution`、`test_failure_routing`、`test_no_progress`、`test_facts`、`test_stop_report`、`test_supersede`、`test_semantic_repair` |
 | 可观测性 | `test_telemetry`、`test_call_diagnostics`、`test_change_report` |
 | 外环指标 | `test_metrics_collect`、`test_metrics_compute`、`test_metrics_rules`、`test_ci_results`、`test_metrics_command`；共用持久化夹具在 `metrics_support.py` |
-| 命令面与技能 | `test_cli`、`test_product_cli`、`test_core`、`test_skills`、`test_foundation_survey` |
+| 命令面与技能 | `test_cli`、`test_product_cli`、`test_core`、`test_skills`、`test_spec_craft`、`test_foundation_survey` |
 | 分层记忆 | `test_lessons`、`test_lesson_store`、`test_lesson_retrieval`、`test_drafts`、`test_lesson_landing`、`test_errata`、`test_retrospective`、`test_report_memory`；共用经验夹具在 `lesson_support.py` |
 
 ## 二、CI
