@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import math
+import re
 from pathlib import Path
 from typing import Callable
 
 from .adapter_profiles import diagnostic_fields
+from . import __version__
 from .models import require
 from .storage import load_json, write_json
 
@@ -15,6 +17,8 @@ Clock = Callable[[], datetime]
 PENDING = "pending"  # product calls made before the change id exists
 NUMERIC = ("cost_usd", "turns", "duration_ms", "input_tokens", "output_tokens", "segments", "lanes", "perspectives")
 STRINGS = ("model", "vendor", "tier_applied")
+PROFILE_FIELDS = ("engine_version", "instructions_sha256", "schema_sha256")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 def record_call(project: Path, role: str, change_id: str | None, telemetry: object,
@@ -49,6 +53,10 @@ def record_call(project: Path, role: str, change_id: str | None, telemetry: obje
         if isinstance(skills, list) and all(_valid_skill(item) for item in skills):
             entry["skills"] = skills
     if isinstance(engine_fields, dict):
+        for key in PROFILE_FIELDS[1:]:
+            value = engine_fields.get(key)
+            if isinstance(value, str) and SHA256.fullmatch(value):
+                entry[key] = value
         for key in ("tier_requested", "adapter", "degraded", "subagents_applied", "path_guard"):
             value = engine_fields.get(key)
             if isinstance(value, (str, bool, dict)):
@@ -59,6 +67,7 @@ def record_call(project: Path, role: str, change_id: str | None, telemetry: obje
                 entry[key] = value[:20]
         if isinstance(engine_fields.get('lessons_truncated'), bool):
             entry['lessons_truncated'] = engine_fields['lessons_truncated']
+    entry["engine_version"] = __version__
     key = change_id or PENDING
     entries = _entries(project, key)
     entries.append(entry)

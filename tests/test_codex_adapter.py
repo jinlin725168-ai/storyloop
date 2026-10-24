@@ -71,7 +71,8 @@ class CodexAdapterTests(unittest.TestCase):
             self.assertEqual(set(ledger_entries(root, 'FEAT-1')[0]),
                              {'lessons_provided', 'lessons_claimed', 'lessons_unknown', 'lessons_truncated',
                               'role', 'wall_ms', 'at', 'call', 'session', 'skills',
-                              'turns', 'input_tokens', 'output_tokens', 'segments'})
+                              'turns', 'input_tokens', 'output_tokens', 'segments',
+                              'engine_version', 'instructions_sha256', 'schema_sha256'})
 
 
     def test_non_json_final_message_is_repaired_by_resuming_the_thread(self):
