@@ -38,11 +38,13 @@ def advance_readiness(project: Path, state: dict) -> dict | None:
 
 
 def _verified_report(project, state):
-    from .project_receipt import ensure_merge_receipt
+    from .change_report import merge_receipt_bytes
+    from .project_receipt import authoritative_report, ensure_merge_receipt
     # Reverification on the already-existing receipt is read-only. Never create a receipt here.
     head = _git(project, 'rev-parse', 'HEAD').strip()
     require(head == state['integration_commit'] and head != state['merge_commit'], 'Receipt missing')
-    require(ensure_merge_receipt(project, state) == head, 'Receipt mismatch')
+    bytes_to_check = merge_receipt_bytes(authoritative_report(project, state), state['merge_commit'])
+    require(ensure_merge_receipt(project, state, bytes_to_check) == head, 'Receipt mismatch')
     path = Path(state['report']).relative_to(project).as_posix()
     report = json.loads(_git(project, 'show', f"{state['report_commit']}:{path}"))
     require(report['change_id'] == state['change_id'], 'Wrong report')

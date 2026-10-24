@@ -14,7 +14,7 @@ from .path_security import safe_target
 from .planning import selected_option
 from .principles import load_principles
 from .project_git import commit_paths
-from .project_loop_guards import read_only_call
+from .guarded_calls import read_only_call
 from .project_loop_support import save_run
 from .run_transitions import transition
 from .run_stops import pause

@@ -40,8 +40,9 @@ from .routing_execution import prepare_execution, candidate_l3
 from .routing_risks import merge_routing_risks
 from .routing_upgrade import enforce_forbidden_paths
 from .project_loop_gates import characterize_paths, design_plan, uncharacterized_paths
-from .project_loop_guards import (read_only_call, require_control_unchanged, require_git_visible,
-                                  verify_read_only_snapshot, write_safely)
+from .guarded_calls import read_only_call, write_safely
+from .project_loop_guards import (require_control_unchanged, require_git_visible,
+                                  verify_read_only_snapshot)
 from .project_loop_failures import (apply_overrule, epoch_of, record_boundary, record_failure,
                                     require_routed_choice, route_review)
 from .project_loop_support import control_digest, run_path, save_run
@@ -148,27 +149,9 @@ def _resume_and_prepare(project: Path, change: dict, state: dict, services: Loop
 
 def _attempts(project: Path, change: dict, state: dict, services: LoopServices,
               config: dict, start_attempt: int) -> dict:
-    while state["attempt"] < config["max_attempts"]:
-        state["attempt"] += 1
-        transition(project, state, "IMPLEMENTING", event="begin_attempt")
-        save_run(project, state)
-        try:
-            outcome = _run_attempt(project, change, state, services, config)
-        except StoryLoopError as exc:
-            if exc.code == "COST_LIMIT_REACHED":
-                return cost_resume.stop(project, state, exc, in_attempt=True)
-            state.pop("pending_review", None)
-            if not exc.details.get("review_semantic"):
-                state.pop("cost_candidate", None)
-            save_run(project, state)
-            if exc.code == "AGENT_UNAVAILABLE" or exc.details.get("review_semantic"):
-                _hand_back_attempt(project, state, exc)
-            raise
-        state.pop("cost_candidate", None)
-        save_run(project, state)
-        if outcome is not None:
-            return outcome
-    return pause(project, state, "BUDGET_EXHAUSTED")
+    from .run_attempts import attempts
+    return attempts(project, change, state, services, config, start_attempt,
+                    _run_attempt, _hand_back_attempt)
 
 
 def load_run_state(project: Path, change_id: str) -> dict:
@@ -309,7 +292,7 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
 
 def _verify_attempt(project, change, state, services, config, boundary):
     change_id = change['change_id']
-    layers, boundary = _run_checks_safely(project, change_id, config, boundary)
+    layers, boundary = _run_checks_safely(project, change, config, boundary)
     layers = check_layers(layers, state.get("oracle"))
     if boundary["violations"]:
         return record_boundary(project, state, boundary)
@@ -369,81 +352,25 @@ def _implement_answer(services: LoopServices, project: Path, context: dict) -> d
 
 
 def _manual_acceptance_gate(project: Path, change: dict, state: dict, verified: dict) -> dict | None:
-    """Pause before the pass report until every manual criterion is accepted on this exact code."""
-    digest = implementation_digest(project)
-    records = load_manual_acceptance(project, change["change_id"])
-    pending = pending_manual_criteria(change, records, digest)
-    if not pending:
-        return None
-    return pause(project, state, "MANUAL_ACCEPTANCE_REQUIRED", pending=pending,
-                 candidate_sha256=digest, verified=verified,
-                 next=f"storyloop accept <project> --change {change['change_id']} "
-                       "--criterion <ID> --note <what you verified>, then storyloop run")
+    from .run_attempts import manual_acceptance_gate
+    return manual_acceptance_gate(project, change, state, verified)
 
 
 def _resume_manual_acceptance(project: Path, change: dict, state: dict) -> dict:
-    """Continue a paused run once the human accepted the manual criteria on unchanged code."""
-    require(implementation_digest(project) == state.get("candidate_sha256"),
-            "Workspace changed while waiting for manual acceptance; use `storyloop reset` to retry")
-    verified = state.get("verified")
-    require(isinstance(verified, dict) and set(verified) == {"boundary", "layers", "review"},
-            "Paused run lacks its verification evidence")
-    paused = _manual_acceptance_gate(project, change, state, verified)
-    if paused is not None:
-        return paused
-    return complete_change(project, change, state, **verified)
+    from .run_attempts import resume_manual_acceptance
+    return resume_manual_acceptance(project, change, state)
 
 
-LAYER_ORDER = ("unit", "integration", "acceptance", "smoke", "checks")
+def _run_checks_safely(project: Path, change: dict, config: dict,
+                       prior_boundary: dict) -> tuple[dict, dict]:
+    from .run_attempts import run_checks_safely
+    return run_checks_safely(project, change, config, prior_boundary)
 
 
-def _run_checks_safely(
-    project: Path, change_id: str, config: dict, prior_boundary: dict,
-) -> tuple[dict, dict]:
-    """Every verification layer, in order, each with its own verdict: unit, integration, acceptance, smoke, checks."""
-    before = capture_snapshot(project, include_control=True, include_ignored=True)
-    control = control_digest(project, change_id, excluded_evidence=RESULT_EVIDENCE)
-    profile, timeout = config["profile"], config["check_timeout_seconds"]
-    try:
-        layers = {
-            "unit": run_commands_isolated(project, layer_commands(profile, "unit"), timeout),
-            "integration": run_commands_isolated(project, layer_commands(profile, "integration"), timeout),
-            "acceptance": run_smoke_isolated(project, change_id),
-            "smoke": run_system_smoke_isolated(project),
-            "checks": run_commands_isolated(project, layer_commands(profile, "checks"), timeout),
-        }
-    finally:
-        verify_read_only_snapshot(
-            before, capture_snapshot(project, include_control=True, include_ignored=True),
-            f".storyloop/evidence/{change_id}/{RESULT_EVIDENCE}",
-        )
-        require_control_unchanged(
-            control_digest(project, change_id,
-                           excluded_evidence=RESULT_EVIDENCE) == control,
-            "Test command modified Git or the protected control plane",
-        )
-    boundary = audit_project_changes(project, change_id)
-    require(prior_boundary["allowed"] == boundary["allowed"] or boundary["violations"],
-            "Audited implementation changed during verification")
-    return layers, boundary
-
-
-def _perform_review(
-    project: Path, change: dict, state: dict, services: LoopServices,
-    boundary: dict, layers: dict,
-) -> dict:
-    context = {"change": change, "attempt": state["attempt"],
-               "facts": list(state.get("facts") or []),
-               "layers": layers, "boundary": boundary, "design_plan": design_plan(state),
-               "answers": load_answers(project, change["change_id"]),
-               "design": state.get("design") or "", **review_focus(state)}
-    try:
-        from .review_disposition import perform_review
-        return perform_review(project, state, services, context, load_project_config(project))
-    except StoryLoopError as exc:
-        if exc.code == "AGENT_UNAVAILABLE":
-            exc.details.setdefault("role", "review")
-        raise
+def _perform_review(project: Path, change: dict, state: dict, services: LoopServices,
+                    boundary: dict, layers: dict) -> dict:
+    from .run_attempts import perform_review
+    return perform_review(project, change, state, services, boundary, layers)
 
 
 def _new_run_state(project: Path, change_id: str, started: dict, contract_digest: str) -> dict:

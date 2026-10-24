@@ -265,8 +265,8 @@ class PlanningTests(unittest.TestCase):
         incomplete['options'][0].update(touched=[], symbols=[], constraints=[])
         fake = FakeCodex([json.dumps(incomplete), json.dumps(answer())])
 
-        with patch('storyloop.project_agents.run_process', fake), \
-                patch('storyloop.project_agents._codex_executable', return_value=['codex']):
+        with patch('storyloop.agent_transport.run_process', fake), \
+                patch('storyloop.agent_transport._codex_executable', return_value=['codex']):
             self.ensure(lambda project, request: invoke_project_agent(project, 'design', request))
 
         initial_prompt = fake.calls[0][1]

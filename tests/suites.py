@@ -16,7 +16,7 @@ FAST = [
     "tests.test_ci_runner", "tests.test_claude_adapter", "tests.test_claude_role_profiles",
     "tests.test_codex_adapter", "tests.test_core", "tests.test_correction_views",
     "tests.test_failure_attribution", "tests.test_final_role_boundaries", "tests.test_forbidden_path_legacy",
-    "tests.test_foundation_survey", "tests.test_foundation_quality", "tests.test_git_identity", "tests.test_init_git_control", "tests.test_monorepo_detection",
+    "tests.test_foundation_survey", "tests.test_foundation_quality", "tests.test_git_command", "tests.test_git_identity", "tests.test_init_git_control", "tests.test_monorepo_detection",
     "tests.test_metrics_rules", "tests.test_metrics_compute",
     "tests.test_product_spec", "tests.test_project_agents", "tests.test_project_git_lifecycle",
     "tests.test_project_profile", "tests.test_project_profile_behavior", "tests.test_report_call_provenance",
@@ -24,7 +24,7 @@ FAST = [
     "tests.test_report_presentation", "tests.test_report_rendering", "tests.test_role_context_integration",
     "tests.test_role_profiles", "tests.test_role_schemas", "tests.test_role_subagents",
     "tests.test_routing_policy", "tests.test_routing_risks", "tests.test_skill_selection",
-    "tests.test_skills", "tests.test_smoke", "tests.test_stop_report",
+    "tests.test_skills", "tests.test_smoke", "tests.test_state_format", "tests.test_stop_report",
     "tests.test_onboarding", "tests.test_onboarding_lock", "tests.test_smoke_harness",
     "tests.test_smoke_harness_protocol", "tests.test_smoke_harness_scratch",
 ]

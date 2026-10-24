@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from .baseline import _git
+from .git_command import git as _git
 from .models import StoryLoopError, identifier, require, text
 from .path_security import repository_relative
 

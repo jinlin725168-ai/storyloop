@@ -175,7 +175,7 @@ def capture_case(name):
     with tempfile.TemporaryDirectory() as folder:
         root = Path(folder).resolve()
         calls = []
-        with fixture_environment(), patch("storyloop.project_agents._codex", side_effect=AssertionError("Real CLI forbidden")):
+        with fixture_environment(), patch("storyloop.agent_transport._codex", side_effect=AssertionError("Real CLI forbidden")):
             identifier, results = execute_case(root, name, calls)
             state = load_run_state(root, identifier)
             verify_active_bindings(root, state)
@@ -200,7 +200,7 @@ def verify_active_bindings(root, state):
     red = json.loads(red_path.read_text(encoding="utf-8"))
     assert state["red_evidence_sha256"] == hashlib.sha256(red_path.read_bytes()).hexdigest()
     assert red["head_commit"] == state["contract_commit"]
-    assert red["suite_digests"] == smoke_digests(root, state["change_id"])
+    assert red["suite_digests"] == smoke_digests(root, load_change(root, state["change_id"]))
 
 
 def artifacts(root, state):

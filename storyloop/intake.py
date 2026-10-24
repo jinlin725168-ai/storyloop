@@ -9,7 +9,8 @@ from pathlib import Path
 from .change_types import definition_for, type_of
 from .assessment import validate_assessment
 from .baseline import _git, load_project_config
-from .models import StoryLoopError, require, validate_product
+from .models import StoryLoopError, require
+from .product_contract import validate_product
 from .path_security import repository_relative, safe_target
 from .readiness import _require_readiness_locked
 from .routing_evidence import measure_scope, _repository_and_commit

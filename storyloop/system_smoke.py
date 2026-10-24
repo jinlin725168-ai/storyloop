@@ -20,21 +20,12 @@ import tempfile
 from .models import StoryLoopError, fields, require
 from .path_security import repository_relative, safe_target
 from .project_profile import is_ci_path
+from .state_format import LEGACY_CHANGE_DIR, SYSTEM_SMOKE_DIR, is_system_smoke_path
 from .storage import load_json, write_json, write_text_atomic
 
-SYSTEM_SMOKE_DIR = "acceptance/smoke"
 PROTECTION = ".storyloop/state/system-smoke.json"
-LEGACY_CHANGE_DIR = re.compile(r"^[A-Z]+-\d{8}-\d{3}$")
 MAX_FILES = 200
 MAX_FILE_BYTES = 512_000
-
-
-def is_system_smoke_path(relative: str) -> bool:
-    """True for files of the system suite, false for legacy per-change directories under it."""
-    if not relative.startswith(SYSTEM_SMOKE_DIR + "/"):
-        return False
-    first = relative[len(SYSTEM_SMOKE_DIR) + 1:].split("/", 1)[0]
-    return not LEGACY_CHANGE_DIR.match(first)
 
 
 def install_system_smoke(project: Path, files: list[dict], manifest: dict) -> dict:
@@ -169,6 +160,13 @@ def _digests(project: Path) -> dict[str, str]:
 DRAFTS = ".storyloop/drafts/smoke"
 
 
+def preflight_system_smoke(project: Path) -> None:
+    """Validate a committed system suite before initialization mutates control state."""
+    path = safe_target(project, SYSTEM_SMOKE_DIR + "/manifest.json", "system smoke manifest")
+    if path.is_file():
+        validate_manifest(load_json(path))
+
+
 def adopt_system_smoke(project: Path) -> dict | None:
     """Trust the committed suite of a clean tree (init, base-update): record its digests as protection."""
     project = Path(project).resolve()
@@ -196,7 +194,7 @@ def propose_smoke_update(project: Path, change_id: str, agent=None) -> dict:
     require(change["status"] == "PASSED", "Smoke maintenance follows a merged (PASSED) change")
     suite = suite_root(project, change_id)
     acceptance_suite = {
-        "manifest": load_smoke_manifest(project, change_id),
+        "manifest": load_smoke_manifest(project, change),
         "files": [{"path": p.relative_to(suite).as_posix(), "content": p.read_text(encoding="utf-8")}
                   for p in sorted(suite.rglob("*")) if p.is_file() and p.name != "manifest.json"],
     }

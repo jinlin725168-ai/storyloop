@@ -9,17 +9,12 @@ import re
 
 from .models import StoryLoopError
 from .path_security import forbidden_path_root, repository_relative
+from .state_format import ACTIONS, LANDING_KINDS, MAX_SUMMARY, STATUSES, STRENGTHS, TIERS
 
 
 LESSONS_ROOT = "openspec/lessons"
 MAX_BODY = 4096
 MAX_CORE_BODY = 4096
-MAX_SUMMARY = 120
-STRENGTHS = ("prose", "knowledge", "check", "config")
-TIERS = ("core", "normal")
-STATUSES = ("active", "needs-review", "retired")
-ACTIONS = ("create", "update", "retire")
-LANDING_KINDS = ("foundation", "check_command", "principles")
 
 _FIELDS = (
     "id",

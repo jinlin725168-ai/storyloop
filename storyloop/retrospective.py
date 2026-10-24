@@ -15,7 +15,7 @@ from .lessons import ACTIONS, LANDING_KINDS, parse_lesson, render_lesson
 from .models import StoryLoopError, identifier, require
 from .path_security import safe_target, repository_relative
 from .project_agents import invoke_project_agent, ROLES
-from .project_loop_guards import read_only_call
+from .guarded_calls import read_only_call
 from .project_loop_support import save_run
 from .stop_report import STOP_STATUSES
 from .call_log import call_folder

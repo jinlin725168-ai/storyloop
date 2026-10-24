@@ -7,13 +7,13 @@ import json
 from pathlib import Path
 
 from .baseline import _git
-from .change_report import merge_receipt_bytes, record_merge_commit
 from .models import require
 from .smoke import RESULT_EVIDENCE
 from .project_git import commit_paths, current_branch
+from .storage import write_bytes_atomic
 
 
-def ensure_merge_receipt(project: Path, state: dict) -> str:
+def ensure_merge_receipt(project: Path, state: dict, receipt_bytes: tuple[bytes, bytes]) -> str:
     """Create or verify the unique report-only child of the verified merge."""
     require(current_branch(project) == state["source_branch"],
             "Merge receipt must finish on its source branch")
@@ -22,17 +22,43 @@ def ensure_merge_receipt(project: Path, state: dict) -> str:
     authoritative, raw = _authoritative_report(project, state, paths[0])
     require(hashlib.sha256(raw).hexdigest() == state["report_sha256"],
             "Verified report commit does not match its protected digest")
+    _require_receipt_bytes(authoritative, state["merge_commit"], receipt_bytes)
     verify_evidence_digest(project, state)
     _require_merge_tree(project, state)
     if head == state["merge_commit"]:
         require(_dirty_paths(project) <= set(paths),
                 "Merge receipt recovery found unrelated workspace changes")
-        record_merge_commit(Path(state["report"]), state["merge_commit"], authoritative)
+        report = Path(state["report"])
+        write_bytes_atomic(report, receipt_bytes[0])
+        write_bytes_atomic(report.with_suffix(".md"), receipt_bytes[1])
         return commit_paths(
             project, paths, f"docs({state['change_id']}): record verified merge"
         )["commit"]
-    _verify_existing_receipt(project, state, head, paths, authoritative)
+    _verify_existing_receipt(project, state, head, paths, receipt_bytes)
     return head
+
+
+def authoritative_report(project: Path, state: dict) -> dict:
+    """Read the pre-merge report from its verified commit for upper-layer rendering."""
+    report_path = _report_paths(project, state)[0]
+    report, raw = _authoritative_report(project, state, report_path)
+    require(hashlib.sha256(raw).hexdigest() == state["report_sha256"],
+            "Verified report commit does not match its protected digest")
+    return report
+
+
+def _require_receipt_bytes(source: dict, merge_commit: str,
+                           receipt_bytes: tuple[bytes, bytes]) -> None:
+    require(isinstance(receipt_bytes, tuple) and len(receipt_bytes) == 2
+            and all(isinstance(value, bytes) for value in receipt_bytes),
+            "Invalid merge receipt bytes")
+    require(len(receipt_bytes[0]) <= 8_000_000, "Acceptance report exceeds size limit")
+    try:
+        report = json.loads(receipt_bytes[0].decode("utf-8"))
+    except (UnicodeError, ValueError):
+        require(False, "Invalid merge receipt bytes")
+    require(report == {**source, "merge_commit": merge_commit},
+            "Merge receipt does not match the verified report")
 
 
 def verify_verified_artifacts(project: Path, state: dict) -> None:
@@ -64,20 +90,17 @@ def verify_evidence_digest(project: Path, state: dict) -> None:
 
 
 def _verify_existing_receipt(
-    project: Path, state: dict, head: str, paths: list[str], authoritative: dict,
+    project: Path, state: dict, head: str, paths: list[str], receipt_bytes: tuple[bytes, bytes],
 ) -> None:
     parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
     changed = set(filter(None, _git(
         project, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", head
     ).split("\0")))
-    expected_json, expected_markdown = merge_receipt_bytes(
-        authoritative, state["merge_commit"]
-    )
     actual = (Path(state["report"]).read_bytes(),
               Path(state["report"]).with_suffix(".md").read_bytes())
     require(len(parents) == 2 and parents[1] == state["merge_commit"]
             and changed == set(paths) and not _dirty_paths(project)
-            and actual == (expected_json, expected_markdown),
+            and actual == receipt_bytes,
             "Cannot recover the merge receipt safely")
 
 

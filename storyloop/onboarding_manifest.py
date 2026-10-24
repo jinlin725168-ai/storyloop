@@ -5,7 +5,7 @@ from pathlib import Path
 
 from . import __version__
 from .models import StoryLoopError, require
-from .onboarding_templates import GUIDE, HINTS, HOOKS, MANIFEST, SETTINGS
+from .state_format import GUIDE, HOOKS, MANIFEST, ONBOARDING_STACKS, SETTINGS
 from .path_security import repository_relative, safe_target
 from .project_profile import GENERATED_PATHS, matches_test_root, validate_project_settings
 from .storage import load_json
@@ -22,7 +22,7 @@ def load_manifest(project: Path) -> dict:
     require(value.get("engine_version") == __version__ and type(value.get("helper_api")) is int
             and value["helper_api"] == 1, "Unsupported helper version; install the pinned engine offline")
     stacks = value.get("stacks")
-    require(isinstance(stacks, list) and stacks and all(isinstance(s, str) and s in HINTS for s in stacks)
+    require(isinstance(stacks, list) and stacks and all(isinstance(s, str) and s in ONBOARDING_STACKS for s in stacks)
             and len(stacks) == len(set(stacks)), "Invalid onboarding stacks")
     require(isinstance(value.get("executors"), dict) and set(value["executors"]) ==
             {f"acceptance/tools/{stack}_smoke.py" for stack in stacks}, "Invalid protected executors")

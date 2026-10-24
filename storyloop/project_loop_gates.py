@@ -19,15 +19,18 @@ from .characterization_locks import (capture_locks, routed_coverage, require_sav
 from .answers import load_answers
 from .baseline import _git
 from .facts import merge_facts
-from .models import StoryLoopError, nature_of, require
+from .models import StoryLoopError, require
+from .product_contract import nature_of
 from .project_boundaries import audit_project_changes
 from .project_git import commit_paths
-from .project_loop_guards import exists_at, read_only_call, require_git_visible, write_safely
+from .guarded_calls import read_only_call, write_safely
+from .project_loop_guards import exists_at, require_git_visible
 from .project_loop_support import run_path, save_run
 from .run_transitions import transition
 from .run_stops import pause, pause_for_boundary
 from .changes import load_change
 from .oracle_counts import removal_paths, sample_layer
+from .smoke_runner import run_commands_at_commit
 from .project_profile import layer_commands, matches_test_root
 from .characterization_baseline import run_characterization_baseline
 from .storage import load_json
@@ -263,7 +266,7 @@ def _verify_characterization(project: Path, change_id: str, state: dict, config:
     removals = removal_paths(load_change(project, change_id)["product"])
     head = _git(project, "rev-parse", "HEAD").strip()
     state.setdefault("oracle", {}).setdefault("baseline", {})["unit"] = sample_layer(
-        project, config, head, "unit", removals)
+        project, config, head, "unit", removals, run_commands_at_commit)
     for key in ("pending_characterization", "unit", "error", "next"):
         state.pop(key, None)
     save_run(project, state)

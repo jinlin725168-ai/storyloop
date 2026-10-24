@@ -12,7 +12,8 @@ from unittest.mock import patch
 from storyloop.baseline import bootstrap_project
 from storyloop.changes import contract_digest, create_change, load_change, revise_change
 from storyloop.cli import clarify_interactively
-from storyloop.models import StoryLoopError, validate_product
+from storyloop.models import StoryLoopError
+from storyloop.product_contract import validate_product
 from storyloop.project_agents import INSTRUCTIONS
 from tests.support import product
 from tests.test_baseline_behavior import repository

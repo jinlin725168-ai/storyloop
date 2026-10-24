@@ -43,7 +43,7 @@ class CrossVendorTests(unittest.TestCase):
             root = Path(folder)
             configured(root)
             with patch('storyloop.adapter_capabilities.probe', side_effect=[capabilities('a'), capabilities('b')]), \
-                 patch('storyloop.project_agents._command', side_effect=StoryLoopError('offline', code='AGENT_UNAVAILABLE')):
+                 patch('storyloop.agent_transport._command', side_effect=StoryLoopError('offline', code='AGENT_UNAVAILABLE')):
                 with self.assertRaises(StoryLoopError) as caught:
                     invoke_project_agent(root, 'review', {'change_id': 'FEAT-1'})
             self.assertTrue(caught.exception.details['cross_vendor'])
@@ -55,7 +55,7 @@ class CrossVendorTests(unittest.TestCase):
             configured(root, 'degrade')
             answer = {'verdict': 'pass', 'summary': 'ok', 'findings': [], 'questions': []}
             with patch('storyloop.adapter_capabilities.probe', side_effect=[capabilities('a'), capabilities('b')]), \
-                 patch('storyloop.project_agents._command', side_effect=[StoryLoopError('offline', code='AGENT_UNAVAILABLE'), answer]):
+                 patch('storyloop.agent_transport._command', side_effect=[StoryLoopError('offline', code='AGENT_UNAVAILABLE'), answer]):
                 invoke_project_agent(root, 'review', {'change_id': 'FEAT-1'})
             entries = ledger_entries(root, 'FEAT-1')
             self.assertEqual(len(entries), 2)
@@ -73,7 +73,7 @@ class CrossVendorTests(unittest.TestCase):
             config['limits'] = {'max_calls': 1}
             write_json(root / '.storyloop/config.json', config)
             with patch('storyloop.adapter_capabilities.probe', side_effect=[capabilities('a'), capabilities('b')]), \
-                 patch('storyloop.project_agents._command', side_effect=StoryLoopError('offline', code='AGENT_UNAVAILABLE')) as call:
+                 patch('storyloop.agent_transport._command', side_effect=StoryLoopError('offline', code='AGENT_UNAVAILABLE')) as call:
                 with self.assertRaises(StoryLoopError) as caught:
                     invoke_project_agent(root, 'review', {'change_id': 'FEAT-1'})
             self.assertEqual(caught.exception.code, 'COST_LIMIT_REACHED')
@@ -88,7 +88,7 @@ class CrossVendorTests(unittest.TestCase):
                 probes = [capabilities('a'), {'known': False, 'tiers': []}]
                 answer = {'verdict': 'pass', 'summary': 'ok', 'findings': [], 'questions': []}
                 with patch('storyloop.adapter_capabilities.probe', side_effect=probes), \
-                     patch('storyloop.project_agents._command', return_value=answer) as call:
+                     patch('storyloop.agent_transport._command', return_value=answer) as call:
                     if policy == 'fail_closed':
                         with self.assertRaises(StoryLoopError) as caught:
                             invoke_project_agent(root, 'review', {'change_id': 'FEAT-1'})
@@ -105,7 +105,7 @@ class CrossVendorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             configured(root, 'silently_accept')
-            with patch('storyloop.project_agents._command') as call:
+            with patch('storyloop.agent_transport._command') as call:
                 with self.assertRaisesRegex(StoryLoopError, 'on_unavailable'):
                     invoke_project_agent(root, 'review', {'change_id': 'FEAT-1'})
             call.assert_not_called()
@@ -126,7 +126,7 @@ class CrossVendorTests(unittest.TestCase):
             services = LoopServices(lambda p, c: smoke_payload(change_id), implement_after(0, []),
                                     lambda p, c: invoke_project_agent(p, 'review', c))
             with patch('storyloop.adapter_capabilities.probe', side_effect=[capabilities('a'), capabilities('b')]), \
-                 patch('storyloop.project_agents._manual', side_effect=StoryLoopError('offline', code='AGENT_UNAVAILABLE')):
+                 patch('storyloop.agent_transport._manual', side_effect=StoryLoopError('offline', code='AGENT_UNAVAILABLE')):
                 with self.assertRaises(StoryLoopError) as caught:
                     run_change(root, change_id, services)
             self.assertEqual(caught.exception.code, 'AGENT_UNAVAILABLE', str(caught.exception))
@@ -163,7 +163,7 @@ class CrossVendorTests(unittest.TestCase):
             services = LoopServices(lambda p, c: smoke_payload(change_id), implement_after(0, calls),
                                     lambda p, c: invoke_project_agent(p, 'review', c))
             with patch('storyloop.adapter_capabilities.probe', side_effect=[capabilities('a'), capabilities('b')] * 2), \
-                 patch('storyloop.project_agents._manual', return_value=passing_review(root, {})) as call:
+                 patch('storyloop.agent_transport._manual', return_value=passing_review(root, {})) as call:
                 self.assertEqual(run_change(root, change_id, services)['status'], 'COST_LIMIT_REACHED')
                 self.assertEqual(load_run_state(root, change_id)['attempt'], 0)
                 config['limits']['max_calls'] = 1
@@ -183,7 +183,7 @@ class CrossVendorTests(unittest.TestCase):
             standard_only = {**capabilities('a'), 'tiers': ['standard']}
             answer = {'verdict': 'pass', 'summary': 'ok', 'findings': [], 'questions': []}
             with patch('storyloop.adapter_capabilities.probe', side_effect=[standard_only, capabilities('b')]), \
-                 patch('storyloop.project_agents._command', side_effect=[StoryLoopError('offline', code='AGENT_UNAVAILABLE'), answer]) as call:
+                 patch('storyloop.agent_transport._command', side_effect=[StoryLoopError('offline', code='AGENT_UNAVAILABLE'), answer]) as call:
                 with self.assertRaises(StoryLoopError) as caught:
                     invoke_project_agent(root, 'review', {'change_id': 'FEAT-1'})
             self.assertEqual(caught.exception.code, 'ADAPTER_PROFILE_UNSUPPORTED')
@@ -214,7 +214,7 @@ class CrossVendorTests(unittest.TestCase):
             # Degrade also pauses after its fallback, so the next run can retry the recovered vendor.
             pause_answer = {'verdict': 'needs_input', 'summary': 'waiting', 'findings': [], 'questions': ['confirm']}
             with patch('storyloop.adapter_capabilities.probe', side_effect=[capabilities('a'), {'known': False, 'tiers': []}, capabilities('a'), capabilities('b')]) as probe, \
-                 patch('storyloop.project_agents._manual', side_effect=[pause_answer, passing_review(root, {})] if availability == 'degrade' else [passing_review(root, {})]), \
+                 patch('storyloop.agent_transport._manual', side_effect=[pause_answer, passing_review(root, {})] if availability == 'degrade' else [passing_review(root, {})]), \
                  patch('storyloop.project_loop._unanswered', return_value=[]):
                 if availability == 'fail_closed':
                     with self.assertRaises(StoryLoopError) as caught:

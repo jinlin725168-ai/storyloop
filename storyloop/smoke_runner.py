@@ -15,8 +15,8 @@ import tempfile
 
 from .baseline import _git, load_project_config
 from .boundaries import capture_snapshot, snapshot_changes
-from .changes import load_change
-from .models import StoryLoopError, criterion_expects_red, require
+from .models import StoryLoopError, require
+from .state_format import criterion_expects_red
 from .harness_command import expand_command, harness_counts
 from .oracle_counts import count_tests, project_patterns
 from .path_security import safe_target
@@ -25,23 +25,23 @@ from .processutil import redact, run_process
 from .smoke import (RED_EVIDENCE, RESULT_EVIDENCE, load_smoke_manifest, protection_path, smoke_digests,
                     suite_relative, suite_root)
 from .storage import load_json, write_json
-from .system_smoke import run_system_smoke_isolated
 
 
 def run_smoke(
-    project: Path, change_id: str, expect_red: bool = False,
+    project: Path, change: dict, expect_red: bool = False,
     head_commit: str | None = None,
     workspace_sha256: str | None = None,
 ) -> dict:
     """Execute exactly the protected manifest and persist bounded evidence."""
     project = Path(project).resolve()
-    manifest = load_smoke_manifest(project, change_id)
+    change_id = change["change_id"]
+    manifest = load_smoke_manifest(project, change)
     started = _timestamp()
     results = _run_tiered(project, manifest["tests"], project_patterns(project), run_all=expect_red)
     errors = [item for item in results if item["status"] == "ERROR"]
     failures = [item for item in results if item["status"] == "FAIL"]
     if expect_red:
-        _judge_red(results, manifest, load_change(project, change_id))
+        _judge_red(results, manifest, change)
         status = "RED"
     elif errors:
         status = "ERROR"
@@ -49,7 +49,7 @@ def run_smoke(
         status = "FAILED"
     else:
         status = "PASSED"
-    suite = smoke_digests(project, change_id)
+    suite = smoke_digests(project, change)
     _require_same_red_suite(project, change_id, suite, expect_red)
     evidence = {
         "version": 1,
@@ -126,13 +126,14 @@ def _tail(result: dict) -> dict:
             "stdout": str(result.get("stdout", ""))[-6000:], "stderr": str(result.get("stderr", ""))[-6000:]}
 
 
-def run_smoke_isolated(project: Path, change_id: str, expect_red: bool = False,
+def run_smoke_isolated(project: Path, change: dict, expect_red: bool = False,
                        at_commit: str | None = None) -> dict:
     """Run smoke from a clean candidate copy that excludes every Git-ignored file.
 
     With `at_commit`, the candidate is the tree at that commit plus the current smoke suite.
     """
     project = Path(project).resolve()
+    change_id = change["change_id"]
     head = at_commit or _git(project, "rev-parse", "HEAD").strip()
     with tempfile.TemporaryDirectory(prefix="storyloop-smoke-") as folder:
         candidate = Path(folder)
@@ -142,7 +143,7 @@ def run_smoke_isolated(project: Path, change_id: str, expect_red: bool = False,
         before = capture_snapshot(candidate, include_control=True, include_ignored=True)
         digest = _files_digest(candidate, paths)
         result = run_smoke(
-            candidate, change_id, expect_red, head_commit=head,
+            candidate, change, expect_red, head_commit=head,
             workspace_sha256=digest,
         )
         source = Path(result["evidence_path"])
@@ -408,11 +409,3 @@ def _timestamp() -> str:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def run_ci(project: Path, change_id: str) -> dict:
-    """The CI entry: the change's acceptance suite plus the system smoke suite, both isolated."""
-    acceptance = run_smoke_isolated(project, change_id)
-    smoke = run_system_smoke_isolated(project)
-    status = "PASSED" if acceptance["status"] == "PASSED" and smoke["status"] in {"PASSED", "SKIPPED"} else "FAILED"
-    return {"status": status, "change_id": change_id, "acceptance": acceptance, "smoke": smoke}

@@ -9,7 +9,7 @@ from .change_types import definition_for, type_for_change_id, type_of
 from .baseline import _git, load_baseline, load_project_config
 from .models import identifier, require
 from .project_profile import CI_FILES, matches_test_root
-from .system_smoke import is_system_smoke_path
+from .state_format import is_system_smoke_path
 from .storage import write_json
 
 

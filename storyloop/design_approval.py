@@ -68,7 +68,7 @@ def current_binding(project: Path, change: dict, state: dict) -> dict:
     require(digest(identity) == plan['id'], 'Plan content or binding changed; replan required')
     binding = {'product_digest': digest(change['product']), 'source_commit': state['contract_commit'],
                'scope_digest': digest([{'id': o['id'], **option_scope(o)} for o in plan['options']]),
-               'suite_digest': digest(smoke_digests(project, change['change_id'])),
+               'suite_digest': digest(smoke_digests(project, change)),
                'policy_digest': digest(state['routing']['policy']),
                'principles_digest': load_principles(project)['digest'],
                'baseline_digest': digest(load_baseline(project))}

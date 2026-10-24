@@ -107,7 +107,7 @@ class ProjectLoopRecoverySecurityTests(unittest.TestCase):
                     raise OSError("simulated receipt crash")
                 write_bytes_atomic_real(path, content)
 
-            with patch("storyloop.change_report.write_bytes_atomic",
+            with patch("storyloop.project_receipt.write_bytes_atomic",
                        side_effect=crash_after_json):
                 with self.assertRaisesRegex(OSError, "receipt crash"):
                     run_change(root, change_id, self._services(change_id))
