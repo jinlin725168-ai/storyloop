@@ -153,8 +153,11 @@ class BaseAgentEndToEndTests(unittest.TestCase):
         git(self.root, "switch", saved["source_branch"])
         git(self.root, "merge", "--ff-only", saved["feature_branch"])
         git(self.root, "switch", saved["feature_branch"])
-        with self.assertRaisesRegex(StoryLoopError, "source|merged|源分支"):
-            run_change(self.root, change_id)
+        # A Windows checkout may change raw bytes (CRLF) before the inventory comparison.
+        # The already-merged Git fact must win before any premerge cleanup decision.
+        with mock.patch("storyloop.run_recovery._agent_cleanup_plan", return_value=None):
+            with self.assertRaisesRegex(StoryLoopError, "source|merged|源分支"):
+                run_change(self.root, change_id)
         self.assertEqual(git(self.root, "rev-parse", "HEAD"), candidate)
 
     def test_agent_reset_discards_candidate_and_requires_new_design(self):

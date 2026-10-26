@@ -143,17 +143,17 @@ def _restart_agent_base(project: Path, state: dict) -> str:
         reason, next_step = issue
         pause(project, state, "WORKSPACE_TAINTED", reason=reason, next=next_step)
         return "WORKSPACE_TAINTED"
+    issue = _agent_branch_issue(project, state)
+    if issue is not None:
+        reason, next_step = issue
+        pause(project, state, "WORKSPACE_TAINTED", reason=reason, next=next_step)
+        return "WORKSPACE_TAINTED"
     cleanup = _agent_cleanup_plan(project, state)
     if cleanup is None:
         pause(project, state, "WORKSPACE_TAINTED",
               reason="Workspace differs from the agent call inventory; attribution is unknown",
               next="Preserve and inspect the workspace changes before "
                    f"storyloop reset <project> --change {state['change_id']} --reason '<reason>'")
-        return "WORKSPACE_TAINTED"
-    issue = _agent_branch_issue(project, state)
-    if issue is not None:
-        reason, next_step = issue
-        pause(project, state, "WORKSPACE_TAINTED", reason=reason, next=next_step)
         return "WORKSPACE_TAINTED"
     _git(project, "reset", "--soft", state["contract_commit"])
     _git(project, "reset", "-q")
