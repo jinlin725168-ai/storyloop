@@ -23,9 +23,12 @@ Clock = Callable[[], datetime]
 # (`storyloop run`) or must go through its own command (accept, answer, base-update).
 STALE_KEYS = ("error", "questions", "pending", "verified", "candidate_sha256", "next", "stop")
 BASE_PREMERGE = frozenset({"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED", "IMPLEMENTING",
-                           "HUMAN_IMPLEMENTATION_REQUIRED", "BASE_REVIEW_REQUIRED",
+                           "HUMAN_IMPLEMENTATION_REQUIRED", "DESIGN_APPROVAL_REQUIRED",
+                           "BASE_REVIEW_REQUIRED",
                            "MANUAL_ACCEPTANCE_REQUIRED", "VERIFIED", "WORKSPACE_TAINTED"})
 BASE_ATTEMPT_KEYS = ("old_green_sha256", "base_evidence", "base_evidence_sha256",
+                     "base_design", "base_design_sha256", "base_design_approval",
+                     "base_design_approval_sha256",
                      "base_review", "base_review_sha256", "manual_acceptance_sha256",
                      "candidate_commit", "candidate_sha256", "base_inflight",
                      "implementation_commit", "report_commit", "report_sha256",
@@ -185,11 +188,17 @@ def _discard_base_files(project: Path, state: dict) -> None:
     change_id = state["change_id"]
     relatives = [f".storyloop/evidence/{change_id}/base-old-green.json",
                  f".storyloop/evidence/{change_id}/base-candidate-green.json",
+                 f".storyloop/state/base-designs/{change_id}.json",
+                 f".storyloop/state/base-design-approvals/{change_id}.json",
                  f".storyloop/state/base-reviews/{change_id}.json",
                  f".storyloop/state/acceptance/{change_id}.json",
                  *sorted(base_report_paths(state))]
     for relative in relatives:
         safe_target(project, relative, "base attempt artifact").unlink(missing_ok=True)
+    design_dir = project / ".storyloop/state/base-designs"
+    for temporary in design_dir.glob(f"{change_id}.json.*.tmp"):
+        safe_target(project, temporary.relative_to(project).as_posix(),
+                    "base design temporary artifact").unlink(missing_ok=True)
 
 
 def _utc_now() -> datetime:

@@ -3,8 +3,10 @@
 import unittest
 
 from storyloop.base_run_open import choose_implementer
+from storyloop.agent_transport import conform
 from storyloop.models import StoryLoopError
 from storyloop.role_profiles import role_settings
+from storyloop.role_schemas import schema_for
 
 
 class BaseAgentPolicyTests(unittest.TestCase):
@@ -28,6 +30,13 @@ class BaseAgentPolicyTests(unittest.TestCase):
                   "roles": {"default_adapter": "one", "implement": {"tier": "standard"}}}
         with self.assertRaisesRegex(StoryLoopError, "base|Base|heavy|strong"):
             role_settings(config, "implement", "heavy", base=True)
+
+    def test_base_design_answer_has_implementation_and_rollback_fields(self):
+        schema = schema_for("design", {"mode": "base-plan"})
+        answer = {"summary": "更新构建", "steps": ["修改 pom.xml"],
+                  "risks": ["旧构建失败"], "rollback": "恢复旧 pom.xml", "questions": []}
+        _, errors = conform(answer, schema)
+        self.assertEqual(errors, [])
 
 
 if __name__ == "__main__":

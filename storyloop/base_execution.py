@@ -29,18 +29,22 @@ from .storage import load_json, locked, write_json, write_text_atomic
 from .system_smoke import run_system_smoke_isolated
 
 
-def run_base_change(project: Path, change: dict, implementer: str | None, new_run_state) -> dict:
-    """Open or resume the manually implemented base change without an agent call."""
+def run_base_change(project: Path, change: dict, implementer: str | None,
+                    new_run_state, services=None) -> dict:
+    """Open or resume either base implementation mode on the shared lifecycle."""
     state = _open_state(project, change, implementer, new_run_state)
     premerge = state["status"] in BASE_PREMERGE and state.get("base_resume_status") != "FINALIZING"
     merged = _resume_git_merge(project, change, state) if premerge else None
     if merged is not None:
         return merged
-    reason = _premerge_restart_reason(project, state)
+    reason = _premerge_restart_reason(project, change, state)
     if reason is not None:
         return _restart_pause(project, change, state, reason)
     if state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED"}:
-        return _prepare(project, change, state)
+        return _prepare(project, change, state, services)
+    if state["status"] == "DESIGN_APPROVAL_REQUIRED":
+        from .base_design import resume_design
+        return resume_design(project, change, state)
     if state["status"] == "HUMAN_IMPLEMENTATION_REQUIRED":
         return _candidate_to_review(project, change, state)
     if state["status"] == "IMPLEMENTING":
@@ -98,8 +102,11 @@ def _resume_git_merge(project: Path, change: dict, state: dict) -> dict | None:
     return None
 
 
-def _premerge_restart_reason(project: Path, state: dict) -> str | None:
+def _premerge_restart_reason(project: Path, change: dict, state: dict) -> str | None:
     status = state["status"]
+    if status == "DESIGN_APPROVAL_REQUIRED":
+        from .base_design import invalid_reason
+        return invalid_reason(project, change, state)
     if status == "WORKSPACE_TAINTED" and state.get("base_resume_status") != "FINALIZING":
         return "Interrupted base attempt"
     if status == "VERIFIED" and current_branch(project) == state["feature_branch"]:
@@ -108,6 +115,8 @@ def _premerge_restart_reason(project: Path, state: dict) -> str | None:
                   "IMPLEMENTING", "BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED"}:
         if state.get("base_inflight"):
             return "Base attempt interrupted before checkpoint"
+        if status == "IMPLEMENTING" and state.get("base_design") and not state.get("base_design_approval"):
+            return "Base design stop was interrupted"
     if status not in {"BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED"}:
         return None
     if (_git(project, "rev-parse", "HEAD").strip() != state.get("candidate_commit")
@@ -406,7 +415,7 @@ def _finalize_base(project: Path, change: dict, state: dict) -> dict:
     return passed_result(state)
 
 
-def _prepare(project: Path, change: dict, state: dict) -> dict:
+def _prepare(project: Path, change: dict, state: dict, services=None) -> dict:
     change_id = change["change_id"]
     contract_root = materialize_approved_change(project, change_id)
     paths = relative_files(project, [contract_root])
@@ -425,8 +434,8 @@ def _prepare(project: Path, change: dict, state: dict) -> dict:
     state.pop("base_inflight", None)
     save_run(project, state)
     if state.get("implementer", "human") == "agent":
-        return {"status": "IMPLEMENTING", "change_id": change_id,
-                "next": f"storyloop run <project> --change {change_id}"}
+        from .base_design import propose_design
+        return propose_design(project, change, state, services)
     return pause(project, state, "HUMAN_IMPLEMENTATION_REQUIRED",
                  next=f"Commit the approved paths on {state['feature_branch']}, then "
                       f"storyloop run <project> --change {change_id}")

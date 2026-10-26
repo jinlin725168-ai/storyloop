@@ -8,6 +8,7 @@ from storyloop.baseline import load_project_config
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import invoke_project_agent
 from storyloop.project_loop import _new_run_state, run_change
+from storyloop.run_services import LoopServices
 from storyloop.run_state import run_path
 from storyloop.storage import load_json, write_json
 from tests import test_base_lifecycle as lifecycle
@@ -16,13 +17,20 @@ from tests import test_base_lifecycle as lifecycle
 class BaseAgentFlowTests(unittest.TestCase):
     setUp = lifecycle.BaseG1Tests.setUp
 
+    def _services(self):
+        return LoopServices(
+            generate_smoke=lambda *_: {}, implement=lambda *_: {}, review=lambda *_: {},
+            design=lambda *_: {"summary": "更新构建配置", "steps": ["编辑 pom.xml"],
+                               "risks": ["构建可能失败"], "rollback": "恢复原文件", "questions": []},
+        )
+
     def test_foundation_defaults_to_agent_without_manual_flag(self):
         state = base_execution._open_state(self.root, self.change, None, _new_run_state)
         self.assertEqual(state["implementer"], "agent")
 
-    def test_agent_run_completes_g1_without_entering_human_stop(self):
-        result = run_change(self.root, self.change["change_id"])
-        self.assertEqual(result["status"], "IMPLEMENTING")
+    def test_agent_run_completes_g1_and_waits_for_design_approval(self):
+        result = run_change(self.root, self.change["change_id"], services=self._services())
+        self.assertEqual(result["status"], "DESIGN_APPROVAL_REQUIRED")
         self.assertEqual(load_json(run_path(self.root, self.change["change_id"]))["implementer"], "agent")
 
     def test_ci_defaults_to_human_and_rejects_explicit_agent(self):
@@ -67,6 +75,52 @@ class BaseAgentFlowTests(unittest.TestCase):
         request = load_json(self.root / ".storyloop/requests/project-implement.json")
         self.assertEqual(request["role_profile"]["routing_tier"], "heavy")
         self.assertEqual(request["role_profile"]["tier"], "strong")
+
+    def test_agent_plan_requires_named_approval_before_implementation(self):
+        change_id = self.change["change_id"]
+        result = run_change(self.root, change_id, services=self._services())
+        self.assertEqual(result["status"], "DESIGN_APPROVAL_REQUIRED")
+        state = load_json(run_path(self.root, change_id))
+        self.assertEqual(state["base_design"]["paths"], ["pom.xml"])
+        self.assertEqual(run_change(self.root, change_id, services=self._services())["status"],
+                         "DESIGN_APPROVAL_REQUIRED")
+        from storyloop.base_design import approve_base_design
+        approved = approve_base_design(self.root, change_id, state["base_design"]["plan_id"])
+        self.assertEqual(approved["actor"], "StoryLoop Test")
+        self.assertEqual(run_change(self.root, change_id, services=self._services())["status"],
+                         "IMPLEMENTING")
+
+    def test_human_run_does_not_call_design_agent(self):
+        services = self._services()
+        services = LoopServices(services.generate_smoke, services.implement, services.review,
+                                design=lambda *_: self.fail("human path called design"))
+        result = run_change(self.root, self.change["change_id"], services=services,
+                            implementer="human")
+        self.assertEqual(result["status"], "HUMAN_IMPLEMENTATION_REQUIRED")
+
+    def test_modified_approved_plan_discards_the_entire_attempt(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, services=self._services())
+        from storyloop.base_design import approve_base_design
+        state = load_json(run_path(self.root, change_id))
+        approve_base_design(self.root, change_id, state["base_design"]["plan_id"])
+        plan_path = self.root / ".storyloop/state/base-designs" / f"{change_id}.json"
+        plan = load_json(plan_path)
+        plan["steps"] = ["偷换步骤"]
+        write_json(plan_path, plan)
+        self.assertEqual(run_change(self.root, change_id, services=self._services())["status"],
+                         "CONTRACT_COMMITTED")
+        self.assertFalse(plan_path.exists())
+
+    def test_design_approval_rejects_code_written_before_human_decision(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, services=self._services())
+        from storyloop.base_design import approve_base_design
+        state = load_json(run_path(self.root, change_id))
+        (self.root / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                            encoding="utf-8")
+        with self.assertRaisesRegex(StoryLoopError, "clean|candidate|before approval"):
+            approve_base_design(self.root, change_id, state["base_design"]["plan_id"])
 
 
 if __name__ == "__main__":

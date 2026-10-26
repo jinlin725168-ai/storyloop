@@ -41,6 +41,7 @@ def parser() -> argparse.ArgumentParser:
         "report": "定位某次变更的验收报告",
         "base-propose": "为计划中的底座改动开一个 BASE 提案（无需先触发功能变更）",
         "base-build-config": "为旧项目具名确认底座构建命令，不改已冻结的 config.json",
+        "base-design-approve": "具名批准代理提出的 base 实施方案",
         "base-update": "兼容旧 BASE 提案：待批准提案导入变更草案，历史回执继续恢复",
         "base-review": "由独立的人对已提交的底座候选记录具名审查",
         "answer": "回答代理在 NEEDS_INPUT 停点提出的问题（--answer 可重复，按问题顺序）",
@@ -116,6 +117,9 @@ def _product_arguments(child, command):
         child.add_argument("--change", dest="change_id", required=True)
         child.add_argument("--verdict", choices=("pass", "fail"), required=True)
         child.add_argument("--note", required=True)
+    elif command == "base-design-approve":
+        child.add_argument("--change", dest="change_id", required=True)
+        child.add_argument("--plan-id", required=True)
     elif command == "base-build-config":
         child.add_argument("--commands-json", required=True,
                            help="构建命令 argv 数组的 JSON；[] 明确表示无构建步骤")
@@ -207,6 +211,9 @@ def dispatch(args) -> dict:
     if args.command == "base-review":
         from .base_execution import record_base_review
         return record_base_review(project, args.change_id, args.verdict, args.note)
+    if args.command == "base-design-approve":
+        from .base_design import approve_base_design
+        return approve_base_design(project, args.change_id, args.plan_id)
     if args.command == "skills":
         if args.view is not None:
             require(bool(args.view), "Skill view name must not be empty")
