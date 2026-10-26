@@ -221,6 +221,21 @@ def _guard_base_g2(project: Path, change: dict, state: dict, context: dict) -> N
             and review.get("candidate_commit") == state.get("candidate_commit")
             and review.get("reviewer") not in base_candidate_authors(project, state),
             "Independent base review is missing")
+    if state.get("implementer", "human") == "agent":
+        require(review.get("mode") in {"agent", "human_substitute"}
+                and review.get("plan_id") == state["base_design"]["plan_id"]
+                and review.get("design_sha256") == state["base_design_sha256"]
+                and review.get("contract_digest") == state["contract_digest"]
+                and review.get("implement_vendor") == state.get("agent_vendor")
+                and review.get("candidate_tree_oid") == _git(
+                    project, "rev-parse", f"{state['candidate_commit']}^{{tree}}").strip(),
+                "Base agent review binding is stale")
+        if review["mode"] == "agent":
+            require(review.get("review_vendor") and review["review_vendor"]
+                    != review["implement_vendor"], "Base review vendor is not independent")
+        else:
+            require(len(str(review.get("human_review_reason", "")).strip()) >= 12,
+                    "Human review substitute reason is missing")
     require(trusted_base_acceptance(project, state),
             "Base manual acceptance does not match the saved digest")
     require(not pending_manual_criteria(change, _manual_records(project, change_id), digest),

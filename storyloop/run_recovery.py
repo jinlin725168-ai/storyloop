@@ -35,7 +35,8 @@ BASE_ATTEMPT_KEYS = ("old_green_sha256", "base_evidence", "base_evidence_sha256"
                      "implementation_commit", "report_commit", "report_sha256",
                      "acceptance_evidence_sha256", "review", "stop", "next", "error", "pending",
                      "interrupted_status", "base_resume_status", "baseline_issue",
-                     "agent_call_contract", "agent_call_head", "agent_control_binding")
+                     "agent_call_contract", "agent_call_head", "agent_control_binding",
+                     "agent_adapter", "agent_vendor")
 
 
 def reset_run(project: Path, change_id: str, reason: str, now: Clock | None = None) -> dict:

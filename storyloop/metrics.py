@@ -8,6 +8,7 @@ from pathlib import Path
 from .ci_results import load_ci_results
 from .metrics_collect import collect
 from .metrics_compute import (
+    base_human_review_substitutions,
     attempts,
     contract_ratio,
     escapes,
@@ -72,6 +73,7 @@ def _compute_metrics(
         stuck(records), escapes(records), local_green_ci_red(ci_values, records),
         forced_heavy(records), overrule_rate(records), contract_ratio(root, records),
         interventions(records), cost(records), lessons(root, records),
+        base_human_review_substitutions(records),
     )
     return {value["id"]: value for value in values}
 

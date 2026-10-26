@@ -16,6 +16,7 @@ from tests import test_base_agent_flow as flow
 class BaseAgentRecoveryTests(unittest.TestCase):
     setUp = flow.BaseAgentFlowTests.setUp
     _services = flow.BaseAgentFlowTests._services
+    _agent_candidate = flow.BaseAgentFlowTests._agent_candidate
 
     def _approved(self):
         change_id = self.change["change_id"]
@@ -125,6 +126,56 @@ class BaseAgentRecoveryTests(unittest.TestCase):
         result = run_change(self.root, self.change["change_id"], services=self._services())
         self.assertEqual(result["status"], "WORKSPACE_TAINTED")
         self.assertEqual(_git(self.root, "rev-parse", "HEAD").strip(), head)
+
+    def _review_context(self):
+        return {"implement_vendor": "openai", "review_vendor": "anthropic",
+                "review_adapter": "reviewer", "available_vendors": {"openai", "anthropic"}}
+
+    def _review_services(self):
+        services = self._services()
+        return LoopServices(services.generate_smoke, services.implement,
+                            lambda *_: {"verdict": "pass", "summary": "独立审查通过",
+                                        "findings": [], "questions": []},
+                            design=services.design)
+
+    def test_review_write_before_state_restarts(self):
+        from storyloop import base_review
+        self._agent_candidate()
+        with mock.patch.object(base_review, "vendor_context", return_value=self._review_context()):
+            with mock.patch.object(base_review, "save_run",
+                                   side_effect=RuntimeError("crash after review write")):
+                with self.assertRaisesRegex(RuntimeError, "crash after review write"):
+                    run_change(self.root, self.change["change_id"],
+                               services=self._review_services())
+        self.assertEqual(run_change(self.root, self.change["change_id"],
+                                    services=self._services())["status"], "CONTRACT_COMMITTED")
+
+    def test_review_tamper_restarts(self):
+        from storyloop import base_review
+        self._agent_candidate()
+        with mock.patch.object(base_review, "vendor_context", return_value=self._review_context()):
+            self.assertEqual(run_change(self.root, self.change["change_id"],
+                                        services=self._review_services())["status"],
+                             "MANUAL_ACCEPTANCE_REQUIRED")
+        path = self.root / ".storyloop/state/base-reviews" / f"{self.change['change_id']}.json"
+        record = load_json(path)
+        record["verdict"] = "fail"
+        write_json(path, record)
+        self.assertEqual(run_change(self.root, self.change["change_id"],
+                                    services=self._services())["status"], "CONTRACT_COMMITTED")
+
+    def test_acceptance_write_before_state_restarts(self):
+        from storyloop import base_review, manual_acceptance
+        self._agent_candidate()
+        with mock.patch.object(base_review, "vendor_context", return_value=self._review_context()):
+            run_change(self.root, self.change["change_id"], services=self._review_services())
+        with mock.patch.object(manual_acceptance, "save_run",
+                               side_effect=RuntimeError("crash after acceptance write")):
+            with self.assertRaisesRegex(RuntimeError, "crash after acceptance write"):
+                manual_acceptance.record_manual_acceptance(
+                    self.root, self.change["change_id"], ["BASE-ACCEPT"], "人工已核对")
+        self.assertEqual(run_change(self.root, self.change["change_id"],
+                                    services=self._services())["status"], "CONTRACT_COMMITTED")
 
     def test_plan_temp_interruption_restarts(self):
         change_id = self.change["change_id"]

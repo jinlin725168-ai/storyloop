@@ -12,11 +12,11 @@ from .baseline import _git, load_project_config
 from .base_run_open import _open_state
 from .git_command import git_is_ancestor
 from .manual_acceptance import load_manual_acceptance
-from .models import StoryLoopError, require, text
+from .models import StoryLoopError, require
 from .project_git import current_branch, commit_paths, exact_child_commit, finish_feature
 from .project_loop_support import relative_files
 from .project_profile import base_commands_digest, effective_base_profile, layer_commands
-from .run_state import run_path, save_run
+from .run_state import save_run
 from .run_stops import pause
 from .run_transitions import transition
 from .run_guards import (base_candidate_authors, trusted_base_acceptance,
@@ -25,7 +25,7 @@ from .run_recovery import (BASE_PREMERGE, base_source_contains_candidate,
                            manual_base_merge_error, restart_base_attempt)
 from .project_receipt import _dirty_paths, recover_completed_merge
 from .smoke_runner import implementation_digest, run_commands_isolated
-from .storage import load_json, locked, write_json, write_text_atomic
+from .storage import locked, write_json, write_text_atomic
 from .system_smoke import run_system_smoke_isolated
 
 
@@ -54,7 +54,7 @@ def run_base_change(project: Path, change: dict, implementer: str | None,
             return _agent_to_review(project, change, state) if result["status"] == "IMPLEMENTING" else result
         return _restart_pause(project, change, state, "Unfinished base verification")
     if state["status"] == "BASE_REVIEW_REQUIRED":
-        return _review_stop(project, change, state)
+        return _review_stop(project, change, state, services)
     if state["status"] == "MANUAL_ACCEPTANCE_REQUIRED":
         return _finish_after_acceptance(project, change, state)
     if state["status"] == "VERIFIED":
@@ -167,39 +167,13 @@ def _restart_pause(project: Path, change: dict, state: dict, reason: str,
                       "to reverify the retained human candidate")
 
 
-def record_base_review(project: Path, change_id: str, verdict: str, note: str) -> dict:
+def record_base_review(project: Path, change_id: str, verdict: str, note: str,
+                       human_review_reason: str | None = None) -> dict:
     """Bind a named independent human review to one committed candidate."""
     project = Path(project).resolve()
     with locked(project):
-        return _record_base_review_locked(project, change_id, verdict, note)
-
-
-def _record_base_review_locked(project: Path, change_id: str, verdict: str, note: str) -> dict:
-    state = load_json(run_path(project, change_id))
-    require(state.get("status") == "BASE_REVIEW_REQUIRED",
-            "Base review needs a verified green candidate")
-    require(verdict in {"pass", "fail"}, "Base review verdict must be pass or fail")
-    require(_git(project, "rev-parse", "HEAD").strip() == state.get("candidate_commit"),
-            "Base candidate changed before review")
-    require(not _dirty_paths(project), "Base review needs a clean candidate worktree")
-    evidence = trusted_base_evidence(project, state)
-    require(evidence is not None and evidence.get("status") == "PASSED"
-            and evidence.get("candidate_commit") == state["candidate_commit"]
-            and evidence.get("candidate_sha256") == state.get("candidate_sha256"),
-            "Base review needs a verified green candidate")
-    reviewer = text(_git(project, "config", "user.name").strip(), "reviewer")
-    require(reviewer not in base_candidate_authors(project, state),
-            "Base reviewer must differ from every implementation author")
-    record = {"version": 1, "change_id": change_id, "verdict": verdict,
-              "note": text(note, "review note"), "reviewer": reviewer,
-              "candidate_commit": state["candidate_commit"],
-              "candidate_sha256": state["candidate_sha256"]}
-    path = _review_path(project, change_id)
-    write_json(path, record, max_bytes=1_000_000)
-    state["base_review"] = record
-    state["base_review_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
-    save_run(project, state)
-    return {"status": "REVIEW_RECORDED", **record}
+        from .base_review import record_human_review
+        return record_human_review(project, change_id, verdict, note, human_review_reason)
 
 
 def _review_path(project: Path, change_id: str) -> Path:
@@ -307,10 +281,22 @@ def _pause_review(project: Path, change: dict, state: dict) -> dict:
                       "--verdict pass --note '<核对内容>', then storyloop run")
 
 
-def _review_stop(project: Path, change: dict, state: dict) -> dict:
+def _review_stop(project: Path, change: dict, state: dict, services=None) -> dict:
     review = state.get("base_review")
     if review is None:
-        return _pause_review(project, change, state)
+        if state.get("implementer", "human") == "agent":
+            from .base_review import review_agent_candidate, single_vendor_only
+            try:
+                if single_vendor_only(project, state):
+                    return pause(project, state, "BASE_REVIEW_REQUIRED",
+                                 next=f"storyloop base-review <project> --change {change['change_id']} "
+                                      "--verdict pass --note '<核对内容>' "
+                                      "--human-review '<至少 12 字理由>'")
+                review = review_agent_candidate(project, change, state, services)
+            except StoryLoopError as exc:
+                return _restart_pause(project, change, state, str(exc), rejected=True)
+        else:
+            return _pause_review(project, change, state)
     if review.get("verdict") == "fail":
         return _restart_pause(project, change, state, "Human candidate needs a new attempt",
                               rejected=True)
@@ -381,6 +367,9 @@ def _verified_report(project: Path, change: dict, state: dict, evidence: dict,
               "verification": evidence, "review": review,
               "manual_acceptance": records,
               "build_note": "项目声明无构建步骤" if evidence["build"]["status"] == "DECLARED_ABSENT" else None}
+    report["review_mode"] = review.get("mode", "human_e1")
+    if review.get("mode") == "human_substitute":
+        report["human_review_reason"] = review["human_review_reason"]
     if evidence.get("oracle_skills_approval") is not None:
         report["oracle_skills_approval"] = evidence["oracle_skills_approval"]
     path = project / "reports/storyloop" / change["change_id"] / "report.json"

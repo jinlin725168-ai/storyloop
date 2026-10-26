@@ -117,6 +117,7 @@ def _product_arguments(child, command):
         child.add_argument("--change", dest="change_id", required=True)
         child.add_argument("--verdict", choices=("pass", "fail"), required=True)
         child.add_argument("--note", required=True)
+        child.add_argument("--human-review", metavar="REASON")
     elif command == "base-design-approve":
         child.add_argument("--change", dest="change_id", required=True)
         child.add_argument("--plan-id", required=True)
@@ -210,7 +211,8 @@ def dispatch(args) -> dict:
         return confirmed_upgrade(project, args.proposal, args.confirm_oracle_skills)
     if args.command == "base-review":
         from .base_execution import record_base_review
-        return record_base_review(project, args.change_id, args.verdict, args.note)
+        return record_base_review(project, args.change_id, args.verdict, args.note,
+                                  args.human_review)
     if args.command == "base-design-approve":
         from .base_design import approve_base_design
         return approve_base_design(project, args.change_id, args.plan_id)

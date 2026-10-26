@@ -23,7 +23,8 @@ def agent_control_binding(project: Path, change_id: str) -> dict[str, str]:
     """Bind the configuration files an agent must never edit during its call."""
     from .project_profile import BASE_BUILD_SUPPLEMENT
     relatives = [".storyloop/config.json", ".storyloop/baseline.json",
-                 BASE_BUILD_SUPPLEMENT, f".storyloop/base-proposals/{change_id}.json"]
+                 ".storyloop/state/adapters.json", BASE_BUILD_SUPPLEMENT,
+                 f".storyloop/base-proposals/{change_id}.json"]
     return {relative: (hashlib.sha256((project / relative).read_bytes()).hexdigest()
                        if (project / relative).is_file() and not (project / relative).is_symlink()
                        else "<missing-or-unsafe>") for relative in relatives}
@@ -53,6 +54,11 @@ def implement_base_candidate(project: Path, change: dict, state: dict, services=
     """Persist the call anchor before granting the agent its approved path set."""
     require(invalid_reason(project, change, state) is None,
             "Approved base design changed before agent implementation")
+    from .adapter_capabilities import ensure_checked
+    from .baseline import load_project_config
+    from .role_profiles import enabled
+    if enabled(load_project_config(project)):
+        ensure_checked(project)
     head = _git(project, "rev-parse", "HEAD").strip()
     require(head == state["contract_commit"]
             and not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
@@ -81,6 +87,13 @@ def implement_base_candidate(project: Path, change: dict, state: dict, services=
     committed = commit_paths(project, paths,
                              f"feat({change['change_id']}): implement approved base change",
                              identity=(AGENT_NAME, AGENT_EMAIL))
+    from .baseline import load_project_config
+    from .call_context import capability_for
+    from .role_profiles import enabled, role_settings
+    config = load_project_config(project)
+    adapter = role_settings(config, "implement", "heavy", base=True)["adapter"] if enabled(config) else None
+    state["agent_adapter"] = adapter
+    state["agent_vendor"] = capability_for(project, adapter).get("vendor") if adapter else None
     state["candidate_commit"] = committed["commit"]
     state["base_inflight"] = "candidate_verification"
     save_run(project, state)

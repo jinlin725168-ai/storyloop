@@ -38,6 +38,31 @@ class BaseAgentPolicyTests(unittest.TestCase):
         _, errors = conform(answer, schema)
         self.assertEqual(errors, [])
 
+    def test_base_review_rejects_same_or_missing_handshake_vendor(self):
+        from storyloop.base_review import require_distinct_vendors
+        with self.assertRaisesRegex(StoryLoopError, "vendor|Vendor"):
+            require_distinct_vendors("openai", "openai")
+        with self.assertRaisesRegex(StoryLoopError, "vendor|Vendor"):
+            require_distinct_vendors("openai", None)
+        self.assertEqual(require_distinct_vendors("OpenAI", "Anthropic"),
+                         ("openai", "anthropic"))
+
+    def test_base_review_never_uses_degrade_fallback(self):
+        from storyloop.cross_vendor import base_review_fallback_allowed
+        self.assertFalse(base_review_fallback_allowed({
+            "cross_vendor_review": {"enabled": True, "on_unavailable": "degrade"}},
+            {"mode": "base-review"}))
+
+    def test_human_substitute_metric_excludes_e1_review(self):
+        from storyloop.metrics_compute import base_human_review_substitutions
+        result = base_human_review_substitutions([
+            {"change_id": "BASE-1", "base_review_mode": "human_e1"},
+            {"change_id": "BASE-2", "base_review_mode": "human_substitute"},
+            {"change_id": "BASE-3", "base_review_mode": "agent"},
+        ])
+        self.assertEqual(result["numerator"], 1)
+        self.assertEqual(result["changes"], ["BASE-2"])
+
 
 if __name__ == "__main__":
     unittest.main()
