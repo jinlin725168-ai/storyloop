@@ -231,13 +231,15 @@ class StopPersistenceTests(unittest.TestCase):
     @patch("pathlib.Path.exists", return_value=True)
     def test_reset_removes_a_stale_saved_stop(self, _exists, load_change, load_json,
                                                _current_branch, write_json):
-        load_change.return_value = {"approval": {"contract_digest": "digest"}}
+        load_change.return_value = {"product": {"nature": "feature"},
+                                    "approval": {"contract_digest": "digest"}}
         state = state_for(
             "WORKSPACE_TAINTED", contract_digest="digest", feature_branch="feature/FEAT-1",
             stop={"status": "WORKSPACE_TAINTED"},
         )
         load_json.return_value = state
-        reset_run(Path("/p"), "FEAT-1", "cleaned")
+        with patch("storyloop.run_recovery.locked"):
+            reset_run(Path("/p"), "FEAT-1", "cleaned")
         saved = write_json.call_args.args[1]
         self.assertEqual(saved["status"], "IMPLEMENTING")
         self.assertNotIn("stop", saved)

@@ -29,7 +29,10 @@ STOP_SOURCES = {
     "COST_LIMIT_REACHED": PLANNING_SOURCES | {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED"},
     "EXISTING_GREEN": REPAIRABLE,
     "ORACLE_DEFECT": REPAIRABLE | PLANNING_SOURCES,
-    "MANUAL_ACCEPTANCE_REQUIRED": {"IMPLEMENTING", "MANUAL_ACCEPTANCE_REQUIRED"},
+    "MANUAL_ACCEPTANCE_REQUIRED": {"IMPLEMENTING", "BASE_REVIEW_REQUIRED",
+                                   "MANUAL_ACCEPTANCE_REQUIRED"},
+    "HUMAN_IMPLEMENTATION_REQUIRED": {"IMPLEMENTING", "HUMAN_IMPLEMENTATION_REQUIRED"},
+    "BASE_REVIEW_REQUIRED": {"IMPLEMENTING", "BASE_REVIEW_REQUIRED"},
     "NO_PROGRESS": {"IMPLEMENTING", "NO_PROGRESS", "BASE_CHANGE_REQUIRED", "BOUNDARY_VIOLATION"},
     # The existing planning API may pause on its committed contract, before RED.
     "NEEDS_INPUT": PLANNING_SOURCES | {"CONTRACT_COMMITTED"},
@@ -65,6 +68,14 @@ TRANSITIONS = {
     "start": frozenset({(None, "PREPARING")}),
     "red_ready": frozenset((source, "IMPLEMENTING") for source in {
         "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}),
+    "base_green_ready": frozenset({("CONTRACT_COMMITTED", "IMPLEMENTING")}),
+    "human_candidate_ready": frozenset({("HUMAN_IMPLEMENTATION_REQUIRED", "IMPLEMENTING")}),
+    # Pre-merge interruptions discard the entire attempt; only human commits survive.
+    "base_restart": frozenset((source, target) for source in {
+        "CONTRACT_COMMITTED", "IMPLEMENTING", "HUMAN_IMPLEMENTATION_REQUIRED",
+        "BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED", "VERIFIED", "WORKSPACE_TAINTED",
+    } for target in {"CONTRACT_COMMITTED", "HUMAN_IMPLEMENTATION_REQUIRED"}),
+    "base_baseline_recheck": frozenset({("WORKSPACE_TAINTED", "FINALIZING")}),
     "begin_attempt": frozenset((source, "IMPLEMENTING") for source in PLANNING_SOURCES),
     "characterization_resumed": frozenset({("CHARACTERIZATION_FAILED", "IMPLEMENTING")}),
     "contract_ready": frozenset({("PREPARING", "CONTRACT_READY")}),
@@ -92,7 +103,7 @@ def transition(project: Path, state: dict, target: str, *, event: str,
     require(legal,
             f"Illegal run transition: {event} {source} -> {target}")
     guard_updates(updates if updates is not None else {})
-    if event in {"red_ready", "begin_attempt", "characterization_resumed", "repair_red"}:
+    if event in {"red_ready", "base_green_ready", "begin_attempt", "characterization_resumed", "repair_red"}:
         guard_g1(project, state, context or {})
     if event == "verified":
         require(isinstance(change, dict), "Verification transition needs its approved change")

@@ -16,7 +16,7 @@
 | `survey` | `[--reason TEXT] [--from FILE]` | `SURVEYED` |
 | `change` | `--idea TEXT [--slug NAME]`、`--change ID --message TEXT` 或 `--supersede ID --message TEXT [--reason TEXT]`；`[--no-interactive]` | 变更状态（`DRAFT`） |
 | `approve` | `--change ID [--no-interactive]` 或 `--draft KIND/ID`（二者互斥） | 运行状态（见第二节）或 `APPLIED` |
-| `run` | `--change ID [--overrule TEXT] [--no-interactive]` | 运行状态 |
+| `run` | `--change ID [--implementer human] [--overrule TEXT] [--no-interactive]` | 运行状态；E1 base 首次运行必须指定 `--implementer human` |
 | `status` | `--change ID` | 变更状态，附 `run`、`telemetry`、`next`、`stop` |
 | `log` | `--change ID` | `LOG` |
 | `answer` | `--change ID --answer TEXT [--answer TEXT …]` | `ANSWERED` |
@@ -27,7 +27,8 @@
 | `smoke-propose` | `--change ID` | `SMOKE_PROPOSED` |
 | `smoke-apply` | `--change ID` | `SMOKE_APPLIED` 或 `SMOKE_UPDATE_FAILED` |
 | `base-propose` | `--path P [--path P …] --reason TEXT [--allow-mutable] [--allow-ci]` | `PROPOSED` |
-| `base-update` | `--proposal BASE-ID [--confirm-oracle-skills]` | `BASELINE_UPGRADED` |
+| `base-update` | `--proposal BASE-ID [--confirm-oracle-skills]` | 旧 `PROPOSED` 返回 `APPROVAL_REQUIRED`；历史已接受回执返回 `BASELINE_UPGRADED` |
+| `base-review` | `--change BASE-ID --verdict pass\|fail --note TEXT` | `REVIEW_RECORDED`，审查人须与候选提交者不同 |
 | `ci` | `--change ID` | `PASSED` 或 `FAILED` |
 | `metrics` | `[--since YYYY-MM-DD] [--ci-results DIR] [--save]` | `METRICS` |
 | `report` | `--change ID` | `REPORT`（报告路径） |

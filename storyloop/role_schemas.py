@@ -243,7 +243,8 @@ def schema_for(role: str, payload: dict) -> dict:
     """Add optional memory metadata to every ordinary call, including special modes."""
     schema = copy.deepcopy(_selected_schema(role, payload))
     if role == 'product':
-        schema['properties']['nature']['enum'] = [*change_types.CHANGE_TYPES, None]
+        schema['properties']['nature']['enum'] = [
+            *(name for name in change_types.CHANGE_TYPES if name != 'base'), None]
     if role != 'survey' and payload.get('mode') != 'retrospective':
         schema['properties'].update(
             lessons_used=_nullable({'type': 'array', 'items': _obj({

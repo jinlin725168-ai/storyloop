@@ -107,7 +107,8 @@ def install_skills(project: Path) -> dict:
     if written and (project / ".storyloop/baseline.json").is_file():
         from .base_upgrade import propose_base_change  # skills are base files on an initialized project
 
-        proposal = propose_base_change(project, sorted(written), "install or refresh packaged skills")
+        proposal = propose_base_change(project, sorted(written), "install or refresh packaged skills",
+                                       scope="skills")
         result.update({"proposal": proposal["proposal"], "change_id": proposal["change_id"],
                        "next": proposal["next"]})
     elif written:

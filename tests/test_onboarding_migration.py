@@ -11,6 +11,7 @@ from storyloop.models import StoryLoopError
 from storyloop.onboarding import scaffold_project
 from tests.onboarding_support import commit, repository
 from tests.test_onboarding_lock import complete
+from tests.test_base_upgrade import begin_legacy_receipt
 
 ARTIFACTS = ["acceptance/AGENT_GUIDE.md", "acceptance/storyloop-settings.json",
              "acceptance/onboarding.json", "acceptance/tools/python_smoke.py"]
@@ -42,6 +43,8 @@ class OnboardingMigrationTests(unittest.TestCase):
             with self.assertRaisesRegex(StoryLoopError, "baseline"):
                 scaffold_project(root, ["python"])
             commit(root)
+            begin_legacy_receipt(root, root / ".storyloop/base-proposals" /
+                                 f"{proposal['change_id']}.json")
             result = upgrade_baseline(root, proposal["change_id"])
             self.assertEqual(result["status"], "BASELINE_UPGRADED")
             self.assertEqual(load_baseline(root)["baseline_version"], "1.0.1")
@@ -50,6 +53,8 @@ class OnboardingMigrationTests(unittest.TestCase):
             rollback = propose_base_change(root, ["acceptance/onboarding.json"], "Return to legacy executor")
             (root / "acceptance/onboarding.json").unlink()
             commit(root)
+            begin_legacy_receipt(root, root / ".storyloop/base-proposals" /
+                                 f"{rollback['change_id']}.json")
             self.assertEqual(upgrade_baseline(root, rollback["change_id"])["status"], "BASELINE_UPGRADED")
 
     def test_base_upgrade_cannot_adopt_an_incomplete_new_manifest(self):
@@ -61,5 +66,7 @@ class OnboardingMigrationTests(unittest.TestCase):
             path.write_text(json.dumps(value))
             commit(root)
             with self.assertRaisesRegex(StoryLoopError, "pending"):
+                begin_legacy_receipt(root, root / ".storyloop/base-proposals" /
+                                     f"{proposal['change_id']}.json")
                 upgrade_baseline(root, proposal["change_id"])
             self.assertEqual(load_baseline(root)["baseline_version"], "1.0.0")

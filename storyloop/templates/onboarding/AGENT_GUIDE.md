@@ -9,6 +9,7 @@
 - source_files 只能填写明确安全文件；不扫描目录，不复制 .env、密钥或凭证。
 - 依赖需预热；依赖缓存显式声明，构建输出使用每次独占 scratch，不下载或安装。
 - 明确 build/start/ready/run_case/cleanup；不用的阶段需 not_applicable 及理由。
+- 请人工确认 settings 中的 `base_build_commands`：空数组明确表示项目没有构建步骤；有构建步骤时填写 argv 命令。
 - 数据隔离、业务断言、只读健康探针和必要的权限须由项目确定。本模板不配置数据库或登录。
 - 运行 0 表示实际执行全绿，1 仅表示行为断言失败，2 表示环境/配置/清理错误或零执行。
 - 完成后将 onboarding.json 的 reviewed 标记为 true 并提交；后续修改保护文件走 BASE。

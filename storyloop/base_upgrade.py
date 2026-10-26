@@ -4,24 +4,29 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path, PurePosixPath
+from datetime import datetime, timezone
+from pathlib import Path
 
 from .baseline import (_foundation_paths, _git, _sha256, _tracked_files,
                        load_baseline, load_project_config)
+from .changes import _save, load_change
 from .models import identifier, require, text
 from .path_security import repository_relative
-from .project_boundaries import _write_base_proposal
-from .project_profile import is_ci_path
+from .product_contract import validate_product
+from .project_boundaries import _write_base_proposal, audit_base_scope, base_scope_path_allowed
+from .project_profile import base_commands_digest, effective_base_profile, is_ci_path
 from .project_profile import layer_commands
-from .smoke_runner import run_commands_isolated
-from .system_smoke import adopt_system_smoke, run_system_smoke_isolated
+from .project_git import changed_paths
+from .smoke_runner import run_commands_at_commit, run_commands_isolated
+from .system_smoke import adopt_system_smoke, load_system_smoke, run_system_smoke_isolated
 from .storage import load_json, locked, write_json
 from .lesson_store import load_lessons_at
 from .lessons import scope_matches
 
 
 def propose_base_change(project: Path, paths: list[str], reason: str,
-                        allow_mutable: bool = False, allow_ci: bool = False) -> dict:
+                        allow_mutable: bool = False, allow_ci: bool = False,
+                        scope: str | None = None) -> dict:
     """Open a BASE proposal for a planned foundation change (no feature run needed).
 
     `allow_mutable` is for upstream synchronisation, where the imported tree legitimately
@@ -36,6 +41,9 @@ def propose_base_change(project: Path, paths: list[str], reason: str,
     changes = []
     for item in paths:
         relative = repository_relative(item, "base path")
+        require(not (relative.startswith(".storyloop/") or relative == ".storyloop"
+                     or relative.startswith(".git/") or relative == ".git"),
+                "Base proposal cannot change the control plane")
         ci = is_ci_path(relative)
         require(allow_ci or not ci, "CI configuration paths change only through a human BASE proposal "
                                     "(storyloop base-propose --allow-ci)")
@@ -55,16 +63,123 @@ def propose_base_change(project: Path, paths: list[str], reason: str,
         else:
             category = "FOUNDATION_CHANGE"
         changes.append({"path": relative, "category": category})
+    scope = scope or ("ci" if allow_ci else "upstream" if allow_mutable else "foundation")
+    require(scope in {"foundation", "ci", "upstream", "skills", "knowledge"},
+            "Invalid base scope")
+    authorized = ((scope == "ci" and allow_ci and not allow_mutable)
+                  or (scope == "upstream" and allow_mutable and not allow_ci)
+                  or (scope in {"foundation", "skills", "knowledge"}
+                      and not allow_ci and not allow_mutable))
+    require(authorized,
+            "Base scope authorization does not match proposal flags")
+    require(all(base_scope_path_allowed(scope, item["path"]) for item in changes),
+            "Base scope cannot include these paths")
     path = _write_base_proposal(project, "manual", changes, baseline, reason)
+    draft_from_proposal(project, path.stem, scope=scope)
     return {"status": "PROPOSED", "change_id": path.stem, "proposal": str(path),
             "paths": [item["path"] for item in changes],
-            "next": f"commit exactly these paths on {baseline['source_branch']}, then "
-                    f"storyloop base-update <project> --proposal {path.stem}"}
+            "next": f"storyloop approve <project> --change {path.stem}"}
 
 
 def _inside(relative: str, root: str) -> bool:
     normalized = root.rstrip("/")
     return relative == normalized or relative.startswith(normalized + "/")
+
+
+def draft_from_proposal(project: Path, proposal_id: str, *, scope: str) -> dict:
+    """Create the matching change state once; leave historical proposal bytes alone."""
+    project = Path(project).resolve()
+    proposal = load_json(project / ".storyloop/base-proposals" / f"{proposal_id}.json")
+    proposal_path = project / ".storyloop/base-proposals" / f"{proposal_id}.json"
+    proposal_sha256 = hashlib.sha256(proposal_path.read_bytes()).hexdigest()
+    require(proposal.get("change_id") == proposal_id, "Base proposal identity mismatch")
+    state_path = project / ".storyloop/state/changes" / f"{proposal_id}.json"
+    if state_path.exists():
+        existing = load_change(project, proposal_id)
+        require(existing["product"]["nature"] == "base", "Base ID belongs to another change")
+        require(existing.get("base_proposal_sha256", proposal_sha256) == proposal_sha256
+                and existing["product"]["base"]["paths"]
+                == [item["path"] for item in proposal["changes"]]
+                and existing["product"]["goal"] == (proposal.get("reason") or "更新项目底座")
+                and existing["product"]["base"]["scope"] == scope,
+                "Base proposal changed after import")
+        return existing
+    product = {"version": 1, "goal": proposal.get("reason") or "更新项目底座",
+               "non_goals": [], "questions": [], "stories": [], "nature": "base",
+               "base": {"scope": scope,
+                        "paths": [item["path"] for item in proposal["changes"]],
+                        "must_stay_green": ["full_regression", "system_smoke", "build"]}}
+    validate_product(product)
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    state = {"version": 1, "change_id": proposal_id, "status": "DRAFT",
+             "revision": 1, "idea": product["goal"], "product": product,
+             "created_at": timestamp, "updated_at": timestamp,
+             "history": [], "approval": None}
+    state["base_proposal_sha256"] = proposal_sha256
+    _save(project, state)
+    return state
+
+
+def establish_old_green(project: Path, change: dict, state: dict) -> dict:
+    """Prove the old source commit keeps all configured checks green before implementation."""
+    project = Path(project).resolve()
+    baseline, config = load_baseline(project), load_project_config(project)
+    profile, _ = effective_base_profile(project, config["profile"], change["approval"])
+    require(change["product"]["nature"] == "base", "Old-green proof needs a base change")
+    require(base_commands_digest(profile) == change["approval"]["base_commands_sha256"],
+            "Approved base commands changed before G1")
+    source = state.get("source_head", baseline["source_head"])
+    timeout = config["check_timeout_seconds"]
+    layers = {}
+    for name in ("unit", "integration", "checks"):
+        commands = layer_commands(profile, name)
+        layers[name] = run_commands_at_commit(project, source, commands, timeout)
+        require(not commands or layers[name]["status"] == "PASSED",
+                f"Old base {name} layer is not green")
+    require(any(layer_commands(profile, name) for name in layers),
+            "Old base has no configured regression commands")
+    manifest = load_system_smoke(project)
+    require(manifest is not None, "Old base has no installed system smoke suite")
+    smoke = run_commands_at_commit(project, source,
+                                   [item["command"] for item in manifest["tests"]], timeout)
+    require(smoke["status"] == "PASSED", "Old base system smoke is not green")
+    build_commands = profile["base_build_commands"]
+    build = (run_commands_at_commit(project, source, build_commands, timeout)
+             if build_commands else {"status": "DECLARED_ABSENT", "results": []})
+    require(build["status"] in {"PASSED", "DECLARED_ABSENT"}, "Old base build is not green")
+    evidence = {"version": 1, "change_id": change["change_id"], "status": "PASSED",
+                "contract_digest": change["approval"]["contract_digest"],
+                "contract_commit": state["contract_commit"], "source_head": source,
+                "baseline_version": baseline["baseline_version"],
+                "commands_sha256": change["approval"]["base_commands_sha256"],
+                "engine_version": change["approval"]["versions"]["engine_version"],
+                "engine_source": state.get("engine_source", str(Path(__file__).resolve().parent)),
+                "target_tree_oid": state.get("target_tree_oid") or
+                _git(project, "rev-parse", f"{source}^{{tree}}").strip(),
+                "layers": layers, "system_smoke": smoke, "build": build}
+    path = project / ".storyloop/evidence" / change["change_id"] / "base-old-green.json"
+    write_json(path, evidence, max_bytes=4_000_000)
+    return evidence
+
+
+def base_candidate_paths(project: Path, change: dict, state: dict) -> list[str]:
+    """Validate every committed human path against the approved base contract."""
+    project = Path(project).resolve()
+    require(_git(project, "branch", "--show-current").strip() == state["feature_branch"],
+            "Resume the saved StoryLoop base branch")
+    require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
+            "Commit or discard all workspace changes before resuming the base run")
+    start = state["contract_commit"]
+    require(start in _git(project, "rev-list", "HEAD").splitlines(),
+            "Base candidate does not descend from the locked contract commit")
+    actual = _changed_since(project, start)
+    expected = set(change["product"]["base"]["paths"])
+    extra, missing = sorted(actual - expected), sorted(expected - actual)
+    require(not extra and not missing,
+            "Base committed paths differ from approved contract; extra: " + ", ".join(extra)
+            + "; missing: " + ", ".join(missing))
+    audit_base_scope(project, change, actual)
+    return sorted(actual)
 
 
 
@@ -81,22 +196,37 @@ def _upgrade_locked(project: Path, proposal_id: str) -> dict:
     proposal = _load_proposal(proposal_path, proposal_id)
     receipt_path = _receipt_path(project, proposal_id)
     if receipt_path.exists():
+        lifecycle = load_json(receipt_path)
+        if lifecycle.get("version") == 2:
+            require(lifecycle.get("proposal_id") == proposal_id
+                    and lifecycle.get("status") == "ACCEPTED",
+                    "Base lifecycle receipt is unfinished; resume storyloop run")
+            baseline = load_baseline(project)
+            require(baseline["source_head"] == lifecycle["integration_commit"]
+                    and baseline["baseline_version"] == lifecycle["new_baseline_version"]
+                    and _dict_digest(baseline) == lifecycle["candidate_baseline_digest"],
+                    "Base lifecycle receipt does not match current baseline")
+            return _upgrade_result(project, {**lifecycle,
+                                             "source_head": lifecycle["integration_commit"]})
         return _recover_upgrade(project, proposal_path, proposal, receipt_path)
     require(proposal["status"] == "PROPOSED", "Base proposal is already handled")
-    baseline = load_baseline(project)
-    _require_candidate(project, baseline, proposal)
-    head = _git(project, "rev-parse", "HEAD").strip()
-    receipt = _new_receipt(project, proposal, baseline, head)
-    from .oracle_skill_approval import require_confirmation
-    require_confirmation(project, proposal, receipt)
-    write_json(receipt_path, receipt, max_bytes=4_000_000)
-    proposal.update({"status": "ACCEPTING", "old_baseline_version": baseline["baseline_version"],
-                     "new_baseline_version": receipt["new_baseline_version"], "source_head": head,
-                     "source_branch": baseline["source_branch"],
-                     "baseline_source_head": baseline["source_head"],
-                     "acceptance_digest": receipt["proposal_digest"]})
-    write_json(proposal_path, proposal, max_bytes=4_000_000)
-    return _recover_upgrade(project, proposal_path, proposal, receipt_path)
+    categories = {item["category"] for item in proposal["changes"]}
+    require("CI_PROTECTED" not in categories,
+            "代理生成的 CI 提案不可导入；先撤回越界改动，"
+            "再由人运行 base-propose --allow-ci 建立新提案")
+    paths = [item["path"] for item in proposal["changes"]]
+    scope = ("ci" if "CI_CHANGE" in categories else
+             "upstream" if "UPSTREAM_MUTABLE" in categories else
+             "skills" if all(base_scope_path_allowed("skills", path) for path in paths) else
+             "knowledge" if all(base_scope_path_allowed("knowledge", path) for path in paths) else
+             "foundation")
+    state_path = project / ".storyloop/state/changes" / f"{proposal_id}.json"
+    if state_path.exists():
+        scope = load_change(project, proposal_id)["product"]["base"]["scope"]
+    draft_from_proposal(project, proposal_id, scope=scope)
+    return {"status": "APPROVAL_REQUIRED", "change_id": proposal_id,
+            "next": f"storyloop approve <project> --change {proposal_id}; "
+                    f"storyloop run <project> --change {proposal_id} --implementer human"}
 
 
 def _load_proposal(path: Path, proposal_id: str) -> dict:
@@ -127,16 +257,7 @@ def _require_candidate(project: Path, baseline: dict, proposal: dict) -> None:
 
 
 def _changed_since(project: Path, source_head: str) -> set[str]:
-    output = _git(project, "diff", "--name-only", "-z", source_head, "HEAD")
-    result = set()
-    for raw in output.split("\0"):
-        if raw:
-            normalized = raw.replace("\\", "/")
-            pure = PurePosixPath(normalized)
-            require(not pure.is_absolute() and ".." not in pure.parts,
-                    "Git reported an unsafe base path")
-            result.add(normalized)
-    return result
+    return changed_paths(project, source_head, "HEAD")
 
 
 def _next_baseline(
@@ -164,6 +285,8 @@ def _recover_upgrade(
     _require_baseline_state(project, baseline, config, receipt)
     from .oracle_skill_approval import require_confirmation
     require_confirmation(project, proposal, receipt)
+    if receipt.get("oracle_skills_approval") and load_json(receipt_path).get("oracle_skills_approval") != receipt["oracle_skills_approval"]:
+        write_json(receipt_path, receipt, max_bytes=4_000_000)
     if receipt["status"] == "ACCEPTED":
         require(baseline["source_head"] == receipt["source_head"]
                 and baseline["baseline_version"] == receipt["new_baseline_version"],

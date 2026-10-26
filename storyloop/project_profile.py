@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
 
 from .models import StoryLoopError, require
-from .path_security import repository_relative
+from .path_security import repository_relative, safe_target
+from .storage import load_json
 
 CI_FILES = (
     ".gitlab-ci.yml", "Jenkinsfile", "azure-pipelines.yml", ".circleci/config.yml",
@@ -16,6 +18,7 @@ CI_FILES = (
 GENERATED_PATHS = ("openspec/changes", "openspec/specs", "acceptance/changes", "acceptance/smoke", "acceptance/ui",
                    "reports/storyloop")
 CUSTOM_ROOT = "storyloop-custom"
+BASE_BUILD_SUPPLEMENT = ".storyloop/base-build-commands.json"
 
 
 SKIP_DIRECTORIES = {"node_modules", "target", "build", "dist", "vendor", "venv", ".venv", "__pycache__"}
@@ -60,7 +63,7 @@ def validate_project_settings(root: Path, overrides: dict | None = None) -> dict
     overrides = overrides or {}
     allowed = {"test_commands", "unit_commands", "integration_commands", "check_commands", "test_roots",
                "module_roots", "integration_paths", "candidate_allow", "scratch_paths",
-               "test_count_patterns", "stacks"}
+               "test_count_patterns", "stacks", "base_build_commands"}
     require(set(overrides) <= allowed, "Unknown project setting")
     require(not ("test_commands" in overrides and "unit_commands" in overrides),
             "test_commands is the old name of unit_commands; give one of them")
@@ -69,6 +72,8 @@ def validate_project_settings(root: Path, overrides: dict | None = None) -> dict
     for key in ("unit_commands", "integration_commands", "check_commands"):
         if key in overrides:
             profile[key] = _commands(overrides[key])
+    if "base_build_commands" in overrides:
+        profile["base_build_commands"] = _commands(overrides["base_build_commands"])
     if "test_roots" in overrides:
         profile["test_roots"] = _relative_paths(overrides["test_roots"], "test_roots")
     for key in ("module_roots", "integration_paths", "candidate_allow"):
@@ -147,6 +152,34 @@ def layer_commands(profile: dict, layer: str) -> list[list[str]]:
         return list(profile.get("test_commands") or [])
     key = {"unit": "unit_commands", "integration": "integration_commands", "checks": "check_commands"}[layer]
     return list(profile.get(key) or [])
+
+
+def base_commands_digest(profile: dict) -> str:
+    """Bind a base approval to the actual configured regression and build argv."""
+    require("base_build_commands" in profile,
+            "Set base_build_commands in acceptance/storyloop-settings.json before base approval")
+    commands = {name: layer_commands(profile, name) for name in LAYERS}
+    commands["build"] = _commands(profile["base_build_commands"])
+    payload = json.dumps(commands, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def effective_base_profile(project: Path, profile: dict,
+                           approval: dict | None = None) -> tuple[dict, str | None]:
+    """Overlay only the missing legacy build setting, with a frozen approval binding."""
+    if "base_build_commands" in profile:
+        return profile, None
+    path = safe_target(project, BASE_BUILD_SUPPLEMENT, "base build supplement")
+    require(path.is_file(), "Confirm legacy base_build_commands with storyloop base-build-config")
+    record = load_json(path)
+    require(record.get("version") == 1 and isinstance(record.get("confirmed_by"), str)
+            and bool(record["confirmed_by"].strip()), "Base build supplement needs human confirmation")
+    commands = _commands(record.get("base_build_commands"))
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if approval is not None:
+        require(approval.get("base_build_config_sha256") == digest,
+                "Confirmed base build supplement changed after approval")
+    return {**profile, "base_build_commands": commands}, digest
 
 
 def is_ci_path(relative_path: str) -> bool:

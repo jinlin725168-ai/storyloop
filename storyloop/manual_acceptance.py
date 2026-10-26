@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 from pathlib import Path
 from typing import Callable
 
 from .changes import load_change
-from .run_guards import manual_criteria, pending_manual_criteria
+from .run_guards import base_candidate_matches, manual_criteria, pending_manual_criteria
 from .models import StoryLoopError, identifier, require, text  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .smoke_runner import implementation_digest
-from .storage import load_json, write_json
+from .run_state import save_run
+from .storage import load_json, locked, write_json
 
 Clock = Callable[[], datetime]
 ACCEPTING_STATES = {"MANUAL_ACCEPTANCE_REQUIRED"}
@@ -31,6 +33,13 @@ def record_manual_acceptance(
 ) -> dict:
     """Record that a human verified the listed manual criteria on the paused candidate code."""
     project = Path(project).resolve()
+    with locked(project):
+        return _record_manual_acceptance_locked(project, change_id, criteria, note, now)
+
+
+def _record_manual_acceptance_locked(
+    project: Path, change_id: str, criteria: list[str], note: str, now: Clock | None,
+) -> dict:
     change = load_change(project, change_id)
     note = text(note, "acceptance note")
     require(isinstance(criteria, list) and bool(criteria), "Acceptance needs at least one --criterion")
@@ -45,15 +54,22 @@ def record_manual_acceptance(
             "Manual acceptance is only possible while the run waits for it (MANUAL_ACCEPTANCE_REQUIRED)")
     commit = state.get("candidate_sha256")
     require(isinstance(commit, str) and bool(commit), "Paused run lacks its candidate digest")
-    require(implementation_digest(project) == commit,
+    candidate_matches = (base_candidate_matches(project, state)
+                         if change["product"].get("nature") == "base"
+                         else implementation_digest(project) == commit)
+    require(candidate_matches,
             "Workspace differs from the verified candidate; use `storyloop reset` and run again before accepting")
     moment = (now or _utc_now)().astimezone(timezone.utc).isoformat(timespec="seconds")
     records = [record for record in load_manual_acceptance(project, change_id)
                if not (record["criterion_id"] in ids and record.get("candidate_sha256") == commit)]
     records.extend({"criterion_id": item, "note": note, "accepted_at": moment,
                     "candidate_sha256": commit} for item in ids)
-    write_json(_path(project, change_id), {"version": 1, "change_id": change_id, "records": records},
+    acceptance_path = _path(project, change_id)
+    write_json(acceptance_path, {"version": 1, "change_id": change_id, "records": records},
                max_bytes=1_000_000)
+    if change["product"].get("nature") == "base":
+        state["manual_acceptance_sha256"] = hashlib.sha256(acceptance_path.read_bytes()).hexdigest()
+        save_run(project, state)
     pending = pending_manual_criteria(change, records, commit)
     return {"status": "ACCEPTED" if not pending else "MANUAL_ACCEPTANCE_REQUIRED",
             "change_id": change_id, "accepted": ids, "pending": pending,

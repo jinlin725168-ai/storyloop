@@ -30,6 +30,10 @@ CHANGE_TYPES: Mapping[str, ChangeType] = MappingProxyType({
         ("structural_red", "behavior_green"),
         ("mutable", "test_roots"), ("by_tier", "characterization"),
         "standard", "by_tier", "REF", False),
+    "base": ChangeType(
+        ("full_regression_green", "system_smoke_green", "build_green"),
+        ("foundation", "integration", "ci", "upstream_mutable", "skills", "knowledge"),
+        ("human_implementation", "manual_acceptance"), "heavy", "required", "BASE", False),
 })
 
 

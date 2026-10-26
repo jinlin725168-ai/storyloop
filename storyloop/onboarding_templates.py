@@ -27,6 +27,7 @@ def render(stacks: list[str]) -> dict[str, bytes]:
     artifacts[GUIDE] = resources.joinpath("AGENT_GUIDE.md").read_text(encoding="utf-8").encode("utf-8")
     artifacts[SETTINGS] = json_bytes({
         "unit_commands": [], "integration_commands": [], "check_commands": [],
+        "base_build_commands": [],
         "module_roots": [], "test_roots": [], "integration_paths": [],
         "candidate_allow": [], "scratch_paths": [], "stacks": stacks})
     manifest = {

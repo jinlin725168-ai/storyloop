@@ -9,7 +9,8 @@ from pathlib import Path
 from .baseline import _git
 from .models import require
 from .smoke import RESULT_EVIDENCE
-from .project_git import commit_paths, current_branch
+from .project_git import (changed_paths, commit_paths, current_branch,
+                          exact_child_commit, safe_changed_path)
 from .storage import write_bytes_atomic
 
 
@@ -63,14 +64,16 @@ def _require_receipt_bytes(source: dict, merge_commit: str,
 
 def verify_verified_artifacts(project: Path, state: dict) -> None:
     report = Path(state["report"])
-    require(report.is_file()
-            and hashlib.sha256(report.read_bytes()).hexdigest() == state["report_sha256"],
+    report_path = report.relative_to(project).as_posix()
+    committed = _git(project, "show", f"{state['report_commit']}:{report_path}").encode("utf-8")
+    require(report.is_file() and report_path not in _dirty_paths(project)
+            and hashlib.sha256(committed).hexdigest() == state["report_sha256"],
             "Verified acceptance report changed before merge")
     verify_evidence_digest(project, state)
 
 
-def recover_completed_merge(project: Path, state: dict) -> str:
-    head = _git(project, "rev-parse", "HEAD").strip()
+def recover_completed_merge(project: Path, state: dict, *, source_ref: str = "HEAD") -> str:
+    head = _git(project, "rev-parse", source_ref).strip()
     parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
     require(len(parents) == 3 and state["source_head"] in parents[1:]
             and state["report_commit"] in parents[1:],
@@ -82,7 +85,9 @@ def recover_completed_merge(project: Path, state: dict) -> str:
 
 
 def verify_evidence_digest(project: Path, state: dict) -> None:
-    evidence = project / ".storyloop/evidence" / state["change_id"] / RESULT_EVIDENCE
+    evidence_name = ("base-candidate-green.json" if state["change_id"].startswith("BASE-")
+                     else RESULT_EVIDENCE)
+    evidence = project / ".storyloop/evidence" / state["change_id"] / evidence_name
     require(evidence.is_file()
             and hashlib.sha256(evidence.read_bytes()).hexdigest()
             == state["acceptance_evidence_sha256"],
@@ -92,14 +97,10 @@ def verify_evidence_digest(project: Path, state: dict) -> None:
 def _verify_existing_receipt(
     project: Path, state: dict, head: str, paths: list[str], receipt_bytes: tuple[bytes, bytes],
 ) -> None:
-    parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
-    changed = set(filter(None, _git(
-        project, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", head
-    ).split("\0")))
     actual = (Path(state["report"]).read_bytes(),
               Path(state["report"]).with_suffix(".md").read_bytes())
-    require(len(parents) == 2 and parents[1] == state["merge_commit"]
-            and changed == set(paths) and not _dirty_paths(project)
+    require(exact_child_commit(project, state["merge_commit"], set(paths), head)
+            and not _dirty_paths(project)
             and actual == receipt_bytes,
             "Cannot recover the merge receipt safely")
 
@@ -129,7 +130,6 @@ def _report_paths(project: Path, state: dict) -> list[str]:
 
 
 def _dirty_paths(project: Path) -> set[str]:
-    outputs = [_git(project, "diff", "--name-only", "-z", "HEAD"),
-               _git(project, "ls-files", "--others", "--exclude-standard", "-z")]
-    return {item.replace("\\", "/") for output in outputs
-            for item in output.split("\0") if item}
+    other = _git(project, "ls-files", "--others", "--exclude-standard", "-z")
+    return changed_paths(project, "HEAD") | {safe_changed_path(item)
+                                            for item in other.split("\0") if item}

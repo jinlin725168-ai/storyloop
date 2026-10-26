@@ -20,7 +20,7 @@ description: 底座摸底：只读探索一个已有仓库（README、构建文�
 | 方式 | 触发 | 产物怎么交付 |
 |---|---|---|
 | StoryLoop 引擎调用 | 请求 `role: "survey"`，payload 含 `baseline_version`、`foundation_root`、`required_documents`、`module_roots`、`integration_paths` | 最终只输出一个 JSON：`{"documents":[{"path","content"}]}`，`path` 相对 `foundation_root`；引擎负责写入、校验、开 BASE 提案 |
-| 交互式（Claude Code / Codex 会话） | 用户要求摸底 | 直接把八份文档写到 `openspec/foundation/`，然后提示用户：`storyloop base-propose <project> --path openspec/foundation/<每个文件> --reason "底座摸底"` → 提交 → `storyloop base-update`；没有 StoryLoop 时直接提交 |
+| 交互式（Claude Code / Codex 会话） | 用户要求摸底 | 直接把八份文档写到 `openspec/foundation/`，然后提示用户：`storyloop base-propose <project> --path openspec/foundation/<每个文件> --reason "底座摸底"` → `approve --change BASE-ID` → `run --change BASE-ID --implementer human`，人在 base 分支提交候选并完成审查、验收；没有 StoryLoop 时直接提交 |
 
 两种方式下探索流程相同。引擎调用时不要写文件，也不要提问；不确定的地方在文档里标 `[待确认]`。
 

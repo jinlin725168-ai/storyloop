@@ -66,10 +66,16 @@ def load_change(project: Path, change_id: str) -> dict:
         "created_at", "updated_at", "history", "approval",
     }
     from .models import require
-    optional = {"supersedes", "superseded_by", "routing_version", "intake"}
+    optional = {"supersedes", "superseded_by", "routing_version", "intake",
+                "base_proposal_sha256"}
     require(required <= set(value) <= required | optional and value["version"] == 1,
             "Invalid change state")
     require(value["change_id"] == change_id, "Change state identity mismatch")
+    if "base_proposal_sha256" in value:
+        require(nature_of(value["product"]) == "base"
+                and isinstance(value["base_proposal_sha256"], str)
+                and len(value["base_proposal_sha256"]) == 64,
+                "Invalid base proposal digest")
     require(value["status"] in {
         "DRAFT", "APPROVED", "RUNNING", "PASSED", "PAUSED", "FAILED", "SUPERSEDED",
     },

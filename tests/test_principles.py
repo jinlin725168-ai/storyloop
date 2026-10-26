@@ -3,7 +3,7 @@ from tests.lesson_support import cleanup_repo
 from storyloop.principles import validate_principles, load_principles
 from storyloop.storage import load_json
 from storyloop.base_upgrade import upgrade_baseline
-from storyloop.lesson_landing import approve_draft
+from storyloop.lesson_landing import approve_draft, land_knowledge
 from storyloop.models import StoryLoopError
 from tests.lesson_support import initialized_project
 from tests import test_lesson_landing
@@ -50,7 +50,9 @@ class PrinciplesTests(unittest.TestCase):
         self.addCleanup(helper.doCleanups)
         for number, value in enumerate(('first', 'second'), 1):
             landing = {'kind': 'principles', 'principle': {'id': 'P1', 'text': value}, 'change': value}
-            result = approve_draft(helper.project, helper.draft(strength='knowledge', landing=landing))
-            upgrade_baseline(helper.project, result['base_proposal'])
-            self.assertEqual(validate_principles(load_json(helper.project / 'openspec/principles.json'))['version'], f'0.0.{number}')
-            self.assertEqual(load_principles(helper.project)['principles'], [landing['principle']])
+            writes = land_knowledge(helper.project, {'payload': {'landing': landing}, 'source': 'manual'}, {})
+            target = helper.project / 'openspec/principles.json'
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(writes['openspec/principles.json'])
+            self.assertEqual(validate_principles(load_json(target))['version'], f'0.0.{number}')
+            self.assertEqual(load_json(target)['principles'], [landing['principle']])
