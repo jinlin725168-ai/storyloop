@@ -8,7 +8,6 @@ import io
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 import tarfile
 import tempfile
@@ -196,8 +195,8 @@ def _copy_candidate_from_commit(project: Path, candidate: Path, commit: str, cha
     Used to re-prove RED after a suite repair: the implementation may already exist in the
     working tree, but at the contract commit it does not, so a correct suite must fail there.
     """
-    archive = subprocess.run(["git", "archive", "--format=tar", commit], cwd=project,
-                             capture_output=True, check=True).stdout
+    from .git_command import git_binary
+    archive = git_binary(project, "archive", "--format=tar", commit)
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
         members = [m for m in tar.getmembers() if m.isfile() and not _is_regression_asset(m.name)]
         for member in members:
@@ -303,8 +302,8 @@ def run_commands_at_commit(project: Path, commit: str, commands: list[list[str]]
     skipped = set(exclude)
     with tempfile.TemporaryDirectory(prefix="storyloop-baseline-") as folder:
         candidate = Path(folder)
-        archive = subprocess.run(["git", "archive", "--format=tar", commit], cwd=project,
-                                 capture_output=True, check=True).stdout
+        from .git_command import git_binary
+        archive = git_binary(project, "archive", "--format=tar", commit)
         with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
             members = [m for m in tar.getmembers() if m.isfile() and m.name not in skipped]
             for member in members:

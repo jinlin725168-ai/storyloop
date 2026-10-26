@@ -85,6 +85,7 @@ rank = 7
 "boundaries" = { module = "execution", zone = "base" }
 "project_git" = { module = "git", zone = "base" }
 "git_command" = { module = "git", zone = "base" }
+"git_user_config" = { module = "git", zone = "base" }
 "project_profile" = { module = "project_contract", zone = "base" }
 "state_format" = { module = "project_contract", zone = "base" }
 "smoke" = { module = "project_contract", zone = "base" }
@@ -167,6 +168,8 @@ rank = 7
 "base_run_open" = { module = "lifecycle", zone = "mutable" }
 "base_design" = { module = "implementation", zone = "mutable" }
 "base_agent_execution" = { module = "implementation", zone = "mutable" }
+"base_agent_inventory" = { module = "implementation", zone = "mutable" }
+"engine_source_safety" = { module = "implementation", zone = "mutable" }
 "base_review" = { module = "implementation", zone = "mutable" }
 "base_finalization" = { module = "lifecycle", zone = "mutable" }
 "foundation_survey" = { module = "onboarding", zone = "mutable" }

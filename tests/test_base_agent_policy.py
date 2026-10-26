@@ -1,5 +1,6 @@
 """Base implementation defaults and agent role tiers are fixed policy."""
 
+import json
 import unittest
 
 from storyloop.base_run_open import choose_implementer
@@ -10,6 +11,13 @@ from storyloop.role_schemas import schema_for
 
 
 class BaseAgentPolicyTests(unittest.TestCase):
+    def test_adapter_handshake_vendor_is_normalized_before_cache(self):
+        from storyloop.capability_protocol import _response
+        raw = {"known": True, "vendor": " OpenAI ", "tiers": ["strong"],
+               "subagents": False, "path_guard": True, "fast_checks": False,
+               "modes": ["*"]}
+        self.assertEqual(_response(json.dumps(raw))["vendor"], "openai")
+
     def test_foundation_and_skills_default_to_agent(self):
         self.assertEqual(choose_implementer("foundation", None), "agent")
         self.assertEqual(choose_implementer("skills", None), "agent")

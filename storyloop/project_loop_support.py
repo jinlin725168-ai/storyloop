@@ -12,6 +12,7 @@ from .run_state import run_path, save_run  # noqa: F401  # 兼容再导出：阶
 
 def control_digest(
     project: Path, change_id: str, excluded_evidence: str | None = None,
+    excluded_paths: frozenset[str] = frozenset(),
 ) -> str:
     # .git/index is deliberately absent: read-only git commands rewrite its stat cache.
     # Staged content is covered semantically by `git diff --cached` below.
@@ -28,6 +29,7 @@ def control_digest(
     for name in (RED_EVIDENCE, RESULT_EVIDENCE):
         if name != excluded_evidence:
             relative_paths.append(f".storyloop/evidence/{change_id}/{name}")
+    relative_paths = [path for path in relative_paths if path not in excluded_paths]
     digest = hashlib.sha256(_git(project, "rev-parse", "HEAD").encode("utf-8"))
     digest.update(_git(project, "branch", "--show-current").encode("utf-8"))
     digest.update(_git(

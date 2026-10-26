@@ -1,5 +1,6 @@
 """Premerge agent design files are never accepted from an interrupted write."""
 
+import os
 import unittest
 from unittest import mock
 
@@ -56,6 +57,65 @@ class BaseAgentRecoveryTests(unittest.TestCase):
         self.assertEqual(run_change(self.root, self.change["change_id"],
                                     services=self._services())["status"], "CONTRACT_COMMITTED")
         self.assertFalse((self.root / "pom.xml").read_text(encoding="utf-8") == "updated\n")
+
+    def test_agent_ignored_file_is_removed_without_touching_preexisting_ignored_file(self):
+        self._approved()
+        exclude = self.root / ".git/info/exclude"
+        exclude.write_text(exclude.read_text(encoding="utf-8") + "\nagent-cache/\n",
+                           encoding="utf-8")
+        cache = self.root / "agent-cache"
+        cache.mkdir()
+        retained = cache / "human.txt"
+        retained.write_text("human\n", encoding="utf-8")
+        self.assertEqual(_git(self.root, "status", "--porcelain=v1", "--untracked-files=all"), "")
+
+        def interrupted(project, _payload):
+            (project / "agent-cache/generated.txt").write_text("agent\n", encoding="utf-8")
+            raise RuntimeError("agent interrupted")
+
+        self.assertEqual(run_change(self.root, self.change["change_id"],
+                                    services=self._writer(interrupted))["status"],
+                         "WORKSPACE_TAINTED")
+        self.assertEqual(run_change(self.root, self.change["change_id"],
+                                    services=self._services())["status"], "CONTRACT_COMMITTED")
+        self.assertTrue(retained.exists())
+        self.assertFalse((cache / "generated.txt").exists())
+
+    def test_agent_symlink_artifact_is_unlinked_without_following(self):
+        self._approved()
+        target = self.root.parent / "outside-agent-target.txt"
+        target.write_text("outside\n", encoding="utf-8")
+        self.addCleanup(target.unlink)
+
+        def interrupted(project, _payload):
+            (project / "agent-link").symlink_to(target)
+            raise RuntimeError("agent interrupted")
+
+        self.assertEqual(run_change(self.root, self.change["change_id"],
+                                    services=self._writer(interrupted))["status"],
+                         "WORKSPACE_TAINTED")
+        self.assertEqual(run_change(self.root, self.change["change_id"],
+                                    services=self._services())["status"], "CONTRACT_COMMITTED")
+        self.assertFalse((self.root / "agent-link").is_symlink())
+        self.assertEqual(target.read_text(encoding="utf-8"), "outside\n")
+
+    def test_agent_hardlink_artifact_is_unlinked_without_deleting_target(self):
+        self._approved()
+        target = self.root.parent / "outside-agent-hardlink.txt"
+        target.write_text("outside\n", encoding="utf-8")
+        self.addCleanup(target.unlink)
+
+        def interrupted(project, _payload):
+            os.link(target, project / "agent-hardlink")
+            raise RuntimeError("agent interrupted")
+
+        self.assertEqual(run_change(self.root, self.change["change_id"],
+                                    services=self._writer(interrupted))["status"],
+                         "WORKSPACE_TAINTED")
+        self.assertEqual(run_change(self.root, self.change["change_id"],
+                                    services=self._services())["status"], "CONTRACT_COMMITTED")
+        self.assertFalse((self.root / "agent-hardlink").exists())
+        self.assertEqual(target.read_text(encoding="utf-8"), "outside\n")
 
     def _successful_writer(self):
         def write(project, _payload):
@@ -126,6 +186,20 @@ class BaseAgentRecoveryTests(unittest.TestCase):
         result = run_change(self.root, self.change["change_id"], services=self._services())
         self.assertEqual(result["status"], "WORKSPACE_TAINTED")
         self.assertEqual(_git(self.root, "rev-parse", "HEAD").strip(), head)
+
+    def test_changed_agent_call_head_does_not_authorize_cleanup(self):
+        self._approved()
+        path = run_path(self.root, self.change["change_id"])
+        state = load_json(path)
+        from storyloop.base_agent_inventory import inventory
+        files = inventory(self.root)
+        state["agent_call_head"] = "f" * 40
+        state["base_inflight"] = "agent_implementation"
+        state["agent_before_inventory"] = files
+        state["agent_after_inventory"] = files
+        write_json(path, state)
+        result = run_change(self.root, self.change["change_id"], services=self._services())
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
 
     def _review_context(self):
         return {"implement_vendor": "openai", "review_vendor": "anthropic",
@@ -238,4 +312,31 @@ class BaseAgentRecoveryTests(unittest.TestCase):
                 base_design.approve_base_design(self.root, change_id, state["base_design"]["plan_id"])
         self.assertEqual(run_change(self.root, change_id, services=self._services())["status"],
                          "CONTRACT_COMMITTED")
+
+    def test_modified_design_file_is_preserved_as_unknown_human_work(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, services=self._services())
+        plan = self.root / ".storyloop/state/base-designs" / f"{change_id}.json"
+        plan.write_text("human edit\n", encoding="utf-8")
+        result = run_change(self.root, change_id, services=self._services())
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        self.assertEqual(plan.read_text(encoding="utf-8"), "human edit\n")
+
+    def test_note_present_before_agent_anchor_is_not_deleted(self):
+        self._approved()
+        note = self.root / "notes.txt"
+        note.write_text("human note\n", encoding="utf-8")
+        with self.assertRaisesRegex(StoryLoopError, "clean contract commit"):
+            run_change(self.root, self.change["change_id"], services=self._services())
+        result = run_change(self.root, self.change["change_id"], services=self._services())
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        self.assertEqual(note.read_text(encoding="utf-8"), "human note\n")
+
+    def test_note_added_after_agent_candidate_is_not_deleted(self):
+        self._agent_candidate()
+        note = self.root / "review-notes.txt"
+        note.write_text("human review notes\n", encoding="utf-8")
+        result = run_change(self.root, self.change["change_id"], services=self._services())
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        self.assertEqual(note.read_text(encoding="utf-8"), "human review notes\n")
 

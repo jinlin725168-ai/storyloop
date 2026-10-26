@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import shutil
 
 from .baseline import GIT_ENVIRONMENT, load_project_config
+from .git_command import git_process_policy
 from .models import StoryLoopError, require
 from .path_security import repository_relative, safe_target
 from .processutil import MAX_OUTPUT, run_process
@@ -282,9 +282,10 @@ def _git(project: Path, *args: str) -> str:
 def _run(project: Path, *args: str) -> dict:
     executable = shutil.which("git")
     require(bool(executable), "Git executable is unavailable")
-    return run_process([executable, "-c", f"core.hooksPath={os.devnull}", *args], project,
+    prefix, environment = git_process_policy(project)
+    return run_process([executable, *prefix, *args], project,
                        GIT_TIMEOUT, environment_allowlist=GIT_ENVIRONMENT,
-                       source_environment=os.environ, max_output=MAX_GIT_OUTPUT)
+                       source_environment=environment, max_output=MAX_GIT_OUTPUT)
 
 
 def _unavailable(result: dict) -> bool:

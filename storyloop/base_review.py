@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 import hashlib
+import re
 
 from .baseline import _git, load_project_config
 from .call_context import capability_for
+from .capability_protocol import normalize_vendor
+from .engine_source_safety import engine_source_digest
 from .guarded_calls import read_only_call
-from .models import require, text
+from .models import StoryLoopError, require, text
 from .project_agents import invoke_project_agent
 from .project_receipt import _dirty_paths
 from .role_profiles import enabled, resolve_adapters, role_settings
@@ -40,7 +43,7 @@ def vendor_context(project: Path, state: dict) -> dict:
              if all(isinstance(value, str) and value.strip() for value in vendors.values())
              else None)
     implement_vendor = vendors.get(implement_adapter)
-    require(implement_vendor == state.get("agent_vendor") and implement_vendor,
+    require(implement_vendor == normalize_vendor(state.get("agent_vendor")) and implement_vendor,
             "Base implement vendor handshake changed after candidate creation")
     return {"implement_vendor": implement_vendor, "review_vendor": vendors.get(review_adapter),
             "review_adapter": review_adapter, "available_vendors": known}
@@ -57,6 +60,12 @@ def human_substitute_fields(project: Path, state: dict, reason: str) -> dict:
             "Human review substitute requires exactly one proven adapter vendor")
     cleaned = " ".join(reason.split()) if isinstance(reason, str) else ""
     require(len(cleaned) >= 12, "Human review substitute reason needs at least 12 characters")
+    verdict_only = re.sub(r"[\W_]+", "", cleaned.casefold(), flags=re.UNICODE)
+    for token in ("pass", "passed", "fail", "failed", "approve", "approved", "审查通过",
+                  "审核通过", "通过", "不通过", "同意", "已审查"):
+        verdict_only = verdict_only.replace(token, "")
+    require(bool(verdict_only), "Human review substitute reason must explain the review, "
+            "not merely repeat its verdict")
     return {"mode": "human_substitute", "human_review_reason": cleaned,
             "implement_vendor": context["implement_vendor"],
             "plan_id": state["base_design"]["plan_id"],
@@ -64,9 +73,10 @@ def human_substitute_fields(project: Path, state: dict, reason: str) -> dict:
             "contract_digest": state["contract_digest"]}
 
 
-def review_agent_candidate(project: Path, change: dict, state: dict, services=None) -> dict:
+def review_agent_candidate(project: Path, change: dict, state: dict, services=None,
+                           context: dict | None = None) -> dict:
     """Call the distinct reviewer read-only and bind its verdict to this attempt."""
-    context = vendor_context(project, state)
+    context = context if context is not None else vendor_context(project, state)
     implement_vendor, review_vendor = require_distinct_vendors(
         context["implement_vendor"], context["review_vendor"])
     payload = {"mode": "base-review", "change": change,
@@ -75,7 +85,15 @@ def review_agent_candidate(project: Path, change: dict, state: dict, services=No
                "design_plan": state["base_design"]}
     operation = (lambda: services.review(project, payload)) if services else (
         lambda: invoke_project_agent(project, "review", payload))
-    answer = read_only_call(project, change["change_id"], operation)
+    source = Path(state["engine_source"])
+    state["agent_engine_digest"] = engine_source_digest(source)
+    save_run(project, state)
+    def source_guard() -> None:
+        if engine_source_digest(source) != state["agent_engine_digest"]:
+            raise StoryLoopError("Base review agent may have changed StoryLoop engine source; "
+                                 "inspect and reinstall before rerunning", code="WORKSPACE_TAINTED")
+    answer = read_only_call(project, change["change_id"], operation,
+                            post_call_guard=source_guard)
     require(isinstance(answer, dict) and answer.get("verdict") == "pass"
             and not answer.get("questions"), "Independent base agent review did not pass")
     record = {"version": 1, "change_id": change["change_id"], "verdict": "pass",
@@ -98,8 +116,8 @@ def review_agent_candidate(project: Path, change: dict, state: dict, services=No
     return record
 
 
-def single_vendor_only(project: Path, state: dict) -> bool:
-    context = vendor_context(project, state)
+def single_vendor_only(project: Path, state: dict, context: dict | None = None) -> bool:
+    context = context if context is not None else vendor_context(project, state)
     return context["available_vendors"] is not None and len(context["available_vendors"]) == 1
 
 

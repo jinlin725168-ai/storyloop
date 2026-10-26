@@ -6,7 +6,9 @@ from pathlib import Path
 import hashlib
 
 from .baseline import _git
+from .base_agent_inventory import inventory
 from .base_design import invalid_reason
+from .engine_source_safety import engine_source_digest
 from .guarded_calls import write_safely
 from .models import StoryLoopError, require
 from .project_agents import invoke_project_agent
@@ -22,7 +24,7 @@ AGENT_EMAIL = "agent@storyloop.local"
 def agent_control_binding(project: Path, change_id: str) -> dict[str, str]:
     """Bind the configuration files an agent must never edit during its call."""
     from .project_profile import BASE_BUILD_SUPPLEMENT
-    relatives = [".storyloop/config.json", ".storyloop/baseline.json",
+    relatives = [".git/config", ".storyloop/config.json", ".storyloop/baseline.json",
                  ".storyloop/state/adapters.json", BASE_BUILD_SUPPLEMENT,
                  f".storyloop/base-proposals/{change_id}.json"]
     return {relative: (hashlib.sha256((project / relative).read_bytes()).hexdigest()
@@ -54,6 +56,26 @@ def implement_base_candidate(project: Path, change: dict, state: dict, services=
     """Persist the call anchor before granting the agent its approved path set."""
     require(invalid_reason(project, change, state) is None,
             "Approved base design changed before agent implementation")
+    head = _prepare_agent_call(project, change, state)
+    try:
+        paths = _invoke_agent(project, change, state, head, services)
+    except StoryLoopError as exc:
+        if exc.code == "WORKSPACE_TAINTED" or _git(
+                project, "status", "--porcelain=v1", "--untracked-files=all").strip():
+            return pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
+                         next=("Inspect and reinstall the StoryLoop engine before rerunning; "
+                               if "engine source" in str(exc) else "Inspect the agent changes, then ")
+                         + "storyloop reset <project> --change "
+                         f"{change['change_id']} --reason '<reason>'")
+        raise
+    committed = commit_paths(project, paths,
+                             f"feat({change['change_id']}): implement approved base change",
+                             identity=(AGENT_NAME, AGENT_EMAIL))
+    _save_agent_candidate(project, change, state, committed["commit"])
+    return {"status": "IMPLEMENTING", "change_id": change["change_id"]}
+
+
+def _prepare_agent_call(project: Path, change: dict, state: dict) -> str:
     from .adapter_capabilities import ensure_checked
     from .baseline import load_project_config
     from .role_profiles import enabled
@@ -65,30 +87,42 @@ def implement_base_candidate(project: Path, change: dict, state: dict, services=
     require(head == state["contract_commit"]
             and not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
             "Agent base implementation needs a clean contract commit")
-    state["agent_call_contract"] = state["contract_commit"]
     state["agent_call_head"] = head
+    state["agent_before_inventory"] = inventory(project)
     state["agent_control_binding"] = agent_control_binding(project, change["change_id"])
+    state["agent_engine_digest"] = engine_source_digest(Path(state["engine_source"]))
     state["base_inflight"] = "agent_implementation"
     save_run(project, state)
+    return head
+
+
+def _invoke_agent(project: Path, change: dict, state: dict, head: str, services) -> list[str]:
     payload = {"mode": "base-implement", "change": change,
                "approved_paths": change["product"]["base"]["paths"],
                "design_plan": state["base_design"], "contract_commit": head}
     operation = (lambda: services.implement(project, payload)) if services else (
         lambda: invoke_project_agent(project, "implement", payload))
-    try:
-        response, touched = write_safely(project, change["change_id"], operation)
-        require(not response.get("questions"), "Base implementer left unresolved questions")
-        paths = agent_candidate_paths(project, change, touched)
-    except StoryLoopError as exc:
-        if exc.code == "WORKSPACE_TAINTED" or _git(
-                project, "status", "--porcelain=v1", "--untracked-files=all").strip():
-            return pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
-                         next="Inspect the agent changes, then storyloop reset <project> --change "
-                              f"{change['change_id']} --reason '<reason>'")
-        raise
-    committed = commit_paths(project, paths,
-                             f"feat({change['change_id']}): implement approved base change",
-                             identity=(AGENT_NAME, AGENT_EMAIL))
+    def source_guard() -> None:
+        if engine_source_digest(Path(state["engine_source"])) != state["agent_engine_digest"]:
+            raise StoryLoopError("Base agent may have changed StoryLoop engine source; inspect "
+                                 "and reinstall the engine before running again",
+                                 code="WORKSPACE_TAINTED")
+        if agent_control_binding(project, change["change_id"]) != state["agent_control_binding"]:
+            raise StoryLoopError("Base agent changed Git or StoryLoop control files; inspect "
+                                 "them before running again", code="WORKSPACE_TAINTED")
+        state["agent_after_inventory"] = inventory(project)
+    approved = set(change["product"]["base"]["paths"])
+    excluded = (frozenset({"openspec/principles.json"})
+                if change["product"]["base"]["scope"] == "knowledge"
+                and "openspec/principles.json" in approved else frozenset())
+    response, touched = write_safely(project, change["change_id"], operation,
+                                     source_guard, excluded)
+    save_run(project, state)
+    require(not response.get("questions"), "Base implementer left unresolved questions")
+    return agent_candidate_paths(project, change, touched)
+
+
+def _save_agent_candidate(project: Path, change: dict, state: dict, committed: str) -> None:
     from .baseline import load_project_config
     from .call_context import capability_for
     from .role_profiles import enabled, role_settings
@@ -96,7 +130,6 @@ def implement_base_candidate(project: Path, change: dict, state: dict, services=
     adapter = role_settings(config, "implement", "heavy", base=True)["adapter"] if enabled(config) else None
     state["agent_adapter"] = adapter
     state["agent_vendor"] = capability_for(project, adapter).get("vendor") if adapter else None
-    state["candidate_commit"] = committed["commit"]
+    state["candidate_commit"] = committed
     state["base_inflight"] = "candidate_verification"
     save_run(project, state)
-    return {"status": "IMPLEMENTING", "change_id": change["change_id"]}

@@ -99,7 +99,7 @@ class BaseAgentFlowTests(unittest.TestCase):
                             implementer="human")
         self.assertEqual(result["status"], "HUMAN_IMPLEMENTATION_REQUIRED")
 
-    def test_modified_approved_plan_discards_the_entire_attempt(self):
+    def test_modified_approved_plan_preserves_unknown_human_edit(self):
         change_id = self.change["change_id"]
         run_change(self.root, change_id, services=self._services())
         from storyloop.base_design import approve_base_design
@@ -110,8 +110,29 @@ class BaseAgentFlowTests(unittest.TestCase):
         plan["steps"] = ["偷换步骤"]
         write_json(plan_path, plan)
         self.assertEqual(run_change(self.root, change_id, services=self._services())["status"],
-                         "CONTRACT_COMMITTED")
-        self.assertFalse(plan_path.exists())
+                         "WORKSPACE_TAINTED")
+        self.assertTrue(plan_path.exists())
+        self.assertEqual(load_json(plan_path)["steps"], ["偷换步骤"])
+
+    def test_design_binding_checks_live_engine_and_source(self):
+        from storyloop import base_design
+        from storyloop.base_design import invalid_reason
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, services=self._services())
+        state = load_json(run_path(self.root, change_id))
+        self.assertIsNone(invalid_reason(self.root, self.change, state))
+        with mock.patch("storyloop.base_design.__version__", "new-engine", create=True):
+            self.assertIsNotNone(invalid_reason(self.root, self.change, state))
+        with mock.patch.object(base_design, "_git", return_value="different-source\n"):
+            self.assertIsNotNone(invalid_reason(self.root, self.change, state))
+
+    def test_design_binding_checks_live_contract_product(self):
+        from storyloop.base_design import invalid_reason
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, services=self._services())
+        state = load_json(run_path(self.root, change_id))
+        changed = {**self.change, "product": {**self.change["product"], "goal": "different"}}
+        self.assertIsNotNone(invalid_reason(self.root, changed, state))
 
     def test_design_approval_rejects_code_written_before_human_decision(self):
         change_id = self.change["change_id"]
@@ -181,6 +202,20 @@ class BaseAgentFlowTests(unittest.TestCase):
         saved = load_json(run_path(self.root, self.change["change_id"]))
         self.assertEqual(saved["base_review"]["mode"], "agent")
 
+    def test_agent_review_reads_vendor_context_once(self):
+        self._agent_candidate()
+        services = self._services()
+        reviewer = LoopServices(services.generate_smoke, services.implement,
+                                lambda *_: {"verdict": "pass", "summary": "已核对",
+                                            "findings": [], "questions": []},
+                                design=services.design)
+        context = {"implement_vendor": "openai", "review_vendor": "anthropic",
+                   "review_adapter": "reviewer", "available_vendors": {"openai", "anthropic"}}
+        with mock.patch("storyloop.base_review.vendor_context", return_value=context) as observed:
+            self.assertEqual(run_change(self.root, self.change["change_id"],
+                                        services=reviewer)["status"], "MANUAL_ACCEPTANCE_REQUIRED")
+        self.assertEqual(observed.call_count, 1)
+
     def test_single_vendor_human_review_requires_reason(self):
         self._agent_candidate()
         from storyloop.base_execution import record_base_review
@@ -194,6 +229,18 @@ class BaseAgentFlowTests(unittest.TestCase):
                 self.root, self.change["change_id"], "pass", "checked",
                 human_review_reason="独立核对了全部变更路径和回归证据")
         self.assertEqual(recorded["mode"], "human_substitute")
+
+    def test_human_review_substitute_rejects_verdict_only_reason(self):
+        self._agent_candidate()
+        from storyloop.base_execution import record_base_review
+        context = {"implement_vendor": "openai", "review_vendor": "openai",
+                   "review_adapter": "one", "available_vendors": {"openai"}}
+        with mock.patch("storyloop.base_review.vendor_context", return_value=context):
+            for reason in ("pass pass pass", "审查通过审查通过审查通过"):
+                with self.subTest(reason=reason):
+                    with self.assertRaisesRegex(StoryLoopError, "reason|理由|结论"):
+                        record_base_review(self.root, self.change["change_id"], "pass", "checked",
+                                           human_review_reason=reason)
 
 
 if __name__ == "__main__":

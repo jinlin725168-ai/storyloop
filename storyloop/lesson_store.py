@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path, PurePosixPath
-import os
 import shutil
 
 from .baseline import GIT_ENVIRONMENT, _git, _git_failure
+from .git_command import git_process_policy
 from .processutil import run_process
 from .lessons import LESSONS_ROOT, parse_lesson, validate_lessons
 from .models import StoryLoopError, identifier, require, text
@@ -132,10 +132,10 @@ def _is_ancestor(project: Path, baseline: str, commit: str) -> bool:
     """Only a clean Git exit 1 means non-ancestor; diagnostics remain errors."""
     executable = shutil.which("git")
     require(bool(executable), "Git executable is unavailable")
+    prefix, environment = git_process_policy(project)
     result = run_process(
-        [executable, "-c", f"core.hooksPath={os.devnull}",
-         "merge-base", "--is-ancestor", baseline, commit], project, 30,
-        environment_allowlist=GIT_ENVIRONMENT, source_environment=os.environ,
+        [executable, *prefix, "merge-base", "--is-ancestor", baseline, commit], project, 30,
+        environment_allowlist=GIT_ENVIRONMENT, source_environment=environment,
     )
     if (result.get("contained") is not True or result.get("timed_out")
             or result.get("truncated") or result.get("error")):

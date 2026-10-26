@@ -226,7 +226,8 @@ def _guard_base_g2(project: Path, change: dict, state: dict, context: dict) -> N
                 and review.get("plan_id") == state["base_design"]["plan_id"]
                 and review.get("design_sha256") == state["base_design_sha256"]
                 and review.get("contract_digest") == state["contract_digest"]
-                and review.get("implement_vendor") == state.get("agent_vendor")
+                and str(review.get("implement_vendor", "")).strip().casefold()
+                == str(state.get("agent_vendor", "")).strip().casefold()
                 and review.get("candidate_tree_oid") == _git(
                     project, "rev-parse", f"{state['candidate_commit']}^{{tree}}").strip(),
                 "Base agent review binding is stale")

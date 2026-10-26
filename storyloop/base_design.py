@@ -7,11 +7,13 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import __version__
 from .agent_transport import conform
 from .baseline import _git
-from .changes import load_change
+from .changes import contract_digest, load_change
+from .engine_source_safety import engine_source_digest
 from .guarded_calls import read_only_call
-from .models import require, text
+from .models import StoryLoopError, require, text
 from .project_agents import invoke_project_agent
 from .project_git import current_branch
 from .role_schemas import schema_for
@@ -35,11 +37,12 @@ def _digest(value: dict) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def _binding(change: dict, state: dict) -> dict:
-    return {"contract_digest": state["contract_digest"],
-            "contract_commit": state["contract_commit"], "source_head": state["source_head"],
+def _binding(project: Path, change: dict, state: dict) -> dict:
+    return {"contract_digest": contract_digest(change["product"]),
+            "contract_commit": state["contract_commit"],
+            "source_head": _git(project, "rev-parse", f"refs/heads/{state['source_branch']}").strip(),
             "baseline_version": change["approval"]["versions"]["baseline_version"],
-            "engine_version": state["engine_version"]}
+            "engine_version": __version__}
 
 
 def _require_unimplemented(project: Path, state: dict) -> None:
@@ -68,7 +71,7 @@ def invalid_reason(project: Path, change: dict, state: dict) -> str | None:
     plan_path, approved_path = design_path(project, state["change_id"]), approval_path(
         project, state["change_id"])
     plan = _trusted(project, state, "base_design")
-    if plan is None or plan.get("binding") != _binding(change, state):
+    if plan is None or plan.get("binding") != _binding(project, change, state):
         return "Base design differs from the saved attempt"
     if state.get("base_design_approval_sha256") or approved_path.exists():
         approval = _trusted(project, state, "base_design_approval")
@@ -81,17 +84,29 @@ def invalid_reason(project: Path, change: dict, state: dict) -> str | None:
 
 def propose_design(project: Path, change: dict, state: dict, services=None) -> dict:
     state["base_inflight"] = "base_design"
+    state["agent_engine_digest"] = engine_source_digest(Path(state["engine_source"]))
     save_run(project, state)
     payload = {"mode": "base-plan", "change": change,
                "contract_commit": state["contract_commit"],
                "approved_paths": change["product"]["base"]["paths"]}
     operation = (lambda: services.design(project, payload)) if services and services.design else (
         lambda: invoke_project_agent(project, "design", payload))
-    answer = read_only_call(project, change["change_id"], operation)
+    def source_guard() -> None:
+        if engine_source_digest(Path(state["engine_source"])) != state["agent_engine_digest"]:
+            raise StoryLoopError("Base design agent may have changed StoryLoop engine source; "
+                                 "inspect and reinstall before rerunning", code="WORKSPACE_TAINTED")
+    try:
+        answer = read_only_call(project, change["change_id"], operation,
+                                post_call_guard=source_guard)
+    except StoryLoopError as exc:
+        if exc.code != "WORKSPACE_TAINTED":
+            raise
+        return pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
+                     next="Inspect and reinstall the StoryLoop engine before rerunning")
     cleaned, errors = conform(answer, schema_for("design", payload))
     require(not errors and not cleaned.get("questions"),
             "Base design needs complete steps, risks and rollback without unresolved questions")
-    plan = {"version": 1, "change_id": change["change_id"], "binding": _binding(change, state),
+    plan = {"version": 1, "change_id": change["change_id"], "binding": _binding(project, change, state),
             "goal": change["product"]["goal"], "paths": change["product"]["base"]["paths"],
             **{key: cleaned[key] for key in ("summary", "steps", "risks", "rollback")}}
     plan["plan_id"] = _digest(plan)

@@ -19,10 +19,12 @@ from .project_loop_support import control_digest
 _VISIBILITY_MESSAGE_LIMIT = 20
 
 
-def write_safely(project: Path, change_id: str, operation: Callable[[], dict]) -> tuple[dict, list]:
+def write_safely(project: Path, change_id: str, operation: Callable[[], dict],
+                 post_call_guard: Callable[[], None] | None = None,
+                 excluded_control_paths: frozenset[str] = frozenset()) -> tuple[dict, list]:
     """Run an agent that may write the workspace; the control plane and the index must stay untouched."""
     before = capture_snapshot(project, include_control=True, include_ignored=True)
-    control = control_digest(project, change_id)
+    control = control_digest(project, change_id, excluded_paths=excluded_control_paths)
     staged = _staged_index(project)
     failure: BaseException | None = None
     try:
@@ -30,8 +32,10 @@ def write_safely(project: Path, change_id: str, operation: Callable[[], dict]) -
     except BaseException as exc:
         failure = exc
     finally:
+        if post_call_guard is not None:
+            post_call_guard()
         require_control_unchanged(
-            control_digest(project, change_id) == control,
+            control_digest(project, change_id, excluded_paths=excluded_control_paths) == control,
             "Implementation agent modified the protected control plane",
         )
         require_control_unchanged(_staged_index(project) == staged,
@@ -53,6 +57,7 @@ def write_safely(project: Path, change_id: str, operation: Callable[[], dict]) -
 def read_only_call(
     project: Path, change_id: str, operation: Callable[[], object],
     allowed_evidence: str | None = None,
+    post_call_guard: Callable[[], None] | None = None,
 ) -> object:
     before = capture_snapshot(project, include_control=True, include_ignored=True)
     control = control_digest(project, change_id, excluded_evidence=allowed_evidence)
@@ -60,6 +65,8 @@ def read_only_call(
     try:
         return operation()
     finally:
+        if post_call_guard is not None:
+            post_call_guard()
         allowed = (f".storyloop/evidence/{change_id}/{allowed_evidence}"
                    if allowed_evidence else None)
         verify_read_only_snapshot(

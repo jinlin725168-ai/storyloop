@@ -290,15 +290,19 @@ def _review_stop(project: Path, change: dict, state: dict, services=None) -> dic
     review = state.get("base_review")
     if review is None:
         if state.get("implementer", "human") == "agent":
-            from .base_review import review_agent_candidate, single_vendor_only
+            from .base_review import review_agent_candidate, single_vendor_only, vendor_context
             try:
-                if single_vendor_only(project, state):
+                context = vendor_context(project, state)
+                if single_vendor_only(project, state, context):
                     return pause(project, state, "BASE_REVIEW_REQUIRED",
                                  next=f"storyloop base-review <project> --change {change['change_id']} "
                                       "--verdict pass --note '<核对内容>' "
                                       "--human-review '<至少 12 字理由>'")
-                review = review_agent_candidate(project, change, state, services)
+                review = review_agent_candidate(project, change, state, services, context)
             except StoryLoopError as exc:
+                if exc.code == "WORKSPACE_TAINTED" and "engine source" in str(exc):
+                    return pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
+                                 next="Inspect and reinstall the StoryLoop engine before rerunning")
                 return _restart_pause(project, change, state, str(exc), rejected=True)
         else:
             return _pause_review(project, change, state)

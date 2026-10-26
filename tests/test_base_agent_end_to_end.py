@@ -47,7 +47,8 @@ class BaseAgentEndToEndTests(unittest.TestCase):
         adapter = Path(__file__).resolve().parents[1] / "storyloop/testing/mock_adapter.py"
         implement_script = Path(self.folder.name) / "implement.json"
         review_script = Path(self.folder.name) / "review.json"
-        implement_script.write_text(json.dumps({"capabilities": _capability("openai"), "calls": [
+        implement_script.write_text(json.dumps({"capabilities": _capability(
+            getattr(self, "implement_vendor", "openai")), "calls": [
             {"role": "design", "mode": "base-plan", "result": {
                 "summary": "更新构建配置", "steps": ["编辑 pom.xml"],
                 "risks": ["构建可能失败"], "rollback": "恢复 pom.xml", "questions": []}},
@@ -223,7 +224,7 @@ class BaseAgentEndToEndTests(unittest.TestCase):
                 run_change(self.root, change_id)
         self.assertEqual(run_change(self.root, change_id)["status"], "CONTRACT_COMMITTED")
 
-    def test_modified_handshake_after_candidate_stops_before_review(self):
+    def test_modified_handshake_after_candidate_discards_attempt(self):
         change_id = self.change["change_id"]
         run_change(self.root, change_id)
         state = load_json(run_path(self.root, change_id))
@@ -235,7 +236,20 @@ class BaseAgentEndToEndTests(unittest.TestCase):
         cached["adapters"]["reviewer"]["vendor"] = "openai"
         from storyloop.storage import write_json
         write_json(path, cached)
-        self.assertEqual(run_change(self.root, change_id)["status"], "WORKSPACE_TAINTED")
+        self.assertEqual(run_change(self.root, change_id)["status"], "CONTRACT_COMMITTED")
+
+    def test_engine_adapter_recheck_after_candidate_restarts_cleanly(self):
+        from storyloop import adapter_capabilities
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id)
+        state = load_json(run_path(self.root, change_id))
+        approve_base_design(self.root, change_id, state["base_design"]["plan_id"])
+        run_change(self.root, change_id)
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        with mock.patch.object(adapter_capabilities, "probe", side_effect=lambda _project, name, _config:
+                               _capability("other-vendor" if name == "reviewer" else "openai")):
+            adapter_capabilities.check(self.root)
+        self.assertEqual(run_change(self.root, change_id)["status"], "CONTRACT_COMMITTED")
 
     def test_tampered_handshake_cannot_create_human_substitute_review(self):
         from storyloop.base_execution import record_base_review
@@ -283,6 +297,19 @@ class BaseAgentSingleVendorTests(unittest.TestCase):
         self.assertEqual(report["review_mode"], "human_substitute")
         self.assertIn("仅有一个厂商", report["human_review_reason"])
         self.assertEqual(build_metrics(self.root, None, None)["metrics"]["base_human_review_substitutions"]["numerator"], 1)
+
+
+class BaseAgentMixedCaseVendorTests(unittest.TestCase):
+    setUp = BaseAgentEndToEndTests.setUp
+    implement_vendor = "OpenAI"
+    review_vendor = "Anthropic"
+    _accepted_agent_candidate = BaseAgentEndToEndTests._accepted_agent_candidate
+
+    def test_mixed_case_handshake_completes_review_and_g2(self):
+        self._accepted_agent_candidate()
+        change_id = self.change["change_id"]
+        self.assertEqual(run_change(self.root, change_id)["status"], "FINALIZING")
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
 
 
 if __name__ == "__main__":
