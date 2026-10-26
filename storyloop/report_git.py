@@ -8,7 +8,6 @@ import os
 import tempfile
 
 from .processutil import _start_process, _cleanup_process, _environment
-from .git_command import GIT_ENVIRONMENT, git_process_policy
 
 
 MAX_GIT_SECONDS = 10
@@ -68,8 +67,7 @@ def _commit(git, value):
 
 
 def _git(root, deadline, limit, *args):
-    prefix, _ = git_process_policy(root)
-    return _capture(root, deadline, limit, ['git', *prefix, '--no-pager', *args])
+    return _capture(root, deadline, limit, ['git', '--no-pager', *args])
 
 
 def _capture(root, deadline, limit, command):
@@ -113,13 +111,8 @@ class _CaptureProcess:
     def __init__(self, command, root, source, error):
         self._lock = threading.Lock()
         self._stopped = None
-        if command[0] == 'git':
-            _, policy = git_process_policy(root)
-            environment = _environment(GIT_ENVIRONMENT, policy)
-        else:
-            environment = _environment(None, None)
         self.process, self.job, self.feeder = _start_process(
-            command, root, environment, source, subprocess.PIPE, error)
+            command, root, _environment(None, None), source, subprocess.PIPE, error)
 
     def finish(self):
         with self._lock:

@@ -11,7 +11,7 @@ from . import __version__
 from .agent_transport import conform
 from .baseline import _git
 from .changes import contract_digest, load_change
-from .engine_source_safety import engine_source_digest
+from .engine_source_safety import ENGINE_WARNING, engine_source_digest, engine_warning
 from .guarded_calls import read_only_call
 from .models import StoryLoopError, require, text
 from .project_agents import invoke_project_agent
@@ -40,7 +40,7 @@ def _digest(value: dict) -> str:
 def _binding(project: Path, change: dict, state: dict) -> dict:
     return {"contract_digest": contract_digest(change["product"]),
             "contract_commit": state["contract_commit"],
-            "source_head": _git(project, "rev-parse", f"refs/heads/{state['source_branch']}").strip(),
+            "source_head": state["source_head"],
             "baseline_version": change["approval"]["versions"]["baseline_version"],
             "engine_version": __version__}
 
@@ -84,7 +84,11 @@ def invalid_reason(project: Path, change: dict, state: dict) -> str | None:
 
 def propose_design(project: Path, change: dict, state: dict, services=None) -> dict:
     state["base_inflight"] = "base_design"
-    state["agent_engine_digest"] = engine_source_digest(Path(state["engine_source"]))
+    try:
+        state["agent_engine_digest"] = engine_source_digest(Path(state["engine_source"]))
+    except (OSError, StoryLoopError):
+        state["agent_engine_digest"] = None
+        state["engine_warning"] = ENGINE_WARNING
     save_run(project, state)
     payload = {"mode": "base-plan", "change": change,
                "contract_commit": state["contract_commit"],
@@ -92,9 +96,9 @@ def propose_design(project: Path, change: dict, state: dict, services=None) -> d
     operation = (lambda: services.design(project, payload)) if services and services.design else (
         lambda: invoke_project_agent(project, "design", payload))
     def source_guard() -> None:
-        if engine_source_digest(Path(state["engine_source"])) != state["agent_engine_digest"]:
-            raise StoryLoopError("Base design agent may have changed StoryLoop engine source; "
-                                 "inspect and reinstall before rerunning", code="WORKSPACE_TAINTED")
+        warning = engine_warning(state)
+        if warning:
+            state["engine_warning"] = warning
     try:
         answer = read_only_call(project, change["change_id"], operation,
                                 post_call_guard=source_guard)

@@ -58,7 +58,7 @@ class BaseAgentRecoveryTests(unittest.TestCase):
                                     services=self._services())["status"], "CONTRACT_COMMITTED")
         self.assertFalse((self.root / "pom.xml").read_text(encoding="utf-8") == "updated\n")
 
-    def test_agent_ignored_file_is_removed_without_touching_preexisting_ignored_file(self):
+    def test_agent_ignored_files_do_not_block_restart_or_get_deleted(self):
         self._approved()
         exclude = self.root / ".git/info/exclude"
         exclude.write_text(exclude.read_text(encoding="utf-8") + "\nagent-cache/\n",
@@ -70,6 +70,7 @@ class BaseAgentRecoveryTests(unittest.TestCase):
         self.assertEqual(_git(self.root, "status", "--porcelain=v1", "--untracked-files=all"), "")
 
         def interrupted(project, _payload):
+            retained.write_text("agent rewrote cache\n", encoding="utf-8")
             (project / "agent-cache/generated.txt").write_text("agent\n", encoding="utf-8")
             raise RuntimeError("agent interrupted")
 
@@ -79,7 +80,50 @@ class BaseAgentRecoveryTests(unittest.TestCase):
         self.assertEqual(run_change(self.root, self.change["change_id"],
                                     services=self._services())["status"], "CONTRACT_COMMITTED")
         self.assertTrue(retained.exists())
-        self.assertFalse((cache / "generated.txt").exists())
+        self.assertEqual(retained.read_text(encoding="utf-8"), "agent rewrote cache\n")
+        self.assertTrue((cache / "generated.txt").exists())
+
+    def test_new_unattributed_file_can_be_cleaned_then_reset(self):
+        self._approved()
+
+        def interrupted(project, _payload):
+            (project / "pom.xml").write_text("agent change\n", encoding="utf-8")
+            raise RuntimeError("agent interrupted")
+
+        self.assertEqual(run_change(self.root, self.change["change_id"],
+                                    services=self._writer(interrupted))["status"],
+                         "WORKSPACE_TAINTED")
+        (self.root / "new-note.txt").write_text("unknown\n", encoding="utf-8")
+        self.assertEqual(run_change(self.root, self.change["change_id"],
+                                    services=self._services())["status"], "WORKSPACE_TAINTED")
+        (self.root / "new-note.txt").unlink()
+        from storyloop.run_recovery import reset_run
+        self.assertEqual(reset_run(self.root, self.change["change_id"], "清理未知文件")["status"],
+                         "CONTRACT_COMMITTED")
+
+    def test_inventory_skips_ignored_and_scratch_paths(self):
+        from storyloop.base_agent_inventory import inventory
+        from storyloop.baseline import load_project_config
+        from storyloop.storage import write_json
+        config_path = self.root / ".storyloop/config.json"
+        config = load_project_config(self.root)
+        config["profile"]["scratch_paths"] = ["build-cache"]
+        write_json(config_path, config)
+        for directory in (".venv", "node_modules", "build-cache"):
+            target = self.root / directory / "large.bin"
+            target.parent.mkdir()
+            target.write_bytes(b"x" * 21_000_001)
+        files = inventory(self.root)
+        self.assertFalse(any(path.endswith("large.bin") for path in files))
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "Named pipes require POSIX")
+    def test_inventory_and_cleanup_handle_special_file_without_opening_it(self):
+        from storyloop.base_agent_inventory import inventory, unlink_agent_file
+        path = self.root / "agent-pipe"
+        os.mkfifo(path)
+        self.assertIsInstance(inventory(self.root), dict)
+        unlink_agent_file(self.root, "agent-pipe")
+        self.assertFalse(path.exists())
 
     def test_agent_symlink_artifact_is_unlinked_without_following(self):
         self._approved()
@@ -200,6 +244,24 @@ class BaseAgentRecoveryTests(unittest.TestCase):
         write_json(path, state)
         result = run_change(self.root, self.change["change_id"], services=self._services())
         self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+
+    def test_old_agent_binding_git_config_hash_does_not_block_reset(self):
+        from storyloop.run_recovery import reset_run
+        self._approved()
+        path = run_path(self.root, self.change["change_id"])
+        state = load_json(path)
+        from storyloop.base_agent_execution import agent_control_binding
+        old_binding = agent_control_binding(self.root, self.change["change_id"])
+        old_binding[".git/config"] = "old hash"
+        state["agent_control_binding"] = old_binding
+        state["agent_call_head"] = state["contract_commit"]
+        state["base_inflight"] = "agent_implementation"
+        from storyloop.base_agent_inventory import inventory
+        state["agent_before_inventory"] = inventory(self.root)
+        state["agent_after_inventory"] = inventory(self.root)
+        write_json(path, state)
+        self.assertEqual(reset_run(self.root, self.change["change_id"], "回退过度绑定")["status"],
+                         "CONTRACT_COMMITTED")
 
     def _review_context(self):
         return {"implement_vendor": "openai", "review_vendor": "anthropic",

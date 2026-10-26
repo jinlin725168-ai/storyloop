@@ -8,7 +8,7 @@ import hashlib
 from .baseline import _git
 from .base_agent_inventory import inventory
 from .base_design import invalid_reason
-from .engine_source_safety import engine_source_digest
+from .engine_source_safety import ENGINE_WARNING, engine_source_digest, engine_warning
 from .guarded_calls import write_safely
 from .models import StoryLoopError, require
 from .project_agents import invoke_project_agent
@@ -24,12 +24,19 @@ AGENT_EMAIL = "agent@storyloop.local"
 def agent_control_binding(project: Path, change_id: str) -> dict[str, str]:
     """Bind the configuration files an agent must never edit during its call."""
     from .project_profile import BASE_BUILD_SUPPLEMENT
-    relatives = [".git/config", ".storyloop/config.json", ".storyloop/baseline.json",
+    relatives = [".storyloop/config.json", ".storyloop/baseline.json",
                  ".storyloop/state/adapters.json", BASE_BUILD_SUPPLEMENT,
                  f".storyloop/base-proposals/{change_id}.json"]
     return {relative: (hashlib.sha256((project / relative).read_bytes()).hexdigest()
                        if (project / relative).is_file() and not (project / relative).is_symlink()
                        else "<missing-or-unsafe>") for relative in relatives}
+
+
+def agent_binding_changes(project: Path, change_id: str, saved: dict | None) -> set[str]:
+    """Ignore the retired whole-file Git config hash in an in-flight agent state."""
+    current = agent_control_binding(project, change_id)
+    prior = {key: value for key, value in (saved or {}).items() if key != ".git/config"}
+    return {key for key in set(prior) | set(current) if prior.get(key) != current.get(key)}
 
 
 def agent_candidate_paths(project: Path, change: dict, touched: list) -> list[str]:
@@ -90,7 +97,11 @@ def _prepare_agent_call(project: Path, change: dict, state: dict) -> str:
     state["agent_call_head"] = head
     state["agent_before_inventory"] = inventory(project)
     state["agent_control_binding"] = agent_control_binding(project, change["change_id"])
-    state["agent_engine_digest"] = engine_source_digest(Path(state["engine_source"]))
+    try:
+        state["agent_engine_digest"] = engine_source_digest(Path(state["engine_source"]))
+    except (OSError, StoryLoopError):
+        state["agent_engine_digest"] = None
+        state["engine_warning"] = ENGINE_WARNING
     state["base_inflight"] = "agent_implementation"
     save_run(project, state)
     return head
@@ -103,12 +114,11 @@ def _invoke_agent(project: Path, change: dict, state: dict, head: str, services)
     operation = (lambda: services.implement(project, payload)) if services else (
         lambda: invoke_project_agent(project, "implement", payload))
     def source_guard() -> None:
-        if engine_source_digest(Path(state["engine_source"])) != state["agent_engine_digest"]:
-            raise StoryLoopError("Base agent may have changed StoryLoop engine source; inspect "
-                                 "and reinstall the engine before running again",
-                                 code="WORKSPACE_TAINTED")
-        if agent_control_binding(project, change["change_id"]) != state["agent_control_binding"]:
-            raise StoryLoopError("Base agent changed Git or StoryLoop control files; inspect "
+        warning = engine_warning(state)
+        if warning:
+            state["engine_warning"] = warning
+        if agent_binding_changes(project, change["change_id"], state["agent_control_binding"]):
+            raise StoryLoopError("Base agent changed protected StoryLoop control files; inspect "
                                  "them before running again", code="WORKSPACE_TAINTED")
         state["agent_after_inventory"] = inventory(project)
     approved = set(change["product"]["base"]["paths"])

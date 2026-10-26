@@ -111,9 +111,9 @@ def _premerge_restart_reason(project: Path, change: dict, state: dict) -> str | 
     if state.get("implementer", "human") == "agent" and status in {
             "IMPLEMENTING", "BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED"}:
         if state.get("agent_call_head"):
-            from .base_agent_execution import agent_control_binding
-            if state.get("agent_control_binding") != agent_control_binding(
-                    project, change["change_id"]):
+            from .base_agent_execution import agent_binding_changes
+            if agent_binding_changes(project, change["change_id"],
+                                     state.get("agent_control_binding")):
                 return "Protected base configuration changed after the agent call anchor"
         from .base_design import invalid_reason
         reason = invalid_reason(project, change, state)
@@ -381,6 +381,8 @@ def _verified_report(project: Path, change: dict, state: dict, evidence: dict,
         report["human_review_reason"] = review["human_review_reason"]
     if evidence.get("oracle_skills_approval") is not None:
         report["oracle_skills_approval"] = evidence["oracle_skills_approval"]
+    if state.get("engine_warning"):
+        report["engine_warning"] = state["engine_warning"]
     path = project / "reports/storyloop" / change["change_id"] / "report.json"
     write_json(path, report, max_bytes=8_000_000)
     write_text_atomic(path.with_suffix(".md"), _base_markdown(report))
@@ -405,6 +407,8 @@ def _base_markdown(report: dict) -> str:
     if report.get("oracle_skills_approval"):
         paths = report["oracle_skills_approval"]["paths"]
         lines += ["", "Oracle 技能确认：" + "、".join(f"`{path}`" for path in paths)]
+    if report.get("engine_warning"):
+        lines += ["", "警告：" + report["engine_warning"]]
     if report.get("merge_commit"):
         lines += ["", f"合并提交：`{report['merge_commit']}`"]
     return "\n".join(lines) + "\n"

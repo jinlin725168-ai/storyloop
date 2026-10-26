@@ -10,7 +10,7 @@ import hashlib
 from .changes import load_change
 from .change_types import type_of
 from .baseline import _git
-from .base_agent_inventory import agent_artifacts, inventory, unlink_agent_file
+from .base_agent_inventory import inventory, unlink_agent_file
 from .git_command import git_is_ancestor
 from .models import StoryLoopError, identifier, require, text
 from .path_security import safe_target
@@ -38,7 +38,7 @@ BASE_ATTEMPT_KEYS = ("old_green_sha256", "base_evidence", "base_evidence_sha256"
                      "acceptance_evidence_sha256", "review", "stop", "next", "error", "pending",
                      "interrupted_status", "base_resume_status", "baseline_issue",
                      "agent_call_contract", "agent_call_head", "agent_control_binding",
-                     "agent_engine_digest", "agent_before_inventory", "agent_after_inventory",
+                     "agent_engine_digest", "engine_warning", "agent_before_inventory", "agent_after_inventory",
                      "agent_adapter", "agent_vendor")
 
 
@@ -168,29 +168,19 @@ def _restart_agent_base(project: Path, state: dict) -> str:
 
 
 def _agent_preflight_issue(project: Path, state: dict) -> tuple[str, str] | None:
-    from .base_agent_execution import agent_control_binding, engine_source_digest
+    from .base_agent_execution import agent_binding_changes
     design = project / ".storyloop/state/base-designs" / f"{state['change_id']}.json"
     expected_design = state.get("base_design_sha256")
     if expected_design and design.is_file() and hashlib.sha256(design.read_bytes()).hexdigest() != expected_design:
         return ("A saved base design file was edited outside the engine",
                 "Preserve the edited design, inspect it, and restore or move it before "
                 f"storyloop reset <project> --change {state['change_id']} --reason '<reason>'")
-    saved_engine = state.get("agent_engine_digest")
-    if saved_engine is not None:
-        try:
-            current_engine = engine_source_digest(Path(state["engine_source"]))
-        except (OSError, StoryLoopError):
-            current_engine = None
-        if current_engine != saved_engine:
-            return ("StoryLoop engine source differs from the agent call anchor",
-                    "Inspect and reinstall the StoryLoop engine before rerunning; then "
-                    f"storyloop reset <project> --change {state['change_id']} --reason '<reason>'")
     anchor = state.get("agent_call_head")
     if anchor is not None and anchor != state["contract_commit"]:
         return ("Agent call HEAD does not match the committed contract anchor",
                 "Preserve the branch and inspect the saved agent call anchor before reset")
     bound = state.get("agent_control_binding")
-    if bound is not None and bound != agent_control_binding(project, state["change_id"]):
+    if bound is not None and agent_binding_changes(project, state["change_id"], bound):
         if not _agent_cache_only_change(project, state, bound):
             return ("Agent changed protected base configuration after the saved call anchor",
                     "Restore the protected configuration from a trusted copy, then "
@@ -231,9 +221,8 @@ def _agent_branch_issue(project: Path, state: dict) -> tuple[str, str] | None:
 
 
 def _agent_cache_only_change(project: Path, state: dict, bound: dict) -> bool:
-    from .base_agent_execution import agent_control_binding
-    current = agent_control_binding(project, state["change_id"])
-    changed = {key for key in set(bound) | set(current) if bound.get(key) != current.get(key)}
+    from .base_agent_execution import agent_binding_changes
+    changed = agent_binding_changes(project, state["change_id"], bound)
     cache = project / ".storyloop/state/adapters.json"
     if changed != {".storyloop/state/adapters.json"} or not cache.is_file() or cache.is_symlink():
         return False
@@ -249,15 +238,16 @@ def _agent_cleanup_plan(project: Path, state: dict) -> list[str] | None:
     current = inventory(project)
     for path in base_report_paths(state):
         current.pop(path, None)  # Engine report files are discarded separately.
-    if after is None:
-        return [] if current == before else None
-    if current != after:
-        return None
-    changed = agent_artifacts(before, after)
+    introduced = set(after or ()) - set(before)
+    if any(path not in before and path not in introduced for path in current):
+        return None  # A later, nonignored file has no agent-call attribution.
+    if any(path in current and current[path] != after[path] for path in introduced):
+        return None  # Someone changed an agent-created file after the call.
     tracked = set(_git(project, "ls-files", "--cached", "-z").split("\0"))
-    if any(path in before and path not in tracked for path in changed):
-        return None  # No saved bytes exist to restore a preexisting untracked file.
-    return [path for path in changed if path not in before]
+    if after and any(path in tracked and path in before and path in current
+                     and current[path] not in {before[path], after.get(path)} for path in current):
+        return None  # Preserve a tracked edit made after the call.
+    return sorted(path for path in introduced if path in current)
 
 
 def _clear_agent_untracked(project: Path, paths: list[str]) -> None:

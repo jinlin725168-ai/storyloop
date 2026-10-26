@@ -216,7 +216,7 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 - `command` 适配器：请求（含 `instructions`）从 stdin 输入，stdout 返回结果。
 - `manual` 适配器：请求另带 `request_id`，写到 `.storyloop/requests/project-<role>.json`；人把 `{request_id, result}` 写到 `.storyloop/responses/project-<role>.json` 后重跑原命令。
 - `codex` 适配器：把“角色说明 + `Request:` + 请求 JSON”作为提示词交给 `codex exec`；implement、characterize 用 `workspace-write` 沙箱，其他角色 `read-only`。
-- base 代理实现不是沙箱。使用代理 CLI 自带沙箱（例如 Codex `workspace-write`）或无凭证容器运行；引擎的 Git 配置隔离、自举限制和源码摘要检查只覆盖已知篡改路径，不能隔离同用户恶意进程。引擎源码位于项目工作树内时，base 请选择 `--implementer human`。
+- base 代理实现不是沙箱。使用代理 CLI 自带沙箱（例如 Codex `workspace-write`）或无凭证容器运行；引擎不隔离 Git 配置与同用户进程。当前引擎源码由项目 Git 跟踪时，base 请选择 `--implementer human`；调用后源码摘要变化只在停点和报告中提醒核查及重新安装，不阻断运行或 reset。
 - 代理进程只拿到白名单环境变量（`PATH`、`HOME`、`TEMP`、`TMP`、`JAVA_HOME`、`USERPROFILE` 等），名字含 KEY、TOKEN、PASSWORD、SECRET、CREDENTIAL 的一律剔除。
 - `openspec/foundation/README.md` 存在时，除 survey 外每个角色的 payload 自动多一项 `foundation: {version, documents:[path]}`。
 - 合同提交存在且经验层校验通过时，除 survey 和复盘外的角色还会收到 `lessons`：核心层带正文；普通层最多 10 条，只含 `id`、`summary`、`path`、`status`。没有 `openspec/lessons/` 时不注入该字段。

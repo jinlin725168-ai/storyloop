@@ -114,7 +114,7 @@ class BaseAgentFlowTests(unittest.TestCase):
         self.assertTrue(plan_path.exists())
         self.assertEqual(load_json(plan_path)["steps"], ["偷换步骤"])
 
-    def test_design_binding_checks_live_engine_and_source(self):
+    def test_design_binding_checks_live_engine_but_uses_frozen_source(self):
         from storyloop import base_design
         from storyloop.base_design import invalid_reason
         change_id = self.change["change_id"]
@@ -124,7 +124,7 @@ class BaseAgentFlowTests(unittest.TestCase):
         with mock.patch("storyloop.base_design.__version__", "new-engine", create=True):
             self.assertIsNotNone(invalid_reason(self.root, self.change, state))
         with mock.patch.object(base_design, "_git", return_value="different-source\n"):
-            self.assertIsNotNone(invalid_reason(self.root, self.change, state))
+            self.assertIsNone(invalid_reason(self.root, self.change, state))
 
     def test_design_binding_checks_live_contract_product(self):
         from storyloop.base_design import invalid_reason

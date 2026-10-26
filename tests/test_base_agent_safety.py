@@ -119,26 +119,55 @@ class BaseAgentSafetyTests(unittest.TestCase):
         proposed = base_upgrade.propose_base_change(
             self.root, ["storyloop/run_guards.py"], "调整引擎守卫")
         change = approve_change(self.root, proposed["change_id"])
-        with mock.patch.object(base_run_open, "__file__", str(self.root / "storyloop/base_run_open.py")):
+        with mock.patch.object(base_run_open, "_self_hosted_agent", return_value=True):
             with self.assertRaisesRegex(StoryLoopError, "self.host|T6|自举"):
                 base_execution._open_state(self.root, change, "agent", _new_run_state)
 
     def test_self_hosting_check_resolves_project_alias(self):
+        self._track_engine_source()
         alias = self.root / ".." / self.root.name
         with mock.patch.object(base_run_open, "__file__", str(self.root / "storyloop/base_run_open.py")):
             self.assertTrue(base_run_open._self_hosted_agent(
                 alias, {"storyloop/run_guards.py"}))
 
     def test_self_hosted_engine_rejects_agent_even_for_document_path(self):
+        self._track_engine_source()
         with mock.patch.object(base_run_open, "__file__", str(self.root / "storyloop/base_run_open.py")):
             self.assertTrue(base_run_open._self_hosted_agent(self.root, {"docs/x.md"}))
 
+    def _track_engine_source(self):
+        from storyloop.baseline import _git
+        path = self.root / "storyloop/base_run_open.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# tracked engine\n", encoding="utf-8")
+        _git(self.root, "add", "--", "storyloop/base_run_open.py")
+
     def test_nested_engine_rejects_agent_even_for_document_path(self):
         engine_file = self.root / "tools/storyloop/storyloop/base_run_open.py"
+        engine_file.parent.mkdir(parents=True)
+        engine_file.write_text("# tracked engine\n", encoding="utf-8")
+        from storyloop.baseline import _git
+        _git(self.root, "add", "--", "tools/storyloop/storyloop/base_run_open.py")
         with mock.patch.object(base_run_open, "__file__", str(engine_file)):
             self.assertTrue(base_run_open._self_hosted_agent(self.root, {"docs/x.md"}))
 
-    def test_agent_engine_source_edit_stops_before_candidate_commit(self):
+    def test_tracked_sibling_engine_source_rejects_agent(self):
+        from storyloop.baseline import _git
+        engine_root = self.root / "tools/storyloop/storyloop"
+        engine_root.mkdir(parents=True)
+        (engine_root / "run_recovery.py").write_text("# tracked sibling\n", encoding="utf-8")
+        _git(self.root, "add", "--", "tools/storyloop/storyloop/run_recovery.py")
+        with mock.patch.object(base_run_open, "__file__", str(engine_root / "base_run_open.py")):
+            self.assertTrue(base_run_open._self_hosted_agent(self.root, {"docs/x.md"}))
+
+    def test_engine_installed_in_project_venv_allows_agent(self):
+        engine_file = self.root / ".venv/lib/site-packages/storyloop/base_run_open.py"
+        engine_file.parent.mkdir(parents=True)
+        engine_file.write_text("# installed engine\n", encoding="utf-8")
+        with mock.patch.object(base_run_open, "__file__", str(engine_file)):
+            self.assertFalse(base_run_open._self_hosted_agent(self.root, {"docs/x.md"}))
+
+    def test_agent_engine_source_edit_warns_without_blocking_candidate(self):
         self._approved()
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
@@ -155,18 +184,17 @@ class BaseAgentSafetyTests(unittest.TestCase):
 
         configured = LoopServices(services.generate_smoke, write, services.review,
                                   design=services.design)
-        with mock.patch.object(base_agent_execution, "engine_source_digest", create=True,
-                               side_effect=lambda _path: source.read_text(encoding="utf-8")):
+        with mock.patch("storyloop.engine_source_safety.engine_source_digest",
+                        side_effect=lambda _path: source.read_text(encoding="utf-8")):
             result = run_change(self.root, self.change["change_id"], services=configured)
+            candidate_head = lifecycle.git(self.root, "rev-parse", "HEAD")
             resumed = run_change(self.root, self.change["change_id"], services=configured)
-        self.assertEqual(result["status"], "WORKSPACE_TAINTED", result)
-        self.assertIn("engine", result["next"].lower())
-        self.assertEqual(lifecycle.git(self.root, "rev-parse", "HEAD"), before)
-        self.assertEqual(resumed["status"], "WORKSPACE_TAINTED")
-        self.assertIn("reinstall", resumed["next"].lower())
+        self.assertEqual(result["status"], "BASE_REVIEW_REQUIRED", result)
+        self.assertIn("reinstall", str(result).lower())
+        self.assertNotEqual(candidate_head, before)
+        self.assertNotEqual(resumed["status"], "WORKSPACE_TAINTED")
 
-    def test_design_agent_engine_edit_stops_before_git_audit(self):
-        from storyloop import project_loop_guards
+    def test_design_agent_engine_edit_adds_warning(self):
         source = self.root.parent / "design-engine-source.txt"
         source.write_text("trusted\n", encoding="utf-8")
         self.addCleanup(source.unlink)
@@ -178,21 +206,20 @@ class BaseAgentSafetyTests(unittest.TestCase):
 
         configured = LoopServices(services.generate_smoke, services.implement, services.review,
                                   design=design)
-        original = project_loop_guards.control_digest
+        with mock.patch("storyloop.engine_source_safety.engine_source_digest",
+                        side_effect=lambda _path: source.read_text(encoding="utf-8")):
+            result = run_change(self.root, self.change["change_id"], services=configured)
+        self.assertEqual(result["status"], "DESIGN_APPROVAL_REQUIRED")
+        self.assertIn("reinstall", result["warning"])
 
-        def guard(project, change_id, **kwargs):
-            if source.read_text(encoding="utf-8") == "changed\n":
-                raise AssertionError("Git audit ran after engine source changed")
-            return original(project, change_id, **kwargs)
-
+    def test_unreadable_engine_digest_warns_without_blocking_design(self):
         with mock.patch("storyloop.base_design.engine_source_digest",
-                               side_effect=lambda _path: source.read_text(encoding="utf-8")):
-            with mock.patch.object(project_loop_guards, "control_digest", side_effect=guard):
-                result = run_change(self.root, self.change["change_id"], services=configured)
-        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+                        side_effect=StoryLoopError("source unreadable")):
+            result = run_change(self.root, self.change["change_id"], services=self._services())
+        self.assertEqual(result["status"], "DESIGN_APPROVAL_REQUIRED")
+        self.assertIn("reinstall", result["warning"])
 
-    def test_review_agent_engine_edit_stops_before_git_audit(self):
-        from storyloop import project_loop_guards
+    def test_review_agent_engine_edit_adds_warning(self):
         self.assertEqual(self._implement("pom.xml", "<project>updated</project>\n")["status"],
                          "BASE_REVIEW_REQUIRED")
         source = self.root.parent / "review-engine-source.txt"
@@ -208,19 +235,12 @@ class BaseAgentSafetyTests(unittest.TestCase):
                                   design=services.design)
         context = {"implement_vendor": "openai", "review_vendor": "anthropic",
                    "review_adapter": "reviewer", "available_vendors": {"openai", "anthropic"}}
-        original = project_loop_guards.control_digest
-
-        def guard(project, change_id, **kwargs):
-            if source.read_text(encoding="utf-8") == "changed\n":
-                raise AssertionError("Git audit ran after engine source changed")
-            return original(project, change_id, **kwargs)
-
         with mock.patch("storyloop.base_review.vendor_context", return_value=context):
-            with mock.patch("storyloop.base_review.engine_source_digest",
-                                   side_effect=lambda _path: source.read_text(encoding="utf-8")):
-                with mock.patch.object(project_loop_guards, "control_digest", side_effect=guard):
-                    result = run_change(self.root, self.change["change_id"], services=configured)
-        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+            with mock.patch("storyloop.engine_source_safety.engine_source_digest",
+                            side_effect=lambda _path: source.read_text(encoding="utf-8")):
+                result = run_change(self.root, self.change["change_id"], services=configured)
+        self.assertEqual(result["status"], "MANUAL_ACCEPTANCE_REQUIRED")
+        self.assertIn("reinstall", result["warning"])
 
     def test_engine_source_digest_detects_changed_source(self):
         folder = tempfile.TemporaryDirectory()
@@ -233,108 +253,27 @@ class BaseAgentSafetyTests(unittest.TestCase):
         source.write_text("modified\n", encoding="utf-8")
         self.assertNotEqual(digest(root), before)
 
-    def test_engine_git_does_not_load_global_executable_configuration(self):
+    def test_engine_git_retains_ambient_global_preferences(self):
         from storyloop.git_command import git as engine_git
         home = self.root / "git-home"
         home.mkdir()
         (home / ".gitconfig").write_text(
             "[user]\n\tname = Global User\n\temail = global@example.invalid\n"
-            "[core]\n\tautocrlf = true\n\tfsmonitor = malicious-monitor\n"
-            f"[safe]\n\tdirectory = {self.root}\n"
-            "[commit]\n\tgpgsign = true\n",
+            "[core]\n\tautocrlf = true\n\texcludesFile = ~/.gitignore-global\n",
             encoding="utf-8")
         with mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home),
                                       "XDG_CONFIG_HOME": str(home / ".config")}):
             settings = engine_git(self.root, "config", "--show-origin", "--list")
-        self.assertNotIn("core.fsmonitor", settings)
-        self.assertNotIn("commit.gpgsign", settings)
-        self.assertIn("command line:", settings)
+        self.assertIn("core.excludesfile=~/.gitignore-global", settings)
         self.assertIn("core.autocrlf=true", settings)
-        self.assertIn("safe.directory=", settings)
 
-    def test_engine_git_preserves_inert_identity_from_explicit_global_file(self):
-        from storyloop.git_command import git as engine_git
-        global_file = self.root / "explicit-global-gitconfig"
-        global_file.write_text("[user]\n\tname = Explicit User\n"
-                               "\temail = explicit@example.invalid\n"
-                               "[core]\n\tfsmonitor = unsafe-monitor\n", encoding="utf-8")
-        lifecycle.git(self.root, "config", "--unset", "user.name")
-        lifecycle.git(self.root, "config", "--unset", "user.email")
-        with mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": str(global_file)}):
-            settings = engine_git(self.root, "config", "--show-origin", "--list")
-        self.assertIn("user.name=Explicit User", settings)
-        self.assertNotIn("core.fsmonitor", settings)
-
-    def test_engine_git_preserves_system_line_ending_preference_explicitly(self):
-        from storyloop.git_command import git as engine_git
-        system_file = self.root / "test-system-gitconfig"
-        system_file.write_text("[core]\n\tautocrlf = true\n"
-                               "\tfsmonitor = unsafe-monitor\n", encoding="utf-8")
-        home = self.root / "system-preference-home"
-        home.mkdir()
-        with mock.patch.dict(os.environ, {"GIT_CONFIG_SYSTEM": str(system_file),
-                                      "HOME": str(home), "USERPROFILE": str(home),
-                                      "XDG_CONFIG_HOME": str(home / ".config")}):
-            settings = engine_git(self.root, "config", "--show-origin", "--list")
-        self.assertIn("core.autocrlf=true", settings)
-        self.assertNotIn("core.fsmonitor", settings)
-
-    def test_binary_git_calls_use_same_global_config_isolation(self):
-        from storyloop.git_command import git_binary
-        home = self.root / "binary-git-home"
-        home.mkdir()
-        (home / ".gitconfig").write_text("[core]\n\tfsmonitor = unsafe-monitor\n",
-                                         encoding="utf-8")
-        with mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home),
-                                      "XDG_CONFIG_HOME": str(home / ".config")}):
-            settings = git_binary(self.root, "config", "--list").decode("utf-8")
-        self.assertNotIn("core.fsmonitor", settings)
-
-    def test_binary_git_rejects_environment_injected_configuration(self):
-        from storyloop.git_command import git_binary
-        injected = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.fsmonitor",
-                    "GIT_CONFIG_VALUE_0": "unsafe-monitor"}
-        with mock.patch.dict(os.environ, injected):
-            settings = git_binary(self.root, "config", "--list").decode("utf-8")
-        self.assertNotIn("core.fsmonitor", settings)
-
-    def test_report_git_uses_isolated_configuration(self):
-        import time
-        from storyloop.report_git import _git as report_git
-        home = self.root / "report-git-home"
-        home.mkdir()
-        (home / ".gitconfig").write_text("[core]\n\tfsmonitor = unsafe-monitor\n",
-                                         encoding="utf-8")
-        with mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home),
-                                      "XDG_CONFIG_HOME": str(home / ".config")}):
-            result = report_git(self.root, time.monotonic() + 5, 4096, "config", "--list")
-        self.assertEqual(result["returncode"], 0)
-        self.assertNotIn("core.fsmonitor", result["stdout"])
-
-    def test_agent_local_git_config_edit_stops_before_git_audit(self):
-        from storyloop import project_loop_guards
-        self._approved()
+    def test_agent_control_binding_excludes_git_config(self):
+        before = base_agent_execution.agent_control_binding(self.root, self.change["change_id"])
         config = self.root / ".git/config"
-        original_bytes = config.read_bytes()
-        services = self._services()
-
-        def write(project, _payload):
-            (project / "pom.xml").write_text("<project>updated</project>\n", encoding="utf-8")
-            config.write_bytes(original_bytes + b"\n[core]\n\tfsmonitor = untrusted-command\n")
-            return {"summary": "updated"}
-
-        original_digest = project_loop_guards.control_digest
-
-        def guarded_digest(project, change_id, **kwargs):
-            if config.read_bytes() != original_bytes:
-                raise AssertionError("Git audit ran after local config was changed")
-            return original_digest(project, change_id, **kwargs)
-
-        configured = LoopServices(services.generate_smoke, write, services.review,
-                                  design=services.design)
-        with mock.patch.object(project_loop_guards, "control_digest", side_effect=guarded_digest):
-            result = run_change(self.root, self.change["change_id"], services=configured)
-        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        config.write_bytes(config.read_bytes() + b"\n[branch \"other\"]\n\tremote = origin\n")
+        after = base_agent_execution.agent_control_binding(self.root, self.change["change_id"])
+        self.assertEqual(after, before)
+        self.assertNotIn(".git/config", after)
 
     def test_approved_knowledge_principles_path_can_be_implemented(self):
         proposal = base_upgrade.propose_base_change(

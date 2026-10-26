@@ -85,7 +85,6 @@ rank = 7
 "boundaries" = { module = "execution", zone = "base" }
 "project_git" = { module = "git", zone = "base" }
 "git_command" = { module = "git", zone = "base" }
-"git_user_config" = { module = "git", zone = "base" }
 "project_profile" = { module = "project_contract", zone = "base" }
 "state_format" = { module = "project_contract", zone = "base" }
 "smoke" = { module = "project_contract", zone = "base" }

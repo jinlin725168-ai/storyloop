@@ -25,7 +25,6 @@
 |  | `windows_job` | 底座 | 用于进程树隔离的最小 Windows Job Object 封装 | — |
 | Git 原语 | `project_git` | 底座 | 对已批准产品变更执行安全的本地 Git 生命周期 | `commit_paths`、`current_branch`、`finish_feature`、`start_feature` |
 |  | `git_command` | 底座 | 执行有界且禁用钩子的 Git 命令 | `git`、`git_failure` |
-|  | `git_user_config` | 底座 | 仅读取无执行能力的全局 Git 偏好并显式传给引擎 Git 命令 | `explicit_global_options` |
 | 变更类型 | `change_types` | 底座 | 声明三种现有变更类型的判据、范围、阶段与档位策略 | `CHANGE_TYPES`、`definition_for`、`type_for_change_id`、`type_of` |
 | 项目契约 | `onboarding_manifest` | 底座 | 校验接入声明，不执行工程钩子或读取凭证 | `load_manifest`、`validate_hooks`、`validate_onboarding` |
 |  | `state_format` | 底座 | 集中状态格式枚举、接入清单与系统烟测路径、测试计数模式校验 | `criterion_expects_red`、`criterion_tier`、`is_system_smoke_path`、`validate_test_count_patterns` |
@@ -74,7 +73,7 @@
 |  | `base_design` | 可变区 | 将 base 代理方案与具名人工批准绑定到当前合同和运行 | `propose_design`、`approve_base_design` |
 |  | `base_agent_execution` | 可变区 | 审计代理写入并由引擎提交单个 base 候选 | `implement_base_candidate` |
 |  | `base_agent_inventory` | 可变区 | 对代理调用窗口前后文件建立无链接跟随的清单 | `inventory` |
-|  | `engine_source_safety` | 可变区 | 代理调用前后校验当前引擎源码摘要 | `engine_source_digest` |
+|  | `engine_source_safety` | 可变区 | 代理调用前后比较引擎源码摘要并给出提醒 | `engine_source_digest`、`engine_warning` |
 |  | `base_review` | 可变区 | 绑定跨厂商审查与单厂商人工替代 | `review_agent_candidate`、`human_substitute_fields` |
 |  | `facts` | 可变区 | 记录并跨运行传递代理声明的安全代码事实位置 | `merge_facts`、`valid_location` |
 |  | `failure_attribution` | 可变区 | 判定失败尝试的修复责任与闭环是否仍有进展 | `check_findings`、`failure_signature`、`finding_key`、`layer_attribution`、`location_file`、`next_mode`、`no_progress`、`route` |

@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 
 from .baseline import _git, load_project_config
@@ -51,8 +52,8 @@ def _baseline(project, candidate, commit):
     # safe_target resolves its root, so compare against the resolved spelling too
     # (Windows temp folders are often 8.3 short names such as RUNNER~1).
     candidate = Path(candidate).resolve()
-    from .git_command import git_binary
-    tree = git_binary(project, 'ls-tree', '-rz', '--full-tree', commit)
+    tree =subprocess.run(['git', 'ls-tree', '-rz', '--full-tree', commit], cwd=project,
+                          capture_output=True, check=True).stdout
     paths = set()
     for entry in tree.split(b'\0'):
         if not entry:
@@ -65,7 +66,8 @@ def _baseline(project, candidate, commit):
         target = safe_target(candidate, relative, 'characterization baseline target')
         require(target.relative_to(candidate).as_posix() == relative,
                 'Characterization baseline path must be canonical')
-        content = git_binary(project, 'cat-file', 'blob', oid.decode('ascii'))
+        content = subprocess.run(['git', 'cat-file', 'blob', oid.decode('ascii')], cwd=project,
+                                 capture_output=True, check=True).stdout
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
         target.chmod(0o755 if mode == b'100755' else 0o644)

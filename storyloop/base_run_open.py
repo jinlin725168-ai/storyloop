@@ -23,8 +23,13 @@ def choose_implementer(scope: str, requested: str | None) -> str:
 
 
 def _self_hosted_agent(project: Path, paths: set[str]) -> bool:
-    engine_root = Path(__file__).resolve().parent.parent
-    return engine_root.is_relative_to(project.resolve())
+    engine_file = Path(__file__).resolve()
+    root = project.resolve()
+    if not engine_file.is_relative_to(root):
+        return False
+    relative = engine_file.parent.relative_to(root).as_posix()
+    tracked = _git(project, "ls-files", "--cached", "-z", "--", relative)
+    return any(path.endswith(".py") for path in tracked.split("\0"))
 
 
 def _open_state(project: Path, change: dict, implementer: str | None, new_run_state) -> dict:

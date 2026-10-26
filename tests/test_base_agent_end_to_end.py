@@ -84,6 +84,17 @@ class BaseAgentEndToEndTests(unittest.TestCase):
         with self.assertRaisesRegex(StoryLoopError, "Merged base runs cannot reset"):
             reset_run(self.root, change_id, "已合并后不得回准备阶段")
 
+    def test_engine_source_warning_reaches_stop_and_final_report(self):
+        with mock.patch("storyloop.engine_source_safety.engine_source_digest",
+                        return_value="source changed after call"):
+            self._accepted_agent_candidate()
+        state = load_json(run_path(self.root, self.change["change_id"]))
+        self.assertIn("reinstall", state["engine_warning"])
+        self.assertEqual(run_change(self.root, self.change["change_id"])["status"], "FINALIZING")
+        self.assertEqual(run_change(self.root, self.change["change_id"])["status"], "PASSED")
+        report = load_json(self.root / "reports/storyloop" / self.change["change_id"] / "report.json")
+        self.assertIn("reinstall", report["engine_warning"])
+
     def _accepted_agent_candidate(self):
         change_id = self.change["change_id"]
         self.assertEqual(run_change(self.root, change_id)["status"],

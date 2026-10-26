@@ -9,9 +9,9 @@ import re
 from .baseline import _git, load_project_config
 from .call_context import capability_for
 from .capability_protocol import normalize_vendor
-from .engine_source_safety import engine_source_digest
+from .engine_source_safety import engine_warning
 from .guarded_calls import read_only_call
-from .models import StoryLoopError, require, text
+from .models import require, text
 from .project_agents import invoke_project_agent
 from .project_receipt import _dirty_paths
 from .role_profiles import enabled, resolve_adapters, role_settings
@@ -51,8 +51,9 @@ def vendor_context(project: Path, state: dict) -> dict:
 
 def human_substitute_fields(project: Path, state: dict, reason: str) -> dict:
     """Permit named human review only if one known vendor can actually be configured."""
-    from .base_agent_execution import agent_control_binding
-    require(state.get("agent_control_binding") == agent_control_binding(project, state["change_id"]),
+    from .base_agent_execution import agent_binding_changes
+    require(not agent_binding_changes(project, state["change_id"],
+                                      state.get("agent_control_binding")),
             "Base review handshake configuration changed after the agent call")
     context = vendor_context(project, state)
     require(context["available_vendors"] is not None
@@ -85,13 +86,10 @@ def review_agent_candidate(project: Path, change: dict, state: dict, services=No
                "design_plan": state["base_design"]}
     operation = (lambda: services.review(project, payload)) if services else (
         lambda: invoke_project_agent(project, "review", payload))
-    source = Path(state["engine_source"])
-    state["agent_engine_digest"] = engine_source_digest(source)
-    save_run(project, state)
     def source_guard() -> None:
-        if engine_source_digest(source) != state["agent_engine_digest"]:
-            raise StoryLoopError("Base review agent may have changed StoryLoop engine source; "
-                                 "inspect and reinstall before rerunning", code="WORKSPACE_TAINTED")
+        warning = engine_warning(state)
+        if warning:
+            state["engine_warning"] = warning
     answer = read_only_call(project, change["change_id"], operation,
                             post_call_guard=source_guard)
     require(isinstance(answer, dict) and answer.get("verdict") == "pass"

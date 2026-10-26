@@ -23,6 +23,9 @@ def pause(project: Path, state: dict, status: str, **details) -> dict:
     """Persist an explicit stop with its details; the result always names the next command."""
     from .stop_report import build_stop
 
+    if state.get("engine_warning"):
+        details.setdefault("warning", state["engine_warning"])
+
     transition(project, state, status, event="stop")
     persisted_details = {key: value for key, value in details.items() if key != "phase"}
     state.update(persisted_details)

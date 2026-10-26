@@ -5,7 +5,23 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from .models import require
+from .models import StoryLoopError, require
+
+
+ENGINE_WARNING = ("StoryLoop engine source may have changed during an agent call; "
+                  "inspect and reinstall the engine before running again")
+
+
+def engine_warning(state: dict) -> str | None:
+    """Advise on source drift without treating a same-user process as isolated."""
+    expected = state.get("agent_engine_digest")
+    if not expected:
+        return None
+    try:
+        current = engine_source_digest(Path(state["engine_source"]))
+    except (OSError, StoryLoopError):
+        return ENGINE_WARNING
+    return ENGINE_WARNING if current != expected else None
 
 
 def engine_source_digest(source: Path) -> str:

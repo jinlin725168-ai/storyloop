@@ -1,4 +1,4 @@
-"""Bounded, no-follow inventory for attributing one agent call's workspace files."""
+"""Git-visible, no-follow inventory for attributing one agent call's workspace files."""
 
 from __future__ import annotations
 
@@ -8,24 +8,25 @@ import stat
 from pathlib import Path
 
 from .models import require
+from .storage import IGNORED
 
 
 def inventory(project: Path) -> dict[str, str]:
-    """Include ignored files and links while excluding the engine's control directories."""
+    """Use Git's ignore rules and the project's existing scratch path policy."""
+    from .baseline import _git
+    from .project_loop_guards import _is_scratch, scratch_paths
+
+    scratch = scratch_paths(project)
+    ignored = {name.casefold() for name in IGNORED | {".storyloop"}}
     result: dict[str, str] = {}
-    for directory, names, files in os.walk(project, followlinks=False):
-        base = Path(directory)
-        if base == project:
-            names[:] = [name for name in names if name not in {".git", ".storyloop"}]
-        for name in list(names):
-            path = base / name
-            if path.is_symlink() or _junction(path):
-                result[path.relative_to(project).as_posix()] = _fingerprint(path)
-                names.remove(name)
-        for name in files:
-            path = base / name
-            result[path.relative_to(project).as_posix()] = _fingerprint(path)
-            require(len(result) <= 20_000, "Agent workspace inventory exceeds file limit")
+    visible = _git(project, "ls-files", "--cached", "--others", "--exclude-standard", "-z")
+    for relative in sorted(set(visible.split("\0")) - {""}):
+        if any(part.casefold() in ignored for part in relative.split("/")):
+            continue
+        if _is_scratch(relative, scratch):
+            continue
+        path = project / relative
+        result[relative] = _fingerprint(path) if path.exists() or path.is_symlink() else "missing"
     return result
 
 
@@ -38,15 +39,13 @@ def _fingerprint(path: Path) -> str:
     metadata = path.lstat()
     if stat.S_ISLNK(metadata.st_mode) or _junction(path):
         return "link:" + hashlib.sha256(os.readlink(path).encode("utf-8")).hexdigest()
-    require(stat.S_ISREG(metadata.st_mode) and metadata.st_size <= 20_000_000,
-            "Agent workspace contains an unsupported file")
-    return "file:" + hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def agent_artifacts(before: dict[str, str], after: dict[str, str]) -> list[str]:
-    """A prior untracked/ignored file may not be overwritten by an agent and then restored."""
-    return sorted(path for path in before.keys() | after.keys()
-                  if before.get(path) != after.get(path))
+    if not stat.S_ISREG(metadata.st_mode):
+        return f"special:{stat.S_IFMT(metadata.st_mode)}"
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return "file:" + digest.hexdigest()
 
 
 def unlink_agent_file(project: Path, relative: str) -> None:
@@ -55,7 +54,7 @@ def unlink_agent_file(project: Path, relative: str) -> None:
     require(path.parent.resolve().is_relative_to(project.resolve()),
             "Agent artifact parent escapes project")
     require(not path.parent.is_symlink(), "Agent artifact parent is a link")
-    if path.is_symlink() or path.is_file():
+    if path.is_symlink() or (path.exists() and not path.is_dir()):
         path.unlink()
     elif _junction(path):
         path.rmdir()
