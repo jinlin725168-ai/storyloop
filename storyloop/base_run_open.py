@@ -24,7 +24,7 @@ def choose_implementer(scope: str, requested: str | None) -> str:
 
 def _self_hosted_agent(project: Path, paths: set[str]) -> bool:
     engine_root = Path(__file__).resolve().parent.parent
-    if project != engine_root:
+    if project.resolve() != engine_root:
         return False
     return any(path.startswith(("storyloop/", "tests/", "examples/"))
                or path in {"pyproject.toml", "setup.cfg", "tox.ini"} for path in paths)

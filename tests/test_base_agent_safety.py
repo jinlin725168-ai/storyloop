@@ -121,6 +121,12 @@ class BaseAgentSafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(StoryLoopError, "self.host|T6|自举"):
                 base_execution._open_state(self.root, change, "agent", _new_run_state)
 
+    def test_self_hosting_check_resolves_project_alias(self):
+        alias = self.root / ".." / self.root.name
+        with mock.patch.object(base_run_open, "__file__", str(self.root / "storyloop/base_run_open.py")):
+            self.assertTrue(base_run_open._self_hosted_agent(
+                alias, {"storyloop/run_guards.py"}))
+
 
 if __name__ == "__main__":
     unittest.main()
