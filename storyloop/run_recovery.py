@@ -15,6 +15,7 @@ from .path_security import safe_target
 from .project_git import changed_paths, current_branch
 from .storage import load_json, locked
 from .run_state import save_run
+from .run_stops import pause
 from .run_transitions import transition, RESETTABLE
 from .run_guards import base_report_paths, reset_status as _reset_status
 
@@ -33,7 +34,8 @@ BASE_ATTEMPT_KEYS = ("old_green_sha256", "base_evidence", "base_evidence_sha256"
                      "candidate_commit", "candidate_sha256", "base_inflight",
                      "implementation_commit", "report_commit", "report_sha256",
                      "acceptance_evidence_sha256", "review", "stop", "next", "error", "pending",
-                     "interrupted_status", "base_resume_status", "baseline_issue")
+                     "interrupted_status", "base_resume_status", "baseline_issue",
+                     "agent_call_contract", "agent_call_head", "agent_control_binding")
 
 
 def reset_run(project: Path, change_id: str, reason: str, now: Clock | None = None) -> dict:
@@ -98,6 +100,8 @@ def restart_base_attempt(project: Path, state: dict, rejected: bool = False) -> 
             "Merged base runs cannot restart; resume finalization with storyloop run")
     require(current_branch(project) == state.get("feature_branch"),
             "Resume the saved StoryLoop base branch before restarting")
+    if state.get("implementer", "human") == "agent":
+        return _restart_agent_base(project, state)
     candidate = state.get("candidate_commit")
     head = _git(project, "rev-parse", "HEAD").strip()
     if head == state["contract_commit"]:
@@ -126,6 +130,48 @@ def restart_base_attempt(project: Path, state: dict, rejected: bool = False) -> 
         state["rejected_candidate_commit"] = candidate
     save_run(project, state)
     return target
+
+
+def _restart_agent_base(project: Path, state: dict) -> str:
+    """Discard one engine-owned candidate, never guess about extra branch commits."""
+    from .base_agent_execution import AGENT_EMAIL, AGENT_NAME, agent_control_binding
+    head = _git(project, "rev-parse", "HEAD").strip()
+    contract = state["contract_commit"]
+    bound = state.get("agent_control_binding")
+    if bound is not None and bound != agent_control_binding(project, state["change_id"]):
+        pause(project, state, "WORKSPACE_TAINTED",
+              reason="Agent changed protected base configuration after the saved call anchor",
+              next="Restore the protected configuration from a trusted copy, then "
+                   f"storyloop reset <project> --change {state['change_id']} --reason '<reason>'")
+        return "WORKSPACE_TAINTED"
+    if head != contract:
+        candidate = state.get("candidate_commit")
+        if candidate and head != candidate and _report_tail(project, state, candidate, head):
+            head = candidate
+        parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
+        identity = _git(project, "show", "-s", "--format=%an <%ae>|%cn <%ce>", head).strip()
+        expected = f"{AGENT_NAME} <{AGENT_EMAIL}>|{AGENT_NAME} <{AGENT_EMAIL}>"
+        if len(parents) != 2 or parents[1] != contract or identity != expected:
+            pause(project, state, "WORKSPACE_TAINTED",
+                  reason="Base branch has an extra or unattributed commit after the agent anchor",
+                  next="Preserve the branch, inspect git log, and remove the unexpected commit "
+                       "manually before storyloop reset")
+            return "WORKSPACE_TAINTED"
+    _git(project, "reset", "--hard", contract)
+    _clear_agent_untracked(project)
+    _discard_base_files(project, state)
+    transition(project, state, "CONTRACT_COMMITTED", event="base_restart")
+    for key in BASE_ATTEMPT_KEYS:
+        state.pop(key, None)
+    save_run(project, state)
+    return "CONTRACT_COMMITTED"
+
+
+def _clear_agent_untracked(project: Path) -> None:
+    """Remove only Git-visible untracked files left by this isolated agent attempt."""
+    raw = _git(project, "ls-files", "--others", "--exclude-standard", "-z")
+    for relative in (item for item in raw.split("\0") if item):
+        safe_target(project, relative, "agent attempt artifact").unlink(missing_ok=True)
 
 
 def base_source_contains_candidate(project: Path, state: dict) -> bool:

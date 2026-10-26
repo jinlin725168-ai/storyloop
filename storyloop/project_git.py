@@ -54,7 +54,8 @@ def start_base(project: Path, change_id: str,
             "source_head": _git(project, "rev-parse", "HEAD").strip()}
 
 
-def commit_paths(project: Path, paths: list[str], message: str, *, details: bool = True) -> dict:
+def commit_paths(project: Path, paths: list[str], message: str, *, details: bool = True,
+                 identity: tuple[str, str] | None = None) -> dict:
     """Stage only explicit safe paths and create a hook-free local commit."""
     project = Path(project).resolve()
     require(isinstance(paths, list) and bool(paths), "Commit needs explicit paths")
@@ -67,7 +68,9 @@ def commit_paths(project: Path, paths: list[str], message: str, *, details: bool
     require(bool(status.strip()), "Commit has no changes")
     try:
         # Commits carry the repository's own configured identity: the loop acts for its user.
-        _git(project, "commit", "--no-verify", "-m", message)
+        prefix = [] if identity is None else ["-c", f"user.name={identity[0]}",
+                                               "-c", f"user.email={identity[1]}"]
+        _git(project, *prefix, "commit", "--no-verify", "-m", message)
     except StoryLoopError as exc:
         raise StoryLoopError(f"Local Git commit failed: {exc}", code="GIT_BLOCKED") from exc
     if not details:

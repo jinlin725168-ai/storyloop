@@ -48,6 +48,10 @@ def run_base_change(project: Path, change: dict, implementer: str | None,
     if state["status"] == "HUMAN_IMPLEMENTATION_REQUIRED":
         return _candidate_to_review(project, change, state)
     if state["status"] == "IMPLEMENTING":
+        if state.get("implementer", "human") == "agent":
+            from .base_agent_execution import implement_base_candidate
+            result = implement_base_candidate(project, change, state, services)
+            return _agent_to_review(project, change, state) if result["status"] == "IMPLEMENTING" else result
         return _restart_pause(project, change, state, "Unfinished base verification")
     if state["status"] == "BASE_REVIEW_REQUIRED":
         return _review_stop(project, change, state)
@@ -104,6 +108,14 @@ def _resume_git_merge(project: Path, change: dict, state: dict) -> dict | None:
 
 def _premerge_restart_reason(project: Path, change: dict, state: dict) -> str | None:
     status = state["status"]
+    if state.get("implementer", "human") == "agent" and status in {
+            "IMPLEMENTING", "BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED"}:
+        from .base_design import invalid_reason
+        reason = invalid_reason(project, change, state)
+        if reason:
+            return reason
+        if status == "IMPLEMENTING" and state.get("agent_call_head"):
+            return "Interrupted agent implementation attempt"
     if status == "DESIGN_APPROVAL_REQUIRED":
         from .base_design import invalid_reason
         return invalid_reason(project, change, state)
@@ -143,6 +155,10 @@ def _premerge_restart_reason(project: Path, change: dict, state: dict) -> str | 
 def _restart_pause(project: Path, change: dict, state: dict, reason: str,
                    *, rejected: bool = False) -> dict:
     target = restart_base_attempt(project, state, rejected=rejected)
+    if target == "WORKSPACE_TAINTED":
+        return {"status": target, "change_id": change["change_id"],
+                "reason": state.get("stop", {}).get("reason", reason),
+                "next": state.get("next")}
     if target == "CONTRACT_COMMITTED":
         return {"status": target, "change_id": change["change_id"], "reason": reason,
                 "next": f"storyloop run <project> --change {change['change_id']}"}
@@ -254,6 +270,21 @@ def _candidate_to_review(project: Path, change: dict, state: dict) -> dict:
                updates={"candidate_commit": candidate, "base_evidence": evidence,
                         "candidate_sha256": evidence["candidate_sha256"],
                         "base_evidence_sha256": _evidence_sha256(project, change["change_id"])})
+    state.pop("base_inflight", None)
+    return _pause_review(project, change, state)
+
+
+def _agent_to_review(project: Path, change: dict, state: dict) -> dict:
+    """Verify the one engine-owned candidate without accepting a prior attempt's evidence."""
+    try:
+        from .run_guards import guard_g1
+        base_candidate_paths(project, change, state)
+        guard_g1(project, state, {})
+        evidence = _verify_candidate(project, change, state)
+    except StoryLoopError as exc:
+        return _restart_pause(project, change, state, str(exc))
+    state.update(base_evidence=evidence, candidate_sha256=evidence["candidate_sha256"],
+                 base_evidence_sha256=_evidence_sha256(project, change["change_id"]))
     state.pop("base_inflight", None)
     return _pause_review(project, change, state)
 

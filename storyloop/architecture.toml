@@ -166,6 +166,7 @@ rank = 7
 "base_execution" = { module = "lifecycle", zone = "mutable" }
 "base_run_open" = { module = "lifecycle", zone = "mutable" }
 "base_design" = { module = "implementation", zone = "mutable" }
+"base_agent_execution" = { module = "implementation", zone = "mutable" }
 "base_finalization" = { module = "lifecycle", zone = "mutable" }
 "foundation_survey" = { module = "onboarding", zone = "mutable" }
 "skills" = { module = "onboarding", zone = "mutable" }

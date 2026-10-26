@@ -122,6 +122,30 @@ class BaseAgentFlowTests(unittest.TestCase):
         with self.assertRaisesRegex(StoryLoopError, "clean|candidate|before approval"):
             approve_base_design(self.root, change_id, state["base_design"]["plan_id"])
 
+    def test_approved_agent_writes_candidate_and_reaches_review(self):
+        from storyloop.base_design import approve_base_design
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, services=self._services())
+        state = load_json(run_path(self.root, change_id))
+        approve_base_design(self.root, change_id, state["base_design"]["plan_id"])
+        self.assertEqual(run_change(self.root, change_id, services=self._services())["status"],
+                         "IMPLEMENTING")
+
+        def implement(project, _payload):
+            (project / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                               encoding="utf-8")
+            return {"summary": "updated"}
+
+        services = self._services()
+        services = LoopServices(services.generate_smoke, implement, services.review,
+                                design=services.design)
+        result = run_change(self.root, change_id, services=services)
+        self.assertEqual(result["status"], "BASE_REVIEW_REQUIRED")
+        saved = load_json(run_path(self.root, change_id))
+        self.assertNotEqual(saved["candidate_commit"], saved["agent_call_head"])
+        self.assertEqual(saved["agent_call_head"], saved["contract_commit"])
+        self.assertTrue(saved["base_evidence_sha256"])
+
 
 if __name__ == "__main__":
     unittest.main()
