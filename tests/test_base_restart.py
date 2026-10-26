@@ -5,6 +5,7 @@ import unittest
 from unittest import mock
 
 from storyloop import base_execution
+from storyloop import base_build_config
 from storyloop.manual_acceptance import record_manual_acceptance
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import run_change
@@ -277,4 +278,97 @@ class BaseRestartTests(unittest.TestCase):
             self.assertEqual(run_change(self.root, change_id)["status"],
                              "BASE_REVIEW_REQUIRED")
         prove.assert_not_called()
+
+    def test_manual_candidate_merge_explains_how_to_restore_source(self):
+        change_id = self._accepted_candidate()
+        state = load_json(run_path(self.root, change_id))
+        git(self.root, "switch", state["source_branch"])
+        git(self.root, "merge", "--ff-only", state["feature_branch"])
+        git(self.root, "switch", state["feature_branch"])
+        with self.assertRaises(StoryLoopError) as caught:
+            run_change(self.root, change_id)
+        message = str(caught.exception)
+        self.assertIn("manually merged", message)
+        self.assertIn(f"git switch {state['source_branch']}", message)
+        self.assertIn(f"git reset --hard {state['source_head']}", message)
+        self.assertIn(f"storyloop run <project> --change {change_id}", message)
+
+    def test_fast_forwarded_report_explains_recovery_without_switching(self):
+        change_id = self._accepted_candidate()
+        with mock.patch.object(base_execution, "finish_feature",
+                               side_effect=RuntimeError("merge interrupted")):
+            with self.assertRaisesRegex(RuntimeError, "merge interrupted"):
+                run_change(self.root, change_id)
+        state = load_json(run_path(self.root, change_id))
+        self.assertEqual(state["status"], "VERIFIED")
+        git(self.root, "switch", state["source_branch"])
+        git(self.root, "merge", "--ff-only", state["feature_branch"])
+        git(self.root, "switch", state["feature_branch"])
+        with self.assertRaises(StoryLoopError) as caught:
+            run_change(self.root, change_id)
+        message = str(caught.exception)
+        self.assertIn("expected verified merge", message)
+        self.assertIn(f"git switch {state['source_branch']}", message)
+        self.assertIn(f"git reset --hard {state['source_head']}", message)
+        self.assertIn(f"storyloop run <project> --change {change_id}", message)
+        self.assertEqual(git(self.root, "branch", "--show-current"), state["feature_branch"])
+
+    def test_passed_run_does_not_check_deleted_source_ref(self):
+        change_id = self._accepted_candidate()
+        self.assertEqual(run_change(self.root, change_id)["status"], "FINALIZING")
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+        with mock.patch.object(base_execution, "base_source_contains_candidate",
+                               side_effect=AssertionError("terminal Git query")):
+            self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+        with mock.patch("storyloop.run_recovery.base_source_contains_candidate",
+                        side_effect=AssertionError("terminal Git query")):
+            with self.assertRaisesRegex(StoryLoopError, "Merged base runs cannot reset"):
+                reset_run(self.root, change_id, "终态不可重置")
+
+    def test_missing_source_ref_has_domain_error_during_premerge(self):
+        change_id = self._accepted_candidate()
+        state = load_json(run_path(self.root, change_id))
+        git(self.root, "branch", "-D", state["source_branch"])
+        with self.assertRaises(StoryLoopError) as caught:
+            run_change(self.root, change_id)
+        self.assertNotEqual(caught.exception.code, "GIT_BLOCKED")
+        self.assertIn(state["source_branch"], str(caught.exception))
+
+    def test_review_and_acceptance_refuse_active_project_lock(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        (self.root / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                            encoding="utf-8")
+        git(self.root, "add", "pom.xml")
+        git(self.root, "commit", "-q", "-m", "candidate")
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        git(self.root, "config", "user.name", "Independent Reviewer")
+        with locked(self.root):
+            with self.assertRaisesRegex(StoryLoopError, "project lock"):
+                base_execution.record_base_review(self.root, change_id, "pass", "已核对")
+        base_execution.record_base_review(self.root, change_id, "pass", "已核对")
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "MANUAL_ACCEPTANCE_REQUIRED")
+        with locked(self.root):
+            with self.assertRaisesRegex(StoryLoopError, "project lock"):
+                record_manual_acceptance(self.root, change_id, ["BASE-ACCEPT"], "符合目标")
+
+    def test_nonstandard_base_change_id_blocks_supplement_replacement(self):
+        change = dict(self.change)
+        change["change_id"] = "LEGACY-BASE-1"
+        write_json(self.root / ".storyloop/state/changes/LEGACY-BASE-1.json", change)
+        (self.root / ".storyloop/state/changes" / f"{self.change['change_id']}.json").unlink()
+        with self.assertRaisesRegex(StoryLoopError, "approved base change"):
+            base_build_config._require_no_pending_base(self.root)
+
+    def test_approval_supplement_digest_blocks_replacement_for_nonbase_nature(self):
+        path = self.root / ".storyloop/state/changes/CUSTOM-1.json"
+        write_json(path, {})
+        (self.root / ".storyloop/state/changes" / f"{self.change['change_id']}.json").unlink()
+        change = {"change_id": "CUSTOM-1", "status": "APPROVED",
+                  "product": {"nature": "fix"},
+                  "approval": {"base_build_config_sha256": "0" * 64}}
+        with mock.patch.object(base_build_config, "load_change", return_value=change):
+            with self.assertRaisesRegex(StoryLoopError, "approved base change"):
+                base_build_config._require_no_pending_base(self.root)
 

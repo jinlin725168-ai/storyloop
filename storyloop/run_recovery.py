@@ -10,7 +10,7 @@ from .changes import load_change
 from .change_types import type_of
 from .baseline import _git
 from .git_command import git_is_ancestor
-from .models import identifier, require, text
+from .models import StoryLoopError, identifier, require, text
 from .path_security import safe_target
 from .project_git import changed_paths, current_branch
 from .storage import load_json, locked
@@ -131,9 +131,29 @@ def base_source_contains_candidate(project: Path, state: dict) -> bool:
     if not isinstance(source, str) or not source:
         return False
     source_ref = f"refs/heads/{source}"
-    return any(git_is_ancestor(project, commit, source_ref)
-               for commit in (state.get("report_commit"), state.get("candidate_commit"))
-               if isinstance(commit, str) and commit)
+    try:
+        return any(git_is_ancestor(project, commit, source_ref)
+                   for commit in (state.get("report_commit"), state.get("candidate_commit"))
+                   if isinstance(commit, str) and commit)
+    except StoryLoopError as exc:
+        raise StoryLoopError(
+            f"Cannot inspect base source {source}: source branch or saved candidate object "
+            "is missing; restore the ref/object before resuming this run",
+            code="BASE_SOURCE_UNAVAILABLE",
+        ) from exc
+
+
+def manual_base_merge_error(state: dict, situation: str) -> str:
+    """Explain the human-only path after an unsupported manual source merge."""
+    source = state["source_branch"]
+    change_id = state["change_id"]
+    return (f"Base run cannot continue: {situation}. Preserve shared history; for an "
+            f"unshared source, restore it with: git switch {source}; "
+            f"git branch backup/{change_id}-manual-merge; "
+            f"git reset --hard {state['source_head']}; "
+            f"git switch {state['feature_branch']}; "
+            f"storyloop run <project> --change {change_id}. "
+            "If the source is shared, coordinate a new base change instead of rewriting it.")
 
 
 def _has_report_history(project: Path, state: dict, head: str) -> bool:

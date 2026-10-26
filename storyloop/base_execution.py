@@ -22,17 +22,19 @@ from .run_stops import pause
 from .run_transitions import transition
 from .run_guards import (base_candidate_authors, trusted_base_acceptance,
                          trusted_base_evidence, trusted_base_review)
-from .run_recovery import base_source_contains_candidate, restart_base_attempt
-from .project_receipt import _dirty_paths
+from .run_recovery import (BASE_PREMERGE, base_source_contains_candidate,
+                           manual_base_merge_error, restart_base_attempt)
+from .project_receipt import _dirty_paths, recover_completed_merge
 from .smoke_runner import implementation_digest, run_commands_isolated
-from .storage import load_json, write_json, write_text_atomic
+from .storage import load_json, locked, write_json, write_text_atomic
 from .system_smoke import run_system_smoke_isolated
 
 
 def run_base_change(project: Path, change: dict, implementer: str | None, new_run_state) -> dict:
     """Open or resume the manually implemented base change without an agent call."""
     state = _open_state(project, change, implementer, new_run_state)
-    merged = _resume_git_merge(project, change, state)
+    premerge = state["status"] in BASE_PREMERGE and state.get("base_resume_status") != "FINALIZING"
+    merged = _resume_git_merge(project, change, state) if premerge else None
     if merged is not None:
         return merged
     reason = _premerge_restart_reason(project, state)
@@ -76,9 +78,14 @@ def _resume_git_merge(project: Path, change: dict, state: dict) -> dict | None:
         return None
     if state["status"] == "VERIFIED":
         report = state.get("report_commit")
-        require(isinstance(report, str) and git_is_ancestor(
-            project, report, f"refs/heads/{state['source_branch']}"),
-            "Source branch contains the candidate without its verified report")
+        source_ref = f"refs/heads/{state['source_branch']}"
+        require(isinstance(report, str) and git_is_ancestor(project, report, source_ref),
+                manual_base_merge_error(state, "source contains candidate without verified report"))
+        try:
+            recover_completed_merge(project, state, source_ref=source_ref)
+        except StoryLoopError as exc:
+            raise StoryLoopError(manual_base_merge_error(
+                state, "source lacks expected verified merge")) from exc
         if current_branch(project) == state["feature_branch"]:
             require(not _dirty_paths(project), "Clean the base branch before merge recovery")
             _git(project, "switch", state["source_branch"])
@@ -88,7 +95,7 @@ def _resume_git_merge(project: Path, change: dict, state: dict) -> dict | None:
     require(state["status"] not in premerge
             and not (state["status"] == "WORKSPACE_TAINTED"
                      and state.get("base_resume_status") != "FINALIZING"),
-            "Source branch already contains this base candidate; do not restart it")
+            manual_base_merge_error(state, "source manually merged candidate before verification"))
     return None
 
 
@@ -139,6 +146,11 @@ def _restart_pause(project: Path, change: dict, state: dict, reason: str,
 def record_base_review(project: Path, change_id: str, verdict: str, note: str) -> dict:
     """Bind a named independent human review to one committed candidate."""
     project = Path(project).resolve()
+    with locked(project):
+        return _record_base_review_locked(project, change_id, verdict, note)
+
+
+def _record_base_review_locked(project: Path, change_id: str, verdict: str, note: str) -> dict:
     state = load_json(run_path(project, change_id))
     require(state.get("status") == "BASE_REVIEW_REQUIRED",
             "Base review needs a verified green candidate")

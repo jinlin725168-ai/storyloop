@@ -12,7 +12,7 @@ from .run_guards import base_candidate_matches, manual_criteria, pending_manual_
 from .models import StoryLoopError, identifier, require, text  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .smoke_runner import implementation_digest
 from .run_state import save_run
-from .storage import load_json, write_json
+from .storage import load_json, locked, write_json
 
 Clock = Callable[[], datetime]
 ACCEPTING_STATES = {"MANUAL_ACCEPTANCE_REQUIRED"}
@@ -33,6 +33,13 @@ def record_manual_acceptance(
 ) -> dict:
     """Record that a human verified the listed manual criteria on the paused candidate code."""
     project = Path(project).resolve()
+    with locked(project):
+        return _record_manual_acceptance_locked(project, change_id, criteria, note, now)
+
+
+def _record_manual_acceptance_locked(
+    project: Path, change_id: str, criteria: list[str], note: str, now: Clock | None,
+) -> dict:
     change = load_change(project, change_id)
     note = text(note, "acceptance note")
     require(isinstance(criteria, list) and bool(criteria), "Acceptance needs at least one --criterion")

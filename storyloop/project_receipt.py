@@ -72,8 +72,8 @@ def verify_verified_artifacts(project: Path, state: dict) -> None:
     verify_evidence_digest(project, state)
 
 
-def recover_completed_merge(project: Path, state: dict) -> str:
-    head = _git(project, "rev-parse", "HEAD").strip()
+def recover_completed_merge(project: Path, state: dict, *, source_ref: str = "HEAD") -> str:
+    head = _git(project, "rev-parse", source_ref).strip()
     parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
     require(len(parents) == 3 and state["source_head"] in parents[1:]
             and state["report_commit"] in parents[1:],

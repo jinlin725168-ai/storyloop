@@ -30,8 +30,13 @@ def confirm_legacy_base_build(project: Path, commands: object, confirmed_by: str
 
 def _require_no_pending_base(project: Path) -> None:
     root = project / ".storyloop/state/changes"
-    for path in root.glob("BASE-*.json"):
+    for path in root.glob("*.json"):
         change = load_change(project, path.stem)
-        require(not (change.get("approval") and change["status"] not in {"PASSED", "SUPERSEDED"}),
+        approval = change.get("approval")
+        depends_on_base_config = (change["product"].get("nature") == "base"
+                                  or isinstance(approval, dict)
+                                  and "base_build_config_sha256" in approval)
+        require(not (depends_on_base_config and approval
+                     and change["status"] not in {"PASSED", "SUPERSEDED"}),
                 f"An approved base change is unfinished: {change['change_id']}; "
                 "complete it before changing base-build-config")
