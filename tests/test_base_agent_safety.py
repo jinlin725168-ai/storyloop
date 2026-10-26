@@ -167,6 +167,15 @@ class BaseAgentSafetyTests(unittest.TestCase):
         with mock.patch.object(base_run_open, "__file__", str(engine_file)):
             self.assertFalse(base_run_open._self_hosted_agent(self.root, {"docs/x.md"}))
 
+    def test_tracked_venv_install_is_still_not_self_hosting(self):
+        from storyloop.baseline import _git
+        engine_file = self.root / ".venv/lib/site-packages/storyloop/base_run_open.py"
+        engine_file.parent.mkdir(parents=True)
+        engine_file.write_text("# installed engine\n", encoding="utf-8")
+        _git(self.root, "add", "-f", "--", ".venv/lib/site-packages/storyloop/base_run_open.py")
+        with mock.patch.object(base_run_open, "__file__", str(engine_file)):
+            self.assertFalse(base_run_open._self_hosted_agent(self.root, {"docs/x.md"}))
+
     def test_agent_engine_source_edit_warns_without_blocking_candidate(self):
         self._approved()
         folder = tempfile.TemporaryDirectory()

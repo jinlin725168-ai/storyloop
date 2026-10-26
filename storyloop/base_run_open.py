@@ -11,7 +11,7 @@ from .models import require
 from .project_boundaries import audit_base_scope
 from .project_git import current_branch, start_base
 from .run_state import run_path, save_run
-from .storage import load_json
+from .storage import IGNORED, load_json
 
 
 def choose_implementer(scope: str, requested: str | None) -> str:
@@ -28,6 +28,9 @@ def _self_hosted_agent(project: Path, paths: set[str]) -> bool:
     if not engine_file.is_relative_to(root):
         return False
     relative = engine_file.parent.relative_to(root).as_posix()
+    installed = {name.casefold() for name in IGNORED} | {"site-packages", "dist-packages"}
+    if any(part.casefold() in installed for part in relative.split("/")):
+        return False
     tracked = _git(project, "ls-files", "--cached", "-z", "--", relative)
     return any(path.endswith(".py") for path in tracked.split("\0"))
 
