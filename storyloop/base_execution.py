@@ -6,17 +6,16 @@ from pathlib import Path
 import hashlib
 import json
 
-from . import __version__
 from .approvals import materialize_approved_change
-from .base_upgrade import _changed_since, base_candidate_paths, establish_old_green
-from .baseline import _git, load_baseline, load_project_config, verify_baseline
+from .base_upgrade import base_candidate_paths, establish_old_green
+from .baseline import _git, load_project_config
+from .base_run_open import _open_state
 from .git_command import git_is_ancestor
 from .manual_acceptance import load_manual_acceptance
 from .models import StoryLoopError, require, text
-from .project_git import current_branch, start_base, commit_paths, exact_child_commit, finish_feature
+from .project_git import current_branch, commit_paths, exact_child_commit, finish_feature
 from .project_loop_support import relative_files
 from .project_profile import base_commands_digest, effective_base_profile, layer_commands
-from .project_boundaries import audit_base_scope
 from .run_state import run_path, save_run
 from .run_stops import pause
 from .run_transitions import transition
@@ -407,65 +406,6 @@ def _finalize_base(project: Path, change: dict, state: dict) -> dict:
     return passed_result(state)
 
 
-def _open_state(project: Path, change: dict, implementer: str | None, new_run_state) -> dict:
-    change_id = change["change_id"]
-    saved = run_path(project, change_id)
-    require(change["status"] in {"APPROVED", "PASSED"} and change["approval"],
-            "Base change must be approved before execution")
-    if saved.exists():
-        state = load_json(saved)
-        require(state.get("contract_digest") == change["approval"]["contract_digest"]
-                and state.get("implementer") == "human", "Saved base run is invalid")
-        require(implementer in {None, "human"}, "Base agent implementation belongs to E2")
-        expected = (state["source_branch"] if state["status"] in
-                    {"MERGED", "RECEIPTING", "FINALIZING", "PASSED"}
-                    or (state["status"] == "WORKSPACE_TAINTED"
-                        and state.get("base_resume_status") == "FINALIZING")
-                    else state["feature_branch"])
-        require(current_branch(project) == expected
-                or (state["status"] == "VERIFIED" and current_branch(project) == state["source_branch"]),
-                "Resume the saved StoryLoop base branch")
-        return state
-    require(implementer == "human", "Use --implementer human for E1 base changes")
-    require(change["approval"]["versions"]["engine_version"] == __version__,
-            "Approved base engine version differs from the running engine")
-    dirty = _git(project, "status", "--porcelain=v1", "--untracked-files=all", "-z")
-    records = [item for item in dirty.split("\0") if item]
-    expected = set(change["product"]["base"]["paths"])
-    allowed = {item[3:].replace("\\", "/") for item in records}
-    require(all(item[:2] in {" M", " D", "??"} for item in records)
-            and allowed <= expected, "Prepared base files exceed approved paths")
-    audit_base_scope(project, change, expected)
-    baseline = load_baseline(project)
-    committed = _changed_since(project, baseline["source_head"])
-    require(not committed.intersection(expected),
-            "Committed proposal paths already exist on the source branch; "
-            "revert them with a new commit, then replay the change on the new base branch")
-    start = _base_start_context(project, change_id, baseline, allowed)
-    state = new_run_state(project, change_id, start,
-                          change["approval"]["contract_digest"])
-    state["implementer"] = "human"
-    state["engine_version"] = __version__
-    state["engine_source"] = str(Path(__file__).resolve().parent)
-    state["target_tree_oid"] = _git(project, "rev-parse", f"{state['source_head']}^{{tree}}").strip()
-    save_run(project, state)
-    return state
-
-
-def _base_start_context(project: Path, change_id: str, baseline: dict,
-                        allowed: set[str]) -> dict:
-    branch = f"storyloop/{change_id}"
-    if current_branch(project) == branch:
-        head = _git(project, "rev-parse", "HEAD").strip()
-        require(head == _git(project, "rev-parse", baseline["source_branch"]).strip(),
-                "Unrecorded base branch no longer matches the locked source")
-        verify_baseline(project, resume=True, allowed_base_paths=allowed)
-        return {"status": "STARTED", "branch": branch,
-                "source_branch": baseline["source_branch"], "source_head": head}
-    verify_baseline(project, allowed_base_paths=allowed)
-    return start_base(project, change_id, allowed)
-
-
 def _prepare(project: Path, change: dict, state: dict) -> dict:
     change_id = change["change_id"]
     contract_root = materialize_approved_change(project, change_id)
@@ -484,6 +424,9 @@ def _prepare(project: Path, change: dict, state: dict) -> dict:
     transition(project, state, "IMPLEMENTING", event="base_green_ready")
     state.pop("base_inflight", None)
     save_run(project, state)
+    if state.get("implementer", "human") == "agent":
+        return {"status": "IMPLEMENTING", "change_id": change_id,
+                "next": f"storyloop run <project> --change {change_id}"}
     return pause(project, state, "HUMAN_IMPLEMENTATION_REQUIRED",
                  next=f"Commit the approved paths on {state['feature_branch']}, then "
                       f"storyloop run <project> --change {change_id}")

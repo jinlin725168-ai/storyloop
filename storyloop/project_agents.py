@@ -16,7 +16,7 @@ from .call_log import close_call, open_call
 from .role_schemas import schema_for, wire_schema
 from .role_instructions import FOUNDATION_NOTE, INSTRUCTIONS  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .telemetry import record_call
-from .role_profiles import build_profile, resolve_adapters
+from .role_profiles import base_payload, build_profile, enabled, resolve_adapters
 
 ROLES = {"product", "acceptance", "implement", "review", "survey", "characterize", "design"}
 
@@ -61,7 +61,9 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
     config = load_project_config(project)
     from .cost_limits import check_before_call
     from .cross_vendor import invoke
-    from .role_profiles import enabled
+    if base_payload(payload):
+        require(enabled(config), "Base agent execution needs configured adapters")
+        payload = {**payload, 'routing_tier': 'heavy'}
     if enabled(config):
         from .role_subagents import routing_tier
         payload = {**payload, 'routing_tier': routing_tier(project, payload)}

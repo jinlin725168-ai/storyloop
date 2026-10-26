@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 
 from .models import StoryLoopError, require
-from .role_profiles import role_settings
+from .role_profiles import base_payload, role_settings
 from .telemetry import record_call
 
 
@@ -35,7 +35,8 @@ def require_distinct(config: dict, capabilities: dict) -> None:
 def invoke(project, role, payload, config, ledger, call):
     """Route a call and, only by explicit policy, retry review on the implement adapter."""
     from .adapter_capabilities import ensure_checked
-    settings = role_settings(config, role, payload.get('routing_tier') or payload.get('tier'))
+    settings = role_settings(config, role, payload.get('routing_tier') or payload.get('tier'),
+                             base=base_payload(payload))
     from .review_context import verification_active
     verifying = role == 'review' and verification_active()
     if verifying:

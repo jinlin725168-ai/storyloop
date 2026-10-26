@@ -150,6 +150,7 @@
 |  | `stop_report` | 可变区 | 构造并渲染各显式停点共用的证据报告 | `build_entry_stop`、`build_stop`、`failure_view`、`render_stop`、`stop_of` |
 | 变更生命周期 | `project_loop` | 可变区 | 已批准产品变更的外部自治闭环 | `load_run_state`、`run_change` |
 |  | `base_execution` | 可变区 | 在统一状态机上编排 base 人工实现与恢复 | `run_base_change` |
+|  | `base_run_open` | 可变区 | 选择 base 实现者并打开兼容旧运行的分支状态 | `_open_state`、`choose_implementer` |
 |  | `base_finalization` | 可变区 | 合并后幂等推进底座版本并恢复断点 | `finalize_base_baseline` |
 |  | `run_attempts` | 可变区 | 编排每轮校验、审查与人工验收 | `run_checks_safely`、`perform_review`、`manual_acceptance_gate` |
 |  | `project_preparation` | 可变区 | 物化合同并建立实现前不可变证据 | — |
