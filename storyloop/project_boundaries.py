@@ -73,7 +73,8 @@ def role_path_boundary(project: Path, role: str, payload: dict) -> dict:
     plan = payload.get("design_plan") if isinstance(payload.get("design_plan"), dict) else {}
     forbidden = [*(path for path in baseline["foundation_paths"] if path not in approved),
                  *(path for path in baseline["protected_paths"] if path not in approved),
-                 "openspec/lessons/**", f"{CUSTOM_ROOT}/**", ".storyloop/**"]
+                 *([] if base_agent else ["openspec/lessons/**", f"{CUSTOM_ROOT}/**"]),
+                 ".storyloop/**"]
     if base_agent:
         forbidden.extend(["reports/storyloop/**", "acceptance/changes/**",
                           "acceptance/smoke/**", "acceptance/storyloop-settings.json",

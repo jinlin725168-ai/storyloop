@@ -65,6 +65,12 @@ class BaseAgentSafetyTests(unittest.TestCase):
         self.assertEqual(result["status"], "WORKSPACE_TAINTED")
 
     def test_agent_rejects_symlink_at_approved_path(self):
+        probe = self.root / "symlink-probe"
+        try:
+            os.symlink("README.md", probe)
+        except OSError:
+            self.skipTest("Creating symlinks needs platform permission")
+        probe.unlink()
         self._approved()
         services = self._services()
 
@@ -91,6 +97,21 @@ class BaseAgentSafetyTests(unittest.TestCase):
                                   design=services.design)
         result = run_change(self.root, self.change["change_id"], services=configured)
         self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+
+    def test_scratch_configuration_cannot_hide_base_evidence_or_control_writes(self):
+        from storyloop.project_loop_guards import _is_scratch
+        self.assertFalse(_is_scratch(".storyloop/evidence/BASE-1/base-candidate-green.json",
+                                     [".storyloop", "evidence"]))
+        self.assertFalse(_is_scratch(".storyloop/state/base-reviews/BASE-1.json",
+                                     [".storyloop", "base-reviews"]))
+
+    def test_knowledge_scope_approved_lesson_is_exactly_writable(self):
+        from storyloop.project_boundaries import role_path_boundary
+        payload = {"change": {"product": {"nature": "base", "base": {
+            "scope": "knowledge", "paths": ["openspec/lessons/update.md"]}}}}
+        boundary = role_path_boundary(self.root, "implement", payload)
+        self.assertIn("openspec/lessons/update.md", boundary["writable_paths"])
+        self.assertNotIn("openspec/lessons/**", boundary["forbidden_paths"])
 
     def test_agent_self_hosting_is_rejected_before_branch_creation(self):
         proposed = base_upgrade.propose_base_change(

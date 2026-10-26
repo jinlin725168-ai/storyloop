@@ -120,6 +120,8 @@ def _is_scratch(path: str, scratch: list[str]) -> bool:
     # The engine's own call ledger is written while agents run; it is bookkeeping, not a change.
     if normalized == ".storyloop/state/telemetry" or normalized.startswith(".storyloop/state/telemetry/"):
         return True
+    if normalized == ".storyloop" or normalized.startswith(".storyloop/"):
+        return False
     parts = normalized.split("/")
     return any(part == item for part in parts for item in scratch) or any(
         normalized == item.rstrip("/") or normalized.startswith(item.rstrip("/") + "/")

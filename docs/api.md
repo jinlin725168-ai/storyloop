@@ -16,7 +16,7 @@
 | `survey` | `[--reason TEXT] [--from FILE]` | `SURVEYED` |
 | `change` | `--idea TEXT [--slug NAME]`、`--change ID --message TEXT` 或 `--supersede ID --message TEXT [--reason TEXT]`；`[--no-interactive]` | 变更状态（`DRAFT`） |
 | `approve` | `--change ID [--no-interactive]` 或 `--draft KIND/ID`（二者互斥） | 运行状态（见第二节）或 `APPLIED` |
-| `run` | `--change ID [--implementer human] [--overrule TEXT] [--no-interactive]` | 运行状态；E1 base 首次运行必须指定 `--implementer human` |
+| `run` | `--change ID [--implementer agent\|human] [--overrule TEXT] [--no-interactive]` | 运行状态；新 base 默认代理实现，`ci/upstream` 默认人工，旧 E1 运行保持人工模式 |
 | `status` | `--change ID` | 变更状态，附 `run`、`telemetry`、`next`、`stop` |
 | `log` | `--change ID` | `LOG` |
 | `answer` | `--change ID --answer TEXT [--answer TEXT …]` | `ANSWERED` |
@@ -28,7 +28,8 @@
 | `smoke-apply` | `--change ID` | `SMOKE_APPLIED` 或 `SMOKE_UPDATE_FAILED` |
 | `base-propose` | `--path P [--path P …] --reason TEXT [--allow-mutable] [--allow-ci]` | `PROPOSED` |
 | `base-update` | `--proposal BASE-ID [--confirm-oracle-skills]` | 旧 `PROPOSED` 返回 `APPROVAL_REQUIRED`；历史已接受回执返回 `BASELINE_UPGRADED` |
-| `base-review` | `--change BASE-ID --verdict pass\|fail --note TEXT` | `REVIEW_RECORDED`，审查人须与候选提交者不同 |
+| `base-design-approve` | `--change BASE-ID --plan-id SHA256` | `DESIGN_APPROVED`，具名批准当前代理方案 |
+| `base-review` | `--change BASE-ID --verdict pass\|fail --note TEXT [--human-review REASON]` | `REVIEW_RECORDED`；单厂商人工替代须给至少 12 字理由，审查人须独立于全部候选作者和提交者 |
 | `ci` | `--change ID` | `PASSED` 或 `FAILED` |
 | `metrics` | `[--since YYYY-MM-DD] [--ci-results DIR] [--save]` | `METRICS` |
 | `report` | `--change ID` | `REPORT`（报告路径） |
@@ -39,6 +40,14 @@
 例如 `storyloop change PATH --idea "导出用户" --slug user-export` 会生成形如 `FEAT-20261024-user-export` 的 ID。短名须为 3–40 个小写字母、数字或连字符，首尾为字母或数字。未提供短名时继续使用 `FEAT-20261024-001` 这样的序号格式；已有旧格式 ID 仍可使用。
 
 各命令的用法见 [使用指南](product-iteration-guide.md)。两阶段接入、onboarding.json、`{storyloop_harness}` argv、可信 case 及公开 helper API 见[版本化冒烟执行器](smoke-harness.md)。scaffold 幂等只接受未改草案；人工补齐后按干净提交执行原 init。init 失败按写入内容归属回滚，不覆盖并发修改。
+
+### E2a 底座代理通道
+
+新 base 变更批准后，`run --change BASE-ID` 先完成旧底座绿，再生成方案并停在 `DESIGN_APPROVAL_REQUIRED`。人阅读 `.storyloop/state/base-designs/BASE-ID.json`，用 `base-design-approve --plan-id` 具名批准；下一次 `run` 进入实现，再一次 `run` 调用代理。代理仅能修改合同批准的精确路径，引擎审计后生成候选提交。判据路径（系统冒烟、`acceptance/changes/**`、声明的 `test_roots`、`acceptance/storyloop-settings.json`）在 E2a 仍拒绝代理修改；**E2b 完成前，不得把设计 §4.2 的判据隔离注入跑红视为已交付**。
+
+不同厂商由适配器握手的 `vendor` 判定；缺失或相同都不能证明独立审查，`degrade` 不会把 base 审查回落给实现厂商。只有项目可配置的适配器均证明属于同一个 vendor 时，具名人可用 `base-review --human-review '至少 12 字理由'` 替代代理审查，随后仍须 `accept --criterion BASE-ACCEPT`。报告增量提供 `review_mode`、`human_review_reason`，metrics 单列 `base_human_review_substitutions`；E1 普通人工审查不计替代。
+
+合并源分支之前，代理通道一旦中断或产物失配，会作废方案、候选、证据、审查和验收并回合同提交；源分支是否已包含候选依 Git 事实判断。源分支已合并后仅按既有回执和底座版本流程幂等推进。T6 引擎分离前，本仓库引擎、守卫、适配器及其判据不可交给本仓库代理修改，可显式选 `--implementer human`。E3 的扩展审查能力未在本批实现。
 
 ### spec-craft 项目定制视图
 

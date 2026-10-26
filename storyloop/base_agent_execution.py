@@ -57,6 +57,8 @@ def implement_base_candidate(project: Path, change: dict, state: dict, services=
     from .adapter_capabilities import ensure_checked
     from .baseline import load_project_config
     from .role_profiles import enabled
+    state["base_inflight"] = "agent_capability_check"
+    save_run(project, state)
     if enabled(load_project_config(project)):
         ensure_checked(project)
     head = _git(project, "rev-parse", "HEAD").strip()

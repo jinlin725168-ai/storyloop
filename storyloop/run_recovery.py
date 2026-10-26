@@ -138,6 +138,15 @@ def _restart_agent_base(project: Path, state: dict) -> str:
     from .base_agent_execution import AGENT_EMAIL, AGENT_NAME, agent_control_binding
     head = _git(project, "rev-parse", "HEAD").strip()
     contract = state["contract_commit"]
+    if head != contract:
+        source_ref = f"refs/heads/{state['source_branch']}"
+        try:
+            source_contains_head = git_is_ancestor(project, head, source_ref)
+        except StoryLoopError as exc:
+            raise StoryLoopError("Cannot inspect the base source branch before agent restart; "
+                                 "restore its ref and retry", code="BASE_SOURCE_UNAVAILABLE") from exc
+        require(not source_contains_head, manual_base_merge_error(
+            state, "source already contains the unsaved agent candidate"))
     bound = state.get("agent_control_binding")
     if bound is not None and bound != agent_control_binding(project, state["change_id"]):
         pause(project, state, "WORKSPACE_TAINTED",
@@ -158,7 +167,9 @@ def _restart_agent_base(project: Path, state: dict) -> str:
                   next="Preserve the branch, inspect git log, and remove the unexpected commit "
                        "manually before storyloop reset")
             return "WORKSPACE_TAINTED"
-    _git(project, "reset", "--hard", contract)
+    _git(project, "reset", "--soft", contract)
+    _git(project, "reset", "-q")
+    _git(project, "restore", "--worktree", "--", ".")
     _clear_agent_untracked(project)
     _discard_base_files(project, state)
     transition(project, state, "CONTRACT_COMMITTED", event="base_restart")

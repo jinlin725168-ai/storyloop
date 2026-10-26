@@ -110,6 +110,11 @@ def _premerge_restart_reason(project: Path, change: dict, state: dict) -> str | 
     status = state["status"]
     if state.get("implementer", "human") == "agent" and status in {
             "IMPLEMENTING", "BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED"}:
+        if state.get("agent_call_head"):
+            from .base_agent_execution import agent_control_binding
+            if state.get("agent_control_binding") != agent_control_binding(
+                    project, change["change_id"]):
+                return "Protected base configuration changed after the agent call anchor"
         from .base_design import invalid_reason
         reason = invalid_reason(project, change, state)
         if reason:

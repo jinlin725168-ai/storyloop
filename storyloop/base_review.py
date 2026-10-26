@@ -48,6 +48,9 @@ def vendor_context(project: Path, state: dict) -> dict:
 
 def human_substitute_fields(project: Path, state: dict, reason: str) -> dict:
     """Permit named human review only if one known vendor can actually be configured."""
+    from .base_agent_execution import agent_control_binding
+    require(state.get("agent_control_binding") == agent_control_binding(project, state["change_id"]),
+            "Base review handshake configuration changed after the agent call")
     context = vendor_context(project, state)
     require(context["available_vendors"] is not None
             and len(context["available_vendors"]) == 1,

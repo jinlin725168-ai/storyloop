@@ -164,6 +164,20 @@ class BaseAgentRecoveryTests(unittest.TestCase):
         self.assertEqual(run_change(self.root, self.change["change_id"],
                                     services=self._services())["status"], "CONTRACT_COMMITTED")
 
+    def test_failed_independent_review_discards_agent_candidate(self):
+        from storyloop import base_review
+        self._agent_candidate()
+        services = self._services()
+        reviewer = LoopServices(services.generate_smoke, services.implement,
+                                lambda *_: {"verdict": "fail", "summary": "发现问题",
+                                            "findings": [], "questions": []},
+                                design=services.design)
+        with mock.patch.object(base_review, "vendor_context", return_value=self._review_context()):
+            result = run_change(self.root, self.change["change_id"], services=reviewer)
+        self.assertEqual(result["status"], "CONTRACT_COMMITTED")
+        self.assertEqual(_git(self.root, "rev-parse", "HEAD").strip(),
+                         load_json(run_path(self.root, self.change["change_id"]))["contract_commit"])
+
     def test_acceptance_write_before_state_restarts(self):
         from storyloop import base_review, manual_acceptance
         self._agent_candidate()
