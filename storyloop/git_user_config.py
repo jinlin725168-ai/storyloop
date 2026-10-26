@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import re
+import shutil
+import sys
 
 from .errors import StoryLoopError
 
@@ -61,6 +63,19 @@ def _global_paths(environment: dict[str, str]) -> list[Path]:
     return [config / "git/config", Path(home) / ".gitconfig"]
 
 
+def _system_paths(environment: dict[str, str]) -> list[Path]:
+    configured = environment.get("GIT_CONFIG_SYSTEM")
+    if configured:
+        return [Path(configured)]
+    if sys.platform == "win32":
+        executable = shutil.which("git")
+        if not executable:
+            return []
+        root = Path(executable).resolve().parent.parent
+        return [root / "etc/gitconfig", root / "mingw64/etc/gitconfig"]
+    return [Path("/etc/gitconfig")]
+
+
 def _trusted_directory(project: Path, raw: str) -> bool:
     if raw == "*":
         return True
@@ -72,7 +87,7 @@ def _trusted_directory(project: Path, raw: str) -> bool:
 def explicit_global_options(project: Path, environment: dict[str, str]) -> list[str]:
     """Preserve harmless global identity/line-ending/trust choices as explicit -c values."""
     global_values: dict[str, list[str]] = {}
-    for path in _global_paths(environment):
+    for path in [*_system_paths(environment), *_global_paths(environment)]:
         for key, items in _config_values(path).items():
             global_values.setdefault(key, []).extend(items)
     local_values = _config_values(project / ".git/config")

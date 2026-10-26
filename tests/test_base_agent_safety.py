@@ -265,6 +265,20 @@ class BaseAgentSafetyTests(unittest.TestCase):
         self.assertIn("user.name=Explicit User", settings)
         self.assertNotIn("core.fsmonitor", settings)
 
+    def test_engine_git_preserves_system_line_ending_preference_explicitly(self):
+        from storyloop.git_command import git as engine_git
+        system_file = self.root / "test-system-gitconfig"
+        system_file.write_text("[core]\n\tautocrlf = true\n"
+                               "\tfsmonitor = unsafe-monitor\n", encoding="utf-8")
+        home = self.root / "system-preference-home"
+        home.mkdir()
+        with mock.patch.dict(os.environ, {"GIT_CONFIG_SYSTEM": str(system_file),
+                                      "HOME": str(home), "USERPROFILE": str(home),
+                                      "XDG_CONFIG_HOME": str(home / ".config")}):
+            settings = engine_git(self.root, "config", "--show-origin", "--list")
+        self.assertIn("core.autocrlf=true", settings)
+        self.assertNotIn("core.fsmonitor", settings)
+
     def test_binary_git_calls_use_same_global_config_isolation(self):
         from storyloop.git_command import git_binary
         home = self.root / "binary-git-home"
