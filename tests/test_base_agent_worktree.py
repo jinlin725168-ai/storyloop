@@ -95,9 +95,7 @@ class BaseAgentWorktreeTests(unittest.TestCase):
 
     def test_long_external_temp_path_stops_before_saving_anchor(self):
         long_root = self.root / ("long" * 50)
-        long_root.mkdir()
-        with mock.patch("storyloop.base_agent_worktree.tempfile.gettempdir",
-                        return_value=str(long_root)):
+        with mock.patch("storyloop.base_agent_worktree._safe_temp_root", return_value=long_root):
             with self.assertRaisesRegex(StoryLoopError, "path.*long"):
                 create_agent_worktree(self.project, self.state)
         self.assertNotIn("agent_worktree", self.state)
