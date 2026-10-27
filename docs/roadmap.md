@@ -1,6 +1,6 @@
 # 路线图
 
-更新：2026-10-25（以 `origin/main` `34da20e` 为准）。历史计划在 `docs/plans/`，当前演进计划在 `docs/superpowers/`。
+更新：2026-10-27（以 `origin/main` `aaf55f8` 为准）。历史计划在 `docs/plans/`，当前演进计划在 `docs/superpowers/`。
 
 ## 已完成
 
@@ -37,23 +37,25 @@
 - **CI 调整（[PR #36](https://github.com/jinlin725168-ai/storyloop/pull/36)、[PR #39](https://github.com/jinlin725168-ai/storyloop/pull/39)）**：只改中文文件名文档时正确跳过测试；PR 的 Linux 跑 core、Windows 跑 platform，main 推送两平台仍跑 core；加入仅检查 F/E9 的 ruff 与 CodeQL。
 - **spec-craft 第 2 批（[计划 PR #41](https://github.com/jinlin725168-ai/storyloop/pull/41)、[实现 PR #42](https://github.com/jinlin725168-ai/storyloop/pull/42)）**：团队/个人定制、受保护路径与控制面视图已合入；[一次真实试用](validation/2026-10-24-spec-craft-第2批试用.md)发现行类型、表外假设和问句计数问题。**[PR #44](https://github.com/jinlin725168-ai/storyloop/pull/44)** 已修订技能和测试，未重跑真实试用，不能据此宣称实际模型输出已验证。
 - **架构收敛 E1（[计划 PR #38](https://github.com/jinlin725168-ai/storyloop/pull/38)、[评审修订 PR #40](https://github.com/jinlin725168-ai/storyloop/pull/40)、[实现 PR #43](https://github.com/jinlin725168-ai/storyloop/pull/43)）**：base 合同、旧底座绿证据、人工实现与具名人审、回归验收和幂等版本推进已交付并在独立样本实跑，见[验证记录](validation/2026-10-24-架构收敛-阶段E1-验证.md)。评审中人决定：旧项目使用人工确认的补充配置声明构建命令；合并前中断一律作废本次尝试、保留人的候选后重验。E1 不含代理实现、跨厂商审查或判据注入跑红，也未完成 I13。
+- **架构收敛 E2a（预览；[计划 PR #46](https://github.com/jinlin725168-ai/storyloop/pull/46)、[实现 PR #47](https://github.com/jinlin725168-ai/storyloop/pull/47)）**：代理在独立 worktree 实现，方案经具名人批准，最重档位下执行跨厂商审查；单厂商须由具名人审并说明替代理由。base 默认仍为 human，须显式 `--implementer agent` 启用预览。人决定维持现有威胁模型、不做 OS 级隔离，改用独立 worktree 并以预览合入代理通道。尚无真实代理试用，**仅测试适配器验证**；判据注入跑红留 E2b，撞底座衔接留 E3，I13 未达成。
 
 ## 已知问题
 
-此前偶发 Git 可见性保护错误仍待捕获具体触发路径，诊断已增强，保护规则未放宽。E1 只交付人工底座通道，I13 仍未达成；后续能力边界见[阶段 E1 验证](validation/2026-10-24-架构收敛-阶段E1-验证.md)。
+此前偶发 Git 可见性保护错误仍待捕获具体触发路径，诊断已增强，保护规则未放宽。E2a 的独立树与主仓共享 `.git`，StoryLoop 不是沙箱，无法隔离同用户恶意进程及检测与使用之间的竞态；代理应在 CLI 沙箱或无凭证容器中运行，见[PR #47 的已知问题](https://github.com/jinlin725168-ai/storyloop/pull/47)。判据注入跑红与撞底座衔接仍待 E2b/E3，I13 未达成。
 
 新发现的代码与文档不一致记在这里，修复后移到"已完成"。
 
 ## 下一步
 
-目标是两件事：StoryLoop 能迭代自己（1.0 可用性标准，T6），以及每次迭代都能用指标看出能力变好还是变差。后者分四个子项目：1 链路骨架 → 2 需求共创技能 → 3 能力指标 → 4 测试充分性（调研见共享工作区 `research_notes/规格与测试充分性调研/`）。骨架 ①、E1 和 spec-craft 第 1、2 批已完成；E2 在计划中。
+目标是两件事：StoryLoop 能迭代自己（1.0 可用性标准，T6），以及每次迭代都能用指标看出能力变好还是变差。后者分四个子项目：1 链路骨架 → 2 需求共创技能 → 3 能力指标 → 4 测试充分性（调研见共享工作区 `research_notes/规格与测试充分性调研/`）。骨架 ①、E1、E2a 预览和 spec-craft 第 1、2 批已完成；E2b 待规划。
 
 ```mermaid
 flowchart LR
     D["架构收敛 D ✅"] --> T1["骨架 ① ✅"]
     T1 --> E1["架构收敛 E1 ✅"]
-    E1 --> E2["架构收敛 E2（计划中）"]
-    E2 --> E3["架构收敛 E3"]
+    E1 --> E2a["架构收敛 E2a ✅（预览）"]
+    E2a --> E2b["架构收敛 E2b（待规划）"]
+    E2b --> E3["架构收敛 E3"]
     E3 --> F["架构收敛 F"]
     E3 --> T2["骨架 ②"]
     S1["spec-craft 第 1、2 批 ✅"] --> S3["spec-craft 第 3 批"]
@@ -68,7 +70,7 @@ flowchart LR
 
 **主线（改引擎，按顺序）**
 
-1. **架构收敛 E2（计划中）→ E3**：E2 补代理实现、跨厂商审查与改动判据时的注入跑红；E3 补功能变更撞底座后的 `blocked_by` 衔接。E1 的人工通道不代表 E 全部完成，I13 尚未达成。
+1. **架构收敛 E2b（待规划）→ E3**：E2a 已以预览交付代理实现与审查；E2b 补改动判据时的注入跑红，E3 补功能变更撞底座后的 `blocked_by` 衔接。I13 尚未达成。
 2. **架构收敛 F**：决策 0018、修订 0004，更新 `architecture.md`、`concepts.md`。
 3. **链路骨架 ②**：需求登记，模块、需求、规则、例子的 ID，fix 溯源，docs 类型。与 E 都改合同和生命周期，排在 E 之后。
 4. **spec-craft 第 3 → 4 → 5 批**：合同新字段与 `--from-draft`、需求地图起草、product 角色说明迁移。
