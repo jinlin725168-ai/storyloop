@@ -61,7 +61,7 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"STORYLOOP_AGENT_WORKTREE_TEMP_ROOT": str(isolated)}):
             checkout = create_agent_worktree(self.project, self.state)
             try:
-                self.assertTrue(checkout.is_relative_to(isolated / "storyloop-agent-wt"))
+                self.assertTrue(checkout.is_relative_to(isolated.resolve() / "storyloop-agent-wt"))
             finally:
                 remove_agent_worktree(self.project, self.state)
         after = ({path.relative_to(system_tree) for path in system_tree.rglob("*")}
