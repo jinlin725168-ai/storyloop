@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -114,6 +115,14 @@ class AdapterCapabilityTests(unittest.TestCase):
         for message in ("API key not found", "password is required", "password is hunter2"):
             with self.subTest(message=message):
                 self.assertEqual(redact(message), message)
+
+    def test_redaction_handles_large_nonsensitive_output_within_timeout(self):
+        result = subprocess.run(
+            [sys.executable, "-c", "from storyloop.processutil import redact; "
+             "assert redact('x' * 200000) == 'x' * 200000"],
+            cwd=Path(__file__).resolve().parents[1], capture_output=True, timeout=8,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
 
     def test_check_rejects_known_missing_requested_tier(self):
         with tempfile.TemporaryDirectory() as folder:
