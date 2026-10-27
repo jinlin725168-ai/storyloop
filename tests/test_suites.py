@@ -3,7 +3,10 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import io
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from tests.suites import CORE, PLATFORM, RUNNER as RUNNER_MODULES, SAFETY
 
@@ -78,6 +81,24 @@ class RunnerTests(unittest.TestCase):
         root = self._project({"test_a": "pass"})
         (root / "tests" / "test_broken.py").write_text("import does_not_exist\n", encoding="utf-8")
         self.assertEqual(_run("--suite", "full", root=root).returncode, 1)
+
+    def test_runner_rejects_new_content_in_system_agent_worktree_root(self):
+        from tests import run as runner
+        isolated = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        leaked = isolated / "storyloop-agent-wt" / "from-test-module"
+        def fake_module(_root, name):
+            leaked.parent.mkdir()
+            leaked.write_text("leak", encoding="utf-8")
+            return {"module": name, "ok": True, "seconds": 0.0,
+                    "tests": 1, "skipped": 0, "output": ""}
+        output = io.StringIO()
+        with (mock.patch.object(runner.tempfile, "gettempdir", return_value=str(isolated)),
+              mock.patch.object(runner, "modules", return_value=["tests.fake"]),
+              mock.patch.object(runner, "run_module", side_effect=fake_module),
+              redirect_stdout(output)):
+            code = runner.main(["--suite", "full", "--workers", "1", "--root", str(isolated)])
+        self.assertEqual(code, 1)
+        self.assertIn("storyloop-agent-wt", output.getvalue())
 
 
 if __name__ == "__main__":

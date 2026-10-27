@@ -49,6 +49,19 @@ def ensure_checked(project: Path) -> dict | None:
     return check(project)
 
 
+def require_base_review_vendors(project: Path, config: dict) -> None:
+    """Prove selected base role vendors before invoking design or implementation."""
+    record = ensure_checked(project)
+    capabilities = (record or {}).get("adapters", {})
+    for role in ("implement", "review"):
+        adapter = role_settings(config, role, "heavy", base=True)["adapter"]
+        if not capabilities.get(adapter, {}).get("vendor"):
+            raise StoryLoopError(
+                f"Base {role} adapter {adapter} vendor handshake is unknown; "
+                "repair adapter configuration and run storyloop adapters check <project> "
+                "before starting this agent run", code="AGENT_UNAVAILABLE")
+
+
 def _require_mappings(config: dict, adapters: dict, results: dict) -> None:
     from .cross_vendor import require_distinct
     for role in ROLES:

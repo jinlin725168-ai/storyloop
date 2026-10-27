@@ -9,6 +9,7 @@ from storyloop.adapter_capabilities import check, ensure_checked, probe
 from storyloop.baseline import bootstrap_project, load_project_config
 from storyloop.cli import dispatch, parser
 from storyloop.models import StoryLoopError
+from storyloop.processutil import redact
 from storyloop.storage import write_json
 from tests.test_baseline_behavior import repository
 
@@ -79,6 +80,17 @@ class AdapterCapabilityTests(unittest.TestCase):
             self.assertIn("exit 9", reason)
             self.assertIn("[REDACTED]", reason)
             self.assertNotIn("private-value", reason)
+
+    def test_handshake_redacts_bearer_and_bare_keys_before_display(self):
+        secrets = ["sk-ant-" + "a" * 24, "ghp_" + "b" * 24,
+                   "xoxb-" + "c" * 24, "sk-" + "d" * 24]
+        samples = [f"Authorization: Bearer {secrets[0]}",
+                   f"Invalid API key {secrets[0]}", f"token {secrets[1]}",
+                   f"secret: {secrets[2]}", f"password {secrets[3]}"]
+        cleaned = redact("; ".join(samples))
+        self.assertIn("[REDACTED]", cleaned)
+        for secret in secrets:
+            self.assertNotIn(secret, cleaned)
 
     def test_check_rejects_known_missing_requested_tier(self):
         with tempfile.TemporaryDirectory() as folder:

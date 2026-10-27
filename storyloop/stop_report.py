@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import shlex
 from .cost_limits import stop_fields, render_usage
+from .run_state import base_design_approved
 from .routing_report import STATUSES, routing_options, routing_view  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 
 
@@ -202,35 +203,55 @@ def _evidence(state: dict, details: dict) -> list[str]:
     return [item for item in dict.fromkeys(evidence) if item]
 
 
-def build_stop(project: Path | str, state: dict, status: str, details: dict) -> dict:
-    """Construct the stable report shape without changing the supplied run state."""
-    project_text = str(project)
-    change_id = str(state["change_id"])
-    failures = state.get("failures") or []
-    routed_options = routing_options(project, change_id, status, {**state, **details})
-    options = routed_options or _options(
+def _base_design_stop(project: Path | str, state: dict, change_id: str) -> tuple[str, list[dict]]:
+    plan = state["base_design"]
+    approved = base_design_approved(project, state)
+    hint = (f"storyloop run <project> --change {change_id}" if approved else
+            f"storyloop base-design-approve <project> --change {change_id} "
+            f"--plan-id {plan['plan_id']}")
+    action = "继续已批准底座方案" if approved else "具名批准底座方案"
+    return hint, [{"action": action, "command": hint}]
+
+
+def _agent_review_stop(state: dict, change_id: str) -> tuple[str, list[dict], str]:
+    mode = state.get("base_review_mode", "unknown")
+    if mode == "single":
+        hint = (f"storyloop base-review <project> --change {change_id} --verdict pass "
+                "--note '<核对内容>' --human-review '<至少 12 字理由>'")
+        return hint, [{"action": "具名人工替代审查", "command": hint}], "等待具名人工替代审查"
+    if mode == "distinct":
+        hint = f"storyloop run <project> --change {change_id}"
+        return hint, [{"action": "触发跨厂商代理审查", "command": hint}], "等待下一次 storyloop run 触发跨厂商代理审查"
+    hint = "storyloop adapters check <project>"
+    return (hint, [{"action": "修复审查者握手", "command": hint}],
+            "审查者 vendor 握手未知；修复握手或配置后会作废本次尝试，从合同提交重新验证")
+
+
+def _stop_actions(project: Path | str, state: dict, status: str, details: dict
+                  ) -> tuple[list[dict], str]:
+    change_id, project_text = str(state["change_id"]), str(project)
+    options = routing_options(project, change_id, status, {**state, **details}) or _options(
         status, project_text, change_id, bool(state.get("routed")),
         details.get("ci_requires_human_proposal", False))
-    hint = details.get("next") or state.get("next")
+    blocker = details.get("error") or state.get("error") or BLOCKERS.get(status, status)
     if status == "DESIGN_APPROVAL_REQUIRED":
-        plan = state.get("base_design") or {}
-        hint = hint or (f"storyloop base-design-approve <project> --change {change_id} "
-                        f"--plan-id {plan['plan_id']}" if plan.get("plan_id") else None)
-        if hint:
-            options = [{"action": "具名批准底座方案", "command": hint}]
-    if status == "BASE_REVIEW_REQUIRED" and state.get("implementer", "human") == "agent":
-        hint = hint or _command("storyloop", "run", project_text, "--change", change_id)
-        action = ("修复审查者握手" if "adapters check" in hint else
-                  "具名人工替代审查" if "--human-review" in hint else "触发跨厂商代理审查")
-        options = [{"action": action, "command": hint}]
-    if status == "WORKSPACE_TAINTED" and details.get("base_resume_status") == "FINALIZING":
+        if (change_id.startswith("BASE-") and state.get("implementer") == "agent"
+                and isinstance(state.get("base_design"), dict)):
+            _, options = _base_design_stop(project, state, change_id)
+    elif status == "BASE_REVIEW_REQUIRED" and state.get("implementer") == "agent":
+        _, options, blocker = _agent_review_stop({**state, **details}, change_id)
+    elif status == "WORKSPACE_TAINTED" and details.get("base_resume_status") == "FINALIZING":
         options = [{"action": "恢复已批准 baseline 后继续", "command": _command(
             "storyloop", "run", project_text, "--change", change_id)}]
-    blocker = details.get("error") or state.get("error") or BLOCKERS.get(status, status)
-    if status == "BASE_REVIEW_REQUIRED" and state.get("implementer", "human") == "agent":
-        blocker = ("审查者 vendor 握手未知；修复握手或配置后再运行" if "adapters check" in hint else
-                   "等待具名人工替代审查" if "--human-review" in hint else
-                   "等待下一次 storyloop run 触发跨厂商代理审查")
+    return options, blocker
+
+
+def build_stop(project: Path | str, state: dict, status: str, details: dict) -> dict:
+    """Construct the stable report shape without changing the supplied run state."""
+    change_id = str(state["change_id"])
+    options, blocker = _stop_actions(project, state, status, details)
+    routed = routing_options(project, change_id, status, {**state, **details})
+    failures = state.get("failures") or []
     result = {
         **stop_fields(project, change_id, details),
         "status": status,
@@ -251,21 +272,34 @@ def build_stop(project: Path | str, state: dict, status: str, details: dict) -> 
         "options": options,
         "resume": (options[0]["command"] if status in {"NEEDS_SPEC_FIX", "DESIGN_APPROVAL_REQUIRED"}
                    or (status == "BASE_REVIEW_REQUIRED" and state.get("implementer") == "agent")
-                   or routed_options else
-                   _command("storyloop", "run", project_text, "--change", change_id)),
+                   or routed else
+                   _command("storyloop", "run", project, "--change", change_id)),
     }
-    if status == "DESIGN_APPROVAL_REQUIRED" and isinstance(state.get("base_design"), dict):
+    if (status == "DESIGN_APPROVAL_REQUIRED" and change_id.startswith("BASE-")
+            and isinstance(state.get("base_design"), dict)):
         result["plan_summary"] = _plan_summary(state["base_design"])
     return result
 
 
 def _plan_summary(plan: dict) -> dict:
-    short = lambda value: " ".join(str(value).split())[:240]
-    return {"goal": short(plan.get("goal", "")),
-            "paths": [short(item) for item in (plan.get("paths") or [])[:8]],
-            "steps": [short(item) for item in (plan.get("steps") or [])[:5]],
-            "risks": [short(item) for item in (plan.get("risks") or [])[:5]],
-            "rollback": short(plan.get("rollback", ""))}
+    def short(value):
+        value = " ".join(str(value).split())
+        return value[:239] + "…" if len(value) > 240 else value
+    paths, steps, risks = (plan.get(key) or [] for key in ("paths", "steps", "risks"))
+    shown = {"paths": [short(item) for item in paths[:8]],
+             "steps": [short(item) for item in steps[:5]],
+             "risks": [short(item) for item in risks[:5]]}
+    return {"goal": short(plan.get("goal", "")), "summary": short(plan.get("summary", "")),
+            "rollback": short(plan.get("rollback", "")), **shown,
+            "totals": {"paths": len(paths), "steps": len(steps), "risks": len(risks)},
+            "source": f".storyloop/state/base-designs/{plan.get('change_id', '<BASE-ID>')}.json"}
+
+
+def _render_plan_list(label: str, key: str, summary: dict) -> str:
+    shown = summary[key]
+    total = summary["totals"][key]
+    suffix = f"（展示 {len(shown)}/{total} 项，共 {total} 项）" if len(shown) < total else ""
+    return f"  {label}：{'; '.join(shown)}{suffix}"
 
 
 def stop_of(project: Path | str, run: dict | None) -> dict | None:
@@ -277,6 +311,8 @@ def stop_of(project: Path | str, run: dict | None) -> dict | None:
         return saved
     if run.get("status") not in STOP_STATUSES:
         return None
+    if (run["status"] == "DESIGN_APPROVAL_REQUIRED" and base_design_approved(project, run)):
+        return build_stop(project, run, run["status"], {})
     if isinstance(saved, dict) and saved.get("status") == run["status"]:
         return saved
     return build_stop(project, run, run["status"], {})
@@ -288,10 +324,11 @@ def render_stop(stop: dict) -> list[str]:
     if stop.get("plan_summary"):
         summary = stop["plan_summary"]
         lines += ["底座方案摘要：", f"  目标：{summary['goal']}",
-                  f"  路径：{', '.join(summary['paths'])}",
-                  f"  步骤：{'; '.join(summary['steps'])}",
-                  f"  风险：{'; '.join(summary['risks'])}",
-                  f"  回退：{summary['rollback']}"]
+                  f"  方案：{summary['summary']}",
+                  _render_plan_list("路径", "paths", summary),
+                  _render_plan_list("步骤", "steps", summary),
+                  _render_plan_list("风险", "risks", summary),
+                  f"  回退：{summary['rollback']}", f"  完整方案：{summary['source']}"]
     for key, heading in (("evidence", "证据"), ("facts", "代理陈述事实"), ("questions", "问题")):
         if stop.get(key):
             lines.append(f"{heading}：")

@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -23,6 +24,11 @@ from suites import CORE, PLATFORM_SUITE  # noqa: E402  (tests/ is not a package 
 
 RAN = re.compile(r"^Ran (\d+) tests? in", re.MULTILINE)
 SKIPPED = re.compile(r"(?:^|[,(]\s*)skipped=(\d+)", re.MULTILINE)
+
+
+def _system_agent_worktrees() -> set[str]:
+    root = Path(tempfile.gettempdir()) / "storyloop-agent-wt"
+    return {str(path.relative_to(root)) for path in root.rglob("*")} if root.exists() else set()
 
 
 def modules(root: Path, suite: str) -> list[str]:
@@ -57,6 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.list:
         print("\n".join(names))
         return 0
+    existing_worktrees = _system_agent_worktrees()
     started, failed, total, skipped = time.monotonic(), [], 0, 0
     with ThreadPoolExecutor(max(1, args.workers)) as pool:
         futures = [pool.submit(run_module, args.root, name) for name in names]
@@ -69,10 +76,15 @@ def main(argv: list[str] | None = None) -> int:
                 failed.append(result)
     for result in failed:
         print(f"\n===== {result['module']} =====\n{result['output']}", flush=True)
+    leaked = _system_agent_worktrees() - existing_worktrees
+    if leaked:
+        print("\n系统 storyloop-agent-wt 新增内容：" + ", ".join(sorted(leaked)[:10]), flush=True)
     status = f"失败 {len(failed)} 个模块" if failed else "全部通过"
+    if leaked:
+        status += f"；临时 worktree 泄漏 {len(leaked)} 项"
     print(f"\n{args.suite}: {len(names)} 个模块，{total} 个测试，跳过 {skipped} 个，{status}，"
           f"用时 {time.monotonic() - started:.0f}s（{args.workers} 路并行）")
-    return 1 if failed else 0
+    return 1 if failed or leaked else 0
 
 
 if __name__ == "__main__":

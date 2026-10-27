@@ -58,6 +58,7 @@ class BaseAgentFlowTests(unittest.TestCase):
         for view in (result["stop"], status["stop"], log["stop"]):
             summary = view["plan_summary"]
             self.assertEqual(summary["goal"], plan["goal"])
+            self.assertEqual(summary["summary"], plan["summary"])
             self.assertEqual(summary["paths"], ["pom.xml"])
             self.assertIn("编辑 pom.xml", summary["steps"])
             self.assertIn("构建可能失败", summary["risks"])
@@ -68,6 +69,19 @@ class BaseAgentFlowTests(unittest.TestCase):
         self.assertIn("更新构建配置", plan["goal"])
         self.assertNotIn("\\u", (self.root / ".storyloop/state/base-designs" /
                                   f"{change_id}.json").read_text(encoding="utf-8"))
+
+    def test_approved_design_status_and_log_point_to_run(self):
+        from storyloop.base_design import approve_base_design
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, services=self._services())
+        state = load_json(run_path(self.root, change_id))
+        approve_base_design(self.root, change_id, state["base_design"]["plan_id"])
+        status = dispatch(parser().parse_args(["status", str(self.root), "--change", change_id]))
+        log = change_log(self.root, change_id)
+        for view in (status, log):
+            self.assertIn("storyloop run", view["next"])
+            self.assertNotIn("base-design-approve", view["next"])
+            self.assertIn("storyloop run", view["stop"]["resume"])
 
     def test_ci_defaults_to_human_and_rejects_explicit_agent(self):
         proposed = base_upgrade.propose_base_change(
@@ -234,6 +248,31 @@ class BaseAgentFlowTests(unittest.TestCase):
         self.assertIn("storyloop run", result["stop"]["options"][0]["command"])
         self.assertNotIn("base-review", str(result["stop"]))
 
+    def test_unrelated_manual_adapter_does_not_hide_distinct_review_vendors(self):
+        from storyloop.base_review import vendor_context
+        state = {"agent_adapter": "writer", "agent_vendor": "openai"}
+        config = {"adapters": {"writer": {}, "reviewer": {}, "manual": {}},
+                  "roles": {"default_adapter": "writer", "review": {"adapter": "reviewer"}}}
+        capabilities = {"writer": {"vendor": "openai"},
+                        "reviewer": {"vendor": "anthropic"}, "manual": {}}
+        with (mock.patch("storyloop.base_review.load_project_config", return_value=config),
+              mock.patch("storyloop.base_review.enabled", return_value=True),
+              mock.patch("storyloop.base_review.resolve_adapters", return_value=config["adapters"]),
+              mock.patch("storyloop.base_review.role_settings", return_value={"adapter": "reviewer"}),
+              mock.patch("storyloop.base_review.capability_for",
+                         side_effect=lambda _project, name: capabilities[name])):
+            context = vendor_context(self.root, state)
+        self.assertEqual(context["available_vendors"], {"openai", "anthropic"})
+
+    def test_implement_vendor_mismatch_discards_candidate_instead_of_waiting_for_handshake(self):
+        self._agent_candidate()
+        with mock.patch("storyloop.base_review.vendor_context",
+                        side_effect=StoryLoopError(
+                            "Base implement vendor handshake changed after candidate creation")):
+            result = run_change(self.root, self.change["change_id"], services=self._services())
+        self.assertEqual(result["status"], "CONTRACT_COMMITTED")
+        self.assertNotIn("candidate_commit", load_json(run_path(self.root, self.change["change_id"])))
+
     def test_single_vendor_review_stop_only_offers_human_substitute(self):
         context = {"implement_vendor": "openai", "review_vendor": "openai",
                    "review_adapter": "one", "available_vendors": {"openai"}}
@@ -250,7 +289,8 @@ class BaseAgentFlowTests(unittest.TestCase):
             result = run_change(self.root, self.change["change_id"], services=self._services())
         self.assertEqual(result["status"], "BASE_REVIEW_REQUIRED")
         self.assertIn("握手", result["stop"]["blocker"])
-        self.assertEqual(result["next"], "storyloop adapters check <project>")
+        self.assertIn("storyloop adapters check <project>", result["next"])
+        self.assertIn("作废", result["stop"]["blocker"])
         self.assertNotIn("base-review", str(result["stop"]))
 
     def test_distinct_vendor_agent_review_advances_to_acceptance(self):

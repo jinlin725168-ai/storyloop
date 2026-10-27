@@ -74,6 +74,8 @@ def _start_state(project: Path, change: dict, implementer: str | None, new_run_s
                 raise StoryLoopError("Manual adapter cannot implement base changes in a "
                                      "disposable worktree; start with --implementer human "
                                      "or configure a command/Codex adapter", code="AGENT_UNAVAILABLE")
+            from .adapter_capabilities import require_base_review_vendors
+            require_base_review_vendors(project, config)
     require(change["approval"]["versions"]["engine_version"] == __version__,
             "Approved base engine version differs from the running engine")
     dirty = _git(project, "status", "--porcelain=v1", "--untracked-files=all", "-z")

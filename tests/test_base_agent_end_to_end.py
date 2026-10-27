@@ -96,7 +96,7 @@ class BaseAgentEndToEndTests(unittest.TestCase):
         with self.assertRaisesRegex(StoryLoopError, "Merged base runs cannot reset"):
             reset_run(self.root, change_id, "已合并后不得回准备阶段")
 
-    def test_unknown_reviewer_vendor_keeps_candidate_and_requires_handshake_fix(self):
+    def test_unknown_reviewer_vendor_stops_before_design_or_implementation(self):
         config = load_project_config(self.root)
         script = Path(config["adapters"]["reviewer"]["agent_command"][3])
         response = json.loads(script.read_text(encoding="utf-8"))
@@ -104,20 +104,14 @@ class BaseAgentEndToEndTests(unittest.TestCase):
         script.write_text(json.dumps(response), encoding="utf-8")
         self.assertFalse(check(self.root)["adapters"]["reviewer"]["known"])
         change_id = self.change["change_id"]
-        first = run_change(self.root, change_id)
-        self.assertEqual(first["status"], "DESIGN_APPROVAL_REQUIRED")
-        state = load_json(run_path(self.root, change_id))
-        approve_base_design(self.root, change_id, state["base_design"]["plan_id"])
-        self.assertEqual(run_change(self.root, change_id)["status"], "IMPLEMENTING")
-        candidate = run_change(self.root, change_id)
-        self.assertEqual(candidate["status"], "BASE_REVIEW_REQUIRED")
-        self.assertIn("握手", candidate["stop"]["blocker"])
-        committed = load_json(run_path(self.root, change_id))["candidate_commit"]
-        retry = run_change(self.root, change_id)
-        self.assertEqual(retry["status"], "BASE_REVIEW_REQUIRED")
-        self.assertEqual(load_json(run_path(self.root, change_id))["candidate_commit"], committed)
-        self.assertEqual(retry["next"], "storyloop adapters check <project>")
-        self.assertNotIn("base-review", str(retry["stop"]))
+        with self.assertRaisesRegex(StoryLoopError, "reviewer|握手|vendor"):
+            run_change(self.root, change_id)
+        self.assertFalse(run_path(self.root, change_id).exists())
+        self.assertFalse((self.root / ".storyloop/state/base-designs" / f"{change_id}.json").exists())
+        response["capabilities"]["vendor"] = "anthropic"
+        script.write_text(json.dumps(response), encoding="utf-8")
+        self.assertTrue(check(self.root)["adapters"]["reviewer"]["known"])
+        self.assertEqual(run_change(self.root, change_id)["status"], "DESIGN_APPROVAL_REQUIRED")
 
     def test_engine_source_warning_reaches_stop_and_final_report(self):
         with mock.patch("storyloop.engine_source_safety.engine_source_digest",

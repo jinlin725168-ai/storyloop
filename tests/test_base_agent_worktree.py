@@ -13,6 +13,7 @@ from storyloop.git_command import git as real_git
 from storyloop.run_state import run_path
 from storyloop.storage import load_json
 from storyloop.base_agent_worktree import create_agent_worktree, remove_agent_worktree
+import tests
 
 
 class BaseAgentWorktreeTests(unittest.TestCase):
@@ -39,6 +40,11 @@ class BaseAgentWorktreeTests(unittest.TestCase):
     def _git(self, *args):
         return subprocess.run(["git", *args], cwd=self.project, check=True,
                               capture_output=True, text=True).stdout
+
+    def test_tests_package_owns_a_shared_temporary_agent_root(self):
+        self.assertTrue(tests.AGENT_TEMP_ROOT.is_dir())
+        self.assertNotEqual(tests.AGENT_TEMP_ROOT.resolve(),
+                            (Path(tempfile.gettempdir()) / "storyloop-agent-wt").resolve())
 
     def test_checkout_is_detached_external_and_contains_only_tracked_files(self):
         (self.project / ".venv").mkdir()

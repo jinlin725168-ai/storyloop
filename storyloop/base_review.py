@@ -37,11 +37,11 @@ def vendor_context(project: Path, state: dict) -> dict:
     adapters = resolve_adapters(config)
     implement_adapter = state.get("agent_adapter")
     review_adapter = role_settings(config, "review", "heavy", base=True)["adapter"]
-    vendors = {name: capability_for(project, name).get("vendor") for name in adapters}
-    known = (set(value.strip().casefold() for value in vendors.values()
-                 if isinstance(value, str) and value.strip())
-             if all(isinstance(value, str) and value.strip() for value in vendors.values())
-             else None)
+    vendors = {name: capability_for(project, name).get("vendor")
+               for name in {implement_adapter, review_adapter} if name in adapters}
+    known = (set(vendors.values()) if len(vendors) == 2 and all(vendors.values()) else None)
+    if implement_adapter == review_adapter and vendors.get(implement_adapter):
+        known = {vendors[implement_adapter]}
     implement_vendor = vendors.get(implement_adapter)
     require(implement_vendor == normalize_vendor(state.get("agent_vendor")) and implement_vendor,
             "Base implement vendor handshake changed after candidate creation")
