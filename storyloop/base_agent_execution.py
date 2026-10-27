@@ -6,19 +6,15 @@ from pathlib import Path
 import hashlib
 
 from .baseline import _git
-from .base_agent_inventory import inventory
+from .base_agent_transfer import AGENT_EMAIL, AGENT_NAME, transfer_agent_candidate  # noqa: F401  # 兼容再导出
+from .base_agent_worktree import create_agent_worktree, remove_agent_worktree
 from .base_design import invalid_reason
 from .engine_source_safety import ENGINE_WARNING, engine_source_digest, engine_warning
 from .guarded_calls import write_safely
 from .models import StoryLoopError, require
 from .project_agents import invoke_project_agent
-from .project_boundaries import _changed_paths, audit_base_scope
-from .project_git import commit_paths
 from .run_state import save_run
 from .run_stops import pause
-
-AGENT_NAME = "StoryLoop Agent"
-AGENT_EMAIL = "agent@storyloop.local"
 
 
 def agent_control_binding(project: Path, change_id: str) -> dict[str, str]:
@@ -39,50 +35,27 @@ def agent_binding_changes(project: Path, change_id: str, saved: dict | None) -> 
     return {key for key in set(prior) | set(current) if prior.get(key) != current.get(key)}
 
 
-def agent_candidate_paths(project: Path, change: dict, touched: list) -> list[str]:
-    """Match both the snapshot and Git views to the human-approved exact paths."""
-    expected = set(change["product"]["base"]["paths"])
-    seen = {item.path for item in touched if not item.path.endswith("/")}
-    actual = set(_changed_paths(project))
-    unexpected = sorted((seen | actual) - expected)
-    if unexpected:
-        raise StoryLoopError("Agent wrote outside approved base paths: " + ", ".join(unexpected),
-                             code="WORKSPACE_TAINTED")
-    if actual != expected:
-        raise StoryLoopError("Agent did not implement every approved base path",
-                             code="WORKSPACE_TAINTED")
-    for path in actual:
-        target = project / path
-        if target.is_symlink() or (hasattr(target, "is_junction") and target.is_junction()):
-            raise StoryLoopError(f"Agent created unsafe link: {path}", code="WORKSPACE_TAINTED")
-    audit_base_scope(project, change, actual)
-    return sorted(actual)
-
-
 def implement_base_candidate(project: Path, change: dict, state: dict, services=None) -> dict:
     """Persist the call anchor before granting the agent its approved path set."""
     require(invalid_reason(project, change, state) is None,
             "Approved base design changed before agent implementation")
-    head = _prepare_agent_call(project, change, state)
+    checkout = _prepare_agent_call(project, change, state)
     try:
-        paths = _invoke_agent(project, change, state, head, services)
+        _invoke_agent(project, checkout, change, state, services)
+        committed = transfer_agent_candidate(project, checkout, change, state["contract_commit"])
     except StoryLoopError as exc:
-        if exc.code == "WORKSPACE_TAINTED" or _git(
-                project, "status", "--porcelain=v1", "--untracked-files=all").strip():
-            return pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
-                         next=("Inspect and reinstall the StoryLoop engine before rerunning; "
-                               if "engine source" in str(exc) else "Inspect the agent changes, then ")
-                         + "storyloop reset <project> --change "
-                         f"{change['change_id']} --reason '<reason>'")
-        raise
-    committed = commit_paths(project, paths,
-                             f"feat({change['change_id']}): implement approved base change",
-                             identity=(AGENT_NAME, AGENT_EMAIL))
-    _save_agent_candidate(project, change, state, committed["commit"])
+        remove_agent_worktree(project, state)
+        save_run(project, state)
+        return pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
+                     next="Inspect the main worktree, then storyloop reset <project> --change "
+                          f"{change['change_id']} --reason '<reason>'")
+    _save_agent_candidate(project, change, state, committed)
+    remove_agent_worktree(project, state)
+    save_run(project, state)
     return {"status": "IMPLEMENTING", "change_id": change["change_id"]}
 
 
-def _prepare_agent_call(project: Path, change: dict, state: dict) -> str:
+def _prepare_agent_call(project: Path, change: dict, state: dict) -> Path:
     from .adapter_capabilities import ensure_checked
     from .baseline import load_project_config
     from .role_profiles import enabled
@@ -95,7 +68,6 @@ def _prepare_agent_call(project: Path, change: dict, state: dict) -> str:
             and not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
             "Agent base implementation needs a clean contract commit")
     state["agent_call_head"] = head
-    state["agent_before_inventory"] = inventory(project)
     state["agent_control_binding"] = agent_control_binding(project, change["change_id"])
     try:
         state["agent_engine_digest"] = engine_source_digest(Path(state["engine_source"]))
@@ -103,16 +75,15 @@ def _prepare_agent_call(project: Path, change: dict, state: dict) -> str:
         state["agent_engine_digest"] = None
         state["engine_warning"] = ENGINE_WARNING
     state["base_inflight"] = "agent_implementation"
-    save_run(project, state)
-    return head
+    return create_agent_worktree(project, state)
 
 
-def _invoke_agent(project: Path, change: dict, state: dict, head: str, services) -> list[str]:
+def _invoke_agent(project: Path, checkout: Path, change: dict, state: dict, services) -> None:
     payload = {"mode": "base-implement", "change": change,
                "approved_paths": change["product"]["base"]["paths"],
-               "design_plan": state["base_design"], "contract_commit": head}
-    operation = (lambda: services.implement(project, payload)) if services else (
-        lambda: invoke_project_agent(project, "implement", payload))
+               "design_plan": state["base_design"], "contract_commit": state["contract_commit"]}
+    operation = (lambda: services.implement(checkout, payload)) if services else (
+        lambda: invoke_project_agent(project, "implement", payload, workspace=checkout))
     def source_guard() -> None:
         warning = engine_warning(state)
         if warning:
@@ -120,16 +91,13 @@ def _invoke_agent(project: Path, change: dict, state: dict, head: str, services)
         if agent_binding_changes(project, change["change_id"], state["agent_control_binding"]):
             raise StoryLoopError("Base agent changed protected StoryLoop control files; inspect "
                                  "them before running again", code="WORKSPACE_TAINTED")
-        state["agent_after_inventory"] = inventory(project)
     approved = set(change["product"]["base"]["paths"])
     excluded = (frozenset({"openspec/principles.json"})
                 if change["product"]["base"]["scope"] == "knowledge"
                 and "openspec/principles.json" in approved else frozenset())
-    response, touched = write_safely(project, change["change_id"], operation,
-                                     source_guard, excluded)
+    response, _ = write_safely(project, change["change_id"], operation, source_guard, excluded)
     save_run(project, state)
     require(not response.get("questions"), "Base implementer left unresolved questions")
-    return agent_candidate_paths(project, change, touched)
 
 
 def _save_agent_candidate(project: Path, change: dict, state: dict, committed: str) -> None:

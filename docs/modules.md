@@ -73,6 +73,7 @@
 |  | `base_design` | 可变区 | 将 base 代理方案与具名人工批准绑定到当前合同和运行 | `propose_design`、`approve_base_design` |
 |  | `base_agent_execution` | 可变区 | 审计代理写入并由引擎提交单个 base 候选 | `implement_base_candidate` |
 |  | `base_agent_worktree` | 可变区 | 为单次 base 代理调用创建、校验和清理独立 Git worktree | `create_agent_worktree`、`remove_agent_worktree` |
+|  | `base_agent_transfer` | 可变区 | 校验独立树的精确路径并由引擎提交 base 候选 | `transfer_agent_candidate` |
 |  | `base_agent_inventory` | 可变区 | 对代理调用窗口前后文件建立无链接跟随的清单 | `inventory` |
 |  | `engine_source_safety` | 可变区 | 代理调用前后比较引擎源码摘要并给出提醒 | `engine_source_digest`、`engine_warning` |
 |  | `base_review` | 可变区 | 绑定跨厂商审查与单厂商人工替代 | `review_agent_candidate`、`human_substitute_fields` |

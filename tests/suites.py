@@ -42,6 +42,7 @@ END_TO_END = [
 SAFETY = [
     "tests.test_base_agent_safety", "tests.test_base_agent_recovery",
     "tests.test_base_agent_worktree", "tests.test_base_agent_transport",
+    "tests.test_base_agent_transfer",
     "tests.test_custom_protection",
     "tests.test_base_contract", "tests.test_base_lifecycle", "tests.test_base_compatibility",
     "tests.test_base_trust", "tests.test_base_restart", "tests.test_base_supplement",
