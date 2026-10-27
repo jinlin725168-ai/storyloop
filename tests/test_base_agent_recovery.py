@@ -304,9 +304,9 @@ class BaseAgentRecoveryTests(unittest.TestCase):
                                     services=self._services())["status"], "CONTRACT_COMMITTED")
 
     def test_candidate_evidence_write_before_state_restarts(self):
-        from storyloop import base_execution
+        from storyloop import base_review
         self._approved()
-        with mock.patch.object(base_execution, "_pause_review",
+        with mock.patch.object(base_review, "pause_base_review",
                                side_effect=RuntimeError("crash after evidence")):
             with self.assertRaisesRegex(RuntimeError, "crash after evidence"):
                 run_change(self.root, self.change["change_id"], services=self._successful_writer())
