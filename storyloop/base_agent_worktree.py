@@ -82,8 +82,7 @@ def remove_agent_worktree(project: Path, state: dict) -> None:
     project = Path(project).resolve()
     require(anchor.get("contract_commit") == state.get("contract_commit"),
             "Agent worktree contract anchor changed")
-    path = _outside_project(project, Path(anchor["path"]))
-    require(not Path(anchor["path"]).is_symlink(), "Agent worktree path became a symbolic link")
+    path = _outside_project(project, _safe_temp_root(Path(anchor["path"])))
     if not path.exists() and not _registered(project, path):
         state.pop("agent_worktree", None)
         return

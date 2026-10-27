@@ -114,6 +114,21 @@ class BaseAgentWorktreeTests(unittest.TestCase):
                 create_agent_worktree(self.project, self.state)
         self.assertNotIn("agent_worktree", self.state)
 
+    def test_symlinked_cleanup_parent_is_rejected_without_following(self):
+        actual = self.root / "actual"
+        actual.mkdir()
+        (actual / "human.txt").write_text("human\n", encoding="utf-8")
+        shortcut = self.root / "shortcut"
+        try:
+            shortcut.symlink_to(actual, target_is_directory=True)
+        except OSError:
+            self.skipTest("Directory symlinks need platform privileges")
+        self.state["agent_worktree"] = {"path": str(shortcut / "human.txt"),
+                                        "contract_commit": self.commit, "attempt_id": "fake"}
+        with self.assertRaisesRegex(StoryLoopError, "symbolic link"):
+            remove_agent_worktree(self.project, self.state)
+        self.assertEqual((actual / "human.txt").read_text(encoding="utf-8"), "human\n")
+
     def test_remove_failure_keeps_anchor_and_reports_manual_steps(self):
         checkout = create_agent_worktree(self.project, self.state)
         def fail_remove(project, *args):
