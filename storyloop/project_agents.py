@@ -146,7 +146,8 @@ def _execute_call(project, role, payload, schema, request, adapter_config, setti
             trace["codex_model"] = model
             trace["codex_profile"] = sequential_profile(request, "openai", model)
             trace["codex_instructions"] = sequential_instructions(request)
-        result = invoke_transport(request, adapter_config, schema, trace)
+        result = invoke_transport({**request, "project": request.get("project", str(project))},
+                                  adapter_config, schema, trace)
         return result
     except Exception as exc:
         error = exc
