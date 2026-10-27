@@ -100,6 +100,22 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("storyloop-agent-wt", output.getvalue())
 
+    def test_runner_ignores_changes_inside_an_existing_external_worktree_root(self):
+        from tests import run as runner
+        isolated = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        existing = isolated / "storyloop-agent-wt" / "other-project"
+        existing.mkdir(parents=True)
+        def fake_module(_root, name):
+            (existing / "agent-output.txt").write_text("external", encoding="utf-8")
+            return {"module": name, "ok": True, "seconds": 0.0,
+                    "tests": 1, "skipped": 0, "output": ""}
+        with (mock.patch.object(runner.tempfile, "gettempdir", return_value=str(isolated)),
+              mock.patch.object(runner, "modules", return_value=["tests.fake"]),
+              mock.patch.object(runner, "run_module", side_effect=fake_module),
+              redirect_stdout(io.StringIO())):
+            code = runner.main(["--suite", "full", "--workers", "1", "--root", str(isolated)])
+        self.assertEqual(code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

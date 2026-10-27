@@ -1,5 +1,6 @@
 """The selected base implementer is frozen in a real run."""
 
+from pathlib import Path
 import unittest
 from unittest import mock
 
@@ -25,6 +26,21 @@ def run_change(*args, **kwargs):
 
 class BaseAgentFlowTests(unittest.TestCase):
     setUp = lifecycle.BaseG1Tests.setUp
+
+    def test_review_context_uses_error_code_instead_of_message_text(self):
+        from storyloop.base_review import agent_review_context
+        error = StoryLoopError("renamed error text", code="BASE_REVIEW_UNCONFIGURED")
+        with mock.patch("storyloop.base_review.vendor_context", side_effect=error):
+            self.assertEqual(agent_review_context(self.root, {"agent_adapter": None})[0], "unknown")
+        different = StoryLoopError("Agent base review needs configured adapters",
+                                   code="AGENT_UNAVAILABLE")
+        with mock.patch("storyloop.base_review.vendor_context", side_effect=different):
+            with self.assertRaises(StoryLoopError):
+                agent_review_context(self.root, {"agent_adapter": None})
+
+    def test_base_execution_module_stays_within_file_size_limit(self):
+        self.assertLessEqual(len(Path(base_execution.__file__).read_text(encoding="utf-8").splitlines()),
+                             500)
 
     def _services(self):
         return LoopServices(
@@ -251,7 +267,9 @@ class BaseAgentFlowTests(unittest.TestCase):
     def test_unrelated_manual_adapter_does_not_hide_distinct_review_vendors(self):
         from storyloop.base_review import vendor_context
         state = {"agent_adapter": "writer", "agent_vendor": "openai"}
-        config = {"adapters": {"writer": {}, "reviewer": {}, "manual": {}},
+        config = {"adapters": {"writer": {"kind": "command"},
+                               "reviewer": {"kind": "command"},
+                               "manual": {"kind": "manual"}},
                   "roles": {"default_adapter": "writer", "review": {"adapter": "reviewer"}}}
         capabilities = {"writer": {"vendor": "openai"},
                         "reviewer": {"vendor": "anthropic"}, "manual": {}}
@@ -263,6 +281,44 @@ class BaseAgentFlowTests(unittest.TestCase):
                          side_effect=lambda _project, name: capabilities[name])):
             context = vendor_context(self.root, state)
         self.assertEqual(context["available_vendors"], {"openai", "anthropic"})
+
+    def test_unrelated_unknown_adapter_does_not_block_distinct_review(self):
+        from storyloop.base_review import agent_review_context
+        context = {"implement_vendor": "openai", "review_vendor": "anthropic",
+                   "review_adapter": "reviewer", "available_vendors": None}
+        with mock.patch("storyloop.base_review.vendor_context", return_value=context):
+            self.assertEqual(agent_review_context(self.root, {"agent_adapter": "writer"})[0],
+                             "distinct")
+
+    def test_other_proven_vendor_disallows_same_vendor_human_substitute(self):
+        from storyloop.base_review import single_vendor_only, vendor_context
+        from storyloop.adapter_capabilities import require_base_review_vendors
+        state = {"agent_adapter": "writer", "agent_vendor": "openai"}
+        adapters = {"writer": {"kind": "command"}, "reviewer2": {"kind": "command"},
+                    "claude": {"kind": "command"}, "manual": {"kind": "manual"}}
+        config = {"adapters": adapters, "roles": {"default_adapter": "writer",
+                                                  "review": {"adapter": "reviewer2"}}}
+        capabilities = {"writer": {"vendor": "openai"}, "reviewer2": {"vendor": "openai"},
+                        "claude": {"vendor": "anthropic"}, "manual": {}}
+        with (mock.patch("storyloop.base_review.load_project_config", return_value=config),
+              mock.patch("storyloop.base_review.enabled", return_value=True),
+              mock.patch("storyloop.base_review.resolve_adapters", return_value=adapters),
+              mock.patch("storyloop.base_review.role_settings", return_value={"adapter": "reviewer2"}),
+              mock.patch("storyloop.base_review.capability_for",
+                         side_effect=lambda _project, name: capabilities[name])):
+            context = vendor_context(self.root, state)
+            self.assertEqual(context["available_vendors"], {"openai", "anthropic"})
+            self.assertFalse(single_vendor_only(self.root, state, context))
+            capabilities["claude"] = {}
+            self.assertIsNone(vendor_context(self.root, state)["available_vendors"])
+            capabilities["claude"] = {"vendor": "anthropic"}
+        with (mock.patch("storyloop.adapter_capabilities.ensure_checked",
+                         return_value={"adapters": capabilities}),
+              mock.patch("storyloop.adapter_capabilities.resolve_adapters", return_value=adapters),
+              mock.patch("storyloop.adapter_capabilities.role_settings",
+                         side_effect=[{"adapter": "writer"}, {"adapter": "reviewer2"}])):
+            with self.assertRaisesRegex(StoryLoopError, "review|different vendor|跨厂商"):
+                require_base_review_vendors(self.root, config)
 
     def test_implement_vendor_mismatch_discards_candidate_instead_of_waiting_for_handshake(self):
         self._agent_candidate()

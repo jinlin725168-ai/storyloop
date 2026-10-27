@@ -11,12 +11,13 @@ from .call_context import capability_for
 from .capability_protocol import normalize_vendor
 from .engine_source_safety import engine_warning
 from .guarded_calls import read_only_call
-from .models import require, text
+from .models import StoryLoopError, require, text
 from .project_agents import invoke_project_agent
 from .project_receipt import _dirty_paths
 from .role_profiles import enabled, resolve_adapters, role_settings
 from .run_guards import base_candidate_authors, trusted_base_evidence
 from .run_state import run_path, save_run
+from .run_stops import pause
 from .storage import load_json, write_json
 
 
@@ -33,20 +34,89 @@ def require_distinct_vendors(implement: str | None, review: str | None) -> tuple
 def vendor_context(project: Path, state: dict) -> dict:
     """Read the engine-observed handshake for the selected role adapters."""
     config = load_project_config(project)
-    require(enabled(config), "Agent base review needs configured adapters")
+    if not enabled(config):
+        raise StoryLoopError("Agent base review needs configured adapters",
+                             code="BASE_REVIEW_UNCONFIGURED")
     adapters = resolve_adapters(config)
     implement_adapter = state.get("agent_adapter")
     review_adapter = role_settings(config, "review", "heavy", base=True)["adapter"]
     vendors = {name: capability_for(project, name).get("vendor")
-               for name in {implement_adapter, review_adapter} if name in adapters}
-    known = (set(vendors.values()) if len(vendors) == 2 and all(vendors.values()) else None)
-    if implement_adapter == review_adapter and vendors.get(implement_adapter):
-        known = {vendors[implement_adapter]}
+               for name, adapter in adapters.items() if adapter["kind"] != "manual"}
+    known = set(vendors.values()) if vendors and all(vendors.values()) else None
     implement_vendor = vendors.get(implement_adapter)
     require(implement_vendor == normalize_vendor(state.get("agent_vendor")) and implement_vendor,
             "Base implement vendor handshake changed after candidate creation")
     return {"implement_vendor": implement_vendor, "review_vendor": vendors.get(review_adapter),
             "review_adapter": review_adapter, "available_vendors": known}
+
+
+def agent_review_context(project: Path, state: dict) -> tuple[str, dict | None]:
+    """Classify the selected reviewer without hiding implementer binding errors."""
+    try:
+        context = vendor_context(project, state)
+    except StoryLoopError as exc:
+        if exc.code == "BASE_REVIEW_UNCONFIGURED" and not state.get("agent_adapter"):
+            return "unknown", None
+        raise
+    if not context["review_vendor"]:
+        return "unknown", context
+    if context["implement_vendor"] != context["review_vendor"]:
+        return "distinct", context
+    if context["available_vendors"] is None:
+        return "unknown", context
+    return ("single" if single_vendor_only(project, state, context) else "unknown"), context
+
+
+def agent_review_next(change_id: str, mode: str) -> str:
+    if mode == "unknown":
+        return "storyloop adapters check <project>"
+    if mode == "single":
+        return (f"storyloop base-review <project> --change {change_id} --verdict pass "
+                "--note '<核对内容>' --human-review '<至少 12 字理由>'")
+    return f"storyloop run <project> --change {change_id}"
+
+
+def pause_base_review(project: Path, change: dict, state: dict, restart) -> dict:
+    if state.get("implementer", "human") == "agent":
+        try:
+            mode, _ = agent_review_context(project, state)
+        except StoryLoopError as exc:
+            return restart(project, change, state, str(exc), rejected=True)
+        return pause(project, state, "BASE_REVIEW_REQUIRED",
+                     next=agent_review_next(change["change_id"], mode), base_review_mode=mode)
+    return pause(project, state, "BASE_REVIEW_REQUIRED",
+                 next=f"storyloop base-review <project> --change {change['change_id']} "
+                      "--verdict pass --note '<核对内容>', then storyloop run")
+
+
+def review_base_candidate(project: Path, change: dict, state: dict, services, restart) -> dict:
+    """Resume a saved review stop using one structured vendor decision."""
+    review = state.get("base_review")
+    if review is None:
+        if state.get("implementer", "human") == "agent":
+            try:
+                mode, context = agent_review_context(project, state)
+                if mode != "distinct":
+                    return pause(project, state, "BASE_REVIEW_REQUIRED",
+                                 next=agent_review_next(change["change_id"], mode),
+                                 base_review_mode=mode)
+                review = review_agent_candidate(project, change, state, services, context)
+            except StoryLoopError as exc:
+                if exc.code == "WORKSPACE_TAINTED" and "engine source" in str(exc):
+                    return pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
+                                 next="Inspect and reinstall the StoryLoop engine before rerunning")
+                return restart(project, change, state, str(exc), rejected=True)
+        else:
+            return pause_base_review(project, change, state, restart)
+    if review.get("verdict") == "fail":
+        return restart(project, change, state, "Human candidate needs a new attempt", rejected=True)
+    require(review.get("verdict") == "pass", "Independent base review is invalid")
+    require(review.get("reviewer") not in base_candidate_authors(project, state),
+            "Base reviewer must differ from implementation author")
+    return pause(project, state, "MANUAL_ACCEPTANCE_REQUIRED",
+                 candidate_sha256=state["candidate_sha256"], pending=["BASE-ACCEPT"],
+                 next=f"storyloop accept <project> --change {change['change_id']} "
+                      "--criterion BASE-ACCEPT --note '<核对内容>', then storyloop run")
 
 
 def human_substitute_fields(project: Path, state: dict, reason: str) -> dict:

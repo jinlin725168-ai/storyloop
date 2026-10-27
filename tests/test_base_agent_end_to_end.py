@@ -106,12 +106,29 @@ class BaseAgentEndToEndTests(unittest.TestCase):
         change_id = self.change["change_id"]
         with self.assertRaisesRegex(StoryLoopError, "reviewer|握手|vendor"):
             run_change(self.root, change_id)
-        self.assertFalse(run_path(self.root, change_id).exists())
+        self.assertEqual(load_json(run_path(self.root, change_id))["status"], "CONTRACT_COMMITTED")
         self.assertFalse((self.root / ".storyloop/state/base-designs" / f"{change_id}.json").exists())
         response["capabilities"]["vendor"] = "anthropic"
         script.write_text(json.dumps(response), encoding="utf-8")
         self.assertTrue(check(self.root)["adapters"]["reviewer"]["known"])
         self.assertEqual(run_change(self.root, change_id)["status"], "DESIGN_APPROVAL_REQUIRED")
+
+    def test_restarted_contract_checks_review_vendor_before_new_design_call(self):
+        change_id = self.change["change_id"]
+        self.assertEqual(run_change(self.root, change_id)["status"], "DESIGN_APPROVAL_REQUIRED")
+        self.assertEqual(reset_run(self.root, change_id, "重新开始代理尝试")["status"],
+                         "CONTRACT_COMMITTED")
+        config = load_project_config(self.root)
+        script = Path(config["adapters"]["reviewer"]["agent_command"][3])
+        response = json.loads(script.read_text(encoding="utf-8"))
+        response["capabilities"].pop("vendor")
+        script.write_text(json.dumps(response), encoding="utf-8")
+        self.assertFalse(check(self.root)["adapters"]["reviewer"]["known"])
+        with mock.patch("storyloop.base_design.propose_design",
+                        side_effect=AssertionError("design agent was called")):
+            with self.assertRaisesRegex(StoryLoopError, "reviewer|vendor"):
+                run_change(self.root, change_id)
+        self.assertEqual(load_json(run_path(self.root, change_id))["status"], "CONTRACT_COMMITTED")
 
     def test_engine_source_warning_reaches_stop_and_final_report(self):
         with mock.patch("storyloop.engine_source_safety.engine_source_digest",

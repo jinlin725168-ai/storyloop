@@ -92,6 +92,29 @@ class AdapterCapabilityTests(unittest.TestCase):
         for secret in secrets:
             self.assertNotIn(secret, cleaned)
 
+    def test_redaction_preserves_diagnostics_and_covers_compound_names_and_auth_schemes(self):
+        cases = [
+            ("access_token=opaque-short", "opaque-short"),
+            ("GITHUB_TOKEN=another-short", "another-short"),
+            ("client_secret: client-value", "client-value"),
+            ("db_password=db-value", "db-value"),
+            ("OPENAI_API_KEY=api-value", "api-value"),
+            ("Authorization: Bearer " + "t" * 24, "t" * 24),
+            ("Authorization: Basic dXNlcjpwYXNz", "dXNlcjpwYXNz"),
+            ("Authorization: Token " + "v" * 24, "v" * 24),
+            ("token " + "r" * 20, "r" * 20),
+            ("Invalid API key sk-ant-" + "a" * 24, "sk-ant-" + "a" * 24),
+            ("Found ghp_" + "b" * 24, "ghp_" + "b" * 24),
+        ]
+        for source, secret in cases:
+            with self.subTest(source=source.split()[0]):
+                cleaned = redact(source)
+                self.assertNotIn(secret, cleaned)
+                self.assertIn("[REDACTED]", cleaned)
+        for message in ("API key not found", "password is required", "password is hunter2"):
+            with self.subTest(message=message):
+                self.assertEqual(redact(message), message)
+
     def test_check_rejects_known_missing_requested_tier(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

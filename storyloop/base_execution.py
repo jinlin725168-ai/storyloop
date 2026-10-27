@@ -19,8 +19,7 @@ from .project_profile import base_commands_digest, effective_base_profile, layer
 from .run_state import save_run
 from .run_stops import pause
 from .run_transitions import transition
-from .run_guards import (base_candidate_authors, trusted_base_acceptance,
-                         trusted_base_evidence, trusted_base_review)
+from .run_guards import (trusted_base_acceptance, trusted_base_evidence, trusted_base_review)
 from .run_recovery import (BASE_PREMERGE, base_source_contains_candidate,
                            manual_base_merge_error, restart_base_attempt)
 from .project_receipt import _dirty_paths, recover_completed_merge
@@ -57,7 +56,8 @@ def run_base_change(project: Path, change: dict, implementer: str | None,
             return _agent_to_review(project, change, state) if result["status"] == "IMPLEMENTING" else result
         return _restart_pause(project, change, state, "Unfinished base verification")
     if state["status"] == "BASE_REVIEW_REQUIRED":
-        return _review_stop(project, change, state, services)
+        from .base_review import review_base_candidate
+        return review_base_candidate(project, change, state, services, _restart_pause)
     if state["status"] == "MANUAL_ACCEPTANCE_REQUIRED":
         return _finish_after_acceptance(project, change, state)
     if state["status"] == "VERIFIED":
@@ -285,7 +285,8 @@ def _candidate_to_review(project: Path, change: dict, state: dict) -> dict:
                         "candidate_sha256": evidence["candidate_sha256"],
                         "base_evidence_sha256": _evidence_sha256(project, change["change_id"])})
     state.pop("base_inflight", None)
-    return _pause_review(project, change, state)
+    from .base_review import pause_base_review
+    return pause_base_review(project, change, state, _restart_pause)
 
 
 def _agent_to_review(project: Path, change: dict, state: dict) -> dict:
@@ -300,7 +301,8 @@ def _agent_to_review(project: Path, change: dict, state: dict) -> dict:
     state.update(base_evidence=evidence, candidate_sha256=evidence["candidate_sha256"],
                  base_evidence_sha256=_evidence_sha256(project, change["change_id"]))
     state.pop("base_inflight", None)
-    return _pause_review(project, change, state)
+    from .base_review import pause_base_review
+    return pause_base_review(project, change, state, _restart_pause)
 
 
 def _prove_old_green(project: Path, change: dict, state: dict) -> None:
@@ -313,73 +315,6 @@ def _prove_old_green(project: Path, change: dict, state: dict) -> None:
 
 def _evidence_sha256(project: Path, change_id: str) -> str:
     return hashlib.sha256(_evidence_path(project, change_id).read_bytes()).hexdigest()
-
-
-def _pause_review(project: Path, change: dict, state: dict) -> dict:
-    if state.get("implementer", "human") == "agent":
-        try:
-            mode, _ = _agent_review_context(project, state)
-        except StoryLoopError as exc:
-            return _restart_pause(project, change, state, str(exc), rejected=True)
-        return pause(project, state, "BASE_REVIEW_REQUIRED",
-                     next=_agent_review_next(change["change_id"], mode), base_review_mode=mode)
-    return pause(project, state, "BASE_REVIEW_REQUIRED",
-                 next=f"storyloop base-review <project> --change {change['change_id']} "
-                      "--verdict pass --note '<核对内容>', then storyloop run")
-
-
-def _agent_review_context(project: Path, state: dict) -> tuple[str, dict | None]:
-    from .base_review import single_vendor_only, vendor_context
-    try:
-        context = vendor_context(project, state)
-    except StoryLoopError as exc:
-        if str(exc) == "Agent base review needs configured adapters" and not state.get("agent_adapter"):
-            return "unknown", None
-        raise
-    if context["available_vendors"] is None or not context["review_vendor"]:
-        return "unknown", context
-    return ("single" if single_vendor_only(project, state, context) else "distinct"), context
-
-
-def _agent_review_next(change_id: str, mode: str) -> str:
-    if mode == "unknown":
-        return "storyloop adapters check <project>"
-    if mode == "single":
-        return (f"storyloop base-review <project> --change {change_id} --verdict pass "
-                "--note '<核对内容>' --human-review '<至少 12 字理由>'")
-    return f"storyloop run <project> --change {change_id}"
-
-
-def _review_stop(project: Path, change: dict, state: dict, services=None) -> dict:
-    review = state.get("base_review")
-    if review is None:
-        if state.get("implementer", "human") == "agent":
-            from .base_review import review_agent_candidate
-            try:
-                mode, context = _agent_review_context(project, state)
-                if mode != "distinct":
-                    return pause(project, state, "BASE_REVIEW_REQUIRED",
-                                 next=_agent_review_next(change["change_id"], mode),
-                                 base_review_mode=mode)
-                review = review_agent_candidate(project, change, state, services, context)
-            except StoryLoopError as exc:
-                if exc.code == "WORKSPACE_TAINTED" and "engine source" in str(exc):
-                    return pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
-                                 next="Inspect and reinstall the StoryLoop engine before rerunning")
-                return _restart_pause(project, change, state, str(exc), rejected=True)
-        else:
-            return _pause_review(project, change, state)
-    if review.get("verdict") == "fail":
-        return _restart_pause(project, change, state, "Human candidate needs a new attempt",
-                              rejected=True)
-    require(review.get("verdict") == "pass", "Independent base review is invalid")
-    require(review.get("reviewer") not in base_candidate_authors(project, state),
-            "Base reviewer must differ from implementation author")
-    return pause(project, state, "MANUAL_ACCEPTANCE_REQUIRED",
-                 candidate_sha256=state["candidate_sha256"],
-                 pending=["BASE-ACCEPT"],
-                 next=f"storyloop accept <project> --change {change['change_id']} "
-                      "--criterion BASE-ACCEPT --note '<核对内容>', then storyloop run")
 
 
 def _finish_after_acceptance(project: Path, change: dict, state: dict) -> dict:
@@ -523,6 +458,12 @@ def _prepare(project: Path, change: dict, state: dict, services=None) -> dict:
         transition(project, state, "CONTRACT_COMMITTED", event="contract_committed",
                    updates={"contract_commit": commit})
         save_run(project, state)
+    if state.get("implementer", "human") == "agent":
+        from .adapter_capabilities import require_base_review_vendors
+        from .role_profiles import enabled
+        config = load_project_config(project)
+        if enabled(config):
+            require_base_review_vendors(project, config)
     state["base_inflight"] = "old_green"
     save_run(project, state)
     _prove_old_green(project, change, state)

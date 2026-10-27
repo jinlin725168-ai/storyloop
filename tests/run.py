@@ -28,7 +28,7 @@ SKIPPED = re.compile(r"(?:^|[,(]\s*)skipped=(\d+)", re.MULTILINE)
 
 def _system_agent_worktrees() -> set[str]:
     root = Path(tempfile.gettempdir()) / "storyloop-agent-wt"
-    return {str(path.relative_to(root)) for path in root.rglob("*")} if root.exists() else set()
+    return {path.name for path in root.iterdir()} if root.exists() else set()
 
 
 def modules(root: Path, suite: str) -> list[str]:
