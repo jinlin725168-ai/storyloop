@@ -102,16 +102,20 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         self.assertNotIn("agent_worktree", self.state)
 
     def test_long_tracked_path_stops_before_saving_anchor(self):
-        deep = self.project / ("a" * 100) / ("b" * 100)
+        deep = self.project / ("a" * 70) / ("b" * 70)
         deep.mkdir(parents=True)
         (deep / "file.txt").write_text("tracked\n", encoding="utf-8")
         self._git("add", ".")
         self._git("commit", "-qm", "long tracked path")
         self.commit = self._git("rev-parse", "HEAD").strip()
         self.state["contract_commit"] = self.commit
+        long_temp_root = self.root / ("x" * 80)
+        long_temp_root.mkdir()
         try:
-            with self.assertRaisesRegex(StoryLoopError, "path.*long"):
-                create_agent_worktree(self.project, self.state)
+            with mock.patch("storyloop.base_agent_worktree.tempfile.gettempdir",
+                            return_value=str(long_temp_root)):
+                with self.assertRaisesRegex(StoryLoopError, "path.*long"):
+                    create_agent_worktree(self.project, self.state)
         finally:
             remove_agent_worktree(self.project, self.state)
         self.assertNotIn("agent_worktree", self.state)
@@ -142,7 +146,7 @@ class BaseAgentWorktreeTests(unittest.TestCase):
                         return_value=str(shortcut)):
             checkout = create_agent_worktree(self.project, self.state)
         self.addCleanup(remove_agent_worktree, self.project, self.state)
-        self.assertTrue(checkout.is_relative_to(actual))
+        self.assertTrue(checkout.parents[3].samefile(actual))
         self.assertIn("agent_worktree", self.state)
 
     def test_temp_root_inside_project_uses_external_parent(self):
@@ -189,7 +193,9 @@ class BaseAgentWorktreeTests(unittest.TestCase):
     def test_missing_checkout_with_stale_git_registration_is_pruned(self):
         checkout = create_agent_worktree(self.project, self.state)
         shutil.rmtree(checkout)
-        self.assertIn(str(checkout), self._git("worktree", "list", "--porcelain"))
+        self.assertIn("prunable gitdir file points to non-existent location",
+                      self._git("worktree", "list", "--porcelain"))
         remove_agent_worktree(self.project, self.state)
         self.assertNotIn("agent_worktree", self.state)
-        self.assertNotIn(str(checkout), self._git("worktree", "list", "--porcelain"))
+        self.assertNotIn("prunable gitdir file points to non-existent location",
+                         self._git("worktree", "list", "--porcelain"))
