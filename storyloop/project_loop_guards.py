@@ -19,10 +19,16 @@ from .project_loop_support import control_digest
 _VISIBILITY_MESSAGE_LIMIT = 20
 
 
-def write_safely(project: Path, change_id: str, operation: Callable[[], dict]) -> tuple[dict, list]:
+def write_safely(project: Path, change_id: str, operation: Callable[[], dict],
+                 post_call_guard: Callable[[], None] | None = None,
+                 excluded_control_paths: frozenset[str] = frozenset(),
+                 exclude_root_git_snapshot: bool = False,
+                 allowed_git_worktree_attempt: str | None = None) -> tuple[dict, list]:
     """Run an agent that may write the workspace; the control plane and the index must stay untouched."""
-    before = capture_snapshot(project, include_control=True, include_ignored=True)
-    control = control_digest(project, change_id)
+    before = capture_snapshot(project, include_control=True, include_ignored=True,
+                              exclude_git=exclude_root_git_snapshot)
+    control = control_digest(project, change_id, excluded_paths=excluded_control_paths,
+                             allowed_git_worktree_attempt=allowed_git_worktree_attempt)
     staged = _staged_index(project)
     failure: BaseException | None = None
     try:
@@ -30,13 +36,17 @@ def write_safely(project: Path, change_id: str, operation: Callable[[], dict]) -
     except BaseException as exc:
         failure = exc
     finally:
+        if post_call_guard is not None:
+            post_call_guard()
         require_control_unchanged(
-            control_digest(project, change_id) == control,
+            control_digest(project, change_id, excluded_paths=excluded_control_paths,
+                           allowed_git_worktree_attempt=allowed_git_worktree_attempt) == control,
             "Implementation agent modified the protected control plane",
         )
         require_control_unchanged(_staged_index(project) == staged,
                                   "Implementation agent staged Git changes")
-    after = capture_snapshot(project, include_control=True, include_ignored=True)
+    after = capture_snapshot(project, include_control=True, include_ignored=True,
+                             exclude_git=exclude_root_git_snapshot)
     changes = snapshot_changes(before, after)
     _require_drafts_unchanged(changes)
     changes = _without_scratch(changes, scratch_paths(project))
@@ -53,6 +63,7 @@ def write_safely(project: Path, change_id: str, operation: Callable[[], dict]) -
 def read_only_call(
     project: Path, change_id: str, operation: Callable[[], object],
     allowed_evidence: str | None = None,
+    post_call_guard: Callable[[], None] | None = None,
 ) -> object:
     before = capture_snapshot(project, include_control=True, include_ignored=True)
     control = control_digest(project, change_id, excluded_evidence=allowed_evidence)
@@ -60,6 +71,8 @@ def read_only_call(
     try:
         return operation()
     finally:
+        if post_call_guard is not None:
+            post_call_guard()
         allowed = (f".storyloop/evidence/{change_id}/{allowed_evidence}"
                    if allowed_evidence else None)
         verify_read_only_snapshot(
@@ -120,6 +133,8 @@ def _is_scratch(path: str, scratch: list[str]) -> bool:
     # The engine's own call ledger is written while agents run; it is bookkeeping, not a change.
     if normalized == ".storyloop/state/telemetry" or normalized.startswith(".storyloop/state/telemetry/"):
         return True
+    if normalized == ".storyloop" or normalized.startswith(".storyloop/"):
+        return False
     parts = normalized.split("/")
     return any(part == item for part in parts for item in scratch) or any(
         normalized == item.rstrip("/") or normalized.startswith(item.rstrip("/") + "/")

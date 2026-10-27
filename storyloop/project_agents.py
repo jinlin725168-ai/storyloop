@@ -16,7 +16,7 @@ from .call_log import close_call, open_call
 from .role_schemas import schema_for, wire_schema
 from .role_instructions import FOUNDATION_NOTE, INSTRUCTIONS  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 from .telemetry import record_call
-from .role_profiles import build_profile, resolve_adapters
+from .role_profiles import base_payload, build_profile, enabled, resolve_adapters
 
 ROLES = {"product", "acceptance", "implement", "review", "survey", "characterize", "design"}
 
@@ -47,7 +47,8 @@ def _instruction_bundle(project: Path, role: str, stacks: list[str] | None = Non
     return text_, snapshots
 
 
-def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
+def invoke_project_agent(project: Path, role: str, payload: dict,
+                         *, workspace: Path | None = None) -> dict:
     """Invoke one stateless agent using the repository-local adapter configuration.
 
     The role's JSON Schema travels with the request (`response_schema`) so adapters can have
@@ -58,20 +59,29 @@ def invoke_project_agent(project: Path, role: str, payload: dict) -> dict:
     project = Path(project).resolve()
     require(role in ROLES, "Unknown project agent role")
     require(isinstance(payload, dict), "Agent payload must be an object")
+    if workspace is not None:
+        require(role == "implement" and payload.get("mode") == "base-implement",
+                "Separate agent workspace is only for base implementation")
+        workspace = Path(workspace).resolve()
+        require(workspace.is_dir() and not workspace.is_relative_to(project),
+                "Base agent workspace must exist outside the project")
     config = load_project_config(project)
     from .cost_limits import check_before_call
     from .cross_vendor import invoke
-    from .role_profiles import enabled
+    if base_payload(payload):
+        require(enabled(config), "Base agent execution needs configured adapters")
+        payload = {**payload, 'routing_tier': 'heavy'}
     if enabled(config):
         from .role_subagents import routing_tier
         payload = {**payload, 'routing_tier': routing_tier(project, payload)}
     ledger = FOUNDATION_LEDGER if role == "survey" else _change_id(payload)
     check_before_call(project, ledger, config)
     return invoke(project, role, payload, config, ledger,
-                  lambda settings, degraded: _invoke_once(project, role, payload, config, settings, degraded))
+                  lambda settings, degraded: _invoke_once(
+                      project, role, payload, config, settings, degraded, workspace))
 
 
-def _invoke_once(project, role, payload, config, settings, degraded):
+def _invoke_once(project, role, payload, config, settings, degraded, workspace=None):
     from .cost_limits import check_before_call
     ledger = FOUNDATION_LEDGER if role == "survey" else _change_id(payload)
     check_before_call(project, ledger, config)
@@ -91,7 +101,7 @@ def _invoke_once(project, role, payload, config, settings, degraded):
     request = {
         "protocol": "storyloop.project-agent.v1",
         "role": role,
-        "project": str(project),
+        "project": str(workspace or project),
         "payload": payload,
         "response_schema": wire_schema(schema),
     }
@@ -118,7 +128,8 @@ def _invoke_once(project, role, payload, config, settings, degraded):
     if profile is not None and capability.get('subagents') is not True:
         instructions += sequential_instructions(request)
     trace: dict = {"stderr": "", "sessions": [], "raw": None, "repairs": 0, "schema_errors": [],
-                   "instructions": instructions, "skills": skill_snapshots, "telemetry": None}
+                   "instructions": instructions, "skills": skill_snapshots, "telemetry": None,
+                   "control_project": str(project)}
     return _execute_call(project, role, payload, schema, request, adapter_config, settings,
                          degraded, profile, ledger, call, trace)
 
@@ -135,7 +146,8 @@ def _execute_call(project, role, payload, schema, request, adapter_config, setti
             trace["codex_model"] = model
             trace["codex_profile"] = sequential_profile(request, "openai", model)
             trace["codex_instructions"] = sequential_instructions(request)
-        result = invoke_transport({**request, "project": str(project)}, adapter_config, schema, trace)
+        result = invoke_transport({**request, "project": request.get("project", str(project))},
+                                  adapter_config, schema, trace)
         return result
     except Exception as exc:
         error = exc

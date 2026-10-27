@@ -70,6 +70,12 @@
 |  | `oracle_skill_approval` | 可变区 | 为修改验收判据技能提供显式 CLI 授权 | `confirmed_upgrade`、`require_confirmation` |
 |  | `system_smoke` | 可变区 | 管理每个变更必须保持通过的项目级系统冒烟层 | `adopt_system_smoke`、`apply_smoke_update`、`is_system_smoke_path`、`load_system_smoke`、`preflight_system_smoke`、`propose_smoke_update`、`run_system_smoke_isolated`、`system_smoke_digests`、`validate_manifest` |
 | 实现 | `characterization_baseline` | 可变区 | 在已提交旧代码及声明锁定产物上证明特征化判据 | `run_characterization_baseline` |
+|  | `base_design` | 可变区 | 将 base 代理方案与具名人工批准绑定到当前合同和运行 | `propose_design`、`approve_base_design` |
+|  | `base_agent_execution` | 可变区 | 审计代理写入并由引擎提交单个 base 候选 | `implement_base_candidate` |
+|  | `base_agent_worktree` | 可变区 | 为单次 base 代理调用创建、校验和清理独立 Git worktree | `create_agent_worktree`、`remove_agent_worktree` |
+|  | `base_agent_transfer` | 可变区 | 校验独立树的精确路径并由引擎提交 base 候选 | `transfer_agent_candidate` |
+|  | `engine_source_safety` | 可变区 | 代理调用前后比较引擎源码摘要并给出提醒 | `engine_source_digest`、`engine_warning` |
+|  | `base_review` | 可变区 | 绑定跨厂商审查与单厂商人工替代 | `review_agent_candidate`、`human_substitute_fields` |
 |  | `facts` | 可变区 | 记录并跨运行传递代理声明的安全代码事实位置 | `merge_facts`、`valid_location` |
 |  | `failure_attribution` | 可变区 | 判定失败尝试的修复责任与闭环是否仍有进展 | `check_findings`、`failure_signature`、`finding_key`、`layer_attribution`、`location_file`、`next_mode`、`no_progress`、`route` |
 |  | `planning` | 可变区 | 运行锁内、特征化与实现之前的 L2 分档方案 | `assess_plan`、`ensure_routing_plan`、`plan_projection`、`required_locks`、`review_focus`、`selected_option` |
@@ -149,7 +155,8 @@
 |  | `run_stops` | 可变区 | 构造停止报告、保存停点并返回恢复命令 | `pause`、`pause_for_boundary` |
 |  | `stop_report` | 可变区 | 构造并渲染各显式停点共用的证据报告 | `build_entry_stop`、`build_stop`、`failure_view`、`render_stop`、`stop_of` |
 | 变更生命周期 | `project_loop` | 可变区 | 已批准产品变更的外部自治闭环 | `load_run_state`、`run_change` |
-|  | `base_execution` | 可变区 | 在统一状态机上编排 base 人工实现与恢复 | `run_base_change` |
+|  | `base_execution` | 可变区 | 在统一状态机上编排 base 人工和代理实现与恢复 | `run_base_change` |
+|  | `base_run_open` | 可变区 | 选择 base 实现者并打开兼容旧运行的分支状态 | `_open_state`、`choose_implementer` |
 |  | `base_finalization` | 可变区 | 合并后幂等推进底座版本并恢复断点 | `finalize_base_baseline` |
 |  | `run_attempts` | 可变区 | 编排每轮校验、审查与人工验收 | `run_checks_safely`、`perform_review`、`manual_acceptance_gate` |
 |  | `project_preparation` | 可变区 | 物化合同并建立实现前不可变证据 | — |

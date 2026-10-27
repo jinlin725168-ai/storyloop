@@ -16,6 +16,10 @@ ROLES = ("product", "acceptance", "implement", "review", "survey", "characterize
 ROUTING = ("light", "standard", "heavy")
 
 
+def normalize_vendor(value: object) -> str | None:
+    return value.strip().casefold() if isinstance(value, str) and value.strip() else None
+
+
 def probe(project: Path, adapter_name: str, adapter: dict) -> dict:
     """Ask one adapter for its capability record; unsupported handshakes stay unknown."""
     kind = adapter.get("kind")
@@ -56,7 +60,8 @@ def _response(raw: object) -> dict:
         return {"known": False, "tiers": []}
     tiers = value["tiers"]
     required_flags = ("subagents", "path_guard", "fast_checks")
-    return {"known": True, **lane_metadata(value), "tiers": sorted(set(tiers)), "vendor": value["vendor"],
+    return {"known": True, **lane_metadata(value), "tiers": sorted(set(tiers)),
+            "vendor": normalize_vendor(value["vendor"]),
             **{key: value[key] for key in (*required_flags, "modes")}}
 
 
@@ -79,8 +84,12 @@ def _load_cache(project: Path, adapters: dict) -> dict | None:
         return None
     if set(value["adapters"]) != set(adapters):
         return None
-    return value if all(_valid_cached_capability(adapters[name], item)
-                        for name, item in value["adapters"].items()) else None
+    if not all(_valid_cached_capability(adapters[name], item)
+               for name, item in value["adapters"].items()):
+        return None
+    return {**value, "adapters": {
+        name: ({**item, "vendor": normalize_vendor(item["vendor"])} if "vendor" in item else item)
+        for name, item in value["adapters"].items()}}
 
 
 def _valid_cached_capability(adapter: dict, value: object) -> bool:
@@ -94,7 +103,7 @@ def _valid_cached_capability(adapter: dict, value: object) -> bool:
 def _complete_capability(value: object) -> bool:
     if not isinstance(value, dict) or value.get("known", True) is not True:
         return False
-    if not isinstance(value.get("vendor"), str) or not value["vendor"]:
+    if normalize_vendor(value.get("vendor")) is None:
         return False
     tiers, modes = value.get("tiers"), value.get("modes")
     return (lane_metadata(value) is not None and isinstance(tiers, list) and all(isinstance(item, str) and item in {"strong", "standard"} for item in tiers)

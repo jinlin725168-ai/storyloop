@@ -32,6 +32,9 @@ def subagents_for(role: str, tier: str, payload: dict, capability: dict) -> dict
 def routing_tier(project: Path, payload: dict) -> str:
     """Prefer persisted engine state; only pre-run calls use engine request context."""
     change = payload.get('change') or {}
+    if isinstance(change, dict) and isinstance(change.get('product'), dict):
+        if change['product'].get('nature') == 'base':
+            return 'heavy'
     change_id = payload.get('change_id') or (change.get('change_id') if isinstance(change, dict) else None)
     if isinstance(change_id, str):
         from .models import identifier

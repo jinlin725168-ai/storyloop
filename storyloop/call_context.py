@@ -3,6 +3,7 @@ import hashlib
 from pathlib import Path, PurePosixPath
 
 from .models import StoryLoopError
+from .capability_protocol import normalize_vendor
 from .path_security import safe_target
 from .storage import load_json
 
@@ -10,7 +11,10 @@ from .storage import load_json
 def capability_for(project: Path, adapter: str) -> dict:
     """Use the already-validated handshake; a missing capability remains unknown."""
     try:
-        return load_json(project / '.storyloop/state/adapters.json').get('adapters', {}).get(adapter, {})
+        value = load_json(project / '.storyloop/state/adapters.json').get('adapters', {}).get(adapter, {})
+        if not isinstance(value, dict):
+            return {}
+        return {**value, 'vendor': normalize_vendor(value['vendor'])} if 'vendor' in value else value
     except StoryLoopError:
         return {}
 

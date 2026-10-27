@@ -52,12 +52,14 @@ class FileChange:
 
 def capture_snapshot(root: Path, max_files: int = _DEFAULT_MAX_FILES,
                      include_control: bool = False,
-                     include_ignored: bool = False) -> WorkspaceSnapshot:
+                     include_ignored: bool = False,
+                     exclude_git: bool = False) -> WorkspaceSnapshot:
     """Capture twice; the caller must first stop every workspace writer."""
     root = Path(root)
     require(type(max_files) is int and max_files > 0, "Invalid snapshot file limit")
     require(type(include_control) is bool, "Invalid include_control option")
     require(type(include_ignored) is bool, "Invalid include_ignored option")
+    require(type(exclude_git) is bool, "Invalid exclude_git option")
     require(not include_ignored or include_control,
             "Full snapshots must include control paths")
     require(root.exists() and root.is_dir(), "Snapshot root must be an existing directory")
@@ -70,8 +72,8 @@ def capture_snapshot(root: Path, max_files: int = _DEFAULT_MAX_FILES,
     )
     allowed = _sensitive_allow(resolved)
     scratch = _scratch_skip(resolved) if include_ignored else frozenset()
-    first = _scan_once(resolved, max_files, ignored, include_control, allowed, scratch)
-    second = _scan_once(resolved, max_files, ignored, include_control, allowed, scratch)
+    first = _scan_once(resolved, max_files, ignored, include_control, allowed, scratch, exclude_git)
+    second = _scan_once(resolved, max_files, ignored, include_control, allowed, scratch, exclude_git)
     require(first == second, "Workspace changed while capturing snapshot")
     return WorkspaceSnapshot(resolved, first)
 
@@ -99,7 +101,8 @@ def _reject_linked_git_control(root: Path) -> None:
 def _scan_once(root: Path, max_files: int, ignored: set[str],
                track_directories: bool,
                allowed: frozenset[str] = frozenset(),
-               scratch: frozenset[str] = frozenset()) -> tuple[tuple[str, FileFingerprint], ...]:
+               scratch: frozenset[str] = frozenset(),
+               exclude_root_git: bool = False) -> tuple[tuple[str, FileFingerprint], ...]:
     entries: list[tuple[str, FileFingerprint]] = []
     for directory, names, files in os.walk(root, followlinks=False):
         current = Path(directory)
@@ -112,6 +115,9 @@ def _scan_once(root: Path, max_files: int, ignored: set[str],
                             or (base + name).startswith('.storyloop/drafts/')))
                         or (name not in scratch and base + name not in scratch)]
         _reject_links(current, [*names, *files])
+        if current == root and exclude_root_git:
+            names[:] = [name for name in names if name.casefold() != ".git"]
+            files[:] = [name for name in files if name.casefold() != ".git"]
         names[:] = sorted(name for name in names if name.casefold() not in ignored)
         if track_directories:
             require(len(entries) < max_files, "Snapshot file limit exceeded")

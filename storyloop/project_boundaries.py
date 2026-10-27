@@ -61,14 +61,25 @@ def role_path_boundary(project: Path, role: str, payload: dict) -> dict:
     product = change.get("product", {}) if isinstance(change, dict) else {}
     scope = definition_for(type_of(product)).writable_scope
     writable = []
+    base_agent = role == "implement" and product.get("nature") == "base"
+    approved = set(product.get("base", {}).get("paths", [])) if base_agent else set()
+    if base_agent:
+        writable.extend(sorted(approved))
     if role == "implement":
-        if "mutable" in scope:
+        if "mutable" in scope and not base_agent:
             writable.extend(f"{root.rstrip('/')}/**" for root in baseline["module_roots"])
     if role in {"implement", "characterize"} and "test_roots" in scope:
         writable.extend(f"{root.rstrip('/')}/**" for root in profile.get("test_roots", []))
     plan = payload.get("design_plan") if isinstance(payload.get("design_plan"), dict) else {}
-    forbidden = [*baseline["foundation_paths"], *baseline["protected_paths"],
-                 "openspec/lessons/**", f"{CUSTOM_ROOT}/**", ".storyloop/**"]
+    forbidden = [*(path for path in baseline["foundation_paths"] if path not in approved),
+                 *(path for path in baseline["protected_paths"] if path not in approved),
+                 *([] if base_agent else ["openspec/lessons/**", f"{CUSTOM_ROOT}/**"]),
+                 ".storyloop/**"]
+    if base_agent:
+        forbidden.extend(["reports/storyloop/**", "acceptance/changes/**",
+                          "acceptance/smoke/**", "acceptance/storyloop-settings.json",
+                          ".github/workflows/**", *[f"{root.rstrip('/')}/**"
+                                                   for root in profile.get("test_roots", [])]])
     forbidden.extend(plan.get("forbidden_paths", []) if isinstance(plan.get("forbidden_paths", []), list) else [])
     return {"writable_paths": sorted(set(writable)), "forbidden_paths": sorted(set(forbidden))}
 
