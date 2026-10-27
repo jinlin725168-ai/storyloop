@@ -94,6 +94,7 @@ class BaseAgentWorktreeTests(unittest.TestCase):
             remove_agent_worktree(self.project, self.state)
         self.assertTrue((unknown / "human.txt").exists())
 
+    @unittest.skipUnless(os.name == "nt", "MAX_PATH preflight applies on Windows")
     def test_long_external_temp_path_stops_before_saving_anchor(self):
         long_root = self.root / ("long" * 50)
         with mock.patch("storyloop.base_agent_worktree._safe_temp_root", return_value=long_root):
@@ -101,6 +102,7 @@ class BaseAgentWorktreeTests(unittest.TestCase):
                 create_agent_worktree(self.project, self.state)
         self.assertNotIn("agent_worktree", self.state)
 
+    @unittest.skipUnless(os.name == "nt", "MAX_PATH preflight applies on Windows")
     def test_long_tracked_path_stops_before_saving_anchor(self):
         deep = self.project / ("a" * 70) / ("b" * 70)
         deep.mkdir(parents=True)
@@ -190,6 +192,23 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         self.assertIn("agent_worktree", self.state)
         remove_agent_worktree(self.project, self.state)
 
+    def test_remove_failure_after_candidate_commit_instructs_run(self):
+        checkout = create_agent_worktree(self.project, self.state)
+        self.state["candidate_commit"] = self.commit
+
+        def fail_remove(project, *args, **kwargs):
+            if args[:2] == ("worktree", "remove"):
+                raise StoryLoopError("locked")
+            return real_git(project, *args, **kwargs)
+
+        with mock.patch("storyloop.base_agent_worktree.git", side_effect=fail_remove):
+            with self.assertRaises(StoryLoopError) as caught:
+                remove_agent_worktree(self.project, self.state)
+        self.assertIn("storyloop run", str(caught.exception))
+        self.assertNotIn("storyloop reset", str(caught.exception))
+        self.assertTrue(checkout.exists())
+        remove_agent_worktree(self.project, self.state)
+
     def test_missing_checkout_with_stale_git_registration_is_pruned(self):
         checkout = create_agent_worktree(self.project, self.state)
         shutil.rmtree(checkout)
@@ -199,3 +218,43 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         self.assertNotIn("agent_worktree", self.state)
         self.assertNotIn("prunable gitdir file points to non-existent location",
                          self._git("worktree", "list", "--porcelain"))
+
+    def test_cleanup_accepts_agent_branch_switch(self):
+        checkout = create_agent_worktree(self.project, self.state)
+        subprocess.run(["git", "checkout", "-qb", "agent-branch"], cwd=checkout,
+                       check=True, capture_output=True)
+        remove_agent_worktree(self.project, self.state)
+        self.assertFalse(checkout.exists())
+        self.assertNotIn("agent_worktree", self.state)
+
+    def test_missing_registration_file_reports_manual_cleanup(self):
+        checkout = create_agent_worktree(self.project, self.state)
+        registration = Path(self.state["agent_worktree"]["gitdir"]) / "gitdir"
+        registration.unlink()
+        with self.assertRaises(StoryLoopError) as caught:
+            remove_agent_worktree(self.project, self.state)
+        self.assertIn("worktree", str(caught.exception))
+        self.assertIn("prune", str(caught.exception))
+        self.assertIn("agent_worktree", self.state)
+        self.assertTrue(checkout.exists())
+
+    def test_relative_gitdir_registration_is_accepted(self):
+        checkout = create_agent_worktree(self.project, self.state)
+        self.addCleanup(remove_agent_worktree, self.project, self.state)
+        gitdir = Path(self.state["agent_worktree"]["gitdir"])
+        registration = gitdir / "gitdir"
+        original = registration.read_text(encoding="utf-8")
+        self.addCleanup(registration.write_text, original, encoding="utf-8")
+        registration.write_text(os.path.relpath(checkout / ".git", gitdir) + "\n",
+                                encoding="utf-8")
+        from storyloop.base_agent_worktree import agent_git
+        # Git 2.43 does not list relative registrations; 2.48 can enable them.
+        with mock.patch("storyloop.base_agent_worktree._registered", return_value=True):
+            self.assertEqual(agent_git(self.project, self.state, "rev-parse", "HEAD").strip(),
+                             self.commit)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX paths do not have MAX_PATH")
+    def test_posix_checkout_path_is_not_limited_to_240_characters(self):
+        from storyloop.base_agent_worktree import _check_checkout_paths
+        long_path = self.root / ("x" * 80) / ("y" * 80) / ("z" * 80)
+        _check_checkout_paths(self.project, self.commit, long_path)

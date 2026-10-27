@@ -106,6 +106,9 @@ def _resume_agent_cleanup(project: Path, change: dict, state: dict) -> dict | No
     state.pop("interrupted_status", None)
     state.pop("stop", None)
     save_run(project, state)
+    reason = _premerge_restart_reason(project, change, {**state, "base_inflight": None})
+    if reason is not None:
+        return _restart_pause(project, change, state, reason)
     return _agent_to_review(project, change, state)
 
 

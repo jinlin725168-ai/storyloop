@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import tempfile
 import uuid
+from collections.abc import Callable
 
 from .git_command import git
 from .models import StoryLoopError, identifier, require
@@ -56,8 +57,15 @@ def _anchored_gitdir(project: Path, state: dict) -> tuple[Path, Path]:
     require(gitdir == expected and gitdir.is_dir() and not gitdir.is_symlink(),
             "Agent worktree Git directory is not the saved registration")
     require(_registered(project, path), "Agent worktree is not registered")
-    recorded = (gitdir / "gitdir").read_text(encoding="utf-8").strip()
-    require(Path(recorded).resolve() == path / ".git",
+    try:
+        recorded = (gitdir / "gitdir").read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise StoryLoopError("Agent worktree Git registration is unreadable",
+                             code="WORKSPACE_TAINTED") from exc
+    registered_path = Path(recorded)
+    if not registered_path.is_absolute():
+        registered_path = gitdir / registered_path
+    require(registered_path.resolve() == path / ".git",
             "Agent worktree Git registration points elsewhere")
     head_file = gitdir / "HEAD"
     require(head_file.is_file() and not head_file.is_symlink(),
@@ -70,16 +78,27 @@ def _anchored_gitdir(project: Path, state: dict) -> tuple[Path, Path]:
     return path, gitdir
 
 
-def agent_git(project: Path, state: dict, *arguments: str) -> str:
-    """Use only the engine's saved Git registration, never checkout/.git."""
+def agent_git_session(project: Path, state: dict) -> tuple[Path, str, Callable[..., str]]:
+    """Pin one audited checkout and its executable Git configuration for transfer."""
     path, gitdir = _anchored_gitdir(project, state)
     names = git(project, "config", "--list", "--name-only").splitlines()
     filters = sorted({name for name in names if name.startswith("filter.")
                       and name.rsplit(".", 1)[-1] in {"process", "clean", "smudge"}})
+    drivers = sorted({name.rsplit(".", 1)[0] for name in filters})
     disabled = [part for name in filters for part in ("-c", f"{name}=")]
-    return git(project, f"--git-dir={gitdir}", f"--work-tree={path}",
-               "-c", "core.fsmonitor=false", "-c", "diff.external=",
-               *disabled, *arguments)
+    disabled += [part for name in drivers for part in ("-c", f"{name}.required=false")]
+
+    def run(*arguments: str) -> str:
+        return git(project, f"--git-dir={gitdir}", f"--work-tree={path}",
+                   "-c", "core.fsmonitor=false", "-c", "diff.external=",
+                   *disabled, *arguments)
+
+    return path, run("rev-parse", "HEAD").strip(), run
+
+
+def agent_git(project: Path, state: dict, *arguments: str) -> str:
+    """Use only the engine's saved Git registration, never checkout/.git."""
+    return agent_git_session(project, state)[2](*arguments)
 
 
 def _private_directory(path: Path) -> None:
@@ -101,12 +120,13 @@ def _worktree_timeout(project: Path) -> int:
 
 
 def _check_checkout_paths(project: Path, contract: str, path: Path) -> None:
+    if os.name != "nt":
+        return
     tracked = git(project, "ls-tree", "-r", "--name-only", "-z", contract)
     for relative in tracked.split("\0"):
         if relative:
             candidate = str(path / relative)
-            length = (len(candidate.encode("utf-16-le")) // 2 if os.name == "nt"
-                      else len(candidate))
+            length = len(candidate.encode("utf-16-le")) // 2
             require(length <= 240, f"Agent worktree path is too long: {relative}")
 
 
@@ -125,7 +145,9 @@ def create_agent_worktree(project: Path, state: dict) -> Path:
     temp_root = _external_temp_root(project, _safe_temp_root(Path(tempfile.gettempdir()).resolve()))
     base = _outside_project(project, temp_root / "storyloop-agent-wt")
     path = _outside_project(project, base / repo / change_id / attempt)
-    require(len(str(path)) <= 240, "Agent worktree path is too long")
+    if os.name == "nt":
+        require(len(str(path).encode("utf-16-le")) // 2 <= 240,
+                "Agent worktree path is too long")
     _check_checkout_paths(project, state["contract_commit"], path)
     for folder in (base, base / repo, path.parent):
         _private_directory(folder)
@@ -145,30 +167,31 @@ def remove_agent_worktree(project: Path, state: dict) -> None:
     if not anchor:
         return
     project = Path(project).resolve()
-    require(anchor.get("contract_commit") == state.get("contract_commit"),
-            "Agent worktree contract anchor changed")
-    path = _outside_project(project, _safe_temp_root(Path(anchor["path"])))
-    if not path.exists() and not _registered(project, path):
-        state.pop("agent_worktree", None)
-        return
-    if not _registered(project, path):
-        if path.is_dir() and not any(path.iterdir()):
-            path.rmdir()
+    path = Path(anchor["path"])
+    try:
+        require(anchor.get("contract_commit") == state.get("contract_commit"),
+                "Agent worktree contract anchor changed")
+        path = _outside_project(project, _safe_temp_root(path))
+        registered = _registered(project, path)
+        if not path.exists() and not registered:
             state.pop("agent_worktree", None)
             return
-        raise StoryLoopError("Agent worktree path is not registered; preserve and inspect it",
-                             code="WORKSPACE_TAINTED")
-    if anchor.get("gitdir"):
-        _anchored_gitdir(project, state)
-    try:
+        if not registered:
+            if path.is_dir() and not any(path.iterdir()):
+                path.rmdir()
+                state.pop("agent_worktree", None)
+                return
+            raise StoryLoopError("Agent worktree path is not registered; preserve it")
         git(project, "worktree", "remove", "--force", str(path),
             timeout_seconds=_worktree_timeout(project))
         git(project, "worktree", "prune", timeout_seconds=_worktree_timeout(project))
-    except StoryLoopError as exc:
+    except (StoryLoopError, OSError) as exc:
+        resume = (f"storyloop run <project> --change {state['change_id']}"
+                  if state.get("candidate_commit") else
+                  f"storyloop reset <project> --change {state['change_id']} --reason '<reason>'")
         raise StoryLoopError(
             f"Agent worktree cleanup failed: {exc}. Close the agent or IDE, then run "
-            f"git worktree remove --force {path}; git worktree prune; "
-            f"storyloop reset <project> --change {state['change_id']} --reason '<reason>'",
+            f"git worktree remove --force {path}; git worktree prune; {resume}",
             code="WORKSPACE_TAINTED",
         ) from exc
     state.pop("agent_worktree", None)

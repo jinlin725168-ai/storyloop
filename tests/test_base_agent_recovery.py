@@ -228,6 +228,32 @@ class BaseAgentRecoveryTests(unittest.TestCase):
         self.assertEqual(load_json(run_path(self.root, self.change["change_id"]))["candidate_commit"],
                          candidate)
 
+    def test_cleanup_failure_instructs_run_without_discarding_candidate(self):
+        from storyloop import base_agent_execution
+        self._approved()
+        with mock.patch.object(base_agent_execution, "remove_agent_worktree",
+                               side_effect=StoryLoopError("locked checkout", code="WORKSPACE_TAINTED")):
+            result = run_change(self.root, self.change["change_id"],
+                                services=self._successful_writer())
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        self.assertIn("storyloop run", result["next"])
+        self.assertNotIn("storyloop reset", result["next"])
+        self.assertIn("candidate_commit", load_json(run_path(self.root, self.change["change_id"])))
+
+    def test_cleanup_retry_rechecks_control_binding_before_candidate_review(self):
+        from storyloop import base_agent_execution
+        self._approved()
+        with mock.patch.object(base_agent_execution, "remove_agent_worktree",
+                               side_effect=StoryLoopError("locked checkout", code="WORKSPACE_TAINTED")):
+            result = run_change(self.root, self.change["change_id"],
+                                services=self._successful_writer())
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        config = self.root / ".storyloop/config.json"
+        config.write_bytes(config.read_bytes() + b" ")
+        resumed = run_change(self.root, self.change["change_id"], services=self._services())
+        self.assertNotEqual(resumed["status"], "BASE_REVIEW_REQUIRED")
+        self.assertIn("configuration", resumed.get("reason", "").lower())
+
     def test_transfer_os_error_becomes_tainted_stop(self):
         from storyloop import base_agent_transfer
         self._approved()

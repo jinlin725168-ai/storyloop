@@ -7,13 +7,13 @@ import unittest
 from unittest import mock
 
 from storyloop.agent_transport import _codex, _codex_once, _command, _manual
-from storyloop.base_agent_execution import _prepare_agent_call
-from storyloop.base_agent_worktree import remove_agent_worktree
+from storyloop.base_execution import _open_state
 from storyloop.baseline import load_project_config
-from storyloop.git_command import git
 from storyloop.models import StoryLoopError
+from storyloop.project_loop import _new_run_state
 from storyloop.project_agents import invoke_project_agent
 from storyloop.storage import load_json, write_json
+from storyloop.run_state import run_path
 from tests import test_base_agent_flow as flow
 
 
@@ -116,18 +116,11 @@ class BaseAgentTransportTests(unittest.TestCase):
             self.assertFalse(response_path.exists())
             self.assertFalse((checkout / ".storyloop").exists())
 
-    def test_manual_base_adapter_is_rejected_before_creating_checkout(self):
+    def test_manual_base_adapter_is_rejected_before_run_state_exists(self):
         config = load_project_config(self.root)
         config.update({"adapters": {"one": {"kind": "manual"}},
                        "roles": {"default_adapter": "one"}})
-        write_json(self.root / ".storyloop/config.json", config)
-        state = {"change_id": self.change["change_id"],
-                 "contract_commit": git(self.root, "rev-parse", "HEAD").strip(),
-                 "engine_source": str(self.root)}
-        try:
-            with mock.patch("storyloop.adapter_capabilities.ensure_checked"):
-                with self.assertRaisesRegex(StoryLoopError, "--implementer human"):
-                    _prepare_agent_call(self.root, self.change, state)
-        finally:
-            remove_agent_worktree(self.root, state)
-        self.assertNotIn("agent_worktree", state)
+        with mock.patch("storyloop.base_run_open.load_project_config", return_value=config):
+            with self.assertRaisesRegex(StoryLoopError, "--implementer human|command/Codex"):
+                _open_state(self.root, self.change, "agent", _new_run_state)
+        self.assertFalse(run_path(self.root, self.change["change_id"]).exists())

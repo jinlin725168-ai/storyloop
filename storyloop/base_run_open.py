@@ -6,8 +6,8 @@ from pathlib import Path
 
 from . import __version__
 from .base_upgrade import _changed_since
-from .baseline import _git, load_baseline, verify_baseline
-from .models import require
+from .baseline import _git, load_baseline, load_project_config, verify_baseline
+from .models import StoryLoopError, require
 from .project_boundaries import audit_base_scope
 from .project_git import current_branch, start_base
 from .run_state import run_path, save_run
@@ -65,6 +65,15 @@ def _resume_state(project: Path, change: dict, implementer: str | None, saved: P
 def _start_state(project: Path, change: dict, implementer: str | None, new_run_state) -> dict:
     change_id = change["change_id"]
     mode = choose_implementer(change["product"]["base"]["scope"], implementer)
+    if mode == "agent":
+        from .role_profiles import enabled, resolve_adapters, role_settings
+        config = load_project_config(project)
+        if enabled(config):
+            adapter = role_settings(config, "implement", "heavy", base=True)["adapter"]
+            if resolve_adapters(config)[adapter]["kind"] == "manual":
+                raise StoryLoopError("Manual adapter cannot implement base changes in a "
+                                     "disposable worktree; start with --implementer human "
+                                     "or configure a command/Codex adapter", code="AGENT_UNAVAILABLE")
     require(change["approval"]["versions"]["engine_version"] == __version__,
             "Approved base engine version differs from the running engine")
     dirty = _git(project, "status", "--porcelain=v1", "--untracked-files=all", "-z")

@@ -68,23 +68,22 @@ def _cleanup_and_pause(project: Path, change: dict, state: dict, reason: str) ->
 
 
 def _pause_agent_issue(project: Path, change: dict, state: dict, reason: str) -> dict:
+    if state.get("candidate_commit"):
+        next_step = ("Close worktree file holders, then storyloop run <project> --change "
+                     f"{change['change_id']}; the saved candidate will be retained")
+    else:
+        next_step = ("Inspect the main worktree and saved agent worktree anchor, then "
+                     f"storyloop reset <project> --change {change['change_id']} "
+                     "--reason '<reason>'")
     return pause(project, state, "WORKSPACE_TAINTED", reason=reason,
-                 next=f"Inspect the main worktree and saved agent worktree anchor, then "
-                      f"storyloop reset <project> --change {change['change_id']} "
-                      "--reason '<reason>'")
+                 next=next_step)
 
 
 def _prepare_agent_call(project: Path, change: dict, state: dict) -> Path:
     from .adapter_capabilities import ensure_checked
     from .baseline import load_project_config
-    from .role_profiles import enabled, resolve_adapters, role_settings
+    from .role_profiles import enabled
     config = load_project_config(project)
-    if enabled(config):
-        adapter = role_settings(config, "implement", "heavy", base=True)["adapter"]
-        if resolve_adapters(config)[adapter]["kind"] == "manual":
-            raise StoryLoopError("Manual adapter cannot implement base changes in a disposable "
-                                 "agent worktree; use --implementer human or a command/Codex adapter",
-                                 code="AGENT_UNAVAILABLE")
     state["base_inflight"] = "agent_capability_check"
     save_run(project, state)
     if enabled(config):
@@ -116,7 +115,8 @@ def _invoke_agent(project: Path, checkout: Path, change: dict, state: dict, serv
     excluded = (frozenset({"openspec/principles.json"})
                 if change["product"]["base"]["scope"] == "knowledge"
                 and "openspec/principles.json" in approved else frozenset())
-    response, changes = write_safely(project, change["change_id"], operation, source_guard, excluded)
+    response, changes = write_safely(project, change["change_id"], operation, source_guard,
+                                     excluded, exclude_git_metadata=True)
     if changes:
         paths = ", ".join(item.path for item in changes[:20])
         raise StoryLoopError(f"Agent changed main project during isolated implementation: {paths}",

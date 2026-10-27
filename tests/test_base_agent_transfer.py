@@ -1,8 +1,10 @@
 """Only exact approved ordinary files cross from the disposable checkout."""
 
 import os
+from pathlib import Path
 import shutil
 import subprocess
+import sys
 import unittest
 from unittest import mock
 
@@ -169,3 +171,101 @@ class BaseAgentTransferTests(unittest.TestCase):
         (checkout / "build.cmd").write_text("echo new\n", encoding="utf-8")
         self._transfer(checkout, "build.cmd")
         self.assertEqual(self._git("ls-tree", "HEAD", "build.cmd").split()[0], "100644")
+
+    def test_required_lfs_style_filter_does_not_block_audit(self):
+        (self.project / ".gitattributes").write_text("tracked.txt filter=lfs\n",
+                                                       encoding="utf-8")
+        self._git("add", ".gitattributes")
+        self._git("commit", "-qm", "attributes")
+        self.commit = self._git("rev-parse", "HEAD").strip()
+        self.state["contract_commit"] = self.commit
+        filter_script = self.root / "copy-filter.py"
+        filter_script.write_text("import sys\nsys.stdout.buffer.write(sys.stdin.buffer.read())\n",
+                                 encoding="utf-8")
+        command = f'"{sys.executable}" "{filter_script}"'
+        self._git("config", "filter.lfs.clean", command)
+        self._git("config", "filter.lfs.smudge", command)
+        self._git("config", "filter.lfs.required", "true")
+        checkout = self._checkout()
+        (checkout / "tracked.txt").write_text("changed\n", encoding="utf-8")
+        self._transfer(checkout, "tracked.txt")
+        self.assertEqual((self.project / "tracked.txt").read_text(encoding="utf-8"),
+                         "changed\n")
+
+    @unittest.skipUnless(os.name == "posix", "Submodule fsmonitor probe uses a POSIX shell")
+    def test_submodule_git_config_cannot_execute_during_audit(self):
+        subrepo = self.root / "subrepo"
+        subrepo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=subrepo, check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=subrepo, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.invalid"],
+                       cwd=subrepo, check=True)
+        (subrepo / "source.txt").write_text("source\n", encoding="utf-8")
+        subprocess.run(["git", "add", "source.txt"], cwd=subrepo, check=True)
+        subprocess.run(["git", "commit", "-qm", "source"], cwd=subrepo, check=True)
+        self._git("-c", "protocol.file.allow=always", "submodule", "add", "-q",
+                  str(subrepo), "sub")
+        self._git("commit", "-qm", "gitlink")
+        self.commit = self._git("rev-parse", "HEAD").strip()
+        self.state["contract_commit"] = self.commit
+        checkout = self._checkout()
+        subprocess.run(["git", "-c", "protocol.file.allow=always", "submodule", "update",
+                        "--init"], cwd=checkout, check=True, capture_output=True)
+        sub = checkout / "sub"
+        original = (sub / ".git").read_text(encoding="utf-8")
+        original_gitdir = Path(original.split("gitdir: ", 1)[1].strip())
+        if not original_gitdir.is_absolute():
+            original_gitdir = (sub / original_gitdir).resolve()
+        evil = sub / ".evil"
+        shutil.copytree(original_gitdir, evil)
+        marker = self.root / "submodule-filter-ran"
+        script = evil / "clean.sh"
+        script.write_text(f"#!/bin/sh\ntouch '{marker}'\ncat\n", encoding="utf-8")
+        script.chmod(0o700)
+        with (evil / "config").open("a", encoding="utf-8") as config:
+            config.write(f"\n[core]\n\tworktree = {sub}\n"
+                         f"\tfsmonitor = {script}\n"
+                         f"[filter \"probe\"]\n\tclean = {script}\n")
+        (sub / ".git").write_text("gitdir: .evil\n", encoding="utf-8")
+        self.addCleanup((sub / ".git").write_text, original, encoding="utf-8")
+        (sub / ".gitattributes").write_text("source.txt filter=probe\n", encoding="utf-8")
+        (sub / "source.txt").write_text("changed\n", encoding="utf-8")
+        sub_status = subprocess.run(["git", "diff", "--name-only"], cwd=sub, check=True,
+                                    capture_output=True, text=True)
+        attribute = subprocess.run(["git", "check-attr", "filter", "source.txt"],
+                                   cwd=sub, check=True, capture_output=True, text=True)
+        self.assertTrue(marker.exists(), f"Inactive filter: {sub_status.stdout}; "
+                        f"attribute={attribute.stdout}")
+        marker.unlink()
+        subprocess.run(["git", "diff", "--name-only", "HEAD"], cwd=checkout,
+                       check=True, capture_output=True)
+        self.assertTrue(marker.exists(), "The fixture did not enter the submodule")
+        marker.unlink()
+        (checkout / "tracked.txt").write_text("changed\n", encoding="utf-8")
+        from storyloop import base_agent_worktree
+        with mock.patch.object(base_agent_worktree, "git", wraps=base_agent_worktree.git) as called:
+            self._transfer(checkout, "tracked.txt")
+        diff_calls = [call for call in called.call_args_list if "diff" in call.args]
+        self.assertTrue(diff_calls)
+        self.assertTrue(all("--ignore-submodules=all" in call.args for call in diff_calls))
+        self.assertFalse(marker.exists())
+
+    def test_transfer_checks_registration_and_filters_once(self):
+        from storyloop import base_agent_worktree
+        extra = self.project / "second.txt"
+        extra.write_text("old\n", encoding="utf-8")
+        self._git("add", "second.txt")
+        self._git("commit", "-qm", "second path")
+        self.commit = self._git("rev-parse", "HEAD").strip()
+        self.state["contract_commit"] = self.commit
+        checkout = self._checkout()
+        (checkout / "tracked.txt").write_text("changed\n", encoding="utf-8")
+        (checkout / "second.txt").write_text("changed\n", encoding="utf-8")
+        with mock.patch.object(base_agent_worktree, "_anchored_gitdir",
+                               wraps=base_agent_worktree._anchored_gitdir) as anchored, \
+             mock.patch.object(base_agent_worktree, "git", wraps=base_agent_worktree.git) as git_call:
+            self._transfer(checkout, "tracked.txt", "second.txt")
+        self.assertEqual(anchored.call_count, 1)
+        config_calls = [call for call in git_call.call_args_list
+                        if call.args[1:4] == ("config", "--list", "--name-only")]
+        self.assertEqual(len(config_calls), 1)

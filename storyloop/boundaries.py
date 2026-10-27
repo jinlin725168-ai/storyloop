@@ -52,12 +52,14 @@ class FileChange:
 
 def capture_snapshot(root: Path, max_files: int = _DEFAULT_MAX_FILES,
                      include_control: bool = False,
-                     include_ignored: bool = False) -> WorkspaceSnapshot:
+                     include_ignored: bool = False,
+                     exclude_git: bool = False) -> WorkspaceSnapshot:
     """Capture twice; the caller must first stop every workspace writer."""
     root = Path(root)
     require(type(max_files) is int and max_files > 0, "Invalid snapshot file limit")
     require(type(include_control) is bool, "Invalid include_control option")
     require(type(include_ignored) is bool, "Invalid include_ignored option")
+    require(type(exclude_git) is bool, "Invalid exclude_git option")
     require(not include_ignored or include_control,
             "Full snapshots must include control paths")
     require(root.exists() and root.is_dir(), "Snapshot root must be an existing directory")
@@ -68,6 +70,8 @@ def capture_snapshot(root: Path, max_files: int = _DEFAULT_MAX_FILES,
     ignored = set() if include_ignored else (
         _READONLY_IGNORED if include_control else _CONTROL_IGNORED
     )
+    if exclude_git:
+        ignored = set(ignored) | {".git"}
     allowed = _sensitive_allow(resolved)
     scratch = _scratch_skip(resolved) if include_ignored else frozenset()
     first = _scan_once(resolved, max_files, ignored, include_control, allowed, scratch)

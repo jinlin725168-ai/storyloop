@@ -21,10 +21,13 @@ _VISIBILITY_MESSAGE_LIMIT = 20
 
 def write_safely(project: Path, change_id: str, operation: Callable[[], dict],
                  post_call_guard: Callable[[], None] | None = None,
-                 excluded_control_paths: frozenset[str] = frozenset()) -> tuple[dict, list]:
+                 excluded_control_paths: frozenset[str] = frozenset(),
+                 exclude_git_metadata: bool = False) -> tuple[dict, list]:
     """Run an agent that may write the workspace; the control plane and the index must stay untouched."""
-    before = capture_snapshot(project, include_control=True, include_ignored=True)
-    control = control_digest(project, change_id, excluded_paths=excluded_control_paths)
+    before = capture_snapshot(project, include_control=True, include_ignored=True,
+                              exclude_git=exclude_git_metadata)
+    control = control_digest(project, change_id, excluded_paths=excluded_control_paths,
+                             exclude_git_metadata=exclude_git_metadata)
     staged = _staged_index(project)
     failure: BaseException | None = None
     try:
@@ -35,12 +38,14 @@ def write_safely(project: Path, change_id: str, operation: Callable[[], dict],
         if post_call_guard is not None:
             post_call_guard()
         require_control_unchanged(
-            control_digest(project, change_id, excluded_paths=excluded_control_paths) == control,
+            control_digest(project, change_id, excluded_paths=excluded_control_paths,
+                           exclude_git_metadata=exclude_git_metadata) == control,
             "Implementation agent modified the protected control plane",
         )
         require_control_unchanged(_staged_index(project) == staged,
                                   "Implementation agent staged Git changes")
-    after = capture_snapshot(project, include_control=True, include_ignored=True)
+    after = capture_snapshot(project, include_control=True, include_ignored=True,
+                             exclude_git=exclude_git_metadata)
     changes = snapshot_changes(before, after)
     _require_drafts_unchanged(changes)
     changes = _without_scratch(changes, scratch_paths(project))

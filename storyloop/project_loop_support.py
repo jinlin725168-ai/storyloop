@@ -13,11 +13,13 @@ from .run_state import run_path, save_run  # noqa: F401  # 兼容再导出：阶
 def control_digest(
     project: Path, change_id: str, excluded_evidence: str | None = None,
     excluded_paths: frozenset[str] = frozenset(),
+    exclude_git_metadata: bool = False,
 ) -> str:
     # .git/index is deliberately absent: read-only git commands rewrite its stat cache.
     # Staged content is covered semantically by `git diff --cached` below.
-    relative_paths = [
-        ".git/HEAD", ".git/config", ".git/info/exclude", ".git/packed-refs",
+    git_paths = [] if exclude_git_metadata else [
+        ".git/HEAD", ".git/config", ".git/info/exclude", ".git/packed-refs"]
+    relative_paths = git_paths + [
         ".storyloop/config.json", ".storyloop/baseline.json", "openspec/principles.json",
         ".storyloop/state/readiness.json",
         f"openspec/changes/{change_id}/routing-plan.json",
@@ -30,12 +32,14 @@ def control_digest(
         if name != excluded_evidence:
             relative_paths.append(f".storyloop/evidence/{change_id}/{name}")
     relative_paths = [path for path in relative_paths if path not in excluded_paths]
-    digest = hashlib.sha256(_git(project, "rev-parse", "HEAD").encode("utf-8"))
-    digest.update(_git(project, "branch", "--show-current").encode("utf-8"))
-    digest.update(_git(
-        project, "for-each-ref", "--format=%(refname):%(objectname)"
-    ).encode("utf-8"))
-    digest.update(_git(project, "diff", "--cached", "--name-status").encode("utf-8"))
+    digest = hashlib.sha256()
+    if not exclude_git_metadata:
+        digest.update(_git(project, "rev-parse", "HEAD").encode("utf-8"))
+        digest.update(_git(project, "branch", "--show-current").encode("utf-8"))
+        digest.update(_git(
+            project, "for-each-ref", "--format=%(refname):%(objectname)"
+        ).encode("utf-8"))
+        digest.update(_git(project, "diff", "--cached", "--name-status").encode("utf-8"))
     digest.update(_path_digest(project, relative_paths).encode("ascii"))
     return digest.hexdigest()
 

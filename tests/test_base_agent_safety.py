@@ -2,6 +2,7 @@
 
 import unittest
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 from unittest import mock
@@ -88,6 +89,42 @@ class BaseAgentSafetyTests(unittest.TestCase):
         self.assertEqual(result["status"], "WORKSPACE_TAINTED")
         self.assertIn("main project", result.get("reason", ""))
         self.assertEqual(tampered.read_text(encoding="utf-8"), "agent\n")
+
+    def test_agent_git_status_and_commit_in_checkout_do_not_taint_main(self):
+        self._approved()
+        services = self._services()
+
+        def write(checkout, _payload):
+            subprocess.run(["git", "status", "--short"], cwd=checkout, check=True,
+                           capture_output=True)
+            (checkout / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                               encoding="utf-8")
+            subprocess.run(["git", "add", "pom.xml"], cwd=checkout, check=True,
+                           capture_output=True)
+            subprocess.run(["git", "commit", "-qm", "agent edit"], cwd=checkout,
+                           check=True, capture_output=True)
+            return {"summary": "updated"}
+
+        configured = LoopServices(services.generate_smoke, write, services.review,
+                                  design=services.design)
+        result = run_change(self.root, self.change["change_id"], services=configured)
+        self.assertEqual(result["status"], "BASE_REVIEW_REQUIRED", result)
+
+    def test_unrelated_git_ref_update_during_agent_call_is_not_main_file_taint(self):
+        self._approved()
+        services = self._services()
+
+        def write(checkout, _payload):
+            subprocess.run(["git", "update-ref", "refs/remotes/origin/unrelated", "HEAD"],
+                           cwd=self.root, check=True, capture_output=True)
+            (checkout / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                               encoding="utf-8")
+            return {"summary": "updated"}
+
+        configured = LoopServices(services.generate_smoke, write, services.review,
+                                  design=services.design)
+        result = run_change(self.root, self.change["change_id"], services=configured)
+        self.assertEqual(result["status"], "BASE_REVIEW_REQUIRED", result)
 
     def test_agent_rejects_symlink_at_approved_path(self):
         probe = self.root / "symlink-probe"
