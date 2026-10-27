@@ -67,6 +67,28 @@ class BaseAgentSafetyTests(unittest.TestCase):
         result = self._implement(".github/workflows/ci.yml")
         self.assertEqual(result["status"], "WORKSPACE_TAINTED")
 
+    def test_agent_write_to_ignored_main_path_stops_without_cleaning_it(self):
+        self._approved()
+        services = self._services()
+        tampered = self.root / ".venv/agent-write.txt"
+        exclude = self.root / ".git/info/exclude"
+        exclude.write_text(exclude.read_text(encoding="utf-8") + "\n.venv/\n",
+                           encoding="utf-8")
+
+        def write(checkout, _payload):
+            (checkout / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                               encoding="utf-8")
+            tampered.parent.mkdir()
+            tampered.write_text("agent\n", encoding="utf-8")
+            return {"summary": "updated"}
+
+        configured = LoopServices(services.generate_smoke, write, services.review,
+                                  design=services.design)
+        result = run_change(self.root, self.change["change_id"], services=configured)
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        self.assertIn("main project", result.get("reason", ""))
+        self.assertEqual(tampered.read_text(encoding="utf-8"), "agent\n")
+
     def test_agent_rejects_symlink_at_approved_path(self):
         probe = self.root / "symlink-probe"
         try:

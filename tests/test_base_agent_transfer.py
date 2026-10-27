@@ -1,6 +1,8 @@
 """Only exact approved ordinary files cross from the disposable checkout."""
 
 import os
+import shutil
+import subprocess
 import unittest
 from unittest import mock
 
@@ -25,7 +27,7 @@ class BaseAgentTransferTests(unittest.TestCase):
 
     def _transfer(self, checkout, *paths):
         with mock.patch("storyloop.base_agent_transfer.audit_base_scope"):
-            return transfer_agent_candidate(self.project, checkout, self._change(*paths), self.commit)
+            return transfer_agent_candidate(self.project, self.state, self._change(*paths))
 
     def test_exact_binary_content_becomes_engine_candidate(self):
         checkout = self._checkout()
@@ -96,3 +98,74 @@ class BaseAgentTransferTests(unittest.TestCase):
             self._transfer(checkout, "tracked.txt")
         self.assertEqual((self.project / "human.txt").read_text(encoding="utf-8"), "human\n")
         self.assertEqual((self.project / "tracked.txt").read_text(encoding="utf-8"), "original\n")
+
+    @unittest.skipUnless(os.name == "posix", "Git fsmonitor probe uses a POSIX shell")
+    def test_modified_git_pointer_cannot_execute_agent_fsmonitor(self):
+        checkout = self._checkout()
+        pointer = (checkout / ".git").read_text(encoding="utf-8")
+        evil = checkout / ".evil"
+        shutil.copytree(self.project / ".git", evil)
+        marker = self.project / "fsmonitor-ran"
+        script = evil / "monitor.sh"
+        script.write_text(f"#!/bin/sh\ntouch '{marker}'\n", encoding="utf-8")
+        script.chmod(0o700)
+        with (evil / "config").open("a", encoding="utf-8") as config:
+            config.write(f"\n[core]\n\tfsmonitor = {script}\n")
+        (checkout / ".git").write_text("gitdir: .evil\n", encoding="utf-8")
+        self.addCleanup((checkout / ".git").write_text, pointer, encoding="utf-8")
+        subprocess.run(["git", "status", "--short"], cwd=checkout, check=True,
+                       capture_output=True)
+        self.assertTrue(marker.exists(), "The test Git config did not trigger fsmonitor")
+        marker.unlink()
+        (checkout / "tracked.txt").write_text("agent\n", encoding="utf-8")
+        with self.assertRaises(StoryLoopError):
+            self._transfer(checkout, "tracked.txt")
+        self.assertFalse(marker.exists(), "Engine executed Git config from the agent checkout")
+
+    def test_tracked_executable_keeps_git_mode_after_transfer(self):
+        script = self.project / "build.sh"
+        script.write_text("#!/bin/sh\necho old\n", encoding="utf-8")
+        self._git("add", "build.sh")
+        self._git("update-index", "--chmod=+x", "build.sh")
+        self._git("commit", "-qm", "executable contract")
+        self.commit = self._git("rev-parse", "HEAD").strip()
+        self.state["contract_commit"] = self.commit
+        self._git("config", "core.filemode", "false")
+        checkout = self._checkout()
+        (checkout / "build.sh").write_text("#!/bin/sh\necho new\n", encoding="utf-8")
+        if os.name == "posix":
+            (checkout / "build.sh").chmod(0o644)
+        self._transfer(checkout, "build.sh")
+        mode = self._git("ls-tree", "HEAD", "build.sh").split()[0]
+        self.assertEqual(mode, "100755")
+
+    @unittest.skipUnless(os.name == "posix", "Git filter probe uses a POSIX shell")
+    def test_agent_attributes_cannot_run_configured_clean_filter(self):
+        marker = self.root / "filter-ran"
+        script = self.root / "filter.sh"
+        script.write_text(f"#!/bin/sh\ntouch '{marker}'\ncat\n", encoding="utf-8")
+        script.chmod(0o700)
+        self._git("config", "filter.storyloopprobe.clean", str(script))
+        checkout = self._checkout()
+        (checkout / ".gitattributes").write_text("tracked.txt filter=storyloopprobe\n",
+                                                encoding="utf-8")
+        (checkout / "tracked.txt").write_text("changed\n", encoding="utf-8")
+        subprocess.run(["git", "diff", "--name-only"], cwd=checkout, check=True,
+                       capture_output=True)
+        self.assertTrue(marker.exists(), "The test attribute did not invoke the filter")
+        marker.unlink()
+        with self.assertRaises(StoryLoopError):
+            self._transfer(checkout, "tracked.txt")
+        self.assertFalse(marker.exists(), "Engine ran a filter selected by agent attributes")
+
+    def test_tracked_batch_file_uses_git_mode_not_os_extension(self):
+        batch = self.project / "build.cmd"
+        batch.write_text("echo old\n", encoding="utf-8")
+        self._git("add", "build.cmd")
+        self._git("commit", "-qm", "batch contract")
+        self.commit = self._git("rev-parse", "HEAD").strip()
+        self.state["contract_commit"] = self.commit
+        checkout = self._checkout()
+        (checkout / "build.cmd").write_text("echo new\n", encoding="utf-8")
+        self._transfer(checkout, "build.cmd")
+        self.assertEqual(self._git("ls-tree", "HEAD", "build.cmd").split()[0], "100644")

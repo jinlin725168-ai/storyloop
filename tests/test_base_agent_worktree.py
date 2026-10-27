@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -71,10 +72,10 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         self.assertTrue((self.project / "human.txt").exists())
 
     def test_failed_add_keeps_saved_anchor_for_restart(self):
-        def fail_add(project, *args):
+        def fail_add(project, *args, **kwargs):
             if args[:2] == ("worktree", "add"):
                 raise StoryLoopError("add failed")
-            return real_git(project, *args)
+            return real_git(project, *args, **kwargs)
 
         with mock.patch("storyloop.base_agent_worktree.git", side_effect=fail_add):
             with self.assertRaisesRegex(StoryLoopError, "add failed"):
@@ -100,7 +101,36 @@ class BaseAgentWorktreeTests(unittest.TestCase):
                 create_agent_worktree(self.project, self.state)
         self.assertNotIn("agent_worktree", self.state)
 
-    def test_symlinked_temp_root_is_rejected(self):
+    def test_long_tracked_path_stops_before_saving_anchor(self):
+        deep = self.project / ("a" * 100) / ("b" * 100)
+        deep.mkdir(parents=True)
+        (deep / "file.txt").write_text("tracked\n", encoding="utf-8")
+        self._git("add", ".")
+        self._git("commit", "-qm", "long tracked path")
+        self.commit = self._git("rev-parse", "HEAD").strip()
+        self.state["contract_commit"] = self.commit
+        try:
+            with self.assertRaisesRegex(StoryLoopError, "path.*long"):
+                create_agent_worktree(self.project, self.state)
+        finally:
+            remove_agent_worktree(self.project, self.state)
+        self.assertNotIn("agent_worktree", self.state)
+
+    def test_worktree_lifecycle_uses_extended_git_timeout(self):
+        calls = []
+
+        def record(project, *args, **kwargs):
+            if args[:2] in {("worktree", "add"), ("worktree", "remove")}:
+                calls.append((args[:2], kwargs.get("timeout_seconds", 30)))
+            return real_git(project, *args, **kwargs)
+
+        with mock.patch("storyloop.base_agent_worktree.git", side_effect=record):
+            create_agent_worktree(self.project, self.state)
+            remove_agent_worktree(self.project, self.state)
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all(timeout >= 180 for _, timeout in calls))
+
+    def test_symlinked_system_temp_root_is_canonicalized(self):
         actual = self.root / "external"
         actual.mkdir()
         shortcut = self.root / "shortcut"
@@ -110,9 +140,22 @@ class BaseAgentWorktreeTests(unittest.TestCase):
             self.skipTest("Directory symlinks need platform privileges")
         with mock.patch("storyloop.base_agent_worktree.tempfile.gettempdir",
                         return_value=str(shortcut)):
-            with self.assertRaisesRegex(StoryLoopError, "symbolic link"):
-                create_agent_worktree(self.project, self.state)
-        self.assertNotIn("agent_worktree", self.state)
+            checkout = create_agent_worktree(self.project, self.state)
+        self.addCleanup(remove_agent_worktree, self.project, self.state)
+        self.assertTrue(checkout.is_relative_to(actual))
+        self.assertIn("agent_worktree", self.state)
+
+    def test_temp_root_inside_project_uses_external_parent(self):
+        inside = self.project / "tmp"
+        inside.mkdir()
+        exclude = self.project / ".git/info/exclude"
+        exclude.write_text(exclude.read_text(encoding="utf-8") + "\ntmp/\n",
+                           encoding="utf-8")
+        with mock.patch("storyloop.base_agent_worktree.tempfile.gettempdir",
+                        return_value=str(inside)):
+            checkout = create_agent_worktree(self.project, self.state)
+        self.addCleanup(remove_agent_worktree, self.project, self.state)
+        self.assertFalse(checkout.is_relative_to(self.project))
 
     def test_symlinked_cleanup_parent_is_rejected_without_following(self):
         actual = self.root / "actual"
@@ -131,10 +174,10 @@ class BaseAgentWorktreeTests(unittest.TestCase):
 
     def test_remove_failure_keeps_anchor_and_reports_manual_steps(self):
         checkout = create_agent_worktree(self.project, self.state)
-        def fail_remove(project, *args):
+        def fail_remove(project, *args, **kwargs):
             if args[:2] == ("worktree", "remove"):
                 raise StoryLoopError("locked")
-            return real_git(project, *args)
+            return real_git(project, *args, **kwargs)
 
         with mock.patch("storyloop.base_agent_worktree.git", side_effect=fail_remove):
             with self.assertRaisesRegex(StoryLoopError, "worktree remove --force"):
@@ -142,3 +185,11 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         self.assertTrue(checkout.exists())
         self.assertIn("agent_worktree", self.state)
         remove_agent_worktree(self.project, self.state)
+
+    def test_missing_checkout_with_stale_git_registration_is_pruned(self):
+        checkout = create_agent_worktree(self.project, self.state)
+        shutil.rmtree(checkout)
+        self.assertIn(str(checkout), self._git("worktree", "list", "--porcelain"))
+        remove_agent_worktree(self.project, self.state)
+        self.assertNotIn("agent_worktree", self.state)
+        self.assertNotIn(str(checkout), self._git("worktree", "list", "--porcelain"))

@@ -140,14 +140,15 @@ class BaseAgentRecoveryTests(unittest.TestCase):
         self._approved()
         original = base_agent_worktree.git
 
-        def fail_add(project, *args):
+        def fail_add(project, *args, **kwargs):
             if args[:2] == ("worktree", "add"):
                 raise StoryLoopError("injected add failure", code="GIT_BLOCKED")
-            return original(project, *args)
+            return original(project, *args, **kwargs)
 
         with mock.patch.object(base_agent_worktree, "git", side_effect=fail_add):
-            with self.assertRaisesRegex(StoryLoopError, "injected add failure"):
-                run_change(self.root, self.change["change_id"], services=self._services())
+            result = run_change(self.root, self.change["change_id"], services=self._services())
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        self.assertIn("injected add failure", result["reason"])
         state = load_json(run_path(self.root, self.change["change_id"]))
         self.assertEqual(state["agent_worktree"]["contract_commit"], state["contract_commit"])
         self.assertEqual(run_change(self.root, self.change["change_id"],
@@ -209,6 +210,48 @@ class BaseAgentRecoveryTests(unittest.TestCase):
         from storyloop.run_recovery import reset_run
         self.assertEqual(reset_run(self.root, self.change["change_id"], "已清理候选索引")["status"],
                          "CONTRACT_COMMITTED")
+
+    def test_candidate_cleanup_failure_keeps_saved_commit_for_retry(self):
+        from storyloop import base_agent_execution
+        self._approved()
+        with mock.patch.object(base_agent_execution, "remove_agent_worktree",
+                               side_effect=StoryLoopError("locked checkout", code="WORKSPACE_TAINTED")):
+            result = run_change(self.root, self.change["change_id"],
+                                services=self._successful_writer())
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        state = load_json(run_path(self.root, self.change["change_id"]))
+        candidate = state["candidate_commit"]
+        self.assertEqual(_git(self.root, "rev-parse", "HEAD").strip(), candidate)
+        self.assertIn("agent_worktree", state)
+        resumed = run_change(self.root, self.change["change_id"], services=self._services())
+        self.assertEqual(resumed["status"], "BASE_REVIEW_REQUIRED")
+        self.assertEqual(load_json(run_path(self.root, self.change["change_id"]))["candidate_commit"],
+                         candidate)
+
+    def test_transfer_os_error_becomes_tainted_stop(self):
+        from storyloop import base_agent_transfer
+        self._approved()
+        with mock.patch.object(base_agent_transfer, "write_bytes_atomic",
+                               side_effect=PermissionError("target locked")):
+            result = run_change(self.root, self.change["change_id"],
+                                services=self._successful_writer())
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        self.assertIn("target locked", result["reason"])
+        self.assertNotIn("candidate_commit", load_json(run_path(self.root, self.change["change_id"])))
+
+    def test_cleanup_error_does_not_hide_transfer_error(self):
+        from storyloop import base_agent_execution
+        self._approved()
+        with mock.patch.object(base_agent_execution, "transfer_agent_candidate",
+                               side_effect=StoryLoopError("out-of-scope", code="WORKSPACE_TAINTED")), \
+             mock.patch.object(base_agent_execution, "remove_agent_worktree",
+                               side_effect=StoryLoopError("checkout locked", code="WORKSPACE_TAINTED")):
+            result = run_change(self.root, self.change["change_id"],
+                                services=self._successful_writer())
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        self.assertIn("out-of-scope", result["reason"])
+        self.assertIn("checkout locked", result["reason"])
+        self.assertIn("agent_worktree", load_json(run_path(self.root, self.change["change_id"])))
 
     def test_anchor_before_agent_call_restarts(self):
         self._approved()
@@ -418,8 +461,9 @@ class BaseAgentRecoveryTests(unittest.TestCase):
         self._approved()
         note = self.root / "notes.txt"
         note.write_text("human note\n", encoding="utf-8")
-        with self.assertRaisesRegex(StoryLoopError, "clean contract commit"):
-            run_change(self.root, self.change["change_id"], services=self._services())
+        first = run_change(self.root, self.change["change_id"], services=self._services())
+        self.assertEqual(first["status"], "WORKSPACE_TAINTED")
+        self.assertIn("clean", first["reason"])
         result = run_change(self.root, self.change["change_id"], services=self._services())
         self.assertEqual(result["status"], "WORKSPACE_TAINTED")
         self.assertEqual(note.read_text(encoding="utf-8"), "human note\n")

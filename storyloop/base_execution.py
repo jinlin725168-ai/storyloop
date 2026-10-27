@@ -37,6 +37,9 @@ def run_base_change(project: Path, change: dict, implementer: str | None,
     merged = _resume_git_merge(project, change, state) if premerge else None
     if merged is not None:
         return merged
+    cleanup = _resume_agent_cleanup(project, change, state)
+    if cleanup is not None:
+        return cleanup
     reason = _premerge_restart_reason(project, change, state)
     if reason is not None:
         return _restart_pause(project, change, state, reason)
@@ -78,6 +81,32 @@ def run_base_change(project: Path, change: dict, implementer: str | None,
         from .project_loop_finish import passed_result
         return passed_result(state)
     return {"status": state["status"], "change_id": change["change_id"]}
+
+
+def _resume_agent_cleanup(project: Path, change: dict, state: dict) -> dict | None:
+    if not (state["status"] == "WORKSPACE_TAINTED"
+            and state.get("implementer") == "agent"
+            and state.get("interrupted_status") == "IMPLEMENTING"
+            and state.get("base_inflight") == "candidate_verification"
+            and state.get("candidate_commit") and state.get("agent_worktree")):
+        return None
+    if (_git(project, "rev-parse", "HEAD").strip() != state["candidate_commit"]
+            or _dirty_paths(project)):
+        return pause(project, state, "WORKSPACE_TAINTED",
+                     reason="Saved agent candidate or main worktree changed during cleanup; preserve it",
+                     next="Inspect the candidate and worktree anchor before reset")
+    from .base_agent_worktree import remove_agent_worktree
+    try:
+        remove_agent_worktree(project, state)
+    except (StoryLoopError, OSError) as exc:
+        return pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
+                     next="Close worktree file holders, then storyloop run <project> --change "
+                          f"{change['change_id']}")
+    transition(project, state, "IMPLEMENTING", event="reset")
+    state.pop("interrupted_status", None)
+    state.pop("stop", None)
+    save_run(project, state)
+    return _agent_to_review(project, change, state)
 
 
 def _resume_git_merge(project: Path, change: dict, state: dict) -> dict | None:

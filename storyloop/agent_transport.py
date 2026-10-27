@@ -62,8 +62,9 @@ def _require_conforming(value: dict, schema: dict, trace: dict) -> dict:
 def _manual(project: Path, request: dict, schema: dict, trace: dict) -> dict:
     request_id = _request_id(request)
     envelope = {**request, "request_id": request_id, "instructions": trace["instructions"]}
-    request_path = project / ".storyloop" / "requests" / f"project-{request['role']}.json"
-    response_path = project / ".storyloop" / "responses" / f"project-{request['role']}.json"
+    control = Path(trace.get("control_project", project))
+    request_path = control / ".storyloop" / "requests" / f"project-{request['role']}.json"
+    response_path = control / ".storyloop" / "responses" / f"project-{request['role']}.json"
     write_json(request_path, envelope, max_bytes=2_000_000)
     if not response_path.exists():
         raise StoryLoopError(
@@ -181,7 +182,8 @@ def _codex_executable() -> list[str]:
 
 def _codex_once(project: Path, argv: list[str], prompt: str, timeout: int, telemetry: dict,
                 trace: dict) -> str:
-    with tempfile.NamedTemporaryFile(dir=project / ".storyloop", suffix=".response",
+    control = Path(trace.get("control_project", project))
+    with tempfile.NamedTemporaryFile(dir=control / ".storyloop", suffix=".response",
                                      delete=False) as handle:
         output = Path(handle.name)
     try:

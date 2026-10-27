@@ -6,11 +6,14 @@ import tempfile
 import unittest
 from unittest import mock
 
-from storyloop.agent_transport import _codex, _command
+from storyloop.agent_transport import _codex, _codex_once, _command, _manual
+from storyloop.base_agent_execution import _prepare_agent_call
+from storyloop.base_agent_worktree import remove_agent_worktree
 from storyloop.baseline import load_project_config
+from storyloop.git_command import git
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import invoke_project_agent
-from storyloop.storage import write_json
+from storyloop.storage import load_json, write_json
 from tests import test_base_agent_flow as flow
 
 
@@ -70,3 +73,61 @@ class BaseAgentTransportTests(unittest.TestCase):
                          {"instructions": "implement"})
             self.assertEqual(run.call_args.args[0][1], str(workspace))
             self.assertEqual(run.call_args.args[1], workspace)
+
+    def test_codex_response_file_stays_in_original_control_plane(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            control, checkout = root / "control", root / "checkout"
+            (control / ".storyloop").mkdir(parents=True)
+            checkout.mkdir()
+            trace = {"control_project": str(control), "sessions": [], "stderr": ""}
+            telemetry = {"segments": 0, "turns": 0, "input_tokens": 0, "output_tokens": 0}
+
+            def respond(argv, cwd, _timeout, **_kwargs):
+                response = Path(argv[argv.index("--output-last-message") + 1])
+                self.assertTrue(response.parent.samefile(control / ".storyloop"))
+                self.assertTrue(cwd.samefile(checkout))
+                response.write_text("{}", encoding="utf-8")
+                return {"contained": True, "returncode": 0, "stdout": "", "stderr": ""}
+
+            with mock.patch("storyloop.agent_transport.run_process", side_effect=respond):
+                self.assertEqual(_codex_once(checkout, ["codex", "exec"], "prompt", 1,
+                                             telemetry, trace), "{}")
+            self.assertFalse((checkout / ".storyloop").exists())
+
+    def test_manual_request_and_response_stay_in_original_control_plane(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            control, checkout = root / "control", root / "checkout"
+            (control / ".storyloop").mkdir(parents=True)
+            checkout.mkdir()
+            request = {"role": "implement", "project": str(checkout),
+                       "payload": {"mode": "base-implement"}}
+            trace = {"control_project": str(control), "instructions": "implement"}
+            with self.assertRaises(StoryLoopError) as caught:
+                _manual(checkout, request, {"type": "object"}, trace)
+            self.assertEqual(caught.exception.code, "NEEDS_INPUT")
+            request_path = control / ".storyloop/requests/project-implement.json"
+            self.assertTrue(request_path.exists())
+            response_path = control / ".storyloop/responses/project-implement.json"
+            write_json(response_path, {"request_id": load_json(request_path)["request_id"],
+                                       "result": {"ok": True}})
+            self.assertEqual(_manual(checkout, request, {"type": "object"}, trace), {"ok": True})
+            self.assertFalse(response_path.exists())
+            self.assertFalse((checkout / ".storyloop").exists())
+
+    def test_manual_base_adapter_is_rejected_before_creating_checkout(self):
+        config = load_project_config(self.root)
+        config.update({"adapters": {"one": {"kind": "manual"}},
+                       "roles": {"default_adapter": "one"}})
+        write_json(self.root / ".storyloop/config.json", config)
+        state = {"change_id": self.change["change_id"],
+                 "contract_commit": git(self.root, "rev-parse", "HEAD").strip(),
+                 "engine_source": str(self.root)}
+        try:
+            with mock.patch("storyloop.adapter_capabilities.ensure_checked"):
+                with self.assertRaisesRegex(StoryLoopError, "--implementer human"):
+                    _prepare_agent_call(self.root, self.change, state)
+        finally:
+            remove_agent_worktree(self.root, state)
+        self.assertNotIn("agent_worktree", state)

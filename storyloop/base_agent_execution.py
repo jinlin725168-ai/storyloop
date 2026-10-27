@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 import hashlib
 
-from .baseline import _git
 from .base_agent_transfer import AGENT_EMAIL, AGENT_NAME, transfer_agent_candidate  # noqa: F401  # 兼容再导出
 from .base_agent_worktree import create_agent_worktree, remove_agent_worktree
 from .base_design import invalid_reason
@@ -39,34 +38,57 @@ def implement_base_candidate(project: Path, change: dict, state: dict, services=
     """Persist the call anchor before granting the agent its approved path set."""
     require(invalid_reason(project, change, state) is None,
             "Approved base design changed before agent implementation")
-    checkout = _prepare_agent_call(project, change, state)
+    try:
+        checkout = _prepare_agent_call(project, change, state)
+    except (StoryLoopError, OSError) as exc:
+        if isinstance(exc, StoryLoopError) and exc.code == "AGENT_UNAVAILABLE":
+            raise
+        return _pause_agent_issue(project, change, state, str(exc))
     try:
         _invoke_agent(project, checkout, change, state, services)
-        committed = transfer_agent_candidate(project, checkout, change, state["contract_commit"])
-    except StoryLoopError as exc:
-        remove_agent_worktree(project, state)
-        save_run(project, state)
-        return pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
-                     next="Inspect the main worktree, then storyloop reset <project> --change "
-                          f"{change['change_id']} --reason '<reason>'")
+        committed = transfer_agent_candidate(project, state, change)
+    except (StoryLoopError, OSError) as exc:
+        return _cleanup_and_pause(project, change, state, str(exc))
     _save_agent_candidate(project, change, state, committed)
-    remove_agent_worktree(project, state)
+    try:
+        remove_agent_worktree(project, state)
+    except (StoryLoopError, OSError) as exc:
+        state["interrupted_status"] = "IMPLEMENTING"
+        return _pause_agent_issue(project, change, state, str(exc))
     save_run(project, state)
     return {"status": "IMPLEMENTING", "change_id": change["change_id"]}
+
+
+def _cleanup_and_pause(project: Path, change: dict, state: dict, reason: str) -> dict:
+    try:
+        remove_agent_worktree(project, state)
+    except (StoryLoopError, OSError) as cleanup:
+        reason = f"{reason}; agent worktree cleanup failed: {cleanup}"
+    return _pause_agent_issue(project, change, state, reason)
+
+
+def _pause_agent_issue(project: Path, change: dict, state: dict, reason: str) -> dict:
+    return pause(project, state, "WORKSPACE_TAINTED", reason=reason,
+                 next=f"Inspect the main worktree and saved agent worktree anchor, then "
+                      f"storyloop reset <project> --change {change['change_id']} "
+                      "--reason '<reason>'")
 
 
 def _prepare_agent_call(project: Path, change: dict, state: dict) -> Path:
     from .adapter_capabilities import ensure_checked
     from .baseline import load_project_config
-    from .role_profiles import enabled
+    from .role_profiles import enabled, resolve_adapters, role_settings
+    config = load_project_config(project)
+    if enabled(config):
+        adapter = role_settings(config, "implement", "heavy", base=True)["adapter"]
+        if resolve_adapters(config)[adapter]["kind"] == "manual":
+            raise StoryLoopError("Manual adapter cannot implement base changes in a disposable "
+                                 "agent worktree; use --implementer human or a command/Codex adapter",
+                                 code="AGENT_UNAVAILABLE")
     state["base_inflight"] = "agent_capability_check"
     save_run(project, state)
-    if enabled(load_project_config(project)):
+    if enabled(config):
         ensure_checked(project)
-    head = _git(project, "rev-parse", "HEAD").strip()
-    require(head == state["contract_commit"]
-            and not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
-            "Agent base implementation needs a clean contract commit")
     state["agent_control_binding"] = agent_control_binding(project, change["change_id"])
     try:
         state["agent_engine_digest"] = engine_source_digest(Path(state["engine_source"]))
@@ -94,7 +116,11 @@ def _invoke_agent(project: Path, checkout: Path, change: dict, state: dict, serv
     excluded = (frozenset({"openspec/principles.json"})
                 if change["product"]["base"]["scope"] == "knowledge"
                 and "openspec/principles.json" in approved else frozenset())
-    response, _ = write_safely(project, change["change_id"], operation, source_guard, excluded)
+    response, changes = write_safely(project, change["change_id"], operation, source_guard, excluded)
+    if changes:
+        paths = ", ".join(item.path for item in changes[:20])
+        raise StoryLoopError(f"Agent changed main project during isolated implementation: {paths}",
+                             code="WORKSPACE_TAINTED")
     save_run(project, state)
     require(not response.get("questions"), "Base implementer left unresolved questions")
 

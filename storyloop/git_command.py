@@ -21,13 +21,13 @@ def git_failure(stderr: str) -> str:
     return f"Git operation failed: {reason}" if reason else "Git operation failed"
 
 
-def git(project: Path, *arguments: str) -> str:
+def git(project: Path, *arguments: str, timeout_seconds: int = 30) -> str:
     executable = shutil.which("git")
     require(bool(executable), "Git executable is unavailable")
     result = run_process(
         [executable, "-c", f"core.hooksPath={os.devnull}", *arguments],
         project,
-        30,
+        timeout_seconds,
         environment_allowlist=GIT_ENVIRONMENT,
         source_environment=os.environ,
     )
