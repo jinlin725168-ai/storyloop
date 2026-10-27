@@ -56,11 +56,12 @@ class BaseAgentSafetyTests(unittest.TestCase):
         self.assertEqual(result["status"], "WORKSPACE_TAINTED")
 
     def test_agent_rejects_control_plane_file(self):
+        original = (self.root / ".storyloop/config.json").read_bytes()
         result = self._implement(".storyloop/config.json", "{}\n")
         self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        self.assertEqual((self.root / ".storyloop/config.json").read_bytes(), original)
         resumed = run_change(self.root, self.change["change_id"], services=self._services())
-        self.assertEqual(resumed["status"], "WORKSPACE_TAINTED")
-        self.assertIn("restore", resumed["next"].lower())
+        self.assertEqual(resumed["status"], "CONTRACT_COMMITTED")
 
     def test_agent_rejects_ci_path(self):
         result = self._implement(".github/workflows/ci.yml")

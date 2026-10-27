@@ -164,11 +164,9 @@ class BaseAgentEndToEndTests(unittest.TestCase):
         git(self.root, "switch", saved["source_branch"])
         git(self.root, "merge", "--ff-only", saved["feature_branch"])
         git(self.root, "switch", saved["feature_branch"])
-        # A Windows checkout may change raw bytes (CRLF) before the inventory comparison.
-        # The already-merged Git fact must win before any premerge cleanup decision.
-        with mock.patch("storyloop.run_recovery._agent_cleanup_plan", return_value=None):
-            with self.assertRaisesRegex(StoryLoopError, "source|merged|源分支"):
-                run_change(self.root, change_id)
+        # The source ref must win before any attempt to remove the anchored checkout.
+        with self.assertRaisesRegex(StoryLoopError, "source|merged|源分支"):
+            run_change(self.root, change_id)
         self.assertEqual(git(self.root, "rev-parse", "HEAD"), candidate)
 
     def test_agent_reset_discards_candidate_and_requires_new_design(self):
@@ -185,7 +183,7 @@ class BaseAgentEndToEndTests(unittest.TestCase):
         self.assertEqual(run_change(self.root, change_id)["status"],
                          "DESIGN_APPROVAL_REQUIRED")
 
-    def test_staged_report_commit_failure_cleans_index_on_restart(self):
+    def test_staged_report_commit_failure_preserves_index_until_human_cleans(self):
         self._accepted_agent_candidate()
         original = base_execution.commit_paths
 
@@ -199,10 +197,16 @@ class BaseAgentEndToEndTests(unittest.TestCase):
             with self.assertRaisesRegex(StoryLoopError, "signing failed"):
                 run_change(self.root, self.change["change_id"])
         self.assertEqual(run_change(self.root, self.change["change_id"])["status"],
+                         "WORKSPACE_TAINTED")
+        self.assertTrue(git(self.root, "diff", "--cached", "--name-only"))
+        git(self.root, "reset", "-q", "--", "reports/storyloop")
+        folder = self.root / "reports/storyloop" / self.change["change_id"]
+        for report in folder.glob("report.*"):
+            report.unlink()
+        self.assertEqual(reset_run(self.root, self.change["change_id"], "人工已清理报告")["status"],
                          "CONTRACT_COMMITTED")
-        self.assertFalse(git(self.root, "diff", "--cached", "--name-only"))
 
-    def test_report_files_before_commit_are_discarded(self):
+    def test_report_files_before_commit_are_preserved_until_human_cleans(self):
         self._accepted_agent_candidate()
         original = base_execution.commit_paths
 
@@ -217,8 +221,12 @@ class BaseAgentEndToEndTests(unittest.TestCase):
         report = self.root / "reports/storyloop" / self.change["change_id"] / "report.json"
         self.assertTrue(report.exists())
         self.assertEqual(run_change(self.root, self.change["change_id"])["status"],
+                         "WORKSPACE_TAINTED")
+        self.assertTrue(report.exists())
+        for output in report.parent.glob("report.*"):
+            output.unlink()
+        self.assertEqual(reset_run(self.root, self.change["change_id"], "人工已清理报告")["status"],
                          "CONTRACT_COMMITTED")
-        self.assertFalse(report.exists())
 
     def test_capability_cache_write_before_agent_anchor_restarts(self):
         from storyloop import adapter_capabilities

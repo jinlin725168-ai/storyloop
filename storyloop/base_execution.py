@@ -110,7 +110,7 @@ def _premerge_restart_reason(project: Path, change: dict, state: dict) -> str | 
     status = state["status"]
     if state.get("implementer", "human") == "agent" and status in {
             "IMPLEMENTING", "BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED"}:
-        if state.get("agent_call_head"):
+        if state.get("agent_control_binding"):
             from .base_agent_execution import agent_binding_changes
             if agent_binding_changes(project, change["change_id"],
                                      state.get("agent_control_binding")):
@@ -119,7 +119,7 @@ def _premerge_restart_reason(project: Path, change: dict, state: dict) -> str | 
         reason = invalid_reason(project, change, state)
         if reason:
             return reason
-        if status == "IMPLEMENTING" and state.get("agent_call_head"):
+        if status == "IMPLEMENTING" and state.get("agent_worktree"):
             return "Interrupted agent implementation attempt"
     if status == "DESIGN_APPROVAL_REQUIRED":
         from .base_design import invalid_reason

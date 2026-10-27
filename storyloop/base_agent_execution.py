@@ -67,11 +67,10 @@ def _prepare_agent_call(project: Path, change: dict, state: dict) -> Path:
     require(head == state["contract_commit"]
             and not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
             "Agent base implementation needs a clean contract commit")
-    state["agent_call_head"] = head
     state["agent_control_binding"] = agent_control_binding(project, change["change_id"])
     try:
         state["agent_engine_digest"] = engine_source_digest(Path(state["engine_source"]))
-    except (OSError, StoryLoopError):
+    except (OSError, StoryLoopError, UnicodeError):
         state["agent_engine_digest"] = None
         state["engine_warning"] = ENGINE_WARNING
     state["base_inflight"] = "agent_implementation"

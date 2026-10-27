@@ -2,6 +2,7 @@
 
 import json
 import unittest
+from unittest import mock
 
 from storyloop.base_run_open import choose_implementer
 from storyloop.agent_transport import conform
@@ -11,6 +12,13 @@ from storyloop.role_schemas import schema_for
 
 
 class BaseAgentPolicyTests(unittest.TestCase):
+    def test_engine_digest_unicode_error_is_only_a_warning(self):
+        from storyloop.engine_source_safety import ENGINE_WARNING, engine_warning
+        error = UnicodeEncodeError("utf-8", "\udcff", 0, 1, "surrogate")
+        state = {"agent_engine_digest": "saved", "engine_source": "/unreadable"}
+        with mock.patch("storyloop.engine_source_safety.engine_source_digest", side_effect=error):
+            self.assertEqual(engine_warning(state), ENGINE_WARNING)
+
     def test_adapter_handshake_vendor_is_normalized_before_cache(self):
         from storyloop.capability_protocol import _response
         raw = {"known": True, "vendor": " OpenAI ", "tiers": ["strong"],

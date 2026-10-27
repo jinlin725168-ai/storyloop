@@ -10,7 +10,7 @@ import hashlib
 from .changes import load_change
 from .change_types import type_of
 from .baseline import _git
-from .base_agent_inventory import inventory, unlink_agent_file
+from .base_agent_worktree import remove_agent_worktree
 from .git_command import git_is_ancestor
 from .models import StoryLoopError, identifier, require, text
 from .path_security import safe_target
@@ -38,7 +38,8 @@ BASE_ATTEMPT_KEYS = ("old_green_sha256", "base_evidence", "base_evidence_sha256"
                      "acceptance_evidence_sha256", "review", "stop", "next", "error", "pending",
                      "interrupted_status", "base_resume_status", "baseline_issue",
                      "agent_call_contract", "agent_call_head", "agent_control_binding",
-                     "agent_engine_digest", "engine_warning", "agent_before_inventory", "agent_after_inventory",
+                     "agent_engine_digest", "engine_warning", "agent_worktree",
+                     "agent_before_inventory", "agent_after_inventory",
                      "agent_adapter", "agent_vendor")
 
 
@@ -137,7 +138,14 @@ def restart_base_attempt(project: Path, state: dict, rejected: bool = False) -> 
 
 
 def _restart_agent_base(project: Path, state: dict) -> str:
-    """Discard one engine-owned candidate, never guess about extra branch commits."""
+    """Discard the anchored checkout; preserve dirty main worktrees and extra commits."""
+    try:
+        remove_agent_worktree(project, state)
+    except StoryLoopError as exc:
+        pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
+              next=f"Inspect the saved worktree path, then storyloop reset <project> "
+                   f"--change {state['change_id']} --reason '<reason>'")
+        return "WORKSPACE_TAINTED"
     issue = _agent_preflight_issue(project, state)
     if issue is not None:
         reason, next_step = issue
@@ -148,17 +156,8 @@ def _restart_agent_base(project: Path, state: dict) -> str:
         reason, next_step = issue
         pause(project, state, "WORKSPACE_TAINTED", reason=reason, next=next_step)
         return "WORKSPACE_TAINTED"
-    cleanup = _agent_cleanup_plan(project, state)
-    if cleanup is None:
-        pause(project, state, "WORKSPACE_TAINTED",
-              reason="Workspace differs from the agent call inventory; attribution is unknown",
-              next="Preserve and inspect the workspace changes before "
-                   f"storyloop reset <project> --change {state['change_id']} --reason '<reason>'")
-        return "WORKSPACE_TAINTED"
-    _git(project, "reset", "--soft", state["contract_commit"])
-    _git(project, "reset", "-q")
-    _git(project, "restore", "--worktree", "--", ".")
-    _clear_agent_untracked(project, cleanup)
+    if _git(project, "rev-parse", "HEAD").strip() != state["contract_commit"]:
+        _git(project, "reset", "--hard", state["contract_commit"])
     _discard_base_files(project, state)
     transition(project, state, "CONTRACT_COMMITTED", event="base_restart")
     for key in BASE_ATTEMPT_KEYS:
@@ -192,9 +191,8 @@ def _agent_branch_issue(project: Path, state: dict) -> tuple[str, str] | None:
     from .base_agent_execution import AGENT_EMAIL, AGENT_NAME
     head = _git(project, "rev-parse", "HEAD").strip()
     contract = state["contract_commit"]
-    if not state.get("agent_call_head") and _git(
-            project, "status", "--porcelain=v1", "--untracked-files=all").strip():
-        return ("Workspace changes existed before the agent call anchor",
+    if _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip():
+        return ("Main worktree has uncommitted changes; attribution is unknown",
                 "Preserve or commit the human changes, then "
                 f"storyloop reset <project> --change {state['change_id']} --reason '<reason>'")
     if head != contract:
@@ -228,32 +226,6 @@ def _agent_cache_only_change(project: Path, state: dict, bound: dict) -> bool:
         return False
     cache.unlink()  # A legitimate post-call recheck invalidates the entire attempt.
     return True
-
-
-def _agent_cleanup_plan(project: Path, state: dict) -> list[str] | None:
-    before = state.get("agent_before_inventory")
-    after = state.get("agent_after_inventory")
-    if before is None:
-        return [] if not state.get("agent_call_head") else None
-    current = inventory(project)
-    for path in base_report_paths(state):
-        current.pop(path, None)  # Engine report files are discarded separately.
-    introduced = set(after or ()) - set(before)
-    if any(path not in before and path not in introduced for path in current):
-        return None  # A later, nonignored file has no agent-call attribution.
-    if any(path in current and current[path] != after[path] for path in introduced):
-        return None  # Someone changed an agent-created file after the call.
-    tracked = set(_git(project, "ls-files", "--cached", "-z").split("\0"))
-    if after and any(path in tracked and path in before and path in current
-                     and current[path] not in {before[path], after.get(path)} for path in current):
-        return None  # Preserve a tracked edit made after the call.
-    return sorted(path for path in introduced if path in current)
-
-
-def _clear_agent_untracked(project: Path, paths: list[str]) -> None:
-    """Unlink only entries absent before the call, including ignored links and hardlinks."""
-    for relative in paths:
-        unlink_agent_file(project, relative)
 
 
 def base_source_contains_candidate(project: Path, state: dict) -> bool:

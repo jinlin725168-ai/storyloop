@@ -19,7 +19,7 @@ def engine_warning(state: dict) -> str | None:
         return None
     try:
         current = engine_source_digest(Path(state["engine_source"]))
-    except (OSError, StoryLoopError):
+    except (OSError, StoryLoopError, UnicodeError):
         return ENGINE_WARNING
     return ENGINE_WARNING if current != expected else None
 

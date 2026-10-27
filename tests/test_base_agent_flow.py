@@ -164,8 +164,9 @@ class BaseAgentFlowTests(unittest.TestCase):
         result = run_change(self.root, change_id, services=services)
         self.assertEqual(result["status"], "BASE_REVIEW_REQUIRED")
         saved = load_json(run_path(self.root, change_id))
-        self.assertNotEqual(saved["candidate_commit"], saved["agent_call_head"])
-        self.assertEqual(saved["agent_call_head"], saved["contract_commit"])
+        self.assertNotEqual(saved["candidate_commit"], saved["contract_commit"])
+        self.assertNotIn("agent_call_head", saved)
+        self.assertNotIn("agent_worktree", saved)
         self.assertTrue(saved["base_evidence_sha256"])
 
     def _agent_candidate(self):
