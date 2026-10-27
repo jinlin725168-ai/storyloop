@@ -135,6 +135,81 @@ class BaseAgentRecoveryTests(unittest.TestCase):
         self.assertEqual(run_change(self.root, self.change["change_id"],
                                     services=self._services())["status"], "CONTRACT_COMMITTED")
 
+    def test_anchor_saved_before_worktree_add_failure_restarts(self):
+        from storyloop import base_agent_worktree
+        self._approved()
+        original = base_agent_worktree.git
+
+        def fail_add(project, *args):
+            if args[:2] == ("worktree", "add"):
+                raise StoryLoopError("injected add failure", code="GIT_BLOCKED")
+            return original(project, *args)
+
+        with mock.patch.object(base_agent_worktree, "git", side_effect=fail_add):
+            with self.assertRaisesRegex(StoryLoopError, "injected add failure"):
+                run_change(self.root, self.change["change_id"], services=self._services())
+        state = load_json(run_path(self.root, self.change["change_id"]))
+        self.assertEqual(state["agent_worktree"]["contract_commit"], state["contract_commit"])
+        self.assertEqual(run_change(self.root, self.change["change_id"],
+                                    services=self._services())["status"], "CONTRACT_COMMITTED")
+
+    def test_audit_before_transfer_interruption_discards_checkout(self):
+        from storyloop import base_agent_execution
+        self._approved()
+        with mock.patch.object(base_agent_execution, "transfer_agent_candidate",
+                               side_effect=RuntimeError("crash before transfer")):
+            with self.assertRaisesRegex(RuntimeError, "crash before transfer"):
+                run_change(self.root, self.change["change_id"],
+                           services=self._successful_writer())
+        state = load_json(run_path(self.root, self.change["change_id"]))
+        checkout = Path(state["agent_worktree"]["path"])
+        self.assertTrue(checkout.exists())
+        self.assertEqual(run_change(self.root, self.change["change_id"],
+                                    services=self._services())["status"], "CONTRACT_COMMITTED")
+        self.assertFalse(checkout.exists())
+
+    def test_transfer_write_interruption_preserves_main_file(self):
+        from storyloop import base_agent_transfer
+        from storyloop.storage import write_bytes_atomic
+        self._approved()
+
+        def interrupt(path, content):
+            write_bytes_atomic(path, content)
+            raise RuntimeError("crash during transfer")
+
+        with mock.patch.object(base_agent_transfer, "write_bytes_atomic", side_effect=interrupt):
+            with self.assertRaisesRegex(RuntimeError, "crash during transfer"):
+                run_change(self.root, self.change["change_id"],
+                           services=self._successful_writer())
+        changed = (self.root / "pom.xml").read_bytes()
+        self.assertIn(b"version>2", changed)
+        self.assertEqual(run_change(self.root, self.change["change_id"],
+                                    services=self._services())["status"], "WORKSPACE_TAINTED")
+        self.assertEqual((self.root / "pom.xml").read_bytes(), changed)
+        _git(self.root, "restore", "--", "pom.xml")
+        from storyloop.run_recovery import reset_run
+        self.assertEqual(reset_run(self.root, self.change["change_id"], "已移走搬回内容")["status"],
+                         "CONTRACT_COMMITTED")
+
+    def test_candidate_commit_failure_preserves_index_until_human_cleans(self):
+        from storyloop import base_agent_transfer
+        self._approved()
+
+        def fail_commit(project, paths, *_args, **_kwargs):
+            _git(project, "add", "--", *paths)
+            raise StoryLoopError("injected candidate commit failure", code="GIT_BLOCKED")
+
+        with mock.patch.object(base_agent_transfer, "commit_paths", side_effect=fail_commit):
+            result = run_change(self.root, self.change["change_id"],
+                                services=self._successful_writer())
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED")
+        self.assertIn("pom.xml", _git(self.root, "diff", "--cached", "--name-only"))
+        _git(self.root, "reset", "-q", "--", "pom.xml")
+        _git(self.root, "restore", "--", "pom.xml")
+        from storyloop.run_recovery import reset_run
+        self.assertEqual(reset_run(self.root, self.change["change_id"], "已清理候选索引")["status"],
+                         "CONTRACT_COMMITTED")
+
     def test_anchor_before_agent_call_restarts(self):
         self._approved()
 
@@ -356,4 +431,3 @@ class BaseAgentRecoveryTests(unittest.TestCase):
         result = run_change(self.root, self.change["change_id"], services=self._services())
         self.assertEqual(result["status"], "WORKSPACE_TAINTED")
         self.assertEqual(note.read_text(encoding="utf-8"), "human review notes\n")
-
