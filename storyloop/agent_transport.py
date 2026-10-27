@@ -120,7 +120,9 @@ def _codex(project: Path, request: dict, config: dict, schema: dict, trace: dict
     trace["telemetry"] = telemetry
     thread: str | None = None
     next_prompt = prompt
-    with tempfile.TemporaryDirectory(dir=project / ".storyloop", prefix="schema-") as folder:
+    control = Path(trace.get("control_project", project))
+    base_implementation = request.get("payload", {}).get("mode") == "base-implement"
+    with tempfile.TemporaryDirectory(dir=control / ".storyloop", prefix="schema-") as folder:
         schema_file = Path(folder) / "response-schema.json"
         schema_file.write_text(json.dumps(request["response_schema"], ensure_ascii=False), encoding="utf-8")
         output_schema = ["--output-schema", str(schema_file)]
@@ -139,14 +141,14 @@ def _codex(project: Path, request: dict, config: dict, schema: dict, trace: dict
             try:
                 result = _parse(content)
             except StoryLoopError:
-                if not thread or repair == CODEX_REPAIR_LIMIT:
+                if base_implementation or not thread or repair == CODEX_REPAIR_LIMIT:
                     raise
                 next_prompt = CODEX_REPAIR_PROMPT
                 continue
             body, errors = conform(result, schema)
             if errors:
                 trace["schema_errors"] = errors
-                if thread and repair < CODEX_REPAIR_LIMIT:
+                if not base_implementation and thread and repair < CODEX_REPAIR_LIMIT:
                     next_prompt = CODEX_SCHEMA_REPAIR_PROMPT.format(errors="\n".join(errors))
                     continue
                 return _require_conforming(result, schema, trace)
