@@ -157,7 +157,8 @@ def _restart_agent_base(project: Path, state: dict) -> str:
         pause(project, state, "WORKSPACE_TAINTED", reason=reason, next=next_step)
         return "WORKSPACE_TAINTED"
     if _git(project, "rev-parse", "HEAD").strip() != state["contract_commit"]:
-        _git(project, "reset", "--hard", state["contract_commit"])
+        _git(project, "reset", "--soft", state["contract_commit"])
+        _git(project, "read-tree", "--reset", "-u", "HEAD")
     _discard_base_files(project, state)
     transition(project, state, "CONTRACT_COMMITTED", event="base_restart")
     for key in BASE_ATTEMPT_KEYS:
