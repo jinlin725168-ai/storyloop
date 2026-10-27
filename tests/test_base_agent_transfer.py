@@ -173,12 +173,6 @@ class BaseAgentTransferTests(unittest.TestCase):
         self.assertEqual(self._git("ls-tree", "HEAD", "build.cmd").split()[0], "100644")
 
     def test_required_lfs_style_filter_does_not_block_audit(self):
-        (self.project / ".gitattributes").write_text("tracked.txt filter=lfs\n",
-                                                       encoding="utf-8")
-        self._git("add", ".gitattributes")
-        self._git("commit", "-qm", "attributes")
-        self.commit = self._git("rev-parse", "HEAD").strip()
-        self.state["contract_commit"] = self.commit
         filter_script = self.root / "copy-filter.py"
         filter_script.write_text("import sys\nsys.stdout.buffer.write(sys.stdin.buffer.read())\n",
                                  encoding="utf-8")
@@ -186,6 +180,14 @@ class BaseAgentTransferTests(unittest.TestCase):
         self._git("config", "filter.lfs.clean", command)
         self._git("config", "filter.lfs.smudge", command)
         self._git("config", "filter.lfs.required", "true")
+        (self.project / ".gitattributes").write_text("tracked.txt filter=lfs\n",
+                                                       encoding="utf-8")
+        self._git("add", "--renormalize", "tracked.txt")
+        self._git("add", ".gitattributes")
+        self._git("commit", "-qm", "attributes")
+        self.commit = self._git("rev-parse", "HEAD").strip()
+        self.state["contract_commit"] = self.commit
+        self.assertEqual(self._git("status", "--porcelain=v1", "--untracked-files=all"), "")
         checkout = self._checkout()
         (checkout / "tracked.txt").write_text("changed\n", encoding="utf-8")
         self._transfer(checkout, "tracked.txt")
