@@ -37,11 +37,11 @@
 - **CI 调整（[PR #36](https://github.com/jinlin725168-ai/storyloop/pull/36)、[PR #39](https://github.com/jinlin725168-ai/storyloop/pull/39)）**：只改中文文件名文档时正确跳过测试；PR 的 Linux 跑 core、Windows 跑 platform，main 推送两平台仍跑 core；加入仅检查 F/E9 的 ruff 与 CodeQL。
 - **spec-craft 第 2 批（[计划 PR #41](https://github.com/jinlin725168-ai/storyloop/pull/41)、[实现 PR #42](https://github.com/jinlin725168-ai/storyloop/pull/42)）**：团队/个人定制、受保护路径与控制面视图已合入；[一次真实试用](validation/2026-10-24-spec-craft-第2批试用.md)发现行类型、表外假设和问句计数问题。**[PR #44](https://github.com/jinlin725168-ai/storyloop/pull/44)** 已修订技能和测试，未重跑真实试用，不能据此宣称实际模型输出已验证。
 - **架构收敛 E1（[计划 PR #38](https://github.com/jinlin725168-ai/storyloop/pull/38)、[评审修订 PR #40](https://github.com/jinlin725168-ai/storyloop/pull/40)、[实现 PR #43](https://github.com/jinlin725168-ai/storyloop/pull/43)）**：base 合同、旧底座绿证据、人工实现与具名人审、回归验收和幂等版本推进已交付并在独立样本实跑，见[验证记录](validation/2026-10-24-架构收敛-阶段E1-验证.md)。评审中人决定：旧项目使用人工确认的补充配置声明构建命令；合并前中断一律作废本次尝试、保留人的候选后重验。E1 不含代理实现、跨厂商审查或判据注入跑红，也未完成 I13。
-- **架构收敛 E2a（预览；[计划 PR #46](https://github.com/jinlin725168-ai/storyloop/pull/46)、[实现 PR #47](https://github.com/jinlin725168-ai/storyloop/pull/47)）**：代理在独立 worktree 实现，方案经具名人批准，最重档位下执行跨厂商审查；单厂商须由具名人审并说明替代理由。base 默认仍为 human，须显式 `--implementer agent` 启用预览。人决定维持现有威胁模型、不做 OS 级隔离，改用独立 worktree 并以预览合入代理通道。尚无真实代理试用，**仅测试适配器验证**；判据注入跑红留 E2b，撞底座衔接留 E3，I13 未达成。
+- **架构收敛 E2a（预览；[计划 PR #46](https://github.com/jinlin725168-ai/storyloop/pull/46)、[实现 PR #47](https://github.com/jinlin725168-ai/storyloop/pull/47)）**：代理在独立 worktree 实现，方案经具名人批准，最重档位下执行跨厂商审查；单厂商须由具名人审并说明替代理由。base 默认仍为 human，须显式 `--implementer agent` 启用预览。人决定维持现有威胁模型、不做 OS 级隔离，改用独立 worktree 并以预览合入代理通道。[一次真实试用走通](validation/2026-10-27-E2a-真实试用.md)，发现 6 个问题待修；判据注入跑红留 E2b，撞底座衔接留 E3，I13 未达成。
 
 ## 已知问题
 
-此前偶发 Git 可见性保护错误仍待捕获具体触发路径，诊断已增强，保护规则未放宽。E2a 的独立树与主仓共享 `.git`，StoryLoop 不是沙箱，无法隔离同用户恶意进程及检测与使用之间的竞态；代理应在 CLI 沙箱或无凭证容器中运行，见[PR #47 的已知问题](https://github.com/jinlin725168-ai/storyloop/pull/47)。判据注入跑红与撞底座衔接仍待 E2b/E3，I13 未达成。
+此前偶发 Git 可见性保护错误仍待捕获具体触发路径，诊断已增强，保护规则未放宽。E2a 的独立树与主仓共享 `.git`，StoryLoop 不是沙箱，无法隔离同用户恶意进程及检测与使用之间的竞态；代理应在 CLI 沙箱或无凭证容器中运行，见[PR #47 的已知问题](https://github.com/jinlin725168-ai/storyloop/pull/47)。[E2a 真实试用](validation/2026-10-27-E2a-真实试用.md)另发现 6 个问题待修。判据注入跑红与撞底座衔接仍待 E2b/E3，I13 未达成。
 
 新发现的代码与文档不一致记在这里，修复后移到"已完成"。
 
