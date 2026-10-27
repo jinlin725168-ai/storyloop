@@ -28,7 +28,7 @@ class BaseAgentTransportTests(unittest.TestCase):
                 invoke_project_agent(self.root, "implement",
                                      {"mode": "base-implement", "change": self.change},
                                      workspace=workspace)
-            self.assertEqual(Path(invoke.call_args.args[0]["project"]), workspace)
+            self.assertTrue(Path(invoke.call_args.args[0]["project"]).samefile(workspace))
             self.assertTrue((self.root / ".storyloop/state/telemetry/calls").exists())
             self.assertFalse((workspace / ".storyloop").exists())
 
