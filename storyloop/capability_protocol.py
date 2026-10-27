@@ -5,10 +5,11 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import sys
 
 from .errors import StoryLoopError, require
 from .path_security import repository_relative
-from .processutil import run_process
+from .processutil import redact, run_process
 from .storage import load_json
 
 PROTOCOL = "storyloop.adapter-capabilities.v1"
@@ -20,27 +21,44 @@ def normalize_vendor(value: object) -> str | None:
     return value.strip().casefold() if isinstance(value, str) and value.strip() else None
 
 
+def expand_agent_token(value: str, project: Path) -> str:
+    """Use the running engine's interpreter for both handshake and transport."""
+    return {"{python}": sys.executable, "{project}": str(project)}.get(value, value)
+
+
 def probe(project: Path, adapter_name: str, adapter: dict) -> dict:
     """Ask one adapter for its capability record; unsupported handshakes stay unknown."""
     kind = adapter.get("kind")
     if kind == "manual":
         return {"known": True, "tiers": []}
     if kind == "codex" and not isinstance(adapter.get("models"), dict):
-        return {"known": False, "tiers": []}
+        return _unknown("Codex model mapping is missing")
     if kind == "codex":
         return _codex_capabilities(adapter)
     if kind != "command":
-        return {"known": False, "tiers": []}
+        return _unknown("Adapter kind is unsupported")
     command = adapter.get("agent_command")
     if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
-        return {"known": False, "tiers": []}
+        return _unknown("Agent command is invalid")
     argv = _argv(project, command)
     if not argv:
-        return {"known": False, "tiers": []}
+        return _unknown("Agent executable is unavailable")
     result = run_process(argv, Path(project), 30, input_text=json.dumps({"protocol": PROTOCOL}))
     if result.get("returncode") != 0 or result.get("timed_out") or result.get("error"):
-        return {"known": False, "tiers": []}
+        return _unknown(_process_failure(result))
     return _response(result.get("stdout"))
+
+
+def _unknown(reason: str) -> dict:
+    return {"known": False, "tiers": [], "reason": reason[:600]}
+
+
+def _process_failure(result: dict) -> str:
+    parts = [f"exit {result['returncode']}"] if result.get("returncode") not in (None, 0) else []
+    parts += [name for name in ("timed_out", "truncated", "error") if result.get(name)]
+    stderr = redact(str(result.get("stderr") or ""))
+    tail = next((line.strip() for line in reversed(stderr.splitlines()) if line.strip()), "")
+    return "; ".join(parts + ([tail[:500]] if tail else [])) or "Handshake process failed"
 
 
 def _require_tier(role: str, setting: dict, adapter: dict, capability: dict) -> None:
@@ -57,7 +75,7 @@ def _response(raw: object) -> dict:
     except ValueError:
         value = None
     if not _complete_capability(value):
-        return {"known": False, "tiers": []}
+        return _unknown("Capability response is invalid or lacks a vendor")
     tiers = value["tiers"]
     required_flags = ("subagents", "path_guard", "fast_checks")
     return {"known": True, **lane_metadata(value), "tiers": sorted(set(tiers)),
@@ -114,8 +132,7 @@ def _complete_capability(value: object) -> bool:
 def _argv(project: Path, command: list[str]) -> list[str] | None:
     if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
         return None
-    argv = [item.replace("{python}", shutil.which("python") or "python").replace("{project}", str(project))
-            for item in command]
+    argv = [expand_agent_token(item, project) for item in command]
     executable = argv[0] if Path(argv[0]).is_absolute() else shutil.which(argv[0])
     return [str(executable), *argv[1:]] if executable else None
 

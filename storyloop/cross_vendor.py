@@ -26,7 +26,10 @@ def require_distinct(config: dict, capabilities: dict) -> None:
     names = [role_settings(config, role, None)['adapter'] for role in ('implement', 'review')]
     vendors = [capabilities.get(name, {}).get('vendor') for name in names]
     if not all(vendors):
-        raise StoryLoopError('Cross-vendor review handshake unavailable', code='AGENT_UNAVAILABLE',
+        unknown = [f"{name}: {capabilities.get(name, {}).get('reason', 'vendor missing')}"
+                   for name in names if not capabilities.get(name, {}).get('vendor')]
+        raise StoryLoopError('Cross-vendor review handshake unavailable; fix adapter handshake/config: '
+                             + '; '.join(unknown), code='AGENT_UNAVAILABLE',
                              details={'cross_vendor': True, 'role': 'review'})
     require(vendors[0].casefold() != vendors[1].casefold(),
             'Cross-vendor review requires different vendors')

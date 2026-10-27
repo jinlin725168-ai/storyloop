@@ -5,10 +5,10 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
-import sys
 import tempfile
 
 from .models import StoryLoopError, require
+from .capability_protocol import expand_agent_token
 from .processutil import redact, run_process
 from .role_schemas import normalize, schema_errors
 from .storage import load_json, write_json
@@ -84,7 +84,7 @@ def _manual(project: Path, request: dict, schema: dict, trace: dict) -> dict:
 def _command(project: Path, request: dict, config: dict, schema: dict, trace: dict) -> dict:
     command = config.get("agent_command")
     require(isinstance(command, list) and bool(command), "Command adapter needs explicit argv")
-    argv = [_expand(item, project) for item in command]
+    argv = [expand_agent_token(item, project) for item in command]
     require(all(isinstance(item, str) and item for item in argv), "Agent argv is invalid")
     executable = argv[0] if Path(argv[0]).is_absolute() else shutil.which(argv[0])
     if not executable:
@@ -253,7 +253,3 @@ def _bounded_json(value: dict) -> None:
     except (TypeError, ValueError) as exc:
         raise StoryLoopError("Agent payload must be finite JSON") from exc
     require(len(content.encode("utf-8")) <= 2_000_000, "Agent payload exceeded the size limit")
-
-
-def _expand(value: str, project: Path) -> str:
-    return {"{python}": sys.executable, "{project}": str(project)}.get(value, value)

@@ -21,7 +21,8 @@ def check(project: Path) -> dict:
     adapters = resolve_adapters(config)
     results = {name: probe(project, name, adapter) for name, adapter in adapters.items()}
     record = {"version": 1, "config_sha256": _digest(config), "argv_sha256": _argv_digest(project, adapters),
-              "adapters": results}
+              "adapters": {name: {key: value for key, value in result.items() if key != "reason"}
+                           for name, result in results.items()}}
     cache = project / ".storyloop/state/adapters.json"
     try:
         _require_mappings(config, adapters, results)
@@ -31,7 +32,7 @@ def check(project: Path) -> dict:
             write_json(cache, record, max_bytes=512_000)
         raise
     write_json(cache, record, max_bytes=512_000)
-    return {"status": "ADAPTERS_CHECKED", **record}
+    return {"status": "ADAPTERS_CHECKED", **record, "adapters": results}
 
 
 def ensure_checked(project: Path) -> dict | None:
