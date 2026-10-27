@@ -70,12 +70,10 @@ def capture_snapshot(root: Path, max_files: int = _DEFAULT_MAX_FILES,
     ignored = set() if include_ignored else (
         _READONLY_IGNORED if include_control else _CONTROL_IGNORED
     )
-    if exclude_git:
-        ignored = set(ignored) | {".git"}
     allowed = _sensitive_allow(resolved)
     scratch = _scratch_skip(resolved) if include_ignored else frozenset()
-    first = _scan_once(resolved, max_files, ignored, include_control, allowed, scratch)
-    second = _scan_once(resolved, max_files, ignored, include_control, allowed, scratch)
+    first = _scan_once(resolved, max_files, ignored, include_control, allowed, scratch, exclude_git)
+    second = _scan_once(resolved, max_files, ignored, include_control, allowed, scratch, exclude_git)
     require(first == second, "Workspace changed while capturing snapshot")
     return WorkspaceSnapshot(resolved, first)
 
@@ -103,7 +101,8 @@ def _reject_linked_git_control(root: Path) -> None:
 def _scan_once(root: Path, max_files: int, ignored: set[str],
                track_directories: bool,
                allowed: frozenset[str] = frozenset(),
-               scratch: frozenset[str] = frozenset()) -> tuple[tuple[str, FileFingerprint], ...]:
+               scratch: frozenset[str] = frozenset(),
+               exclude_root_git: bool = False) -> tuple[tuple[str, FileFingerprint], ...]:
     entries: list[tuple[str, FileFingerprint]] = []
     for directory, names, files in os.walk(root, followlinks=False):
         current = Path(directory)
@@ -116,6 +115,9 @@ def _scan_once(root: Path, max_files: int, ignored: set[str],
                             or (base + name).startswith('.storyloop/drafts/')))
                         or (name not in scratch and base + name not in scratch)]
         _reject_links(current, [*names, *files])
+        if current == root and exclude_root_git:
+            names[:] = [name for name in names if name.casefold() != ".git"]
+            files[:] = [name for name in files if name.casefold() != ".git"]
         names[:] = sorted(name for name in names if name.casefold() not in ignored)
         if track_directories:
             require(len(entries) < max_files, "Snapshot file limit exceeded")

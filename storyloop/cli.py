@@ -157,7 +157,7 @@ def _maintenance_arguments(child, command):
         child.add_argument("--reason")
         child.add_argument("--change", dest="change_id", required=True)
         child.add_argument("--implementer", choices=("agent", "human"),
-                           help="base 实现者；默认代理，CI 和上游同步默认人工")
+                           help="base 实现者；默认人工，agent 为预览模式（CI 禁止）")
         child.add_argument("--confirm-oracle-skills", action="store_true",
                            help="明确确认本次 base 候选对生效 Oracle 技能的修改")
         child.add_argument("--overrule", help="不同意审查对 ORACLE_DEFECT / NEEDS_SPEC_FIX 的判定：写明理由")

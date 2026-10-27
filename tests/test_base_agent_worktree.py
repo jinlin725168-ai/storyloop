@@ -90,9 +90,40 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         (unknown / "human.txt").write_text("human\n", encoding="utf-8")
         self.state["agent_worktree"] = {"path": str(unknown), "contract_commit": self.commit,
                                         "attempt_id": "unknown"}
-        with self.assertRaises(StoryLoopError):
+        self.state["candidate_commit"] = self.commit
+        with self.assertRaises(StoryLoopError) as caught:
             remove_agent_worktree(self.project, self.state)
+        self.assertIn("preserve", str(caught.exception).lower())
+        self.assertIn("storyloop reset", str(caught.exception))
+        self.assertNotIn("worktree remove --force", str(caught.exception))
         self.assertTrue((unknown / "human.txt").exists())
+
+    def test_changed_contract_anchor_never_suggests_forced_removal(self):
+        checkout = create_agent_worktree(self.project, self.state)
+        self.addCleanup(remove_agent_worktree, self.project, self.state)
+        original = self.state["agent_worktree"]["contract_commit"]
+        self.state["agent_worktree"]["contract_commit"] = "changed"
+        self.state["candidate_commit"] = self.commit
+        try:
+            with self.assertRaises(StoryLoopError) as caught:
+                remove_agent_worktree(self.project, self.state)
+            self.assertIn("storyloop reset", str(caught.exception))
+            self.assertNotIn("worktree remove --force", str(caught.exception))
+            self.assertTrue(checkout.exists())
+        finally:
+            self.state["agent_worktree"]["contract_commit"] = original
+
+    def test_project_path_anchor_never_suggests_forced_removal(self):
+        protected = self.project / "human-notes"
+        protected.mkdir()
+        (protected / "note.txt").write_text("human\n", encoding="utf-8")
+        self.state["candidate_commit"] = self.commit
+        self.state["agent_worktree"] = {"path": str(protected),
+                                        "contract_commit": self.commit, "attempt_id": "fake"}
+        with self.assertRaises(StoryLoopError) as caught:
+            remove_agent_worktree(self.project, self.state)
+        self.assertNotIn("worktree remove --force", str(caught.exception))
+        self.assertEqual((protected / "note.txt").read_text(encoding="utf-8"), "human\n")
 
     @unittest.skipUnless(os.name == "nt", "MAX_PATH preflight applies on Windows")
     def test_long_external_temp_path_stops_before_saving_anchor(self):
@@ -195,6 +226,7 @@ class BaseAgentWorktreeTests(unittest.TestCase):
     def test_remove_failure_after_candidate_commit_instructs_run(self):
         checkout = create_agent_worktree(self.project, self.state)
         self.state["candidate_commit"] = self.commit
+        self.state["base_inflight"] = "candidate_verification"
 
         def fail_remove(project, *args, **kwargs):
             if args[:2] == ("worktree", "remove"):
@@ -234,7 +266,9 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         with self.assertRaises(StoryLoopError) as caught:
             remove_agent_worktree(self.project, self.state)
         self.assertIn("worktree", str(caught.exception))
-        self.assertIn("prune", str(caught.exception))
+        self.assertIn("Preserve", str(caught.exception))
+        self.assertIn("storyloop reset", str(caught.exception))
+        self.assertNotIn("worktree remove --force", str(caught.exception))
         self.assertIn("agent_worktree", self.state)
         self.assertTrue(checkout.exists())
 
@@ -247,11 +281,13 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         self.addCleanup(registration.write_text, original, encoding="utf-8")
         registration.write_text(os.path.relpath(checkout / ".git", gitdir) + "\n",
                                 encoding="utf-8")
-        from storyloop.base_agent_worktree import agent_git
+        from storyloop.base_agent_worktree import agent_git_session
         # Git 2.43 does not list relative registrations; 2.48 can enable them.
         with mock.patch("storyloop.base_agent_worktree._registered", return_value=True):
-            self.assertEqual(agent_git(self.project, self.state, "rev-parse", "HEAD").strip(),
-                             self.commit)
+            path, head, run = agent_git_session(self.project, self.state)
+            self.assertEqual(path, checkout)
+            self.assertEqual(head, self.commit)
+            self.assertEqual(run("rev-parse", "HEAD").strip(), self.commit)
 
     @unittest.skipUnless(os.name == "posix", "POSIX paths do not have MAX_PATH")
     def test_posix_checkout_path_is_not_limited_to_240_characters(self):

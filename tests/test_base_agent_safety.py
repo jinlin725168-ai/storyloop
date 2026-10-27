@@ -10,12 +10,14 @@ from unittest import mock
 from storyloop import base_agent_execution, base_execution, base_run_open, base_upgrade
 from storyloop.approvals import approve_change
 from storyloop.models import StoryLoopError
-from storyloop.project_loop import _new_run_state, run_change
+from storyloop.project_loop import _new_run_state
 from storyloop.run_services import LoopServices
 from storyloop.run_state import run_path
 from storyloop.storage import load_json
 from storyloop.base_design import approve_base_design
+from storyloop.boundaries import capture_snapshot, snapshot_changes
 from tests import test_base_agent_flow as flow
+from tests.test_base_agent_flow import run_change
 from tests import test_base_lifecycle as lifecycle
 
 
@@ -110,13 +112,15 @@ class BaseAgentSafetyTests(unittest.TestCase):
         result = run_change(self.root, self.change["change_id"], services=configured)
         self.assertEqual(result["status"], "BASE_REVIEW_REQUIRED", result)
 
-    def test_unrelated_git_ref_update_during_agent_call_is_not_main_file_taint(self):
+    def test_agent_ref_update_taints_shared_git_control(self):
         self._approved()
         services = self._services()
+        state = load_json(run_path(self.root, self.change["change_id"]))
 
         def write(checkout, _payload):
-            subprocess.run(["git", "update-ref", "refs/remotes/origin/unrelated", "HEAD"],
-                           cwd=self.root, check=True, capture_output=True)
+            subprocess.run(["git", "update-ref", f"refs/heads/{state['source_branch']}",
+                            state["contract_commit"]], cwd=self.root, check=True,
+                           capture_output=True)
             (checkout / "pom.xml").write_text("<project><version>2</version></project>\n",
                                                encoding="utf-8")
             return {"summary": "updated"}
@@ -124,7 +128,87 @@ class BaseAgentSafetyTests(unittest.TestCase):
         configured = LoopServices(services.generate_smoke, write, services.review,
                                   design=services.design)
         result = run_change(self.root, self.change["change_id"], services=configured)
-        self.assertEqual(result["status"], "BASE_REVIEW_REQUIRED", result)
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED", result)
+
+    def test_agent_git_config_change_taints_shared_git_control(self):
+        self._approved()
+        services = self._services()
+
+        def write(checkout, _payload):
+            subprocess.run(["git", "config", "--local", "core.fsmonitor", "false"],
+                           cwd=checkout, check=True, capture_output=True)
+            (checkout / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                               encoding="utf-8")
+            return {"summary": "updated"}
+
+        configured = LoopServices(services.generate_smoke, write, services.review,
+                                  design=services.design)
+        result = run_change(self.root, self.change["change_id"], services=configured)
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED", result)
+
+    def test_agent_switching_main_worktree_branch_taints_shared_git_control(self):
+        self._approved()
+        services = self._services()
+
+        def write(checkout, _payload):
+            subprocess.run(["git", "switch", "-qc", "agent-moved-main"], cwd=self.root,
+                           check=True, capture_output=True)
+            (checkout / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                               encoding="utf-8")
+            return {"summary": "updated"}
+
+        configured = LoopServices(services.generate_smoke, write, services.review,
+                                  design=services.design)
+        result = run_change(self.root, self.change["change_id"], services=configured)
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED", result)
+
+    def test_agent_git_modules_change_taints_shared_git_control(self):
+        self._approved()
+        services = self._services()
+
+        def write(checkout, _payload):
+            target = self.root / ".git/modules/sub/config"
+            target.parent.mkdir(parents=True)
+            target.write_text("[core]\nfsmonitor = false\n", encoding="utf-8")
+            (checkout / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                               encoding="utf-8")
+            return {"summary": "updated"}
+
+        configured = LoopServices(services.generate_smoke, write, services.review,
+                                  design=services.design)
+        result = run_change(self.root, self.change["change_id"], services=configured)
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED", result)
+
+    def test_snapshot_excludes_only_root_git_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".git").mkdir()
+            (root / "sub").mkdir()
+            before = capture_snapshot(root, include_control=True, include_ignored=True,
+                                      exclude_git=True)
+            (root / ".git/index").write_text("normal Git metadata", encoding="utf-8")
+            (root / "sub/.git").mkdir()
+            (root / "sub/.git/config").write_text("agent config", encoding="utf-8")
+            after = capture_snapshot(root, include_control=True, include_ignored=True,
+                                     exclude_git=True)
+            self.assertIn("sub/.git/config", {item.path for item in snapshot_changes(before, after)})
+
+    def test_agent_nested_git_directory_taints_main_snapshot(self):
+        self._approved()
+        services = self._services()
+
+        def write(checkout, _payload):
+            nested = self.root / "acceptance/smoke/.git"
+            nested.mkdir()
+            (nested / "config").write_text("[core]\nfsmonitor = false\n", encoding="utf-8")
+            (checkout / "pom.xml").write_text("<project><version>2</version></project>\n",
+                                               encoding="utf-8")
+            return {"summary": "updated"}
+
+        configured = LoopServices(services.generate_smoke, write, services.review,
+                                  design=services.design)
+        result = run_change(self.root, self.change["change_id"], services=configured)
+        self.assertEqual(result["status"], "WORKSPACE_TAINTED", result)
 
     def test_agent_rejects_symlink_at_approved_path(self):
         probe = self.root / "symlink-probe"

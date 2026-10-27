@@ -96,11 +96,6 @@ def agent_git_session(project: Path, state: dict) -> tuple[Path, str, Callable[.
     return path, run("rev-parse", "HEAD").strip(), run
 
 
-def agent_git(project: Path, state: dict, *arguments: str) -> str:
-    """Use only the engine's saved Git registration, never checkout/.git."""
-    return agent_git_session(project, state)[2](*arguments)
-
-
 def _private_directory(path: Path) -> None:
     path.mkdir(mode=0o700, exist_ok=True)
     require(not path.is_symlink() and not (hasattr(path, "is_junction") and path.is_junction()),
@@ -182,16 +177,28 @@ def remove_agent_worktree(project: Path, state: dict) -> None:
                 state.pop("agent_worktree", None)
                 return
             raise StoryLoopError("Agent worktree path is not registered; preserve it")
+    except (StoryLoopError, OSError) as exc:
+        raise StoryLoopError(
+            f"Agent worktree anchor is unsafe: {exc}. Preserve the directory, inspect the "
+            "saved anchor and Git registration, then storyloop reset <project> "
+            f"--change {state['change_id']} --reason '<reason>'",
+            code="AGENT_ANCHOR_INVALID",
+        ) from exc
+    try:
         git(project, "worktree", "remove", "--force", str(path),
             timeout_seconds=_worktree_timeout(project))
         git(project, "worktree", "prune", timeout_seconds=_worktree_timeout(project))
     except (StoryLoopError, OSError) as exc:
-        resume = (f"storyloop run <project> --change {state['change_id']}"
-                  if state.get("candidate_commit") else
-                  f"storyloop reset <project> --change {state['change_id']} --reason '<reason>'")
+        resume = agent_cleanup_next(state)
         raise StoryLoopError(
             f"Agent worktree cleanup failed: {exc}. Close the agent or IDE, then run "
             f"git worktree remove --force {path}; git worktree prune; {resume}",
             code="WORKSPACE_TAINTED",
         ) from exc
     state.pop("agent_worktree", None)
+
+
+def agent_cleanup_next(state: dict) -> str:
+    if state.get("candidate_commit") and state.get("base_inflight") == "candidate_verification":
+        return f"storyloop run <project> --change {state['change_id']}"
+    return f"storyloop reset <project> --change {state['change_id']} --reason '<reason>'"

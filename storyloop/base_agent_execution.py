@@ -6,7 +6,7 @@ from pathlib import Path
 import hashlib
 
 from .base_agent_transfer import AGENT_EMAIL, AGENT_NAME, transfer_agent_candidate  # noqa: F401  # 兼容再导出
-from .base_agent_worktree import create_agent_worktree, remove_agent_worktree
+from .base_agent_worktree import agent_cleanup_next, create_agent_worktree, remove_agent_worktree
 from .base_design import invalid_reason
 from .engine_source_safety import ENGINE_WARNING, engine_source_digest, engine_warning
 from .guarded_calls import write_safely
@@ -54,23 +54,32 @@ def implement_base_candidate(project: Path, change: dict, state: dict, services=
         remove_agent_worktree(project, state)
     except (StoryLoopError, OSError) as exc:
         state["interrupted_status"] = "IMPLEMENTING"
-        return _pause_agent_issue(project, change, state, str(exc))
+        return _pause_agent_issue(project, change, state, str(exc),
+                                  invalid_anchor=isinstance(exc, StoryLoopError)
+                                  and exc.code == "AGENT_ANCHOR_INVALID")
     save_run(project, state)
     return {"status": "IMPLEMENTING", "change_id": change["change_id"]}
 
 
 def _cleanup_and_pause(project: Path, change: dict, state: dict, reason: str) -> dict:
+    invalid_anchor = False
     try:
         remove_agent_worktree(project, state)
     except (StoryLoopError, OSError) as cleanup:
+        invalid_anchor = (isinstance(cleanup, StoryLoopError)
+                          and cleanup.code == "AGENT_ANCHOR_INVALID")
         reason = f"{reason}; agent worktree cleanup failed: {cleanup}"
-    return _pause_agent_issue(project, change, state, reason)
+    return _pause_agent_issue(project, change, state, reason, invalid_anchor=invalid_anchor)
 
 
-def _pause_agent_issue(project: Path, change: dict, state: dict, reason: str) -> dict:
-    if state.get("candidate_commit"):
-        next_step = ("Close worktree file holders, then storyloop run <project> --change "
-                     f"{change['change_id']}; the saved candidate will be retained")
+def _pause_agent_issue(project: Path, change: dict, state: dict, reason: str,
+                       invalid_anchor: bool = False) -> dict:
+    if invalid_anchor:
+        next_step = ("Preserve the worktree and inspect its saved anchor and Git registration; "
+                     f"then {agent_cleanup_next({**state, 'base_inflight': None})}")
+    elif state.get("candidate_commit") and state.get("base_inflight") == "candidate_verification":
+        next_step = ("Close worktree file holders, then "
+                     f"{agent_cleanup_next(state)}; the saved candidate will be retained")
     else:
         next_step = ("Inspect the main worktree and saved agent worktree anchor, then "
                      f"storyloop reset <project> --change {change['change_id']} "
@@ -82,8 +91,14 @@ def _pause_agent_issue(project: Path, change: dict, state: dict, reason: str) ->
 def _prepare_agent_call(project: Path, change: dict, state: dict) -> Path:
     from .adapter_capabilities import ensure_checked
     from .baseline import load_project_config
-    from .role_profiles import enabled
+    from .role_profiles import enabled, resolve_adapters, role_settings
     config = load_project_config(project)
+    if enabled(config):
+        adapter = role_settings(config, "implement", "heavy", base=True)["adapter"]
+        if resolve_adapters(config)[adapter]["kind"] == "manual":
+            raise StoryLoopError("Manual adapter cannot implement base changes in a disposable "
+                                 "worktree; use --implementer human for a new run or configure "
+                                 "a command/Codex adapter", code="AGENT_UNAVAILABLE")
     state["base_inflight"] = "agent_capability_check"
     save_run(project, state)
     if enabled(config):
@@ -116,7 +131,8 @@ def _invoke_agent(project: Path, checkout: Path, change: dict, state: dict, serv
                 if change["product"]["base"]["scope"] == "knowledge"
                 and "openspec/principles.json" in approved else frozenset())
     response, changes = write_safely(project, change["change_id"], operation, source_guard,
-                                     excluded, exclude_git_metadata=True)
+                                     excluded, exclude_root_git_snapshot=True,
+                                     allowed_git_worktree_attempt=state["agent_worktree"]["attempt_id"])
     if changes:
         paths = ", ".join(item.path for item in changes[:20])
         raise StoryLoopError(f"Agent changed main project during isolated implementation: {paths}",

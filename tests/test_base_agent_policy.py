@@ -26,9 +26,10 @@ class BaseAgentPolicyTests(unittest.TestCase):
                "modes": ["*"]}
         self.assertEqual(_response(json.dumps(raw))["vendor"], "openai")
 
-    def test_foundation_and_skills_default_to_agent(self):
-        self.assertEqual(choose_implementer("foundation", None), "agent")
-        self.assertEqual(choose_implementer("skills", None), "agent")
+    def test_all_base_scopes_default_to_human_in_preview(self):
+        self.assertEqual(choose_implementer("foundation", None), "human")
+        self.assertEqual(choose_implementer("skills", None), "human")
+        self.assertEqual(choose_implementer("knowledge", None), "human")
 
     def test_ci_and_upstream_default_to_human(self):
         self.assertEqual(choose_implementer("ci", None), "human")
@@ -36,6 +37,9 @@ class BaseAgentPolicyTests(unittest.TestCase):
 
     def test_explicit_human_remains_available_for_foundation(self):
         self.assertEqual(choose_implementer("foundation", "human"), "human")
+
+    def test_explicit_agent_uses_preview_channel_for_foundation(self):
+        self.assertEqual(choose_implementer("foundation", "agent"), "agent")
 
     def test_ci_rejects_explicit_agent(self):
         with self.assertRaisesRegex(StoryLoopError, "CI"):

@@ -8,11 +8,17 @@ from storyloop.approvals import approve_change
 from storyloop.baseline import load_project_config
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import invoke_project_agent
-from storyloop.project_loop import _new_run_state, run_change
+from storyloop.project_loop import _new_run_state, run_change as _run_change
 from storyloop.run_services import LoopServices
 from storyloop.run_state import run_path
 from storyloop.storage import load_json, write_json
 from tests import test_base_lifecycle as lifecycle
+
+
+def run_change(*args, **kwargs):
+    """The agent channel is preview-only, so these agent tests opt in explicitly."""
+    kwargs.setdefault("implementer", "agent")
+    return _run_change(*args, **kwargs)
 
 
 class BaseAgentFlowTests(unittest.TestCase):
@@ -25,12 +31,13 @@ class BaseAgentFlowTests(unittest.TestCase):
                                "risks": ["构建可能失败"], "rollback": "恢复原文件", "questions": []},
         )
 
-    def test_foundation_defaults_to_agent_without_manual_flag(self):
+    def test_foundation_defaults_to_human_without_preview_flag(self):
         state = base_execution._open_state(self.root, self.change, None, _new_run_state)
-        self.assertEqual(state["implementer"], "agent")
+        self.assertEqual(state["implementer"], "human")
 
     def test_agent_run_completes_g1_and_waits_for_design_approval(self):
-        result = run_change(self.root, self.change["change_id"], services=self._services())
+        result = run_change(self.root, self.change["change_id"], services=self._services(),
+                            implementer="agent")
         self.assertEqual(result["status"], "DESIGN_APPROVAL_REQUIRED")
         self.assertEqual(load_json(run_path(self.root, self.change["change_id"]))["implementer"], "agent")
 

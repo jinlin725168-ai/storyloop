@@ -41,6 +41,7 @@ END_TO_END = [
 # Safety boundaries: out-of-scope writes, tampering, path and process containment.
 SAFETY = [
     "tests.test_base_agent_safety", "tests.test_base_agent_recovery",
+    "tests.test_base_agent_cleanup_hints",
     "tests.test_base_agent_worktree", "tests.test_base_agent_transport",
     "tests.test_base_agent_transfer",
     "tests.test_custom_protection",

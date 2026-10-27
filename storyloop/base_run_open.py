@@ -19,7 +19,7 @@ def choose_implementer(scope: str, requested: str | None) -> str:
     require(requested in {None, "human", "agent"}, "Invalid base implementer")
     require(not (scope == "ci" and requested == "agent"),
             "CI base changes require human implementation")
-    return requested or ("human" if scope in {"ci", "upstream"} else "agent")
+    return requested or "human"
 
 
 def _self_hosted_agent(project: Path, paths: set[str]) -> bool:

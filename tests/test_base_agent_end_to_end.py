@@ -16,11 +16,17 @@ from storyloop.baseline import load_baseline
 from storyloop.manual_acceptance import record_manual_acceptance
 from storyloop.models import StoryLoopError
 from storyloop.onboarding_cli import bootstrap_with_project_checks
-from storyloop.project_loop import run_change
+from storyloop.project_loop import run_change as _run_change
 from storyloop.run_state import run_path
 from storyloop.run_recovery import reset_run
 from storyloop.storage import load_json
 from tests.test_baseline_behavior import git, repository
+
+
+def run_change(*args, **kwargs):
+    """Exercise the opt-in preview channel throughout this module."""
+    kwargs.setdefault("implementer", "agent")
+    return _run_change(*args, **kwargs)
 
 
 def _capability(vendor):

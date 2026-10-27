@@ -10,7 +10,7 @@ import hashlib
 from .changes import load_change
 from .change_types import type_of
 from .baseline import _git
-from .base_agent_worktree import remove_agent_worktree
+from .base_agent_worktree import agent_cleanup_next, remove_agent_worktree
 from .git_command import git_is_ancestor
 from .models import StoryLoopError, identifier, require, text
 from .path_security import safe_target
@@ -142,9 +142,11 @@ def _restart_agent_base(project: Path, state: dict) -> str:
     try:
         remove_agent_worktree(project, state)
     except StoryLoopError as exc:
+        next_step = (f"storyloop reset <project> --change {state['change_id']} "
+                     "--reason '<reason>'" if exc.code == "AGENT_ANCHOR_INVALID"
+                     else agent_cleanup_next(state))
         pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
-              next=f"Inspect the saved worktree path, then storyloop reset <project> "
-                   f"--change {state['change_id']} --reason '<reason>'")
+              next=next_step)
         return "WORKSPACE_TAINTED"
     issue = _agent_preflight_issue(project, state)
     if issue is not None:

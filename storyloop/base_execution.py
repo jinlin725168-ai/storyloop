@@ -95,13 +95,16 @@ def _resume_agent_cleanup(project: Path, change: dict, state: dict) -> dict | No
         return pause(project, state, "WORKSPACE_TAINTED",
                      reason="Saved agent candidate or main worktree changed during cleanup; preserve it",
                      next="Inspect the candidate and worktree anchor before reset")
-    from .base_agent_worktree import remove_agent_worktree
+    from .base_agent_worktree import agent_cleanup_next, remove_agent_worktree
     try:
         remove_agent_worktree(project, state)
     except (StoryLoopError, OSError) as exc:
+        next_step = (f"Preserve the worktree and inspect its anchor, then storyloop reset "
+                     f"<project> --change {change['change_id']} --reason '<reason>'"
+                     if isinstance(exc, StoryLoopError) and exc.code == "AGENT_ANCHOR_INVALID"
+                     else f"Close worktree file holders, then {agent_cleanup_next(state)}")
         return pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
-                     next="Close worktree file holders, then storyloop run <project> --change "
-                          f"{change['change_id']}")
+                     next=next_step)
     transition(project, state, "IMPLEMENTING", event="reset")
     state.pop("interrupted_status", None)
     state.pop("stop", None)

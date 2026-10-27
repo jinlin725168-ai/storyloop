@@ -7,10 +7,14 @@ import unittest
 from unittest import mock
 
 from storyloop.agent_transport import _codex, _codex_once, _command, _manual
+from storyloop.base_agent_execution import _prepare_agent_call
+from storyloop.base_agent_worktree import remove_agent_worktree
+from storyloop.base_design import approve_base_design
 from storyloop.base_execution import _open_state
 from storyloop.baseline import load_project_config
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import _new_run_state
+from storyloop.project_loop import run_change
 from storyloop.project_agents import invoke_project_agent
 from storyloop.storage import load_json, write_json
 from storyloop.run_state import run_path
@@ -124,3 +128,23 @@ class BaseAgentTransportTests(unittest.TestCase):
             with self.assertRaisesRegex(StoryLoopError, "--implementer human|command/Codex"):
                 _open_state(self.root, self.change, "agent", _new_run_state)
         self.assertFalse(run_path(self.root, self.change["change_id"]).exists())
+
+    def test_manual_base_adapter_is_rejected_when_saved_agent_run_resumes(self):
+        change_id = self.change["change_id"]
+        services = flow.BaseAgentFlowTests._services(self)
+        run_change(self.root, change_id, services=services, implementer="agent")
+        saved = load_json(run_path(self.root, change_id))
+        approve_base_design(self.root, change_id, saved["base_design"]["plan_id"])
+        run_change(self.root, change_id, services=services)
+        state = load_json(run_path(self.root, change_id))
+        config = load_project_config(self.root)
+        config.update({"adapters": {"one": {"kind": "manual"}},
+                       "roles": {"default_adapter": "one"}})
+        write_json(self.root / ".storyloop/config.json", config)
+        try:
+            with self.assertRaises(StoryLoopError) as caught:
+                _prepare_agent_call(self.root, self.change, state)
+            self.assertEqual(caught.exception.code, "AGENT_UNAVAILABLE")
+        finally:
+            if state.get("agent_worktree"):
+                remove_agent_worktree(self.root, state)
