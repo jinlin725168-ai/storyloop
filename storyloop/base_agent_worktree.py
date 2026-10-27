@@ -137,7 +137,8 @@ def create_agent_worktree(project: Path, state: dict) -> Path:
     common = _common_dir(project)
     repo = hashlib.sha256(str(common).encode("utf-8")).hexdigest()[:12]
     attempt = uuid.uuid4().hex[:12]
-    temp_root = _external_temp_root(project, _safe_temp_root(Path(tempfile.gettempdir()).resolve()))
+    configured_root = os.environ.get("STORYLOOP_AGENT_WORKTREE_TEMP_ROOT") or tempfile.gettempdir()
+    temp_root = _external_temp_root(project, _safe_temp_root(Path(configured_root).resolve()))
     base = _outside_project(project, temp_root / "storyloop-agent-wt")
     path = _outside_project(project, base / repo / change_id / attempt)
     if os.name == "nt":

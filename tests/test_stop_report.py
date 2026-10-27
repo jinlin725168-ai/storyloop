@@ -26,6 +26,27 @@ def state_for(status: str, **extra) -> dict:
 
 
 class StopReportTests(unittest.TestCase):
+    def test_e1_human_base_review_keeps_named_human_command(self):
+        stop = build_stop("/project", state_for("BASE_REVIEW_REQUIRED", implementer="human"),
+                          "BASE_REVIEW_REQUIRED", {})
+        self.assertIn("base-review", stop["options"][0]["command"])
+        self.assertIn("--verdict pass", stop["options"][0]["command"])
+        self.assertNotIn("--human-review", stop["options"][0]["command"])
+
+    def test_base_design_summary_is_bounded_and_single_line(self):
+        plan = {"plan_id": "p", "goal": "目标\n" + "长" * 500,
+                "paths": ["a.txt"] * 20, "steps": ["步骤\n说明"] * 20,
+                "risks": ["风险"] * 20, "rollback": "回退\n说明"}
+        stop = build_stop("/project", state_for("DESIGN_APPROVAL_REQUIRED",
+                                                base_design=plan),
+                          "DESIGN_APPROVAL_REQUIRED", {})
+        summary = stop["plan_summary"]
+        self.assertLessEqual(len(summary["goal"]), 240)
+        self.assertFalse(any("\n" in value for value in
+                             [summary["goal"], summary["rollback"], *summary["steps"]]))
+        self.assertLessEqual(len(summary["paths"]), 8)
+        self.assertLessEqual(len(summary["steps"]), 5)
+
     def test_post_l3_ready_does_not_override_current_execution_phase(self):
         state = state_for('MANUAL_ACCEPTANCE_REQUIRED',
                           planning={'origin': 'L3', 'phase': 'READY'}, phase='planning')

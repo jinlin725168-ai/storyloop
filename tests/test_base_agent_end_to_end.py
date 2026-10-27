@@ -1,6 +1,7 @@
 """A scripted pair of adapter vendors completes the full base agent channel."""
 
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -10,9 +11,10 @@ from unittest import mock
 from storyloop import base_execution
 from storyloop import base_agent_execution
 from storyloop.approvals import approve_change
+from storyloop.adapter_capabilities import check
 from storyloop.base_design import approve_base_design
 from storyloop.base_upgrade import propose_base_change
-from storyloop.baseline import load_baseline
+from storyloop.baseline import load_baseline, load_project_config
 from storyloop.manual_acceptance import record_manual_acceptance
 from storyloop.models import StoryLoopError
 from storyloop.onboarding_cli import bootstrap_with_project_checks
@@ -40,6 +42,10 @@ class BaseAgentEndToEndTests(unittest.TestCase):
         self.addCleanup(self.folder.cleanup)
         self.root = Path(self.folder.name) / "project"
         self.root.mkdir()
+        agent_env = mock.patch.dict(os.environ, {"STORYLOOP_AGENT_WORKTREE_TEMP_ROOT":
+                                              self.folder.name})
+        agent_env.start()
+        self.addCleanup(agent_env.stop)
         repository(self.root)
         smoke = self.root / "acceptance/smoke"
         smoke.mkdir(parents=True)
@@ -89,6 +95,29 @@ class BaseAgentEndToEndTests(unittest.TestCase):
         self.assertEqual(report["review_mode"], "agent")
         with self.assertRaisesRegex(StoryLoopError, "Merged base runs cannot reset"):
             reset_run(self.root, change_id, "已合并后不得回准备阶段")
+
+    def test_unknown_reviewer_vendor_keeps_candidate_and_requires_handshake_fix(self):
+        config = load_project_config(self.root)
+        script = Path(config["adapters"]["reviewer"]["agent_command"][3])
+        response = json.loads(script.read_text(encoding="utf-8"))
+        response["capabilities"].pop("vendor")
+        script.write_text(json.dumps(response), encoding="utf-8")
+        self.assertFalse(check(self.root)["adapters"]["reviewer"]["known"])
+        change_id = self.change["change_id"]
+        first = run_change(self.root, change_id)
+        self.assertEqual(first["status"], "DESIGN_APPROVAL_REQUIRED")
+        state = load_json(run_path(self.root, change_id))
+        approve_base_design(self.root, change_id, state["base_design"]["plan_id"])
+        self.assertEqual(run_change(self.root, change_id)["status"], "IMPLEMENTING")
+        candidate = run_change(self.root, change_id)
+        self.assertEqual(candidate["status"], "BASE_REVIEW_REQUIRED")
+        self.assertIn("握手", candidate["stop"]["blocker"])
+        committed = load_json(run_path(self.root, change_id))["candidate_commit"]
+        retry = run_change(self.root, change_id)
+        self.assertEqual(retry["status"], "BASE_REVIEW_REQUIRED")
+        self.assertEqual(load_json(run_path(self.root, change_id))["candidate_commit"], committed)
+        self.assertEqual(retry["next"], "storyloop adapters check <project>")
+        self.assertNotIn("base-review", str(retry["stop"]))
 
     def test_engine_source_warning_reaches_stop_and_final_report(self):
         with mock.patch("storyloop.engine_source_safety.engine_source_digest",

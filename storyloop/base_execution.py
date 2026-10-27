@@ -316,23 +316,45 @@ def _evidence_sha256(project: Path, change_id: str) -> str:
 
 
 def _pause_review(project: Path, change: dict, state: dict) -> dict:
+    if state.get("implementer", "human") == "agent":
+        mode, _ = _agent_review_context(project, state)
+        return pause(project, state, "BASE_REVIEW_REQUIRED",
+                     next=_agent_review_next(change["change_id"], mode))
     return pause(project, state, "BASE_REVIEW_REQUIRED",
                  next=f"storyloop base-review <project> --change {change['change_id']} "
                       "--verdict pass --note '<核对内容>', then storyloop run")
+
+
+def _agent_review_context(project: Path, state: dict) -> tuple[str, dict | None]:
+    from .base_review import single_vendor_only, vendor_context
+    try:
+        context = vendor_context(project, state)
+    except StoryLoopError:
+        return "unknown", None
+    if context["available_vendors"] is None or not context["review_vendor"]:
+        return "unknown", context
+    return ("single" if single_vendor_only(project, state, context) else "distinct"), context
+
+
+def _agent_review_next(change_id: str, mode: str) -> str:
+    if mode == "unknown":
+        return "storyloop adapters check <project>"
+    if mode == "single":
+        return (f"storyloop base-review <project> --change {change_id} --verdict pass "
+                "--note '<核对内容>' --human-review '<至少 12 字理由>'")
+    return f"storyloop run <project> --change {change_id}"
 
 
 def _review_stop(project: Path, change: dict, state: dict, services=None) -> dict:
     review = state.get("base_review")
     if review is None:
         if state.get("implementer", "human") == "agent":
-            from .base_review import review_agent_candidate, single_vendor_only, vendor_context
+            from .base_review import review_agent_candidate
             try:
-                context = vendor_context(project, state)
-                if single_vendor_only(project, state, context):
+                mode, context = _agent_review_context(project, state)
+                if mode != "distinct":
                     return pause(project, state, "BASE_REVIEW_REQUIRED",
-                                 next=f"storyloop base-review <project> --change {change['change_id']} "
-                                      "--verdict pass --note '<核对内容>' "
-                                      "--human-review '<至少 12 字理由>'")
+                                 next=_agent_review_next(change["change_id"], mode))
                 review = review_agent_candidate(project, change, state, services, context)
             except StoryLoopError as exc:
                 if exc.code == "WORKSPACE_TAINTED" and "engine source" in str(exc):
