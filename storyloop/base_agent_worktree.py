@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 import tempfile
 import uuid
@@ -37,6 +38,15 @@ def _registered(project: Path, path: Path) -> bool:
                if line.startswith("worktree "))
 
 
+def _private_directory(path: Path) -> None:
+    path.mkdir(mode=0o700, exist_ok=True)
+    require(not path.is_symlink() and not (hasattr(path, "is_junction") and path.is_junction()),
+            "Agent worktree parent contains a symbolic link or junction")
+    if os.name == "posix":
+        require(path.stat().st_uid == os.getuid(), "Agent worktree parent belongs to another user")
+        path.chmod(0o700)
+
+
 def create_agent_worktree(project: Path, state: dict) -> Path:
     """Save the only cleanup anchor before asking Git to create a detached checkout."""
     project = Path(project).resolve()
@@ -52,7 +62,8 @@ def create_agent_worktree(project: Path, state: dict) -> Path:
     base = _outside_project(project, temp_root / "storyloop-agent-wt")
     path = _outside_project(project, base / repo / change_id / attempt)
     require(len(str(path)) <= 240, "Agent worktree path is too long")
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    for folder in (base, base / repo, path.parent):
+        _private_directory(folder)
     require(not path.exists(), "Agent attempt worktree path already exists")
     state["agent_worktree"] = {"path": str(path), "contract_commit": state["contract_commit"],
                                "attempt_id": attempt}

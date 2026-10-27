@@ -1,6 +1,7 @@
 """The disposable agent checkout is anchored before creation and cleaned by identity."""
 
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 import unittest
@@ -45,6 +46,13 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         self.assertEqual(self._git("worktree", "list", "--porcelain").count("worktree "), 2)
         self.assertEqual(load_json(run_path(self.project, self.state["change_id"]))["agent_worktree"]
                          ["contract_commit"], self.commit)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX directory modes only")
+    def test_every_engine_owned_parent_is_private(self):
+        checkout = create_agent_worktree(self.project, self.state)
+        self.addCleanup(remove_agent_worktree, self.project, self.state)
+        for folder in (checkout.parents[2], checkout.parents[1], checkout.parent):
+            self.assertEqual(folder.stat().st_mode & 0o777, 0o700, str(folder))
 
     def test_dirty_checkout_is_removed_without_touching_main(self):
         checkout = create_agent_worktree(self.project, self.state)
