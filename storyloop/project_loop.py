@@ -51,7 +51,7 @@ from .run_stops import pause
 from .oracle_counts import check_layers
 from .project_preparation import _prepare_acceptance
 from .project_profile import layer_commands
-from .processutil import redact
+from .processutil import redact, redaction_prefix
 from .system_smoke import run_system_smoke_isolated  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .smoke import RESULT_EVIDENCE  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .smoke import suite_relative  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
@@ -336,7 +336,7 @@ def _hand_back_attempt(project: Path, state: dict, error: StoryLoopError) -> Non
     moment = datetime.now(timezone.utc).isoformat(timespec="seconds")
     state.setdefault("agent_failures", []).append({
         "attempt": state["attempt"], "role": error.details.get("role"), "code": error.code,
-        "message": redact(str(error))[:600], "at": moment})
+        "message": redact(redaction_prefix(str(error), 600))[:600], "at": moment})
     consumed = state.get('planning', {}).get('consumed_attempt', 0)
     state["attempt"] = max(int(state["attempt"]) - 1, consumed)
     from .stop_report import build_stop
