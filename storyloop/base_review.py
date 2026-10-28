@@ -9,6 +9,7 @@ import re
 from .baseline import _git, load_project_config
 from .capability_protocol import normalize_vendor, observed_vendors
 from .engine_source_safety import engine_warning
+from .finding_disposition import dispose
 from .guarded_calls import read_only_call
 from .models import StoryLoopError, require, text
 from .project_agents import invoke_project_agent
@@ -110,6 +111,10 @@ def review_base_candidate(project: Path, change: dict, state: dict, services, re
         else:
             return pause_base_review(project, change, state, restart)
     if review.get("verdict") == "fail":
+        if state.get("implementer", "human") == "agent":
+            return pause(project, state, "BASE_REVIEW_REQUIRED",
+                         next=f"storyloop reset <project> --change {change['change_id']} "
+                              "--reason '<审查发现与重来原因>'")
         return restart(project, change, state, "Human candidate needs a new attempt", rejected=True)
     require(review.get("verdict") == "pass", "Independent base review is invalid")
     require(review.get("reviewer") not in base_candidate_authors(project, state),
@@ -163,10 +168,16 @@ def review_agent_candidate(project: Path, change: dict, state: dict, services=No
             state["engine_warning"] = warning
     answer = read_only_call(project, change["change_id"], operation,
                             post_call_guard=source_guard)
-    require(isinstance(answer, dict) and answer.get("verdict") == "pass"
-            and not answer.get("questions"), "Independent base agent review did not pass")
-    record = {"version": 1, "change_id": change["change_id"], "verdict": "pass",
+    require(isinstance(answer, dict) and isinstance(answer.get("findings"), list),
+            "Independent base agent review is invalid")
+    disposition = dispose(answer["findings"],
+                          load_project_config(project).get("review_thresholds", {}), [])
+    blocking = disposition["fix"] + disposition["stop"] + disposition["human"]
+    verdict = "fail" if blocking or answer.get("questions") else "pass"
+    record = {"version": 1, "change_id": change["change_id"], "verdict": verdict,
               "note": answer.get("summary", "independent agent review"),
+              "finding_disposition": disposition,
+              "findings": blocking, "questions": answer.get("questions") or [],
               "reviewer": f"agent:{context['review_adapter']}", "mode": "agent",
               "review_adapter": context["review_adapter"],
               "review_vendor": review_vendor, "implement_vendor": implement_vendor,
@@ -188,6 +199,18 @@ def review_agent_candidate(project: Path, change: dict, state: dict, services=No
 def single_vendor_only(project: Path, state: dict, context: dict | None = None) -> bool:
     context = context if context is not None else vendor_context(project, state)
     return context["available_vendors"] is not None and len(context["available_vendors"]) == 1
+
+
+def review_findings_markdown(review: dict) -> list[str]:
+    """Show nonblocking agent findings in the human-readable base report."""
+    lines = []
+    disposition = review.get("finding_disposition") or {}
+    for bucket, label in (("legacy_issue", "既有问题"), ("out_of_scope", "范围外")):
+        findings = disposition.get(bucket) or []
+        if findings:
+            lines += ["", f"## {label}", ""]
+            lines += [f"- {item.get('message', '')}" for item in findings]
+    return lines
 
 
 def record_human_review(project: Path, change_id: str, verdict: str, note: str,

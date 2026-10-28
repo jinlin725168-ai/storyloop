@@ -398,11 +398,13 @@ def _verified_report(project: Path, change: dict, state: dict, evidence: dict,
 
 
 def _base_markdown(report: dict) -> str:
+    from .base_review import review_findings_markdown
     lines = [f"# {report['change_id']} base 验证报告", "", f"目标：{report['goal']}", "",
              "## 批准路径", "", *(f"- `{path}`" for path in report["paths"]), "",
              "## 审查与人工验收", "", f"审查者：{report['review']['reviewer']}",
              f"结论：{report['review']['verdict']}",
              f"人工验收：{report['manual_acceptance'][0]['note']}"]
+    lines += review_findings_markdown(report["review"])
     if report.get("build_note"):
         lines += ["", report["build_note"]]
     if report.get("oracle_skills_approval"):

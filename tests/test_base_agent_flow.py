@@ -399,6 +399,63 @@ class BaseAgentFlowTests(unittest.TestCase):
         saved = load_json(run_path(self.root, self.change["change_id"]))
         self.assertEqual(saved["base_review"]["mode"], "agent")
 
+    def test_agent_review_ignores_fail_verdict_for_legacy_and_out_of_scope_findings(self):
+        self._agent_candidate()
+        findings = [{"message": "旧冒烟检查", "introduced": False, "confidence": 95},
+                    {"message": "范围外问题", "target": "out_of_scope", "confidence": 95}]
+        services = self._services()
+        reviewer = LoopServices(services.generate_smoke, services.implement,
+                                lambda *_: {"verdict": "fail", "summary": "发现既有问题",
+                                            "findings": findings, "questions": []},
+                                design=services.design)
+        context = {"implement_vendor": "openai", "review_vendor": "anthropic",
+                   "review_adapter": "reviewer", "available_vendors": {"openai", "anthropic"}}
+        with mock.patch("storyloop.base_review.vendor_context", return_value=context):
+            result = run_change(self.root, self.change["change_id"], services=reviewer)
+        self.assertEqual(result["status"], "MANUAL_ACCEPTANCE_REQUIRED")
+        review = load_json(run_path(self.root, self.change["change_id"]))["base_review"]
+        self.assertEqual(review["verdict"], "pass")
+        self.assertEqual(len(review["finding_disposition"]["legacy_issue"]), 1)
+        self.assertEqual(len(review["finding_disposition"]["out_of_scope"]), 1)
+        markdown = base_execution._base_markdown({
+            "change_id": self.change["change_id"], "goal": "更新构建配置",
+            "paths": ["pom.xml"], "review": review,
+            "manual_acceptance": [{"note": "已核对"}],
+        })
+        self.assertIn("旧冒烟检查", markdown)
+        self.assertIn("范围外问题", markdown)
+
+    def test_blocking_agent_review_waits_for_human_without_repeating_agents(self):
+        self._agent_candidate()
+        findings = [{"message": "新引入的构建缺陷", "introduced": True,
+                     "confidence": 95, "target": "code"}]
+        calls = []
+
+        def review(*_):
+            calls.append("review")
+            return {"verdict": "pass", "summary": "需要修复", "findings": findings,
+                    "questions": []}
+
+        def unexpected(*_):
+            self.fail("review failure must not re-run design or implementation")
+
+        services = LoopServices(unexpected, unexpected, review, design=unexpected)
+        context = {"implement_vendor": "openai", "review_vendor": "anthropic",
+                   "review_adapter": "reviewer", "available_vendors": {"openai", "anthropic"}}
+        with mock.patch("storyloop.base_review.vendor_context", return_value=context):
+            first = run_change(self.root, self.change["change_id"], services=services)
+            second = run_change(self.root, self.change["change_id"], services=services)
+        for result in (first, second):
+            self.assertEqual(result["status"], "BASE_REVIEW_REQUIRED")
+            self.assertIn("新引入的构建缺陷", result["stop"]["blocker"])
+            actions = [option["action"] for option in result["stop"]["options"]]
+            self.assertTrue(any("重新实现" in action for action in actions))
+            self.assertTrue(any("放弃" in action for action in actions))
+            self.assertIn("storyloop reset", result["stop"]["resume"])
+        self.assertEqual(calls, ["review"])
+        saved = load_json(run_path(self.root, self.change["change_id"]))
+        self.assertEqual(saved["candidate_commit"], saved["base_review"]["candidate_commit"])
+
     def test_agent_review_reads_vendor_context_once(self):
         self._agent_candidate()
         services = self._services()
