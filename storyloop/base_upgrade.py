@@ -91,6 +91,15 @@ def draft_from_proposal(project: Path, proposal_id: str, *, scope: str) -> dict:
     project = Path(project).resolve()
     proposal = load_json(project / ".storyloop/base-proposals" / f"{proposal_id}.json")
     proposal_path = project / ".storyloop/base-proposals" / f"{proposal_id}.json"
+    reference = proposal.get("reference")
+    if reference is not None:
+        expected = f".storyloop/base-proposals/{proposal_id}-reference.json"
+        require(isinstance(reference, dict) and set(reference) == {"path", "sha256"}
+                and reference["path"] == expected, "Invalid base proposal reference")
+        reference_path = project / expected
+        require(reference_path.is_file()
+                and hashlib.sha256(reference_path.read_bytes()).hexdigest() == reference["sha256"],
+                "Base proposal reference changed")
     proposal_sha256 = hashlib.sha256(proposal_path.read_bytes()).hexdigest()
     require(proposal.get("change_id") == proposal_id, "Base proposal identity mismatch")
     state_path = project / ".storyloop/state/changes" / f"{proposal_id}.json"

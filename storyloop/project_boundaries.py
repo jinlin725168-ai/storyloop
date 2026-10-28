@@ -168,6 +168,14 @@ def _write_base_proposal(
 ) -> Path:
     root = project / ".storyloop" / "base-proposals"
     root.mkdir(parents=True, exist_ok=True)
+    if change_id != "manual":
+        for existing_path in sorted(root.glob("BASE-*.json")):
+            existing = load_json(existing_path)
+            if (existing.get("triggered_by") == change_id
+                    and existing.get("baseline_source_head") == baseline["source_head"]
+                    and existing.get("changes") == changes
+                    and existing.get("status") == "PROPOSED"):
+                return existing_path
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
     existing = {path.stem for path in root.glob(f"BASE-{stamp}-*.json")}
     number = next(index for index in range(1, 1000)

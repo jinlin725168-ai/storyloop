@@ -133,6 +133,7 @@ rank = 7
 "facts" = { module = "implementation", zone = "mutable" }
 "failure_attribution" = { module = "implementation", zone = "mutable" }
 "project_loop_failures" = { module = "implementation", zone = "mutable" }
+"base_collision" = { module = "implementation", zone = "mutable" }
 "review_context" = { module = "verification", zone = "mutable" }
 "review_disposition" = { module = "verification", zone = "mutable" }
 "finding_disposition" = { module = "verification", zone = "mutable" }

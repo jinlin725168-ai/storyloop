@@ -32,6 +32,7 @@ from .failure_attribution import layer_attribution, next_mode
 from .facts import merge_facts
 from .models import StoryLoopError, require, text
 from .project_boundaries import audit_project_changes
+from .project_boundaries import _changed_paths
 from .project_contracts import validate_agent_summary, validate_review  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .project_git import current_branch, start_feature
 from .project_loop_finish import (complete_change, finalize_change, finish_merged, finish_receipting,
@@ -248,6 +249,7 @@ def _run_attempt(
                "mode": state["mode"],
                "design_plan": design_plan(state),
                **({"routing_tier": state["routing"]["effective_tier"]} if is_routed(change, state) else {})}
+    preexisting = set(_changed_paths(project))
     saved = cost_resume.candidate(project, state)
     response, touched = saved or write_safely(project, change_id, lambda: _implement_answer(services, project, context))
     if "_contract_error" in response:
@@ -255,11 +257,11 @@ def _run_attempt(
         return record_failure(project, state, {"attempt": state["attempt"], "contract": {
             "status": "INVALID", "message": response["_contract_error"]}}, "implement")
     cost_resume.checkpoint(project, state, response, touched)
-    return _judge_attempt(project, change, state, services, config, response, touched)
+    return _judge_attempt(project, change, state, services, config, response, touched, preexisting)
 
 
 def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServices, config: dict,
-                   response: dict, touched: set[str]) -> dict | None:
+                   response: dict, touched: list, preexisting: set[str]) -> dict | None:
     """Apply deterministic gates to one valid implement response."""
     change_id = change["change_id"]
     validate_agent_summary(response)
@@ -270,7 +272,7 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
     require_git_visible(touched, boundary)
     enforce_forbidden_paths(state, boundary)
     if boundary["violations"]:
-        return record_boundary(project, state, boundary)
+        return record_boundary(project, state, boundary, touched, preexisting)
     release_errata()
     if response["questions"]:
         return pause(project, state, "NEEDS_INPUT", questions=response["questions"])

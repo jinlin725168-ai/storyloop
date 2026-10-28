@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .evidence_locations import evidence_location_exists
+from .base_collision import link_base_collision
 from .failure_attribution import check_findings, failure_signature, finding_key, no_progress, route
 from .models import require, text
 from .project_loop_support import save_run
@@ -36,8 +37,11 @@ def record_failure(project: Path, state: dict, entry: dict, attribution: str) ->
     return None
 
 
-def record_boundary(project: Path, state: dict, boundary: dict) -> dict:
+def record_boundary(project: Path, state: dict, boundary: dict,
+                    touched: list | None = None, preexisting: set[str] | None = None) -> dict:
     """Record a boundary verdict once before preserving the existing boundary stop."""
+    if touched is not None:
+        link_base_collision(project, state, boundary, touched, preexisting or set())
     attribution = "base" if any(
         item.get("category") == "FOUNDATION_CHANGE" for item in boundary.get("violations") or []) else "implement"
     entry = {"attempt": state["attempt"], "boundary": boundary}
@@ -45,6 +49,8 @@ def record_boundary(project: Path, state: dict, boundary: dict) -> dict:
     if stopped is not None:
         return stopped
     details = {"violations": boundary["violations"], "base_proposal": boundary["base_proposal"]}
+    if state.get("blocked_by"):
+        details["blocked_by"] = state["blocked_by"]
     if boundary.get("ci_requires_human_proposal"):
         details["ci_requires_human_proposal"] = True
     return pause(project, state, boundary["status"], **details)

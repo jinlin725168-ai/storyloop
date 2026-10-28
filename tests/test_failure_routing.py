@@ -2,11 +2,16 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+import hashlib
+import json
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from storyloop.acceptance_repair import repair_smoke
 from storyloop.approvals import approve_change
+from storyloop.base_upgrade import draft_from_proposal
+from storyloop.changes import load_change
 from storyloop.baseline import bootstrap_project, load_project_config
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.cli import parser, run_with_answers
@@ -14,6 +19,7 @@ from storyloop.evidence_locations import evidence_location_exists
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, load_run_state, run_change
 from storyloop.project_loop_failures import record_boundary
+from storyloop.project_boundaries import audit_project_changes
 from storyloop.storage import write_json
 from tests.support import product
 from tests.boundary_diagnostics import diagnose_core_boundary
@@ -207,6 +213,72 @@ class ReviewRoutingTests(unittest.TestCase):
 
 
 class BoundaryAttributionTests(unittest.TestCase):
+    def test_unowned_write_during_boundary_stop_preserves_workspace(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = approved(root, add_core=True)
+
+            def implement(project, context):
+                (project / "pom.xml").write_text("<project>candidate</project>\n", encoding="utf-8")
+                return {"summary": "dependency needed", "questions": []}
+
+            def audit_with_external_write(project, selected_change):
+                result = audit_project_changes(project, selected_change)
+                (project / "personal.txt").write_text("human note\n", encoding="utf-8")
+                return result
+
+            with patch("storyloop.project_loop.audit_project_changes",
+                       side_effect=audit_with_external_write):
+                with self.assertRaises(StoryLoopError) as caught:
+                    run_change(root, change_id, LoopServices(
+                        generate_smoke=lambda p, s: smoke_payload(change_id),
+                        implement=implement, review=failing_review()))
+            self.assertEqual(caught.exception.code, "WORKSPACE_TAINTED")
+            self.assertTrue((root / "pom.xml").exists())
+            self.assertEqual((root / "personal.txt").read_text(encoding="utf-8"), "human note\n")
+
+    def test_base_collision_opens_linked_draft_and_restores_owned_candidate(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = approved(root, add_core=True)
+
+            def implement(project, context):
+                (project / "pom.xml").write_text(
+                    "<project><dependency>sample</dependency></project>\n", encoding="utf-8")
+                target = project / "modules/orders/service.py"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("VALUE = 1\n", encoding="utf-8")
+                return {"summary": "dependency and feature", "questions": []}
+
+            result = run_change(root, change_id, LoopServices(
+                generate_smoke=lambda p, s: smoke_payload(change_id),
+                implement=implement, review=failing_review()))
+
+            base_id = Path(result["base_proposal"]).stem
+            self.assertEqual(result["status"], "BASE_CHANGE_REQUIRED")
+            self.assertEqual(load_change(root, change_id)["blocked_by"], base_id)
+            self.assertEqual(load_run_state(root, change_id)["blocked_by"], base_id)
+            self.assertIn(f"--change {base_id}", result["next"])
+            self.assertIn(f"--change {base_id}", result["stop"]["options"][0]["command"])
+            draft = load_change(root, base_id)
+            self.assertEqual(draft["status"], "DRAFT")
+            self.assertEqual(draft["product"]["base"]["paths"], ["pom.xml"])
+            self.assertNotIn("reference", draft["product"])
+            proposal = json.loads(Path(result["base_proposal"]).read_text(encoding="utf-8"))
+            reference = root / proposal["reference"]["path"]
+            self.assertEqual(hashlib.sha256(reference.read_bytes()).hexdigest(),
+                             proposal["reference"]["sha256"])
+            self.assertIn("<dependency>sample</dependency>", reference.read_text(encoding="utf-8"))
+            preview = (root / ".storyloop/drafts" / base_id / "proposal.md").read_text(encoding="utf-8")
+            self.assertIn(proposal["reference"]["path"], preview)
+            self.assertIn("仅供参考", preview)
+            self.assertEqual((root / "pom.xml").read_text(encoding="utf-8"), "<project/>\n")
+            self.assertFalse((root / "modules/orders/service.py").exists())
+            self.assertFalse(git(root, "status", "--porcelain"))
+            reference.write_text("altered reference\n", encoding="utf-8")
+            with self.assertRaises(StoryLoopError):
+                draft_from_proposal(root, base_id, scope="foundation")
+
     def test_repeated_boundary_failure_stops_at_no_progress(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
