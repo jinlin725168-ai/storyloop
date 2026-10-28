@@ -219,6 +219,7 @@ def _start_run(project: Path, change: dict, routing: dict | None) -> tuple[dict,
     verify_baseline(project)
     state = _new_run_state(project, change_id, start_feature(project, change_id),
                            change["approval"]["contract_digest"])
+    state["e3_collision"] = True
     if routing is not None:
         state["routing"] = routing
     state["skills_used"] = role_skill_versions(project, load_project_config(project).get("profile", {}).get("stacks", []))

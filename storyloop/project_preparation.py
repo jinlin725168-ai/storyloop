@@ -118,7 +118,9 @@ def reprove_after_base(project: Path, change: dict, state: dict) -> dict | None:
     head = _git(project, "rev-parse", "HEAD").strip()
     if state["contract_commit"] != head:
         parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
-        require(parents[1:] == [state["contract_commit"], state["source_head"]],
+        from .base_follow import engine_feature_tail
+        require(len(parents) == 3 and parents[2] == state["source_head"]
+                and engine_feature_tail(project, state, parents[1]),
                 "New base must be merged onto the locked feature contract")
         load_smoke_manifest(project, change)
         _archive_old_evidence(project, state)
@@ -137,6 +139,8 @@ def reprove_after_base(project: Path, change: dict, state: dict) -> dict | None:
             state.pop(key, None)
         state["contract_commit"] = head
         state["red_evidence_sha256"] = red["evidence_sha256"]
+        state["base_upgrades"][-1]["voided_attempts"] = state["attempt"]
+        state["attempt"] = 0
         if state.get("planning"):
             from .routing_upgrade import invalidate_planning
             invalidate_planning(state, "Base upgrade changed plan inputs")

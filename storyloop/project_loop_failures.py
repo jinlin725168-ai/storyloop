@@ -40,7 +40,7 @@ def record_failure(project: Path, state: dict, entry: dict, attribution: str) ->
 def record_boundary(project: Path, state: dict, boundary: dict,
                     touched: list | None = None, preexisting: set[str] | None = None) -> dict:
     """Record a boundary verdict once before preserving the existing boundary stop."""
-    if touched is not None:
+    if touched is not None and state.get("e3_collision") is True:
         link_base_collision(project, state, boundary, touched, preexisting or set())
     attribution = "base" if any(
         item.get("category") == "FOUNDATION_CHANGE" for item in boundary.get("violations") or []) else "implement"

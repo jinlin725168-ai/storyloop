@@ -197,6 +197,42 @@ class E3MergeTests(unittest.TestCase):
         _follow_base_upgrade(self.root, state)
         self.assertEqual(git(self.root, "rev-parse", "HEAD"), parents[0])
 
+    def test_characterization_lock_commit_allows_merge_red_and_pass(self):
+        git(self.root, "switch", f"feature/{self.feature_id}")
+        lock = self.root / "tests/test_existing.py"
+        lock.parent.mkdir(exist_ok=True)
+        lock.write_text("# preserve old behavior\n", encoding="utf-8")
+        git(self.root, "add", "tests/test_existing.py")
+        git(self.root, "commit", "-m",
+            f"test({self.feature_id}): characterize touched paths")
+        lock_head = git(self.root, "rev-parse", "HEAD")
+        state = load_run_state(self.root, self.feature_id)
+        state["characterization"] = {"status": "GREEN", "tests": ["tests/test_existing.py"],
+                                     "touched": [], "commits": [lock_head]}
+        from storyloop.project_loop_support import save_run
+        save_run(self.root, state)
+        git(self.root, "switch", self.source_branch)
+        self.advance_base()
+
+        def implement(project, context):
+            target = project / "modules/orders/service.py"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("VALUE = 1\n", encoding="utf-8")
+            return {"summary": "done", "questions": []}
+
+        result = run_change(self.root, self.feature_id, LoopServices(
+            generate_smoke=lambda project, change: self.fail("locked suite must be reused"),
+            implement=implement,
+            review=lambda project, context: {"verdict": "pass", "summary": "ok",
+                                             "findings": [], "questions": []}))
+        self.assertEqual(result["status"], "PASSED")
+        state = load_run_state(self.root, self.feature_id)
+        parents = git(self.root, "rev-list", "--parents", "-n", "1",
+                      state["contract_commit"]).split()
+        self.assertEqual(parents[1:], [lock_head, self.source_head])
+        red = load_json(self.root / ".storyloop/evidence" / self.feature_id / RED_EVIDENCE)
+        self.assertEqual(red["head_commit"], state["contract_commit"])
+
     def test_run_merges_base_before_verifying_new_foundation(self):
         self.advance_base()
         state, _, fresh = _open_run(self.root, load_change(self.root, self.feature_id))
@@ -244,13 +280,37 @@ class E3MergeTests(unittest.TestCase):
                                              "findings": [], "questions": []}))
         self.assertEqual(result["status"], "PASSED")
         state = load_run_state(self.root, self.feature_id)
-        self.assertEqual(state["attempt"], 2)
+        self.assertEqual(state["attempt"], 1)
+        self.assertEqual(state["base_upgrades"][-1]["voided_attempts"], 1)
         self.assertEqual(len(state["failures"]), 1)
         self.assertNotEqual(state["contract_commit"], self.feature_head)
         self.assertEqual(load_json(red_path)["head_commit"], state["contract_commit"])
         self.assertNotEqual(red_path.read_bytes(), old_red)
         archive = red_path.parent / "history" / f"{self.feature_head[:12]}-{RED_EVIDENCE}"
         self.assertEqual(archive.read_bytes(), old_red)
+
+    def test_last_attempt_collision_gets_fresh_budget_after_base_red(self):
+        state = load_run_state(self.root, self.feature_id)
+        state["attempt"] = 3
+        from storyloop.project_loop_support import save_run
+        save_run(self.root, state)
+        self.advance_base()
+
+        def implement(project, context):
+            target = project / "modules/orders/service.py"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("VALUE = 1\n", encoding="utf-8")
+            return {"summary": "done", "questions": []}
+
+        result = run_change(self.root, self.feature_id, LoopServices(
+            generate_smoke=lambda project, change: self.fail("locked suite must be reused"),
+            implement=implement,
+            review=lambda project, context: {"verdict": "pass", "summary": "ok",
+                                             "findings": [], "questions": []}))
+        self.assertEqual(result["status"], "PASSED")
+        state = load_run_state(self.root, self.feature_id)
+        self.assertEqual(state["attempt"], 1)
+        self.assertEqual(state["base_upgrades"][-1]["voided_attempts"], 3)
 
     def test_old_red_cannot_open_implementation_after_base_merge(self):
         self.advance_base()

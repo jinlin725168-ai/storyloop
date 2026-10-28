@@ -30,7 +30,8 @@ def link_base_collision(project: Path, state: dict, boundary: dict,
         return None
     owned = {item.path for item in touched if not item.path.endswith("/")}
     visible = {item["path"] for item in boundary["allowed"] + violations}
-    if preexisting or not owned or owned != visible or owned != set(_changed_paths(project)):
+    if (not owned or owned & preexisting or owned != visible - preexisting
+            or visible != set(_changed_paths(project))):
         raise StoryLoopError("Cannot attribute all candidate paths to this implementation call",
                              code="WORKSPACE_TAINTED")
     entries = [_reference_entry(project, item.path, item.kind,
@@ -49,7 +50,8 @@ def link_base_collision(project: Path, state: dict, boundary: dict,
     save_run(project, state)
     for entry in entries:
         _restore_candidate(project, entry)
-    require(not _changed_paths(project), "Candidate cleanup left Git-visible changes")
+    require(set(_changed_paths(project)) == preexisting,
+            "Candidate cleanup changed preexisting Git-visible paths")
     return base_id
 
 
@@ -61,23 +63,32 @@ def _reference_entry(project: Path, relative: str, kind: str, category: str) -> 
         cursor /= part
         if cursor.is_symlink() or (hasattr(cursor, "is_junction") and cursor.is_junction()):
             raise StoryLoopError("Candidate path is a link", code="WORKSPACE_TAINTED")
-    if path.exists() and (not path.is_file() or path.stat().st_size > MAX_REFERENCE_FILE):
-        raise StoryLoopError("Candidate reference is not a bounded regular file",
+    if path.exists() and not path.is_file():
+        raise StoryLoopError("Candidate reference is not a regular file",
                              code="WORKSPACE_TAINTED")
-    after = path.read_bytes() if path.exists() else b""
     tracked = relative in _git(project, "ls-files", "--", relative).splitlines()
-    before = _git(project, "show", f"HEAD:{relative}").encode("utf-8") if tracked else b""
-    if len(before) > MAX_REFERENCE_FILE or len(after) > MAX_REFERENCE_FILE:
-        raise StoryLoopError("Candidate reference exceeds size limit", code="WORKSPACE_TAINTED")
-    try:
-        old, new = before.decode("utf-8"), after.decode("utf-8")
-    except UnicodeError as exc:
-        raise StoryLoopError("Candidate reference is not UTF-8 text",
-                             code="WORKSPACE_TAINTED") from exc
-    return {"path": relative, "kind": kind, "category": category, "tracked": tracked,
-            "before_sha256": hashlib.sha256(before).hexdigest(),
-            "after_sha256": hashlib.sha256(after).hexdigest(),
-            "before": redact(old), "after": redact(new)}
+    before_oid = _git(project, "rev-parse", f"HEAD:{relative}").strip() if tracked else None
+    before_size = int(_git(project, "cat-file", "-s", before_oid).strip()) if tracked else 0
+    after_size = path.stat().st_size if path.exists() else 0
+    after_oid = (_git(project, "hash-object", "--no-filters", "--", relative).strip()
+                 if path.exists() else None)
+    entry = {"path": relative, "kind": kind, "category": category, "tracked": tracked,
+             "before_size": before_size, "after_size": after_size,
+             "before_oid": before_oid, "after_oid": after_oid}
+    if max(before_size, after_size) <= MAX_REFERENCE_FILE:
+        before = _git(project, "show", f"HEAD:{relative}") if tracked else ""
+        after = path.read_bytes() if path.exists() else b""
+        try:
+            new = after.decode("utf-8")
+        except UnicodeError:
+            new = None
+        if new is not None and "\ufffd" not in before and "\x00" not in before + new:
+            old_bytes = before.encode("utf-8")
+            return {**entry, "content_saved": True,
+                    "before_sha256": hashlib.sha256(old_bytes).hexdigest(),
+                    "after_sha256": hashlib.sha256(after).hexdigest(),
+                    "before": redact(before), "after": redact(new)}
+    return {**entry, "content_saved": False, "note": "内容未保存"}
 
 
 def _store_reference(project: Path, proposal_path: Path, state: dict, entries: list[dict]) -> None:

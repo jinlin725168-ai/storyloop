@@ -10,7 +10,7 @@ from .baseline import _git
 from .changes import load_change
 from .git_command import git_is_ancestor
 from .models import StoryLoopError, require
-from .project_git import current_branch
+from .project_git import changed_paths, current_branch, exact_child_commit
 from .run_state import run_path, save_run
 from .storage import load_json
 
@@ -23,9 +23,11 @@ def merge_blocking_base(project: Path, state: dict, baseline: dict) -> None:
             and not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
             "Feature branch must be clean before merging the accepted base")
     parents = _git(project, "rev-list", "--parents", "-n", "1", "HEAD").split()
-    if parents[1:] != [state["contract_commit"], head]:
-        require(parents[0] == state["contract_commit"],
-                "Feature branch changed after the blocking base stop")
+    merged = len(parents) == 3 and parents[2] == head
+    feature_head = parents[1] if merged else parents[0]
+    require(engine_feature_tail(project, state, feature_head),
+            "Feature branch changed after the blocking base stop")
+    if not merged:
         try:
             _git(project, "merge", "--no-ff", "--no-edit", "--no-verify", state["source_branch"])
         except StoryLoopError as exc:
@@ -36,6 +38,30 @@ def merge_blocking_base(project: Path, state: dict, baseline: dict) -> None:
         "to": head})
     state["source_head"] = head
     save_run(project, state)
+
+
+def engine_feature_tail(project: Path, state: dict, head: str) -> bool:
+    """Accept only the recorded characterization commits atop the locked contract."""
+    contract = state["contract_commit"]
+    if head == contract:
+        return True
+    if not git_is_ancestor(project, contract, head):
+        return False
+    commits = _git(project, "rev-list", "--reverse", f"{contract}..{head}").splitlines()
+    recorded = (state.get("characterization") or {}).get("commits") or []
+    tests = set((state.get("characterization") or {}).get("tests") or [])
+    if not commits or commits != recorded or not tests:
+        return False
+    parent = contract
+    for commit in commits:
+        paths = changed_paths(project, parent, commit)
+        subject = _git(project, "log", "-1", "--format=%s", commit).strip()
+        if (not paths or not paths <= tests
+                or subject != f"test({state['change_id']}): characterize touched paths"
+                or not exact_child_commit(project, parent, paths, commit)):
+            return False
+        parent = commit
+    return True
 
 
 def _require_accepted_base(project: Path, state: dict, baseline: dict) -> None:
