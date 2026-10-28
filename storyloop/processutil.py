@@ -24,8 +24,30 @@ def redact(value: str) -> str:
     """Remove common credential forms before persisting or displaying output."""
     value = re.sub(r"(?i)(password|token|secret|authorization|api[_-]?key)\s*[:=]\s*[^\s,;]+",
                    r"\1=[REDACTED]", value)
-    return re.sub(r"([a-z][a-z0-9+.-]*://)[^\s/@]+:[^\s/@]+@",
-                  r"\1[REDACTED]@", value)
+    def hide_userinfo(match: re.Match[str]) -> str:
+        userinfo = match.group(1)
+        scheme_start = match.start()
+        while scheme_start and value[scheme_start - 1] in "abcdefghijklmnopqrstuvwxyz0123456789+.-":
+            scheme_start -= 1
+        scheme = value[scheme_start:match.start()]
+        colon = userinfo.find(":", 1)
+        return ("://[REDACTED]@" if any("a" <= char <= "z" for char in scheme)
+                and 0 < colon < len(userinfo) - 1 else match.group(0))
+
+    return re.sub(r"://([^\s/@]+)@", hide_userinfo, value)
+
+
+def redaction_prefix(value: str, limit: int) -> str:
+    """Bound a displayed prefix without exposing URL userinfo cut before its @."""
+    prefix = value[:limit]
+    if len(value) <= limit:
+        return prefix
+    marker = prefix.rfind("://")
+    if marker >= 0:
+        tail = prefix[marker + 3:]
+        if ":" in tail and not re.search(r"[\s/@]", tail):
+            return prefix[:marker + 3] + "[REDACTED]"
+    return prefix
 
 
 def _cleanup_call(action) -> bool:

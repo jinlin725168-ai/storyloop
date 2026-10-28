@@ -16,7 +16,7 @@ from pathlib import Path
 import secrets
 
 from .models import StoryLoopError
-from .processutil import redact
+from .processutil import redact, redaction_prefix
 from .storage import write_json, write_text_atomic
 
 CALLS_ROOT = Path(".storyloop/state/telemetry/calls")
@@ -56,7 +56,7 @@ def close_call(project: Path, call_id: str, *, status: str, wall_ms: int, respon
         if semantic_repair:
             meta["semantic_repair"] = True
         if error:
-            meta["error"] = redact(error)[:4000]
+            meta["error"] = redact(redaction_prefix(error, 4000))[:4000]
         if code:
             meta["code"] = code
         if schema_errors:
