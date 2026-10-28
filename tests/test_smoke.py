@@ -1,8 +1,10 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from storyloop.changes import load_change
 from storyloop.approvals import approve_change
@@ -10,12 +12,47 @@ from storyloop.baseline import bootstrap_project
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.smoke import install_smoke_suite, load_smoke_manifest
-from storyloop.smoke_runner import run_smoke_isolated
+from storyloop.smoke_runner import _run_test, run_smoke_isolated
+from storyloop.processutil import redact
 from tests.support import product
 from tests.test_baseline_behavior import repository
 
 
 NOW = datetime(2026, 9, 16, tzinfo=timezone.utc)
+
+
+class SmokeOutputLimitTests(unittest.TestCase):
+    def test_redaction_receives_only_the_persisted_output_prefix(self):
+        seen = []
+
+        def bounded_redact(value):
+            seen.append(len(value))
+            return redact(value)
+
+        outcome = {"stdout": "x" * 200_000, "stderr": "y" * 200_000,
+                   "contained": True, "timed_out": False, "truncated": False,
+                   "error": "", "returncode": 0}
+        test = {"id": "SMOKE-1", "criteria": [], "command": [sys.executable, "-V"],
+                "timeout_seconds": 5}
+        with patch("storyloop.smoke_runner.run_process", return_value=outcome), \
+                patch("storyloop.smoke_runner.count_tests", return_value={}), \
+                patch("storyloop.smoke_runner.redact", side_effect=bounded_redact):
+            result = _run_test(Path.cwd(), test, [])
+        self.assertEqual(seen, [100_000, 100_000])
+        self.assertEqual(result["stdout"], "x" * 100_000)
+        self.assertEqual(result["stderr"], "y" * 100_000)
+
+    def test_truncated_url_userinfo_is_not_published_without_its_at_sign(self):
+        prefix = "x" * 99_970
+        outcome = {"stdout": prefix + " http://alice:synthetic-secret@example.test",
+                   "stderr": "", "contained": True, "timed_out": False,
+                   "truncated": False, "error": "", "returncode": 0}
+        test = {"id": "SMOKE-1", "criteria": [], "command": [sys.executable, "-V"],
+                "timeout_seconds": 5}
+        with patch("storyloop.smoke_runner.run_process", return_value=outcome), \
+                patch("storyloop.smoke_runner.count_tests", return_value={}):
+            result = _run_test(Path.cwd(), test, [])
+        self.assertNotIn("alice:synthetic", result["stdout"])
 
 
 class SmokeSuiteTests(unittest.TestCase):

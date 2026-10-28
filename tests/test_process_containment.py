@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -18,7 +19,65 @@ from storyloop.processutil import (
     _start_windows,
     _stop_tree,
     run_process,
+    redact,
 )
+
+
+class RedactPerformanceTests(unittest.TestCase):
+    def test_url_userinfo_and_existing_labels_keep_their_output(self):
+        cases = {
+            "https://alice:p:a:s:s@example.test/path": "https://[REDACTED]@example.test/path",
+            "s3://:alice:pass@bucket/key": "s3://[REDACTED]@bucket/key",
+            "s3://alice:pass:@bucket/key": "s3://[REDACTED]@bucket/key",
+            "https://alice@example.test/path": "https://alice@example.test/path",
+            "token=synthetic-value": "token=[REDACTED]",
+            "plain/path/abc123": "plain/path/abc123",
+        }
+        for value, expected in cases.items():
+            with self.subTest(value=value):
+                self.assertEqual(redact(value), expected)
+
+    def test_adversarial_url_and_json_finish_within_two_seconds(self):
+        script = (
+            "from storyloop.processutil import redact\n"
+            "import sys\n"
+            "value = ('s3://' + 'a:' * 100000) if sys.argv[1] == 'url' "
+            "else (('x' * 200000) if sys.argv[1] == 'plain' "
+            "else ('{\"url\":\"http://localhost:8080\",\"k\":\"v\"' + ',\"k\":\"v\"' * 150000 + '}'))\n"
+            "redact(value)\n"
+        )
+        for sample in ("url", "json", "plain"):
+            with self.subTest(sample=sample):
+                result = subprocess.run(
+                    [sys.executable, "-c", script, sample], cwd=Path(__file__).resolve().parents[1],
+                    capture_output=True, text=True, timeout=2, check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_existing_post_redaction_limits_are_applied_before_scanning(self):
+        from storyloop.call_log import close_call, open_call
+        from storyloop.project_loop import _hand_back_attempt
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            call_id = open_call(root, "review", None, "command", {})
+            error = "x" * 3975 + " http://alice:synthetic-secret@example.test"
+            with patch("storyloop.call_log.redact", wraps=redact) as scanner:
+                close_call(root, call_id, status="ERROR", wall_ms=1, error=error)
+            self.assertLessEqual(len(scanner.call_args.args[0]), 4000)
+            self.assertNotIn("alice:synthetic", (root / ".storyloop/state/telemetry/calls"
+                                                    / call_id / "meta.json").read_text(encoding="utf-8"))
+
+        state = {"attempt": 1, "change_id": "FEAT-1"}
+        error = StoryLoopError("x" * 575 + " http://alice:synthetic-secret@example.test",
+                               code="AGENT_UNAVAILABLE")
+        with patch("storyloop.project_loop.redact", wraps=redact) as scanner, \
+                patch("storyloop.project_loop.save_run"), \
+                patch("storyloop.stop_report.build_stop", return_value={}):
+            _hand_back_attempt(Path.cwd(), state, error)
+        self.assertLessEqual(len(scanner.call_args_list[0].args[0]), 600)
+        self.assertNotIn("alice:synthetic", state["agent_failures"][0]["message"])
+
 
 
 class ProcessContainmentTests(unittest.TestCase):

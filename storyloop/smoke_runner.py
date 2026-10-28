@@ -21,7 +21,7 @@ from .harness_command import expand_command, harness_counts
 from .oracle_counts import count_tests, project_patterns
 from .path_security import safe_target
 from .project_profile import GENERATED_PATHS
-from .processutil import redact, run_process
+from .processutil import redact, redaction_prefix, run_process
 from .smoke import (RED_EVIDENCE, RESULT_EVIDENCE, load_smoke_manifest, protection_path, smoke_digests,
                     suite_relative, suite_root)
 from .storage import load_json, write_json
@@ -381,8 +381,8 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> 
         "returncode": outcome.get("returncode"),
         "timed_out": bool(outcome.get("timed_out")),
         "counts": counts,
-        "stdout": redact(str(outcome.get("stdout", "")))[:100_000],
-        "stderr": redact(str(outcome.get("stderr", "")))[:100_000],
+        "stdout": redact(redaction_prefix(str(outcome.get("stdout", "")), 100_000)),
+        "stderr": redact(redaction_prefix(str(outcome.get("stderr", "")), 100_000)),
     }
 
 
