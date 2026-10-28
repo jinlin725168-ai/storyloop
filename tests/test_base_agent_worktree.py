@@ -13,6 +13,7 @@ from storyloop.git_command import git as real_git
 from storyloop.run_state import run_path
 from storyloop.storage import load_json
 from storyloop.base_agent_worktree import create_agent_worktree, remove_agent_worktree
+import tests
 
 
 class BaseAgentWorktreeTests(unittest.TestCase):
@@ -22,6 +23,10 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.project = self.root / "project"
         self.project.mkdir()
+        agent_env = mock.patch.dict(os.environ, {"STORYLOOP_AGENT_WORKTREE_TEMP_ROOT":
+                                              str(self.root)})
+        agent_env.start()
+        self.addCleanup(agent_env.stop)
         self._git("init", "-q")
         self._git("config", "user.name", "Test")
         self._git("config", "user.email", "test@example.invalid")
@@ -36,6 +41,11 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         return subprocess.run(["git", *args], cwd=self.project, check=True,
                               capture_output=True, text=True).stdout
 
+    def test_tests_package_owns_a_shared_temporary_agent_root(self):
+        self.assertTrue(tests.AGENT_TEMP_ROOT.is_dir())
+        self.assertNotEqual(tests.AGENT_TEMP_ROOT.resolve(),
+                            (Path(tempfile.gettempdir()) / "storyloop-agent-wt").resolve())
+
     def test_checkout_is_detached_external_and_contains_only_tracked_files(self):
         (self.project / ".venv").mkdir()
         (self.project / ".venv/secret.txt").write_text("human", encoding="utf-8")
@@ -47,6 +57,22 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         self.assertEqual(self._git("worktree", "list", "--porcelain").count("worktree "), 2)
         self.assertEqual(load_json(run_path(self.project, self.state["change_id"]))["agent_worktree"]
                          ["contract_commit"], self.commit)
+
+    def test_agent_test_temp_root_does_not_add_system_worktree_content(self):
+        system_tree = Path(tempfile.gettempdir()) / "storyloop-agent-wt"
+        before = ({path.relative_to(system_tree) for path in system_tree.rglob("*")}
+                  if system_tree.exists() else set())
+        isolated = self.root / "agent-temp"
+        isolated.mkdir()
+        with mock.patch.dict(os.environ, {"STORYLOOP_AGENT_WORKTREE_TEMP_ROOT": str(isolated)}):
+            checkout = create_agent_worktree(self.project, self.state)
+            try:
+                self.assertTrue(checkout.is_relative_to(isolated.resolve() / "storyloop-agent-wt"))
+            finally:
+                remove_agent_worktree(self.project, self.state)
+        after = ({path.relative_to(system_tree) for path in system_tree.rglob("*")}
+                 if system_tree.exists() else set())
+        self.assertEqual(after, before)
 
     @unittest.skipUnless(os.name == "posix", "POSIX directory modes only")
     def test_every_engine_owned_parent_is_private(self):
@@ -145,8 +171,9 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         long_temp_root = self.root / ("x" * 80)
         long_temp_root.mkdir()
         try:
-            with mock.patch("storyloop.base_agent_worktree.tempfile.gettempdir",
-                            return_value=str(long_temp_root)):
+            with mock.patch.dict(os.environ, {"STORYLOOP_AGENT_WORKTREE_TEMP_ROOT": ""}), mock.patch(
+                    "storyloop.base_agent_worktree.tempfile.gettempdir",
+                    return_value=str(long_temp_root)):
                 with self.assertRaisesRegex(StoryLoopError, "path.*long"):
                     create_agent_worktree(self.project, self.state)
         finally:
@@ -175,8 +202,8 @@ class BaseAgentWorktreeTests(unittest.TestCase):
             shortcut.symlink_to(actual, target_is_directory=True)
         except OSError:
             self.skipTest("Directory symlinks need platform privileges")
-        with mock.patch("storyloop.base_agent_worktree.tempfile.gettempdir",
-                        return_value=str(shortcut)):
+        with mock.patch.dict(os.environ, {"STORYLOOP_AGENT_WORKTREE_TEMP_ROOT": ""}), mock.patch(
+                "storyloop.base_agent_worktree.tempfile.gettempdir", return_value=str(shortcut)):
             checkout = create_agent_worktree(self.project, self.state)
         self.addCleanup(remove_agent_worktree, self.project, self.state)
         self.assertTrue(checkout.parents[3].samefile(actual))
@@ -188,8 +215,8 @@ class BaseAgentWorktreeTests(unittest.TestCase):
         exclude = self.project / ".git/info/exclude"
         exclude.write_text(exclude.read_text(encoding="utf-8") + "\ntmp/\n",
                            encoding="utf-8")
-        with mock.patch("storyloop.base_agent_worktree.tempfile.gettempdir",
-                        return_value=str(inside)):
+        with mock.patch.dict(os.environ, {"STORYLOOP_AGENT_WORKTREE_TEMP_ROOT": ""}), mock.patch(
+                "storyloop.base_agent_worktree.tempfile.gettempdir", return_value=str(inside)):
             checkout = create_agent_worktree(self.project, self.state)
         self.addCleanup(remove_agent_worktree, self.project, self.state)
         self.assertFalse(checkout.is_relative_to(self.project))

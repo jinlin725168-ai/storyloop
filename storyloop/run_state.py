@@ -1,5 +1,7 @@
 """Bounded persistence for versioned run records; no transition decisions."""
 from pathlib import Path
+import hashlib
+import json
 from .storage import write_json
 
 # These values describe the on-disk/report format; transition policy lives in the kernel.
@@ -26,3 +28,26 @@ def save_run(project: Path, state: dict) -> None:
 
 def run_path(project: Path, change_id: str) -> Path:
     return project / ".storyloop" / "state" / "runs" / f"{change_id}.json"
+
+
+def base_design_approved(project: Path | str, state: dict) -> bool:
+    """Check saved plan and approval bytes before presenting the next run command."""
+    plan, approval = state.get("base_design"), state.get("base_design_approval")
+    if not isinstance(plan, dict) or not isinstance(approval, dict):
+        return False
+    if not plan.get("plan_id") or approval.get("plan_id") != plan["plan_id"]:
+        return False
+    change_id = state.get("change_id")
+    if not isinstance(change_id, str):
+        return False
+    for kind, value, folder in (("base_design", plan, "base-designs"),
+                                ("base_design_approval", approval, "base-design-approvals")):
+        path = Path(project) / ".storyloop/state" / folder / f"{change_id}.json"
+        try:
+            raw = path.read_bytes()
+            if (hashlib.sha256(raw).hexdigest() != state.get(kind + "_sha256")
+                    or json.loads(raw) != value):
+                return False
+        except (OSError, ValueError, UnicodeError):
+            return False
+    return True

@@ -3,9 +3,11 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from storyloop.adapter_capabilities import check, ensure_checked, probe
 from storyloop.baseline import bootstrap_project, load_project_config
+from storyloop.cli import dispatch, parser
 from storyloop.models import StoryLoopError
 from storyloop.storage import write_json
 from tests.test_baseline_behavior import repository
@@ -31,14 +33,61 @@ class AdapterCapabilityTests(unittest.TestCase):
             root = Path(folder)
             self._project(root, "not json")
             result = probe(root, "test", load_project_config(root)["adapters"]["test"])
-            self.assertEqual(result, {"known": False, "tiers": []})
+            self.assertEqual(result["known"], False)
+            self.assertIn("invalid", result["reason"])
 
     def test_probe_partial_json_reply_is_unknown(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             self._project(root, json.dumps({"vendor": "test", "tiers": ["strong", "standard"]}))
             result = probe(root, "test", load_project_config(root)["adapters"]["test"])
-            self.assertEqual(result, {"known": False, "tiers": []})
+            self.assertEqual(result["known"], False)
+            self.assertIn("invalid", result["reason"])
+
+    def test_handshake_uses_engine_python_even_when_path_python_differs(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._project(root, _capabilities(["strong", "standard"]))
+            config = load_project_config(root)
+            config["adapters"]["test"]["agent_command"][0] = "{python}"
+            write_json(root / ".storyloop/config.json", config)
+            with mock.patch("storyloop.capability_protocol.shutil.which", return_value="/wrong/python"):
+                result = check(root)
+            self.assertTrue(result["adapters"]["test"]["known"])
+            self.assertEqual((root / "probes.txt").read_text(encoding="utf-8"), "x")
+
+    def test_failed_handshake_explains_exit_without_process_output(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._project(root, _capabilities(["strong", "standard"]))
+            script = root / "adapter.py"
+            script.write_text("import missing_storyloop_trial_module\n", encoding="utf-8")
+            result = dispatch(parser().parse_args(["adapters", "check", str(root)]))
+            reason = result["adapters"]["test"].get("reason", "")
+            self.assertIn("exit 1", reason)
+            self.assertIn("adapter command", reason)
+            self.assertNotIn("missing_storyloop_trial_module", reason)
+            self.assertLessEqual(len(reason), 600)
+
+    def test_failed_handshake_never_exposes_stderr_or_stdout(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._project(root, _capabilities(["strong", "standard"]))
+            (root / "adapter.py").write_text(
+                "import sys; print('Authorization: Bearer secret-token-xyz', file=sys.stderr); "
+                "print('secret-token-xyz'); sys.exit(9)\n",
+                encoding="utf-8")
+            result = dispatch(parser().parse_args(["adapters", "check", str(root)]))
+            reason = result["adapters"]["test"]["reason"]
+            self.assertIn("exit 9", reason)
+            self.assertIn("adapter command", reason)
+            self.assertNotIn("secret-token-xyz", json.dumps(result))
+            from storyloop.cross_vendor import require_distinct
+            with self.assertRaises(StoryLoopError) as caught:
+                require_distinct({"cross_vendor_review": {"enabled": True},
+                                  "roles": {"default_adapter": "test", "review": {"adapter": "test"}}},
+                                 {"test": result["adapters"]["test"]})
+            self.assertNotIn("secret-token-xyz", str(caught.exception))
 
     def test_check_rejects_known_missing_requested_tier(self):
         with tempfile.TemporaryDirectory() as folder:

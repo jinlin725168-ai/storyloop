@@ -1,5 +1,6 @@
 """The selected base implementer is frozen in a real run."""
 
+from pathlib import Path
 import unittest
 from unittest import mock
 
@@ -12,6 +13,8 @@ from storyloop.project_loop import _new_run_state, run_change as _run_change
 from storyloop.run_services import LoopServices
 from storyloop.run_state import run_path
 from storyloop.storage import load_json, write_json
+from storyloop.change_log import change_log, render_log
+from storyloop.cli import dispatch, parser
 from tests import test_base_lifecycle as lifecycle
 
 
@@ -23,6 +26,21 @@ def run_change(*args, **kwargs):
 
 class BaseAgentFlowTests(unittest.TestCase):
     setUp = lifecycle.BaseG1Tests.setUp
+
+    def test_review_context_uses_error_code_instead_of_message_text(self):
+        from storyloop.base_review import agent_review_context
+        error = StoryLoopError("renamed error text", code="BASE_REVIEW_UNCONFIGURED")
+        with mock.patch("storyloop.base_review.vendor_context", side_effect=error):
+            self.assertEqual(agent_review_context(self.root, {"agent_adapter": None})[0], "unknown")
+        different = StoryLoopError("Agent base review needs configured adapters",
+                                   code="AGENT_UNAVAILABLE")
+        with mock.patch("storyloop.base_review.vendor_context", side_effect=different):
+            with self.assertRaises(StoryLoopError):
+                agent_review_context(self.root, {"agent_adapter": None})
+
+    def test_base_execution_module_stays_within_file_size_limit(self):
+        self.assertLessEqual(len(Path(base_execution.__file__).read_text(encoding="utf-8").splitlines()),
+                             500)
 
     def _services(self):
         return LoopServices(
@@ -40,6 +58,46 @@ class BaseAgentFlowTests(unittest.TestCase):
                             implementer="agent")
         self.assertEqual(result["status"], "DESIGN_APPROVAL_REQUIRED")
         self.assertEqual(load_json(run_path(self.root, self.change["change_id"]))["implementer"], "agent")
+
+    def test_design_stop_commands_and_summary_match_status_and_log(self):
+        change_id = self.change["change_id"]
+        result = run_change(self.root, change_id, services=self._services())
+        plan = load_json(self.root / ".storyloop/state/base-designs" / f"{change_id}.json")
+        command = result["next"]
+        self.assertIn("storyloop base-design-approve", command)
+        self.assertEqual(result["stop"]["options"][0]["command"], command)
+        self.assertEqual(result["stop"]["resume"], command)
+        status = dispatch(parser().parse_args(["status", str(self.root), "--change", change_id]))
+        log = change_log(self.root, change_id)
+        self.assertEqual(status["next"], command)
+        self.assertEqual(log["next"], command)
+        for view in (result["stop"], status["stop"], log["stop"]):
+            summary = view["plan_summary"]
+            self.assertEqual(summary["goal"], plan["goal"])
+            self.assertEqual(summary["summary"], plan["summary"])
+            self.assertEqual(summary["paths"], ["pom.xml"])
+            self.assertIn("编辑 pom.xml", summary["steps"])
+            self.assertIn("构建可能失败", summary["risks"])
+            self.assertEqual(summary["rollback"], "恢复原文件")
+        rendered = render_log(log)
+        for value in (plan["goal"], "pom.xml", "编辑 pom.xml", "构建可能失败", "恢复原文件"):
+            self.assertIn(value, rendered)
+        self.assertIn("更新构建配置", plan["goal"])
+        self.assertNotIn("\\u", (self.root / ".storyloop/state/base-designs" /
+                                  f"{change_id}.json").read_text(encoding="utf-8"))
+
+    def test_approved_design_status_and_log_point_to_run(self):
+        from storyloop.base_design import approve_base_design
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, services=self._services())
+        state = load_json(run_path(self.root, change_id))
+        approve_base_design(self.root, change_id, state["base_design"]["plan_id"])
+        status = dispatch(parser().parse_args(["status", str(self.root), "--change", change_id]))
+        log = change_log(self.root, change_id)
+        for view in (status, log):
+            self.assertIn("storyloop run", view["next"])
+            self.assertNotIn("base-design-approve", view["next"])
+            self.assertIn("storyloop run", view["stop"]["resume"])
 
     def test_ci_defaults_to_human_and_rejects_explicit_agent(self):
         proposed = base_upgrade.propose_base_change(
@@ -192,8 +250,139 @@ class BaseAgentFlowTests(unittest.TestCase):
 
         writer = LoopServices(services.generate_smoke, implement, services.review,
                               design=services.design)
-        self.assertEqual(run_change(self.root, change_id, services=writer)["status"],
-                         "BASE_REVIEW_REQUIRED")
+        result = run_change(self.root, change_id, services=writer)
+        self.assertEqual(result["status"], "BASE_REVIEW_REQUIRED")
+        return result
+
+    def test_distinct_vendor_review_stop_points_to_agent_run(self):
+        context = {"implement_vendor": "openai", "review_vendor": "anthropic",
+                   "review_adapter": "reviewer", "available_vendors": {"openai", "anthropic"}}
+        with mock.patch("storyloop.base_review.vendor_context", return_value=context):
+            result = self._agent_candidate()
+        self.assertIn("跨厂商代理审查", result["stop"]["blocker"])
+        self.assertEqual(result["next"], f"storyloop run <project> --change {self.change['change_id']}")
+        self.assertIn("storyloop run", result["stop"]["options"][0]["command"])
+        self.assertNotIn("base-review", str(result["stop"]))
+
+    def test_unrelated_manual_adapter_does_not_hide_distinct_review_vendors(self):
+        from storyloop.base_review import vendor_context
+        state = {"agent_adapter": "writer", "agent_vendor": "openai"}
+        config = {"adapters": {"writer": {"kind": "command"},
+                               "reviewer": {"kind": "command"},
+                               "manual": {"kind": "manual"}},
+                  "roles": {"default_adapter": "writer", "review": {"adapter": "reviewer"}}}
+        capabilities = {"writer": {"vendor": "openai"},
+                        "reviewer": {"vendor": "anthropic"}, "manual": {}}
+        with (mock.patch("storyloop.base_review.load_project_config", return_value=config),
+              mock.patch("storyloop.base_review.enabled", return_value=True),
+              mock.patch("storyloop.base_review.resolve_adapters", return_value=config["adapters"]),
+              mock.patch("storyloop.base_review.role_settings", return_value={"adapter": "reviewer"}),
+              mock.patch("storyloop.base_review.load_json",
+                         return_value={"adapters": capabilities})):
+            context = vendor_context(self.root, state)
+        self.assertEqual(context["available_vendors"], {"openai", "anthropic"})
+
+    def test_unrelated_unknown_adapter_does_not_block_distinct_review(self):
+        from storyloop.base_review import agent_review_context
+        context = {"implement_vendor": "openai", "review_vendor": "anthropic",
+                   "review_adapter": "reviewer", "available_vendors": None}
+        with mock.patch("storyloop.base_review.vendor_context", return_value=context):
+            self.assertEqual(agent_review_context(self.root, {"agent_adapter": "writer"})[0],
+                             "distinct")
+
+    def test_vendor_context_reads_one_handshake_record_for_all_adapters(self):
+        from storyloop.base_review import vendor_context
+        state = {"agent_adapter": "writer", "agent_vendor": "openai"}
+        adapters = {"writer": {"kind": "command"}, "reviewer": {"kind": "command"},
+                    "manual": {"kind": "manual"}}
+        config = {"adapters": adapters, "roles": {"default_adapter": "writer",
+                                                "review": {"adapter": "reviewer"}}}
+        record = {"adapters": {"writer": {"vendor": "openai"},
+                               "reviewer": {"vendor": "anthropic"}, "manual": {}}}
+        with (mock.patch("storyloop.base_review.load_project_config", return_value=config),
+              mock.patch("storyloop.base_review.enabled", return_value=True),
+              mock.patch("storyloop.base_review.resolve_adapters", return_value=adapters),
+              mock.patch("storyloop.base_review.role_settings", return_value={"adapter": "reviewer"}),
+              mock.patch("storyloop.base_review.load_json", return_value=record) as read):
+            context = vendor_context(self.root, state)
+        self.assertEqual(context["available_vendors"], {"openai", "anthropic"})
+        read.assert_called_once()
+
+    def test_same_vendor_with_other_proven_vendor_points_to_review_role_configuration(self):
+        from storyloop.base_review import agent_review_context, agent_review_next
+        from storyloop.stop_report import build_stop
+        context = {"implement_vendor": "openai", "review_vendor": "openai",
+                   "review_adapter": "reviewer2", "available_vendors": {"openai", "anthropic"}}
+        with mock.patch("storyloop.base_review.vendor_context", return_value=context):
+            mode, _ = agent_review_context(self.root, {"agent_adapter": "writer"})
+        self.assertEqual(mode, "reconfigure")
+        hint = agent_review_next(self.change["change_id"], mode)
+        self.assertIn("roles.review.adapter", hint)
+        self.assertNotIn("adapters check", hint)
+        state = {"change_id": self.change["change_id"], "implementer": "agent",
+                 "base_review_mode": mode}
+        stop = build_stop(self.root, state, "BASE_REVIEW_REQUIRED", {})
+        self.assertIn("roles.review.adapter", stop["blocker"])
+        self.assertNotIn("握手未知", stop["blocker"])
+
+    def test_other_proven_vendor_disallows_same_vendor_human_substitute(self):
+        from storyloop.base_review import single_vendor_only, vendor_context
+        from storyloop.adapter_capabilities import require_base_review_vendors
+        state = {"agent_adapter": "writer", "agent_vendor": "openai"}
+        adapters = {"writer": {"kind": "command"}, "reviewer2": {"kind": "command"},
+                    "claude": {"kind": "command"}, "manual": {"kind": "manual"}}
+        config = {"adapters": adapters, "roles": {"default_adapter": "writer",
+                                                  "review": {"adapter": "reviewer2"}}}
+        capabilities = {"writer": {"vendor": "openai"}, "reviewer2": {"vendor": "openai"},
+                        "claude": {"vendor": "anthropic"}, "manual": {}}
+        with (mock.patch("storyloop.base_review.load_project_config", return_value=config),
+              mock.patch("storyloop.base_review.enabled", return_value=True),
+              mock.patch("storyloop.base_review.resolve_adapters", return_value=adapters),
+              mock.patch("storyloop.base_review.role_settings", return_value={"adapter": "reviewer2"}),
+              mock.patch("storyloop.base_review.load_json",
+                         side_effect=lambda _path: {"adapters": capabilities})):
+            context = vendor_context(self.root, state)
+            self.assertEqual(context["available_vendors"], {"openai", "anthropic"})
+            self.assertFalse(single_vendor_only(self.root, state, context))
+            capabilities["claude"] = {}
+            self.assertIsNone(vendor_context(self.root, state)["available_vendors"])
+            capabilities["claude"] = {"vendor": "anthropic"}
+        with (mock.patch("storyloop.adapter_capabilities.ensure_checked",
+                         return_value={"adapters": capabilities}),
+              mock.patch("storyloop.adapter_capabilities.resolve_adapters", return_value=adapters),
+              mock.patch("storyloop.adapter_capabilities.role_settings",
+                         side_effect=[{"adapter": "writer"}, {"adapter": "reviewer2"}])):
+            with self.assertRaisesRegex(StoryLoopError, "review|different vendor|跨厂商"):
+                require_base_review_vendors(self.root, config)
+
+    def test_implement_vendor_mismatch_discards_candidate_instead_of_waiting_for_handshake(self):
+        self._agent_candidate()
+        with mock.patch("storyloop.base_review.vendor_context",
+                        side_effect=StoryLoopError(
+                            "Base implement vendor handshake changed after candidate creation")):
+            result = run_change(self.root, self.change["change_id"], services=self._services())
+        self.assertEqual(result["status"], "CONTRACT_COMMITTED")
+        self.assertNotIn("candidate_commit", load_json(run_path(self.root, self.change["change_id"])))
+
+    def test_single_vendor_review_stop_only_offers_human_substitute(self):
+        context = {"implement_vendor": "openai", "review_vendor": "openai",
+                   "review_adapter": "one", "available_vendors": {"openai"}}
+        with mock.patch("storyloop.base_review.vendor_context", return_value=context):
+            result = self._agent_candidate()
+        self.assertIn("--human-review", result["next"])
+        self.assertIn("--human-review", result["stop"]["options"][0]["command"])
+
+    def test_missing_reviewer_vendor_stops_without_human_fallback(self):
+        context = {"implement_vendor": "openai", "review_vendor": None,
+                   "review_adapter": "reviewer", "available_vendors": None}
+        with mock.patch("storyloop.base_review.vendor_context", return_value=context):
+            self._agent_candidate()
+            result = run_change(self.root, self.change["change_id"], services=self._services())
+        self.assertEqual(result["status"], "BASE_REVIEW_REQUIRED")
+        self.assertIn("握手", result["stop"]["blocker"])
+        self.assertIn("storyloop adapters check <project>", result["next"])
+        self.assertIn("作废", result["stop"]["blocker"])
+        self.assertNotIn("base-review", str(result["stop"]))
 
     def test_distinct_vendor_agent_review_advances_to_acceptance(self):
         self._agent_candidate()

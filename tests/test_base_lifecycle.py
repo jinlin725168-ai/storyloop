@@ -25,6 +25,12 @@ class BaseG1Tests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
+        agent_temp = tempfile.TemporaryDirectory()
+        self.addCleanup(agent_temp.cleanup)
+        agent_env = mock.patch.dict("os.environ", {"STORYLOOP_AGENT_WORKTREE_TEMP_ROOT":
+                                           agent_temp.name})
+        agent_env.start()
+        self.addCleanup(agent_env.stop)
         self.root = Path(self.folder.name)
         repository(self.root)
         smoke = self.root / "acceptance/smoke"

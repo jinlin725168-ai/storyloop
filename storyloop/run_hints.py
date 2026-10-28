@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import shlex
 from .routing_report import routing_options
+from .run_state import base_design_approved
 
 
 def append_pending_memory(project: Path | str, value: str | None) -> str | None:
@@ -27,6 +28,13 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
               details: dict | None = None) -> str | None:
     """A copy-pasteable next action for a run status or error code; None when nothing is pending."""
     details = details or {}
+    if status == "DESIGN_APPROVAL_REQUIRED" and isinstance(details.get("base_design"), dict):
+        plan_id = details["base_design"].get("plan_id")
+        if isinstance(plan_id, str) and plan_id:
+            if base_design_approved(project, details):
+                return f"storyloop run <project> --change {change_id}"
+            return (f"storyloop base-design-approve <project> --change {change_id} "
+                    f"--plan-id {plan_id}")
     options = routing_options(project, change_id, status, details)
     if options:
         return options[0]["command"]

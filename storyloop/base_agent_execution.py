@@ -89,8 +89,8 @@ def _pause_agent_issue(project: Path, change: dict, state: dict, reason: str,
 
 
 def _prepare_agent_call(project: Path, change: dict, state: dict) -> Path:
-    from .adapter_capabilities import ensure_checked
     from .baseline import load_project_config
+    from .adapter_capabilities import require_base_review_vendors
     from .role_profiles import enabled, resolve_adapters, role_settings
     config = load_project_config(project)
     if enabled(config):
@@ -102,7 +102,7 @@ def _prepare_agent_call(project: Path, change: dict, state: dict) -> Path:
     state["base_inflight"] = "agent_capability_check"
     save_run(project, state)
     if enabled(config):
-        ensure_checked(project)
+        require_base_review_vendors(project, config)
     state["agent_control_binding"] = agent_control_binding(project, change["change_id"])
     try:
         state["agent_engine_digest"] = engine_source_digest(Path(state["engine_source"]))
