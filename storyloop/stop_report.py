@@ -214,6 +214,17 @@ def _base_design_stop(project: Path | str, state: dict, change_id: str) -> tuple
 
 
 def _agent_review_stop(state: dict, change_id: str) -> tuple[str, list[dict], str]:
+    review = state.get("base_review") or {}
+    if review.get("verdict") == "fail":
+        findings = review.get("findings") or []
+        summary = "; ".join(str(item.get("message", "")) for item in findings[:3])
+        if not summary:
+            summary = "; ".join(str(item) for item in (review.get("questions") or [])[:3])
+        hint = (f"storyloop reset <project> --change {change_id} "
+                "--reason '<审查发现与重来原因>'")
+        return (hint, [{"action": "作废本次尝试并重新实现", "command": hint},
+                       {"action": "放弃（保留此停点，不再运行该变更）", "command": ""}],
+                f"底座代理审查未通过；{len(findings)} 条阻断发现：{summary[:300]}")
     mode = state.get("base_review_mode", "unknown")
     if mode == "single":
         hint = (f"storyloop base-review <project> --change {change_id} --verdict pass "

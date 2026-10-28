@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from .baseline import load_baseline, load_project_config
-from .models import identifier, require, text
+from .models import StoryLoopError, identifier, require, text
 from .product_contract import SLUG, nature_of, validate_product
 from .openspec_docs import capability_of, render_delta_spec
 from .requirement_checklist import evaluate_checklist, render_checklist
@@ -60,7 +60,10 @@ def create_change(
 def load_change(project: Path, change_id: str) -> dict:
     """Load a validated local product change state."""
     change_id = identifier(change_id, "change id")
-    value = load_json(_state_path(Path(project).resolve(), change_id))
+    path = _state_path(Path(project).resolve(), change_id)
+    if not path.exists():
+        raise StoryLoopError(f"变更 {change_id} 不存在")
+    value = load_json(path)
     required = {
         "version", "change_id", "status", "revision", "idea", "product",
         "created_at", "updated_at", "history", "approval",

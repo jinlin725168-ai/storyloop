@@ -5,12 +5,18 @@ from unittest.mock import patch
 
 from storyloop.cli import dispatch, parser
 from storyloop.changes import load_change
+from storyloop.models import StoryLoopError
 from tests.test_intake import assessed_product as product
 from tests.routing_support import readiness_repository
 from storyloop.readiness import inspect_readiness, approve_readiness
 
 
 class ProductCliTests(unittest.TestCase):
+    def test_missing_change_names_the_change_instead_of_json_error(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaisesRegex(StoryLoopError, "变更 BASE-MISSING 不存在"):
+                load_change(Path(folder), "BASE-MISSING")
+
     def test_help_surface_includes_product_change_and_ci_commands(self):
         help_text = parser().format_help()
         self.assertIn("change", help_text)
