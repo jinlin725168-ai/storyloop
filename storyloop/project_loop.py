@@ -51,7 +51,7 @@ from .project_loop_failures import (apply_overrule, epoch_of, record_boundary, r
 from .project_loop_support import control_digest, run_path, save_run  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .run_stops import pause
 from .oracle_counts import check_layers
-from .project_preparation import _prepare_acceptance
+from .project_preparation import _prepare_acceptance, reprove_after_base
 from .project_profile import layer_commands
 from .processutil import redact, redaction_prefix
 from .system_smoke import run_system_smoke_isolated  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
@@ -150,9 +150,15 @@ def _resume_and_prepare(project: Path, change: dict, state: dict, services: Loop
     if state["status"] == "FINALIZING":
         return finalize_change(project, change, state)
     if state["status"] == "BASE_CHANGE_REQUIRED" and state.get("blocked_by"):
-        return pause(project, state, "BASE_CHANGE_REQUIRED", blocked_by=state["blocked_by"],
-                     base_proposal=state.get("base_proposal"),
-                     violations=state.get("violations", []))
+        parents = _git(project, "rev-list", "--parents", "-n", "1", "HEAD").split()
+        merged = len(parents) == 3 and parents[2] == state["source_head"]
+        if not merged:
+            return pause(project, state, "BASE_CHANGE_REQUIRED", blocked_by=state["blocked_by"],
+                         base_proposal=state.get("base_proposal"),
+                         violations=state.get("violations", []))
+        paused = reprove_after_base(project, change, state)
+        if paused is not None:
+            return paused
     if fresh or state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}:
         paused = _prepare_acceptance(project, change, services, state)
         if paused is not None:

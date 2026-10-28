@@ -12,9 +12,12 @@ from storyloop.base_build_config import confirm_legacy_base_build
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, run_change, load_run_state
-from storyloop.project_loop import _follow_base_upgrade
-from storyloop.changes import contract_digest
+from storyloop.project_loop import _follow_base_upgrade, _open_run
+from storyloop.project_preparation import reprove_after_base
+from storyloop.changes import contract_digest, load_change
 from storyloop.storage import load_json, write_json
+from storyloop.smoke import RED_EVIDENCE
+from storyloop.run_transitions import transition
 from tests.support import product
 from tests.test_baseline_behavior import git, repository
 from tests.test_project_loop import smoke_payload
@@ -196,11 +199,9 @@ class E3MergeTests(unittest.TestCase):
 
     def test_run_merges_base_before_verifying_new_foundation(self):
         self.advance_base()
-        result = run_change(self.root, self.feature_id, LoopServices(
-            generate_smoke=lambda project, change: self.fail("old smoke must not regenerate"),
-            implement=lambda project, context: self.fail("old candidate must not run"),
-            review=lambda project, context: self.fail("old review must not run")))
-        self.assertEqual(result["status"], "BASE_CHANGE_REQUIRED")
+        state, _, fresh = _open_run(self.root, load_change(self.root, self.feature_id))
+        self.assertFalse(fresh)
+        self.assertEqual(state["status"], "BASE_CHANGE_REQUIRED")
         self.assertEqual(len(git(self.root, "rev-list", "--parents", "-n", "1", "HEAD").split()), 3)
 
     def test_receipt_version_mismatch_blocks_merge(self):
@@ -224,6 +225,66 @@ class E3MergeTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "WORKSPACE_TAINTED")
         self.assertEqual(git(self.root, "branch", "--show-current"), f"feature/{self.feature_id}")
         self.assertIn("AA openspec/changes", git(self.root, "status", "--porcelain"))
+
+    def test_new_base_reproves_red_and_completes_original_feature(self):
+        self.advance_base()
+        red_path = self.root / ".storyloop/evidence" / self.feature_id / RED_EVIDENCE
+        old_red = red_path.read_bytes()
+
+        def implement(project, context):
+            target = project / "modules/orders/service.py"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("VALUE = 1\n", encoding="utf-8")
+            return {"summary": "implemented on new base", "questions": []}
+
+        result = run_change(self.root, self.feature_id, LoopServices(
+            generate_smoke=lambda project, change: self.fail("locked suite must be reused"),
+            implement=implement,
+            review=lambda project, context: {"verdict": "pass", "summary": "ok",
+                                             "findings": [], "questions": []}))
+        self.assertEqual(result["status"], "PASSED")
+        state = load_run_state(self.root, self.feature_id)
+        self.assertEqual(state["attempt"], 2)
+        self.assertEqual(len(state["failures"]), 1)
+        self.assertNotEqual(state["contract_commit"], self.feature_head)
+        self.assertEqual(load_json(red_path)["head_commit"], state["contract_commit"])
+        self.assertNotEqual(red_path.read_bytes(), old_red)
+        archive = red_path.parent / "history" / f"{self.feature_head[:12]}-{RED_EVIDENCE}"
+        self.assertEqual(archive.read_bytes(), old_red)
+
+    def test_old_red_cannot_open_implementation_after_base_merge(self):
+        self.advance_base()
+        state = load_run_state(self.root, self.feature_id)
+        _follow_base_upgrade(self.root, state)
+        with self.assertRaises(StoryLoopError):
+            transition(self.root, state, "IMPLEMENTING", event="begin_attempt")
+
+    def test_new_base_invalidates_old_routing_plan(self):
+        self.advance_base()
+        state = load_run_state(self.root, self.feature_id)
+        state["planning"] = {"plan": {"status": "DONE", "binding": {
+            "source_commit": state["contract_commit"]}}}
+        _follow_base_upgrade(self.root, state)
+        change = load_json(self.root / ".storyloop/state/changes" / f"{self.feature_id}.json")
+        self.assertIsNone(reprove_after_base(self.root, change, state))
+        self.assertNotIn("plan", state["planning"])
+        self.assertEqual(state["planning"]["history"][-1]["reason"],
+                         "Base upgrade changed plan inputs")
+
+    def test_fresh_red_allows_a_characterization_lock_commit(self):
+        self.advance_base()
+        state = load_run_state(self.root, self.feature_id)
+        _follow_base_upgrade(self.root, state)
+        change = load_json(self.root / ".storyloop/state/changes" / f"{self.feature_id}.json")
+        self.assertIsNone(reprove_after_base(self.root, change, state))
+        target = self.root / "tests/test_existing.py"
+        target.parent.mkdir(exist_ok=True)
+        target.write_text("# existing behavior lock\n", encoding="utf-8")
+        git(self.root, "add", "tests/test_existing.py")
+        git(self.root, "commit", "-m", "characterization lock")
+        state["characterization"] = {"status": "GREEN"}
+        transition(self.root, state, "IMPLEMENTING", event="begin_attempt")
+        self.assertEqual(state["status"], "IMPLEMENTING")
 
 
 if __name__ == "__main__":
