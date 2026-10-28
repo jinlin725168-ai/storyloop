@@ -1,5 +1,6 @@
 """The suite runner: the core list stays real, and a failing module fails the whole run."""
 import subprocess
+import os
 import sys
 import tempfile
 import unittest
@@ -82,13 +83,14 @@ class RunnerTests(unittest.TestCase):
         (root / "tests" / "test_broken.py").write_text("import does_not_exist\n", encoding="utf-8")
         self.assertEqual(_run("--suite", "full", root=root).returncode, 1)
 
-    def test_runner_rejects_new_content_in_system_agent_worktree_root(self):
+    def test_runner_rejects_own_agent_worktree_leak_and_cleans_its_root(self):
         from tests import run as runner
         isolated = Path(self.enterContext(tempfile.TemporaryDirectory()))
-        leaked = isolated / "storyloop-agent-wt" / "from-test-module"
+        created = []
         def fake_module(_root, name):
-            leaked.parent.mkdir()
+            leaked = Path(os.environ["STORYLOOP_AGENT_WORKTREE_TEMP_ROOT"]) / "from-test-module"
             leaked.write_text("leak", encoding="utf-8")
+            created.append(leaked)
             return {"module": name, "ok": True, "seconds": 0.0,
                     "tests": 1, "skipped": 0, "output": ""}
         output = io.StringIO()
@@ -98,15 +100,16 @@ class RunnerTests(unittest.TestCase):
               redirect_stdout(output)):
             code = runner.main(["--suite", "full", "--workers", "1", "--root", str(isolated)])
         self.assertEqual(code, 1)
-        self.assertIn("storyloop-agent-wt", output.getvalue())
+        self.assertIn("worktree", output.getvalue())
+        self.assertFalse(created[0].parent.exists())
 
-    def test_runner_ignores_changes_inside_an_existing_external_worktree_root(self):
+    def test_runner_ignores_other_process_new_system_worktree(self):
         from tests import run as runner
         isolated = Path(self.enterContext(tempfile.TemporaryDirectory()))
-        existing = isolated / "storyloop-agent-wt" / "other-project"
-        existing.mkdir(parents=True)
+        external = isolated / "storyloop-agent-wt" / "other-project"
         def fake_module(_root, name):
-            (existing / "agent-output.txt").write_text("external", encoding="utf-8")
+            external.mkdir(parents=True)
+            (external / "agent-output.txt").write_text("external", encoding="utf-8")
             return {"module": name, "ok": True, "seconds": 0.0,
                     "tests": 1, "skipped": 0, "output": ""}
         with (mock.patch.object(runner.tempfile, "gettempdir", return_value=str(isolated)),

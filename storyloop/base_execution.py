@@ -9,14 +9,14 @@ import json
 from .approvals import materialize_approved_change
 from .base_upgrade import base_candidate_paths, establish_old_green
 from .baseline import _git, load_project_config
-from .base_run_open import _open_state
+from .base_run_open import _open_state, choose_implementer
 from .git_command import git_is_ancestor
 from .manual_acceptance import load_manual_acceptance
 from .models import StoryLoopError, require
 from .project_git import current_branch, commit_paths, exact_child_commit, finish_feature
 from .project_loop_support import relative_files
 from .project_profile import base_commands_digest, effective_base_profile, layer_commands
-from .run_state import save_run
+from .run_state import run_path, save_run
 from .run_stops import pause
 from .run_transitions import transition
 from .run_guards import (trusted_base_acceptance, trusted_base_evidence, trusted_base_review)
@@ -31,6 +31,9 @@ from .system_smoke import run_system_smoke_isolated
 def run_base_change(project: Path, change: dict, implementer: str | None,
                     new_run_state, services=None) -> dict:
     """Open or resume either base implementation mode on the shared lifecycle."""
+    if (not run_path(project, change["change_id"]).exists()
+            and choose_implementer(change["product"]["base"]["scope"], implementer) == "agent"):
+        _require_agent_vendors(project)
     state = _open_state(project, change, implementer, new_run_state)
     premerge = state["status"] in BASE_PREMERGE and state.get("base_resume_status") != "FINALIZING"
     merged = _resume_git_merge(project, change, state) if premerge else None
@@ -446,7 +449,17 @@ def _finalize_base(project: Path, change: dict, state: dict) -> dict:
     return passed_result(state)
 
 
+def _require_agent_vendors(project: Path) -> None:
+    from .adapter_capabilities import require_base_review_vendors
+    from .role_profiles import enabled
+    config = load_project_config(project)
+    if enabled(config):
+        require_base_review_vendors(project, config)
+
+
 def _prepare(project: Path, change: dict, state: dict, services=None) -> dict:
+    if state.get("implementer", "human") == "agent":
+        _require_agent_vendors(project)
     change_id = change["change_id"]
     contract_root = materialize_approved_change(project, change_id)
     paths = relative_files(project, [contract_root])
@@ -458,12 +471,6 @@ def _prepare(project: Path, change: dict, state: dict, services=None) -> dict:
         transition(project, state, "CONTRACT_COMMITTED", event="contract_committed",
                    updates={"contract_commit": commit})
         save_run(project, state)
-    if state.get("implementer", "human") == "agent":
-        from .adapter_capabilities import require_base_review_vendors
-        from .role_profiles import enabled
-        config = load_project_config(project)
-        if enabled(config):
-            require_base_review_vendors(project, config)
     state["base_inflight"] = "old_green"
     save_run(project, state)
     _prove_old_green(project, change, state)

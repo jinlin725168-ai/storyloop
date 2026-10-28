@@ -106,12 +106,30 @@ class BaseAgentEndToEndTests(unittest.TestCase):
         change_id = self.change["change_id"]
         with self.assertRaisesRegex(StoryLoopError, "reviewer|握手|vendor"):
             run_change(self.root, change_id)
-        self.assertEqual(load_json(run_path(self.root, change_id))["status"], "CONTRACT_COMMITTED")
+        self.assertFalse(run_path(self.root, change_id).exists())
+        self.assertEqual(git(self.root, "branch", "--show-current").strip(),
+                         load_baseline(self.root)["source_branch"])
         self.assertFalse((self.root / ".storyloop/state/base-designs" / f"{change_id}.json").exists())
         response["capabilities"]["vendor"] = "anthropic"
         script.write_text(json.dumps(response), encoding="utf-8")
         self.assertTrue(check(self.root)["adapters"]["reviewer"]["known"])
         self.assertEqual(run_change(self.root, change_id)["status"], "DESIGN_APPROVAL_REQUIRED")
+
+    def test_failed_first_vendor_preflight_can_switch_directly_to_human(self):
+        config = load_project_config(self.root)
+        script = Path(config["adapters"]["reviewer"]["agent_command"][3])
+        response = json.loads(script.read_text(encoding="utf-8"))
+        response["capabilities"].pop("vendor")
+        script.write_text(json.dumps(response), encoding="utf-8")
+        self.assertFalse(check(self.root)["adapters"]["reviewer"]["known"])
+        change_id = self.change["change_id"]
+        with self.assertRaisesRegex(StoryLoopError, "vendor"):
+            run_change(self.root, change_id)
+        self.assertFalse(run_path(self.root, change_id).exists())
+        self.assertEqual(git(self.root, "branch", "--show-current").strip(),
+                         load_baseline(self.root)["source_branch"])
+        self.assertEqual(run_change(self.root, change_id, implementer="human")["status"],
+                         "HUMAN_IMPLEMENTATION_REQUIRED")
 
     def test_restarted_contract_checks_review_vendor_before_new_design_call(self):
         change_id = self.change["change_id"]

@@ -222,6 +222,11 @@ def _agent_review_stop(state: dict, change_id: str) -> tuple[str, list[dict], st
     if mode == "distinct":
         hint = f"storyloop run <project> --change {change_id}"
         return hint, [{"action": "触发跨厂商代理审查", "command": hint}], "等待下一次 storyloop run 触发跨厂商代理审查"
+    if mode == "reconfigure":
+        hint = ("把 roles.review.adapter 改配到其他已握手 vendor 的适配器，然后 "
+                f"storyloop run <project> --change {change_id}")
+        return (hint, [{"action": "改配跨厂商审查", "command": hint}],
+                "实现与审查同厂商；把 roles.review.adapter 改配到其他已握手 vendor 的适配器，然后 run")
     hint = "storyloop adapters check <project>"
     return (hint, [{"action": "修复审查者握手", "command": hint}],
             "审查者 vendor 握手未知；修复握手或配置后会作废本次尝试，从合同提交重新验证")

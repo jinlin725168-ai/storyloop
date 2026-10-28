@@ -277,8 +277,8 @@ class BaseAgentFlowTests(unittest.TestCase):
               mock.patch("storyloop.base_review.enabled", return_value=True),
               mock.patch("storyloop.base_review.resolve_adapters", return_value=config["adapters"]),
               mock.patch("storyloop.base_review.role_settings", return_value={"adapter": "reviewer"}),
-              mock.patch("storyloop.base_review.capability_for",
-                         side_effect=lambda _project, name: capabilities[name])):
+              mock.patch("storyloop.base_review.load_json",
+                         return_value={"adapters": capabilities})):
             context = vendor_context(self.root, state)
         self.assertEqual(context["available_vendors"], {"openai", "anthropic"})
 
@@ -289,6 +289,41 @@ class BaseAgentFlowTests(unittest.TestCase):
         with mock.patch("storyloop.base_review.vendor_context", return_value=context):
             self.assertEqual(agent_review_context(self.root, {"agent_adapter": "writer"})[0],
                              "distinct")
+
+    def test_vendor_context_reads_one_handshake_record_for_all_adapters(self):
+        from storyloop.base_review import vendor_context
+        state = {"agent_adapter": "writer", "agent_vendor": "openai"}
+        adapters = {"writer": {"kind": "command"}, "reviewer": {"kind": "command"},
+                    "manual": {"kind": "manual"}}
+        config = {"adapters": adapters, "roles": {"default_adapter": "writer",
+                                                "review": {"adapter": "reviewer"}}}
+        record = {"adapters": {"writer": {"vendor": "openai"},
+                               "reviewer": {"vendor": "anthropic"}, "manual": {}}}
+        with (mock.patch("storyloop.base_review.load_project_config", return_value=config),
+              mock.patch("storyloop.base_review.enabled", return_value=True),
+              mock.patch("storyloop.base_review.resolve_adapters", return_value=adapters),
+              mock.patch("storyloop.base_review.role_settings", return_value={"adapter": "reviewer"}),
+              mock.patch("storyloop.base_review.load_json", return_value=record) as read):
+            context = vendor_context(self.root, state)
+        self.assertEqual(context["available_vendors"], {"openai", "anthropic"})
+        read.assert_called_once()
+
+    def test_same_vendor_with_other_proven_vendor_points_to_review_role_configuration(self):
+        from storyloop.base_review import agent_review_context, agent_review_next
+        from storyloop.stop_report import build_stop
+        context = {"implement_vendor": "openai", "review_vendor": "openai",
+                   "review_adapter": "reviewer2", "available_vendors": {"openai", "anthropic"}}
+        with mock.patch("storyloop.base_review.vendor_context", return_value=context):
+            mode, _ = agent_review_context(self.root, {"agent_adapter": "writer"})
+        self.assertEqual(mode, "reconfigure")
+        hint = agent_review_next(self.change["change_id"], mode)
+        self.assertIn("roles.review.adapter", hint)
+        self.assertNotIn("adapters check", hint)
+        state = {"change_id": self.change["change_id"], "implementer": "agent",
+                 "base_review_mode": mode}
+        stop = build_stop(self.root, state, "BASE_REVIEW_REQUIRED", {})
+        self.assertIn("roles.review.adapter", stop["blocker"])
+        self.assertNotIn("握手未知", stop["blocker"])
 
     def test_other_proven_vendor_disallows_same_vendor_human_substitute(self):
         from storyloop.base_review import single_vendor_only, vendor_context
@@ -304,8 +339,8 @@ class BaseAgentFlowTests(unittest.TestCase):
               mock.patch("storyloop.base_review.enabled", return_value=True),
               mock.patch("storyloop.base_review.resolve_adapters", return_value=adapters),
               mock.patch("storyloop.base_review.role_settings", return_value={"adapter": "reviewer2"}),
-              mock.patch("storyloop.base_review.capability_for",
-                         side_effect=lambda _project, name: capabilities[name])):
+              mock.patch("storyloop.base_review.load_json",
+                         side_effect=lambda _path: {"adapters": capabilities})):
             context = vendor_context(self.root, state)
             self.assertEqual(context["available_vendors"], {"openai", "anthropic"})
             self.assertFalse(single_vendor_only(self.root, state, context))

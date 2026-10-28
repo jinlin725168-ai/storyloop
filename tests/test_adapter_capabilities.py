@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -10,7 +9,6 @@ from storyloop.adapter_capabilities import check, ensure_checked, probe
 from storyloop.baseline import bootstrap_project, load_project_config
 from storyloop.cli import dispatch, parser
 from storyloop.models import StoryLoopError
-from storyloop.processutil import redact
 from storyloop.storage import write_json
 from tests.test_baseline_behavior import repository
 
@@ -58,7 +56,7 @@ class AdapterCapabilityTests(unittest.TestCase):
             self.assertTrue(result["adapters"]["test"]["known"])
             self.assertEqual((root / "probes.txt").read_text(encoding="utf-8"), "x")
 
-    def test_failed_handshake_explains_exit_and_redacted_stderr(self):
+    def test_failed_handshake_explains_exit_without_process_output(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             self._project(root, _capabilities(["strong", "standard"]))
@@ -67,62 +65,29 @@ class AdapterCapabilityTests(unittest.TestCase):
             result = dispatch(parser().parse_args(["adapters", "check", str(root)]))
             reason = result["adapters"]["test"].get("reason", "")
             self.assertIn("exit 1", reason)
-            self.assertIn("missing_storyloop_trial_module", reason)
+            self.assertIn("adapter command", reason)
+            self.assertNotIn("missing_storyloop_trial_module", reason)
             self.assertLessEqual(len(reason), 600)
 
-    def test_failed_handshake_redacts_credentials_in_stderr(self):
+    def test_failed_handshake_never_exposes_stderr_or_stdout(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             self._project(root, _capabilities(["strong", "standard"]))
             (root / "adapter.py").write_text(
-                "import sys; print('token=private-value', file=sys.stderr); sys.exit(9)\n",
+                "import sys; print('Authorization: Bearer secret-token-xyz', file=sys.stderr); "
+                "print('secret-token-xyz'); sys.exit(9)\n",
                 encoding="utf-8")
-            reason = check(root)["adapters"]["test"]["reason"]
+            result = dispatch(parser().parse_args(["adapters", "check", str(root)]))
+            reason = result["adapters"]["test"]["reason"]
             self.assertIn("exit 9", reason)
-            self.assertIn("[REDACTED]", reason)
-            self.assertNotIn("private-value", reason)
-
-    def test_handshake_redacts_bearer_and_bare_keys_before_display(self):
-        secrets = ["sk-ant-" + "a" * 24, "ghp_" + "b" * 24,
-                   "xoxb-" + "c" * 24, "sk-" + "d" * 24]
-        samples = [f"Authorization: Bearer {secrets[0]}",
-                   f"Invalid API key {secrets[0]}", f"token {secrets[1]}",
-                   f"secret: {secrets[2]}", f"password {secrets[3]}"]
-        cleaned = redact("; ".join(samples))
-        self.assertIn("[REDACTED]", cleaned)
-        for secret in secrets:
-            self.assertNotIn(secret, cleaned)
-
-    def test_redaction_preserves_diagnostics_and_covers_compound_names_and_auth_schemes(self):
-        cases = [
-            ("access_token=opaque-short", "opaque-short"),
-            ("GITHUB_TOKEN=another-short", "another-short"),
-            ("client_secret: client-value", "client-value"),
-            ("db_password=db-value", "db-value"),
-            ("OPENAI_API_KEY=api-value", "api-value"),
-            ("Authorization: Bearer " + "t" * 24, "t" * 24),
-            ("Authorization: Basic dXNlcjpwYXNz", "dXNlcjpwYXNz"),
-            ("Authorization: Token " + "v" * 24, "v" * 24),
-            ("token " + "r" * 20, "r" * 20),
-            ("Invalid API key sk-ant-" + "a" * 24, "sk-ant-" + "a" * 24),
-            ("Found ghp_" + "b" * 24, "ghp_" + "b" * 24),
-        ]
-        for source, secret in cases:
-            with self.subTest(source=source.split()[0]):
-                cleaned = redact(source)
-                self.assertNotIn(secret, cleaned)
-                self.assertIn("[REDACTED]", cleaned)
-        for message in ("API key not found", "password is required", "password is hunter2"):
-            with self.subTest(message=message):
-                self.assertEqual(redact(message), message)
-
-    def test_redaction_handles_large_nonsensitive_output_within_timeout(self):
-        result = subprocess.run(
-            [sys.executable, "-c", "from storyloop.processutil import redact; "
-             "assert redact('x' * 200000) == 'x' * 200000"],
-            cwd=Path(__file__).resolve().parents[1], capture_output=True, timeout=8,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
+            self.assertIn("adapter command", reason)
+            self.assertNotIn("secret-token-xyz", json.dumps(result))
+            from storyloop.cross_vendor import require_distinct
+            with self.assertRaises(StoryLoopError) as caught:
+                require_distinct({"cross_vendor_review": {"enabled": True},
+                                  "roles": {"default_adapter": "test", "review": {"adapter": "test"}}},
+                                 {"test": result["adapters"]["test"]})
+            self.assertNotIn("secret-token-xyz", str(caught.exception))
 
     def test_check_rejects_known_missing_requested_tier(self):
         with tempfile.TemporaryDirectory() as folder:

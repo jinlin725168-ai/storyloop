@@ -26,11 +26,6 @@ RAN = re.compile(r"^Ran (\d+) tests? in", re.MULTILINE)
 SKIPPED = re.compile(r"(?:^|[,(]\s*)skipped=(\d+)", re.MULTILINE)
 
 
-def _system_agent_worktrees() -> set[str]:
-    root = Path(tempfile.gettempdir()) / "storyloop-agent-wt"
-    return {path.name for path in root.iterdir()} if root.exists() else set()
-
-
 def modules(root: Path, suite: str) -> list[str]:
     if suite == "core":
         return list(CORE)
@@ -63,7 +58,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.list:
         print("\n".join(names))
         return 0
-    existing_worktrees = _system_agent_worktrees()
+    previous = os.environ.get("STORYLOOP_AGENT_WORKTREE_TEMP_ROOT")
+    with tempfile.TemporaryDirectory(prefix="storyloop-test-suite-") as folder:
+        os.environ["STORYLOOP_AGENT_WORKTREE_TEMP_ROOT"] = folder
+        try:
+            return _run_suite(args, names, Path(folder))
+        finally:
+            if previous is None:
+                os.environ.pop("STORYLOOP_AGENT_WORKTREE_TEMP_ROOT", None)
+            else:
+                os.environ["STORYLOOP_AGENT_WORKTREE_TEMP_ROOT"] = previous
+
+
+def _run_suite(args, names: list[str], agent_root: Path) -> int:
     started, failed, total, skipped = time.monotonic(), [], 0, 0
     with ThreadPoolExecutor(max(1, args.workers)) as pool:
         futures = [pool.submit(run_module, args.root, name) for name in names]
@@ -76,9 +83,9 @@ def main(argv: list[str] | None = None) -> int:
                 failed.append(result)
     for result in failed:
         print(f"\n===== {result['module']} =====\n{result['output']}", flush=True)
-    leaked = _system_agent_worktrees() - existing_worktrees
+    leaked = {path.name for path in agent_root.iterdir()}
     if leaked:
-        print("\n系统 storyloop-agent-wt 新增内容：" + ", ".join(sorted(leaked)[:10]), flush=True)
+        print("\n本次测试 agent worktree 残留：" + ", ".join(sorted(leaked)[:10]), flush=True)
     status = f"失败 {len(failed)} 个模块" if failed else "全部通过"
     if leaked:
         status += f"；临时 worktree 泄漏 {len(leaked)} 项"

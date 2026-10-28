@@ -22,17 +22,9 @@ SENSITIVE_ENV_MARKERS = ("KEY", "TOKEN", "PASSWORD", "SECRET", "CREDENTIAL")
 
 def redact(value: str) -> str:
     """Remove common credential forms before persisting or displaying output."""
-    value = re.sub(r"(?i)(authorization)\s*[:=]\s*"
-                   r"(?:[a-z][a-z0-9+._-]*\s+)?[^\s,;]+",
+    value = re.sub(r"(?i)(password|token|secret|authorization|api[_-]?key)\s*[:=]\s*[^\s,;]+",
                    r"\1=[REDACTED]", value)
-    label = r"(password|token|secret|api[_-]?key|api\s+key)"
-    value = re.sub(rf"(?i){label}\s*[:=]\s*[^\s,;]+", r"\1=[REDACTED]", value)
-    value = re.sub(rf"(?i){label}\s+(?:[a-z0-9_+./=-]{{16,}}|"
-                   r"(?:sk-|ghp_|xox[baprs]-)[a-z0-9_-]{8,})",
-                   r"\1=[REDACTED]", value)
-    value = re.sub(r"(?<![A-Za-z0-9])(?:sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{16,}"
-                   r"|xox[baprs]-[A-Za-z0-9-]{16,})", "[REDACTED]", value)
-    return re.sub(r"([a-z][a-z0-9+.-]{0,31}://)[^\s/@]+:[^\s/@]+@",
+    return re.sub(r"([a-z][a-z0-9+.-]*://)[^\s/@]+:[^\s/@]+@",
                   r"\1[REDACTED]@", value)
 
 

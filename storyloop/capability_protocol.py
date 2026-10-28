@@ -9,7 +9,7 @@ import sys
 
 from .errors import StoryLoopError, require
 from .path_security import repository_relative
-from .processutil import redact, run_process
+from .processutil import run_process
 from .storage import load_json
 
 PROTOCOL = "storyloop.adapter-capabilities.v1"
@@ -19,6 +19,13 @@ ROUTING = ("light", "standard", "heavy")
 
 def normalize_vendor(value: object) -> str | None:
     return value.strip().casefold() if isinstance(value, str) and value.strip() else None
+
+
+def observed_vendors(adapters: dict, capabilities: dict) -> tuple[dict, set[str] | None]:
+    """Use one handshake record for every non-manual adapter vendor decision."""
+    vendors = {name: normalize_vendor(capabilities.get(name, {}).get("vendor"))
+               for name, adapter in adapters.items() if adapter["kind"] != "manual"}
+    return vendors, set(vendors.values()) if vendors and all(vendors.values()) else None
 
 
 def expand_agent_token(value: str, project: Path) -> str:
@@ -50,15 +57,20 @@ def probe(project: Path, adapter_name: str, adapter: dict) -> dict:
 
 
 def _unknown(reason: str) -> dict:
-    return {"known": False, "tiers": [], "reason": reason[:600]}
+    hint = "run the configured adapter command manually with a capability handshake request to reproduce"
+    return {"known": False, "tiers": [], "reason": f"{reason}; {hint}"[:600]}
 
 
 def _process_failure(result: dict) -> str:
-    parts = [f"exit {result['returncode']}"] if result.get("returncode") not in (None, 0) else []
-    parts += [name for name in ("timed_out", "truncated", "error") if result.get(name)]
-    stderr = redact(str(result.get("stderr") or ""))
-    tail = next((line.strip() for line in reversed(stderr.splitlines()) if line.strip()), "")
-    return "; ".join(parts + ([tail[:500]] if tail else [])) or "Handshake process failed"
+    if result.get("timed_out"):
+        return "Handshake timed out"
+    if result.get("returncode") not in (None, 0):
+        return f"Handshake non-zero exit (exit {result['returncode']})"
+    if result.get("error"):
+        return "Adapter command could not start"
+    if result.get("truncated"):
+        return "Handshake output exceeded limit"
+    return "Handshake process failed"
 
 
 def _require_tier(role: str, setting: dict, adapter: dict, capability: dict) -> None:

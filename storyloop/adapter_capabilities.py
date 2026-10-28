@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .baseline import load_project_config
 from .capability_protocol import (PROTOCOL, ROLES, ROUTING, probe, _argv_digest, _digest,  # noqa: F401  # 兼容再导出：保留旧模块导入路径
-                                  _load_cache, _require_tier)
+                                  _load_cache, _require_tier, observed_vendors)
 from .models import StoryLoopError, require
 from .role_profiles import enabled, resolve_adapters, role_settings
 from .storage import write_json
@@ -53,25 +53,23 @@ def require_base_review_vendors(project: Path, config: dict) -> None:
     """Prove selected base role vendors before invoking design or implementation."""
     record = ensure_checked(project)
     capabilities = (record or {}).get("adapters", {})
+    vendors, available = observed_vendors(resolve_adapters(config), capabilities)
     selected = []
     for role in ("implement", "review"):
         adapter = role_settings(config, role, "heavy", base=True)["adapter"]
-        vendor = capabilities.get(adapter, {}).get("vendor")
+        vendor = vendors.get(adapter)
         if not vendor:
             raise StoryLoopError(
                 f"Base {role} adapter {adapter} vendor handshake is unknown; "
                 "repair adapter configuration and run storyloop adapters check <project> "
-                "before starting this agent run", code="AGENT_UNAVAILABLE")
+                "before agent design or implementation", code="AGENT_UNAVAILABLE")
         selected.append(vendor)
     if selected[0] == selected[1]:
-        adapters = resolve_adapters(config)
-        usable = [capabilities.get(name, {}).get("vendor") for name, adapter in adapters.items()
-                  if adapter["kind"] != "manual"]
-        if not all(usable):
+        if available is None:
             raise StoryLoopError("Base human review substitute needs all non-manual adapter "
                                  "vendors proven; repair handshakes before the agent run",
                                  code="AGENT_UNAVAILABLE")
-        if len(set(usable)) > 1:
+        if len(available) > 1:
             raise StoryLoopError("Configure the base review adapter to a different proven "
                                  "vendor; human review substitute is only for one vendor",
                                  code="AGENT_UNAVAILABLE")

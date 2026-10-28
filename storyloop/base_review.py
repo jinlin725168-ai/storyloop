@@ -7,8 +7,7 @@ import hashlib
 import re
 
 from .baseline import _git, load_project_config
-from .call_context import capability_for
-from .capability_protocol import normalize_vendor
+from .capability_protocol import normalize_vendor, observed_vendors
 from .engine_source_safety import engine_warning
 from .guarded_calls import read_only_call
 from .models import StoryLoopError, require, text
@@ -40,9 +39,11 @@ def vendor_context(project: Path, state: dict) -> dict:
     adapters = resolve_adapters(config)
     implement_adapter = state.get("agent_adapter")
     review_adapter = role_settings(config, "review", "heavy", base=True)["adapter"]
-    vendors = {name: capability_for(project, name).get("vendor")
-               for name, adapter in adapters.items() if adapter["kind"] != "manual"}
-    known = set(vendors.values()) if vendors and all(vendors.values()) else None
+    try:
+        capabilities = load_json(project / ".storyloop/state/adapters.json").get("adapters", {})
+    except StoryLoopError:
+        capabilities = {}
+    vendors, known = observed_vendors(adapters, capabilities)
     implement_vendor = vendors.get(implement_adapter)
     require(implement_vendor == normalize_vendor(state.get("agent_vendor")) and implement_vendor,
             "Base implement vendor handshake changed after candidate creation")
@@ -64,12 +65,15 @@ def agent_review_context(project: Path, state: dict) -> tuple[str, dict | None]:
         return "distinct", context
     if context["available_vendors"] is None:
         return "unknown", context
-    return ("single" if single_vendor_only(project, state, context) else "unknown"), context
+    return ("single" if single_vendor_only(project, state, context) else "reconfigure"), context
 
 
 def agent_review_next(change_id: str, mode: str) -> str:
     if mode == "unknown":
         return "storyloop adapters check <project>"
+    if mode == "reconfigure":
+        return ("Set roles.review.adapter to a proven adapter from another vendor, then "
+                f"storyloop run <project> --change {change_id}")
     if mode == "single":
         return (f"storyloop base-review <project> --change {change_id} --verdict pass "
                 "--note '<核对内容>' --human-review '<至少 12 字理由>'")
@@ -102,9 +106,6 @@ def review_base_candidate(project: Path, change: dict, state: dict, services, re
                                  base_review_mode=mode)
                 review = review_agent_candidate(project, change, state, services, context)
             except StoryLoopError as exc:
-                if exc.code == "WORKSPACE_TAINTED" and "engine source" in str(exc):
-                    return pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
-                                 next="Inspect and reinstall the StoryLoop engine before rerunning")
                 return restart(project, change, state, str(exc), rejected=True)
         else:
             return pause_base_review(project, change, state, restart)
