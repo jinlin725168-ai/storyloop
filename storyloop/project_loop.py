@@ -22,6 +22,7 @@ from .cross_vendor import prepare_run
 from .cost_limits import check_before_call
 from .answers import _pending as _unanswered, load_answers
 from .baseline import _git, load_baseline, load_project_config, verify_baseline
+from .base_follow import merge_blocking_base
 from .boundaries import capture_snapshot  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .changes import load_change
 from .change_types import type_of
@@ -148,6 +149,10 @@ def _resume_and_prepare(project: Path, change: dict, state: dict, services: Loop
         return finish_receipting(project, change, state)
     if state["status"] == "FINALIZING":
         return finalize_change(project, change, state)
+    if state["status"] == "BASE_CHANGE_REQUIRED" and state.get("blocked_by"):
+        return pause(project, state, "BASE_CHANGE_REQUIRED", blocked_by=state["blocked_by"],
+                     base_proposal=state.get("base_proposal"),
+                     violations=state.get("violations", []))
     if fresh or state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}:
         paused = _prepare_acceptance(project, change, services, state)
         if paused is not None:
@@ -185,10 +190,14 @@ def _open_run(project: Path, change: dict, routing: dict | None = None) -> tuple
                     else state.get("feature_branch"))
         require(current == expected, "Resume the saved StoryLoop branch")
         if state["status"] != "RECEIPTING":
-            verify_baseline(
-                project, resume=state["status"] not in {"MERGED", "FINALIZING"}
-            )
-            _follow_base_upgrade(project, state)
+            if state.get("blocked_by"):
+                _follow_base_upgrade(project, state)
+                verify_baseline(project, resume=True)
+            else:
+                verify_baseline(
+                    project, resume=state["status"] not in {"MERGED", "FINALIZING"}
+                )
+                _follow_base_upgrade(project, state)
         return state, int(state.get("attempt", 0)) + 1, False
     return _start_run(project, change, routing)
 
@@ -217,6 +226,9 @@ def _follow_base_upgrade(project: Path, state: dict) -> None:
     movement of the source branch is still refused at completion."""
     baseline = load_baseline(project)
     if baseline["source_head"] == state["source_head"] or state["status"] in {"MERGED", "FINALIZING"}:
+        return
+    if state.get("blocked_by"):
+        merge_blocking_base(project, state, baseline)
         return
     # A run may start after legal prose commits; its older BASE is not a new upgrade.
     if _git(project, "merge-base", baseline["source_head"], state["source_head"]).strip() \
