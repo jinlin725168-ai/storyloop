@@ -26,6 +26,7 @@ from .project_receipt import _dirty_paths, recover_completed_merge
 from .smoke_runner import implementation_digest, run_commands_isolated
 from .storage import locked, write_json, write_text_atomic
 from .system_smoke import run_system_smoke_isolated
+from .state_format import is_system_smoke_path
 
 
 def run_base_change(project: Path, change: dict, implementer: str | None,
@@ -173,7 +174,9 @@ def _verify_candidate(project: Path, change: dict, state: dict) -> dict:
     for name, result in layers.items():
         require(not layer_commands(profile, name) or result["status"] == "PASSED",
                 f"Base candidate {name} layer did not pass")
-    smoke = run_system_smoke_isolated(project)
+    smoke = run_system_smoke_isolated(
+        project, approved_base_candidate=any(is_system_smoke_path(path)
+                                              for path in change["product"]["base"]["paths"]))
     require(smoke["status"] == "PASSED", "Base candidate system smoke did not pass")
     commands = profile["base_build_commands"]
     build = (run_commands_isolated(project, commands, timeout) if commands

@@ -70,13 +70,14 @@ def system_smoke_digests(project: Path) -> dict[str, str]:
     return dict(load_json(Path(project).resolve() / PROTECTION)["digests"])
 
 
-def run_system_smoke_isolated(project: Path) -> dict:
+def run_system_smoke_isolated(project: Path, *, approved_base_candidate: bool = False) -> dict:
     """Run the protected system suite in a disposable Git-visible candidate; SKIPPED when absent."""
     from .smoke_runner import _copy_candidate, _run_test  # noqa: PLC0415  (avoid an import cycle)
     from .boundaries import capture_snapshot, snapshot_changes
 
     project = Path(project).resolve()
-    manifest = load_system_smoke(project)
+    manifest = (validate_manifest(load_json(project / SYSTEM_SMOKE_DIR / "manifest.json"))
+                if approved_base_candidate else load_system_smoke(project))
     if manifest is None:
         return {"status": "SKIPPED", "reason": "NO_SYSTEM_SMOKE_SUITE", "results": []}
     before = capture_snapshot(project, include_control=True, include_ignored=True)
@@ -94,7 +95,8 @@ def run_system_smoke_isolated(project: Path) -> dict:
         status = "FAILED"
     else:
         status = "PASSED"
-    return {"status": status, "results": results, "suite_digests": system_smoke_digests(project)}
+    digests = _digests(project) if approved_base_candidate else system_smoke_digests(project)
+    return {"status": status, "results": results, "suite_digests": digests}
 
 
 def validate_manifest(manifest: object) -> dict:

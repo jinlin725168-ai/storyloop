@@ -44,6 +44,8 @@
 
 base 变更只走人工实现通道：批准后运行 `storyloop run --change BASE-ID` 锁定合同、证明旧底座绿，并停在 `HUMAN_IMPLEMENTATION_REQUIRED`。人在 `storyloop/BASE-ID` 分支提交批准的路径；再次运行会核对 G1、候选回归、系统冒烟和构建，然后停在 `BASE_REVIEW_REQUIRED`。独立审查者执行 `base-review --verdict pass --note`，再由人记录 `BASE-ACCEPT` 验收。报告、合并、底座版本推进和回执沿用 E1 流程。
 
+批准路径可包含系统冒烟清单及其检查文件、声明的测试根；候选须保留源提交的全部冒烟用例 ID、原检查文件和原测试文件，可修改或新增，不可删除。
+
 已有 `implementer=agent` 的在途试用状态保持原样，但不能继续执行；请保留状态和分支，另开批准的 base 变更并使用人工通道。
 
 
