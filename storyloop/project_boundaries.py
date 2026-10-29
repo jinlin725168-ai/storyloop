@@ -68,6 +68,33 @@ def validate_base_target_paths(project: Path, paths: list[str], proof: dict | No
             "Target proof violation path must be an existing regular file")
 
 
+def verify_target_binding(project: Path, change: dict, state: dict, evidence: dict) -> None:
+    """Recheck the Git identities of an engine-bound target proof at G2."""
+    proof = change["product"]["base"].get("target_proof")
+    if proof is None:
+        require("target_proof" not in evidence, "Unexpected target proof evidence")
+        return
+    result = evidence.get("target_proof") or {}
+
+    def oid(commit: str, path: str) -> str:
+        row = _git(project, "ls-tree", commit, "--", path).strip()
+        require(row.startswith("100644 blob "), "Target proof Git blob changed")
+        return row.split(" ", 3)[2].split("\t", 1)[0]
+
+    require(result.get("contract_digest") == state["contract_digest"]
+            and result.get("source_head") == state["source_head"]
+            and result.get("candidate_commit") == state["candidate_commit"]
+            and result.get("candidate_tree_oid") == _git(
+                project, "rev-parse", f"{state['candidate_commit']}^{{tree}}").strip()
+            and result.get("source_blob_oid") == oid(state["source_head"], proof["violation_path"])
+            and result.get("criterion_blob_oids") == {
+                path: oid(state["candidate_commit"], path) for path in proof["criterion_paths"]}
+            and result.get("check_ref") == proof["check_ref"]
+            and result.get("violation", {}).get("status") == "FAILED"
+            and result.get("candidate", {}).get("status") == "PASSED",
+            "Base target proof binding is stale")
+
+
 def base_scope_path_allowed(scope: str, path: str) -> bool:
     if scope == "skills":
         return path.startswith((".claude/skills/", ".codex/skills/"))

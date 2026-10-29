@@ -297,7 +297,8 @@ def run_commands_isolated(
 
 
 def run_commands_at_commit(project: Path, commit: str, commands: list[list[str]], timeout_seconds: int,
-                           exclude: list[str] | tuple = ()) -> dict:
+                           exclude: list[str] | tuple = (),
+                           replacements: dict[str, bytes] | None = None) -> dict:
     """Run regression commands on a commit's tree (workspace edits excluded), minus `exclude` paths."""
     project = Path(project).resolve()
     skipped = set(exclude)
@@ -310,6 +311,8 @@ def run_commands_at_commit(project: Path, commit: str, commands: list[list[str]]
             for member in members:
                 safe_target(candidate, member.name, "baseline target")
             tar.extractall(candidate, members=members, filter="data")
+        for relative, content in (replacements or {}).items():
+            safe_target(candidate, relative, "probe target").write_bytes(content)
         return run_commands(candidate, commands, timeout_seconds, project_patterns(project))
 
 

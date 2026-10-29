@@ -213,6 +213,30 @@ def review_findings_markdown(review: dict) -> list[str]:
     return lines
 
 
+def base_report_markdown(report: dict) -> str:
+    lines = [f"# {report['change_id']} base 验证报告", "", f"目标：{report['goal']}", "",
+             "## 批准路径", "", *(f"- `{path}`" for path in report["paths"]), "",
+             "## 审查与人工验收", "", f"审查者：{report['review']['reviewer']}",
+             f"结论：{report['review']['verdict']}",
+             f"人工验收：{report['manual_acceptance'][0]['note']}"]
+    lines += review_findings_markdown(report["review"])
+    if report.get("build_note"):
+        lines += ["", report["build_note"]]
+    if report.get("oracle_skills_approval"):
+        paths = report["oracle_skills_approval"]["paths"]
+        lines += ["", "Oracle 技能确认：" + "、".join(f"`{path}`" for path in paths)]
+    if report.get("engine_warning"):
+        lines += ["", "警告：" + report["engine_warning"]]
+    if report.get("target_proof"):
+        proof = report["target_proof"]
+        lines += ["", "目标判据：旧目标注入红、候选绿",
+                  f"源 blob：`{proof['source_blob_oid']}`",
+                  f"候选 tree：`{proof['candidate_tree_oid']}`"]
+    if report.get("merge_commit"):
+        lines += ["", f"合并提交：`{report['merge_commit']}`"]
+    return "\n".join(lines) + "\n"
+
+
 def record_human_review(project: Path, change_id: str, verdict: str, note: str,
                         human_review_reason: str | None) -> dict:
     """Record either E1 human review or an explicit E2a single-vendor substitute."""

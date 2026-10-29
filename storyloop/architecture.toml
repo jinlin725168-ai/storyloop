@@ -125,6 +125,7 @@ rank = 7
 "supersede" = { module = "contract", zone = "mutable" }
 "acceptance_repair" = { module = "oracle", zone = "mutable" }
 "system_smoke" = { module = "oracle", zone = "mutable" }
+"base_criterion_probe" = { module = "oracle", zone = "mutable" }
 "oracle_skill_approval" = { module = "oracle", zone = "mutable" }
 "project_loop_gates" = { module = "implementation", zone = "mutable" }
 "planning" = { module = "implementation", zone = "mutable" }

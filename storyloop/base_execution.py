@@ -23,6 +23,7 @@ from .run_guards import (trusted_base_acceptance, trusted_base_evidence, trusted
 from .run_recovery import (BASE_PREMERGE, base_source_contains_candidate,
                            manual_base_merge_error, restart_base_attempt)
 from .project_receipt import _dirty_paths, recover_completed_merge
+from .base_review import base_report_markdown
 from .smoke_runner import implementation_digest, run_commands_isolated
 from .storage import locked, write_json, write_text_atomic
 from .system_smoke import run_system_smoke_isolated
@@ -237,7 +238,12 @@ def _verify_candidate(project: Path, change: dict, state: dict) -> dict:
     for name, result in layers.items():
         require(not layer_commands(profile, name) or result["status"] == "PASSED",
                 f"Base candidate {name} layer did not pass")
-    smoke = run_system_smoke_isolated(project)
+    proof = change["product"]["base"].get("target_proof")
+    if proof:
+        from .base_criterion_probe import run_candidate_smoke
+        smoke = run_candidate_smoke(project, state["candidate_commit"], timeout)
+    else:
+        smoke = run_system_smoke_isolated(project)
     require(smoke["status"] == "PASSED", "Base candidate system smoke did not pass")
     commands = profile["base_build_commands"]
     build = (run_commands_isolated(project, commands, timeout) if commands
@@ -255,6 +261,9 @@ def _verify_candidate(project: Path, change: dict, state: dict) -> dict:
                 "system_smoke": smoke, "build": build}
     if approval is not None:
         evidence["oracle_skills_approval"] = approval
+    if proof:
+        from .base_criterion_probe import prove_target
+        evidence["target_proof"] = prove_target(project, change, state, profile, timeout)
     write_json(_evidence_path(project, change["change_id"]), evidence, max_bytes=4_000_000)
     return evidence
 
@@ -382,11 +391,13 @@ def _verified_report(project: Path, change: dict, state: dict, evidence: dict,
         report["human_review_reason"] = review["human_review_reason"]
     if evidence.get("oracle_skills_approval") is not None:
         report["oracle_skills_approval"] = evidence["oracle_skills_approval"]
+    if evidence.get("target_proof"):
+        report["target_proof"] = evidence["target_proof"]
     if state.get("engine_warning"):
         report["engine_warning"] = state["engine_warning"]
     path = project / "reports/storyloop" / change["change_id"] / "report.json"
     write_json(path, report, max_bytes=8_000_000)
-    write_text_atomic(path.with_suffix(".md"), _base_markdown(report))
+    write_text_atomic(path.with_suffix(".md"), base_report_markdown(report))
     paths = [path.relative_to(project).as_posix(),
              path.with_suffix(".md").relative_to(project).as_posix()]
     commit = commit_paths(project, paths,
@@ -397,32 +408,12 @@ def _verified_report(project: Path, change: dict, state: dict, evidence: dict,
             "review": review}
 
 
-def _base_markdown(report: dict) -> str:
-    from .base_review import review_findings_markdown
-    lines = [f"# {report['change_id']} base 验证报告", "", f"目标：{report['goal']}", "",
-             "## 批准路径", "", *(f"- `{path}`" for path in report["paths"]), "",
-             "## 审查与人工验收", "", f"审查者：{report['review']['reviewer']}",
-             f"结论：{report['review']['verdict']}",
-             f"人工验收：{report['manual_acceptance'][0]['note']}"]
-    lines += review_findings_markdown(report["review"])
-    if report.get("build_note"):
-        lines += ["", report["build_note"]]
-    if report.get("oracle_skills_approval"):
-        paths = report["oracle_skills_approval"]["paths"]
-        lines += ["", "Oracle 技能确认：" + "、".join(f"`{path}`" for path in paths)]
-    if report.get("engine_warning"):
-        lines += ["", "警告：" + report["engine_warning"]]
-    if report.get("merge_commit"):
-        lines += ["", f"合并提交：`{report['merge_commit']}`"]
-    return "\n".join(lines) + "\n"
-
-
 def _base_receipt(project: Path, change: dict, state: dict) -> dict:
     from .project_receipt import authoritative_report, ensure_merge_receipt
     report = authoritative_report(project, state)
     report["merge_commit"] = state["merge_commit"]
     receipt_bytes = ((json.dumps(report, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
-                     _base_markdown(report).encode("utf-8"))
+                     base_report_markdown(report).encode("utf-8"))
     receipt_commit = ensure_merge_receipt(project, state, receipt_bytes)
     transition(project, state, "FINALIZING", event="finalizing",
                updates={"integration_commit": receipt_commit})
