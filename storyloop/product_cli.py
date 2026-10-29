@@ -126,7 +126,7 @@ def dispatch(project: Path, args, run_with_answers, draft_result, load_run_state
     if args.command == "reset":
         return reset_run(project, change_id, args.reason)
     if args.command in {"smoke-repair", "acceptance-repair"}:
-        return repair_smoke(project, change_id, args.reason)
+        return repair_smoke(project, change_id, args.reason, suite=args.suite)
     if args.command == "document":
         return document_change(project, change_id, args.design.resolve() if args.design else None,
                                capability=args.capability)

@@ -8,16 +8,18 @@ import shutil
 
 from .errors import StoryLoopError, require
 from .processutil import run_process
+from .processutil import redact
 
 
 # Git needs the user's global identity and safe.directory settings; hooks are disabled below.
 GIT_ENVIRONMENT = ["PATH", "SYSTEMROOT", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "XDG_CONFIG_HOME"]
 
 
-def git_failure(stderr: str) -> str:
+def git_failure(stderr: str, stdout: str = "") -> str:
     """Keep Git's own bounded reason in a failed operation message."""
-    lines = [line.strip() for line in stderr.splitlines() if line.strip() and not line.startswith("***")]
-    reason = " ".join(lines)[:400]
+    output = stderr or stdout
+    lines = [line.strip() for line in output.splitlines() if line.strip() and not line.startswith("***")]
+    reason = redact(" ".join(lines)[:400])
     return f"Git operation failed: {reason}" if reason else "Git operation failed"
 
 
@@ -35,7 +37,7 @@ def git(project: Path, *arguments: str, timeout_seconds: int = 30) -> str:
             or result.get("truncated") or result.get("error")):
         raise StoryLoopError("Git process failed safely", code="GIT_BLOCKED")
     if result.get("returncode") != 0:
-        raise StoryLoopError(git_failure(result.get("stderr", "")), code="GIT_BLOCKED")
+        raise StoryLoopError(git_failure(result.get("stderr", ""), result.get("stdout", "")), code="GIT_BLOCKED")
     stdout = result.get("stdout")
     require(isinstance(stdout, str) and len(stdout) <= 8_000_000, "Git output is invalid")
     return stdout

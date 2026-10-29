@@ -22,7 +22,7 @@
 | `answer` | `--change ID --answer TEXT [--answer TEXT …]` | `ANSWERED` |
 | `accept` | `--change ID --criterion ID [--criterion ID …] --note TEXT` | `ACCEPTED`，或仍有未确认条件时 `MANUAL_ACCEPTANCE_REQUIRED` |
 | `reset` | `--change ID --reason TEXT` | 污染前的中断阶段；人工验收复位为 `IMPLEMENTING` |
-| `acceptance-repair`（旧名 `smoke-repair`） | `--change ID --reason TEXT` | `ACCEPTANCE_REPAIRED` |
+| `acceptance-repair`（旧名 `smoke-repair`） | `--change ID --reason TEXT [--suite acceptance\|characterization]` | `ACCEPTANCE_REPAIRED` 或 `CHARACTERIZATION_REPAIRED` |
 | `document` | `--change ID [--design FILE] [--capability NAME]` | `DOCUMENTED` |
 | `smoke-propose` | `--change ID` | `SMOKE_PROPOSED` |
 | `smoke-apply` | `--change ID` | `SMOKE_APPLIED` 或 `SMOKE_UPDATE_FAILED` |
@@ -138,6 +138,7 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 `change --supersede` 与 `--idea`、`--change` 互斥，必须有非空 `--message`。除 `NEEDS_SPEC_FIX` 外必须有 `--reason`；`--reason` 只用于 supersede。允许的旧运行状态为 `NEEDS_SPEC_FIX`、`BUDGET_EXHAUSTED`、`NO_PROGRESS`、`ORACLE_DEFECT`、`EXISTING_GREEN`、`NEEDS_INPUT`、`IMPLEMENTING`、`BOUNDARY_VIOLATION`、`CHARACTERIZATION_FAILED`。已合并的变更不允许作废。重复同一修订请求返回已有新草案，不重复创建；新运行必须从旧运行的当前源分支启动，不能从旧功能分支继续。
 
 `acceptance-repair` 要求已有合同提交，允许的运行状态为 `CONTRACT_COMMITTED`、`IMPLEMENTING`、`BUDGET_EXHAUSTED`、`NEEDS_INPUT`、`EXISTING_GREEN`、`ORACLE_DEFECT`、`NO_PROGRESS`。其中 `CONTRACT_COMMITTED` 用于套件已提交、证明 RED 时因套件写入候选副本等副作用报 `BLOCKED` 的恢复；`PREPARING` 与 `PASSED` 仍禁止修复。修复套件提交后，引擎仍从合同提交重建候选副本并重新证明 RED，不跳过判据门。
+当审查指出本变更的特征化测试与合同冲突时，人在 `test_roots` 内修正该测试，再用 `--suite characterization`；引擎先在旧代码的隔离副本中证明单元层为绿，作废当前候选尝试并重证 RED。默认 `--suite acceptance` 仍由 acceptance 角色修复验收套件。
 
 ### 错误码
 

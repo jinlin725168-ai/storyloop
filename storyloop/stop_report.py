@@ -181,6 +181,8 @@ def _last_verdict(state: dict, details: dict) -> dict | None:
 def _evidence(state: dict, details: dict) -> list[str]:
     routed = (state.get("routed") or {}).get("findings") or []
     evidence = [item["location"] for item in routed if isinstance(item, dict) and item.get("location")]
+    if state.get("status") == "DESIGN_APPROVAL_REQUIRED":
+        evidence.extend(_plan_summary(state))
     evidence += list(details.get("criteria_summary") or [])
     violations = details.get("violations") or state.get("violations") or []
     evidence += [item.get("path", "") for item in violations if isinstance(item, dict)]
@@ -209,6 +211,12 @@ def _stop_actions(project: Path | str, state: dict, status: str, details: dict
     options = routing_options(project, change_id, status, {**state, **details}) or _options(
         status, project_text, change_id, bool(state.get("routed")),
         details.get("ci_requires_human_proposal", False))
+    if status == "ORACLE_DEFECT":
+        from .failure_attribution import characterization_oracle
+        if characterization_oracle({**state, **details}):
+            options[0] = {"action": "修正特征化测试并重证旧代码", "command": _command(
+                "storyloop", "acceptance-repair", project_text, "--change", change_id,
+                "--suite", "characterization", "--reason", "<修正理由>")}
     if status == "BASE_CHANGE_REQUIRED" and details.get("blocked_by"):
         options = [{"action": "批准已生成的底座草案", "command": _command(
             "storyloop", "approve", project_text, "--change", details["blocked_by"])}]
@@ -243,7 +251,8 @@ def build_stop(project: Path | str, state: dict, status: str, details: dict) -> 
         "facts": list(details.get("facts") or state.get("facts") or []),
         "questions": list(details.get("questions") or state.get("questions") or []),
         "options": options,
-        "resume": (options[0]["command"] if status in {"NEEDS_SPEC_FIX", "DESIGN_APPROVAL_REQUIRED"}
+        "resume": (options[0]["command"] if status in {"NEEDS_SPEC_FIX", "DESIGN_APPROVAL_REQUIRED",
+                                                   "ORACLE_DEFECT"}
                    or routed else
                    _command("storyloop", "run", project, "--change", change_id)),
     }
@@ -262,6 +271,11 @@ def stop_of(project: Path | str, run: dict | None) -> dict | None:
     if run.get("status") not in STOP_STATUSES:
         return None
     if isinstance(saved, dict) and saved.get("status") == run["status"]:
+        if run["status"] == "ORACLE_DEFECT":
+            from .failure_attribution import characterization_oracle
+            if characterization_oracle(run):
+                options, _ = _stop_actions(project, run, run["status"], {})
+                return {**saved, "options": options, "resume": options[0]["command"]}
         return saved
     return build_stop(project, run, run["status"], {})
 
@@ -285,6 +299,37 @@ def _render_item(item: object) -> str:
     if isinstance(item, dict):
         return str(item.get("statement") or item.get("question") or item.get("message") or item)
     return str(item)
+
+
+def _plan_summary(state: dict) -> list[str]:
+    plan = (state.get("planning") or {}).get("plan") or {}
+    if plan.get("status") != "DONE" or not plan.get("options"):
+        return []
+    selected = (plan.get("approval") or {}).get("option_id", plan["main_option"])
+    option = next(item for item in plan["options"] if item["id"] == selected)
+    location = f".storyloop/state/runs/{state['change_id']}.json → planning.plan"
+    paths = [str(item) for item in option.get("touched", []) + option.get("creates", [])]
+    risks = [f"{name}: {value.get('reason', value.get('value', ''))}"
+             for name, value in (option.get("risks") or {}).items() if isinstance(value, dict)]
+    decisions = _plan_section(str(plan.get("design") or ""), "Decisions")
+    return [f"方案选项 {selected}：{option.get('summary', '')}（全文：{location}）",
+            _plan_items("涉及文件", paths, location), _plan_items("Risks", risks, location),
+            f"Decisions：{decisions[:400]}" + (f"…完整内容见 {location}" if len(decisions) > 400 else "")]
+
+
+def _plan_items(label: str, values: list[str], location: str) -> str:
+    remainder = f"；共 {len(values)} 项，完整内容见 {location}" if len(values) > 8 else ""
+    return f"{label}：" + "、".join(values[:8]) + remainder
+
+
+def _plan_section(markdown: str, heading: str) -> str:
+    lines = markdown.splitlines()
+    start = next((i for i, line in enumerate(lines)
+                  if line.strip().lower().startswith(f"## {heading.lower()}")), None)
+    if start is None:
+        return "详见方案全文"
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    return " ".join(line.strip() for line in lines[start + 1:end] if line.strip()) or "详见方案全文"
 
 
 def build_entry_stop(project: Path, status: str, details: dict) -> dict:

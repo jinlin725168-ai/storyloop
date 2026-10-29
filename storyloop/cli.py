@@ -140,6 +140,9 @@ def _maintenance_arguments(child, command):
     elif command in {"reset", "smoke-repair", "acceptance-repair"}:
         child.add_argument("--change", dest="change_id", required=True)
         child.add_argument("--reason", required=True)
+        if command in {"smoke-repair", "acceptance-repair"}:
+            child.add_argument("--suite", choices=("acceptance", "characterization"),
+                               default="acceptance", help="缺陷所属判据套件；特征化测试由人修正后重证")
     elif command == "base-propose":
         child.add_argument("--path", dest="paths", action="append", default=[], required=True)
         child.add_argument("--reason", required=True)

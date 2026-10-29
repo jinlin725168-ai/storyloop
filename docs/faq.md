@@ -35,6 +35,9 @@ characterize 角色写的特征化测试在旧代码上没跑绿（`unit_command
 **`ORACLE_DEFECT`：应当保持成立的条件在旧代码上就失败**
 行类型为 `regression`、`state_preservation`、`non_goal` 的验收条件断言的是"保持不变"，在旧代码上本来就该通过。它们失败说明用例写错了，不是代码的问题。用 `storyloop acceptance-repair PATH --change ID --reason "…"` 让 acceptance 角色修正这些用例（它能看到 `criteria_failing` 和输出），重证 RED 后 `run` 继续。
 
+**`ORACLE_DEFECT`：特征化测试与合同冲突**
+若审查证据指向本变更提交的特征化测试，它锁定了合同明确要改变的旧行为。按审查理由由人修正该测试，使它只断言必须保持的行为；再运行 `storyloop acceptance-repair PATH --change ID --suite characterization --reason "修正理由"`。引擎在旧代码的隔离副本上重跑单元层，绿后提交测试、作废当前实现尝试并重新证明 RED；随后 `run`，如要求方案具名批准则重新批准。若修复没有改变测试，命令会说明原因，不会把候选源码误提交。
+
 **报告的"判据自证"里写着"未能统计"**
 引擎没能从这条命令的输出里认出测试工具的汇总行，所以这一层没有执行数自证。常见原因：Gradle 全部通过时默认不打印数量；Go 没加 `-v`；自定义的测试脚本不打印汇总。处理：让命令输出汇总，或在 settings 里加 `test_count_patterns`。
 

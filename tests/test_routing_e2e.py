@@ -36,6 +36,18 @@ class RoutedEndToEndTests(unittest.TestCase):
                            review=Mock(wraps=services.review))
         return root, change['change_id'], observed
 
+    def test_design_summary_is_visible_in_status_and_log(self):
+        from storyloop.change_log import change_log
+        from storyloop.cli import dispatch, parser
+        root, identifier, services = self.case('heavy')
+        paused = run_change(root, identifier, services)
+        self.assertEqual(paused['status'], 'DESIGN_APPROVAL_REQUIRED')
+        status = dispatch(parser().parse_args(['status', str(root), '--change', identifier]))
+        log = change_log(root, identifier)
+        for result in (paused, status, log):
+            self.assertIn('Implement the approved contract', str(result['stop']))
+            self.assertIn('Decisions', str(result['stop']))
+
     def test_light_standard_heavy_real_gates_and_call_counts(self):
         for tier, design_calls, lock_calls in [('light', 0, 0), ('standard', 1, 0), ('heavy', 1, 1)]:
             with self.subTest(tier=tier):
@@ -286,6 +298,49 @@ class RoutedEndToEndTests(unittest.TestCase):
         pause = run_change(root, identifier, services)
         self.assertEqual(pause['status'], 'DESIGN_APPROVAL_REQUIRED')
         approve_design(root, identifier, pause['plan_id'])
+        self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
+
+    def test_reviewed_characterization_defect_can_be_repaired_on_old_code(self):
+        from storyloop.acceptance_repair import repair_smoke
+        from tests.test_structured_output import passing_review
+        root, identifier, services = self.case('heavy')
+        paused = run_change(root, identifier, services)
+        approve_design(root, identifier, paused['plan_id'])
+
+        def defective_review(project, context):
+            if context.get('mode') == 'consistency':
+                return passing_review(project, context)
+            return {'verdict': 'fail', 'summary': 'lock conflicts with contract',
+                    'findings': [{'target': 'oracle', 'criterion_id': 'AC-1',
+                                  'location': 'tests/test_lock.py:4',
+                                  'message': 'characterization locks a behavior the contract changes'}],
+                    'questions': []}
+
+        old_source = (root / 'app/service.py').read_bytes()
+        def dirty_implement(project, context):
+            result = services.implement(project, context)
+            (project / 'app/service.py').write_bytes(old_source + b'# candidate edit\n')
+            return result
+        stopped = run_change(root, identifier, replace(
+            services, implement=dirty_implement, review=defective_review))
+        self.assertEqual(stopped['status'], 'ORACLE_DEFECT', stopped)
+        self.assertIn('--suite characterization', stopped['next'])
+        path = root / 'tests/test_lock.py'
+        path.write_text(path.read_text(encoding='utf-8').replace(
+            'self.assertEqual(serve(), "ok")', 'self.assertIn(serve(), ("ok", "new"))'),
+            encoding='utf-8')
+        result = repair_smoke(root, identifier, 'old assertion conflicts with AC-3',
+                              suite='characterization')
+        self.assertEqual(result['status'], 'CHARACTERIZATION_REPAIRED', result)
+        state = load_run_state(root, identifier)
+        self.assertEqual(state['attempt'], 0)
+        self.assertEqual(state['characterization']['status'], 'GREEN')
+        self.assertNotIn('routed', state)
+        self.assertEqual((root / 'app/service.py').read_bytes(), old_source)
+        self.assertFalse((root / 'modules/orders/service.py').exists())
+        replanned = run_change(root, identifier, services)
+        self.assertEqual(replanned['status'], 'DESIGN_APPROVAL_REQUIRED')
+        approve_design(root, identifier, replanned['plan_id'])
         self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
 
     def test_base_upgrade_invalidates_plan_then_replan_completes(self):

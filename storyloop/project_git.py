@@ -64,8 +64,9 @@ def commit_paths(project: Path, paths: list[str], message: str, *, details: bool
     message = text(message, "commit message")
     branch = _git(project, "branch", "--show-current").strip() if details else None
     _git(project, "add", "--", *normalized)
-    status = _git(project, "status", "--porcelain=v1", "--untracked-files=all")
-    require(bool(status.strip()), "Commit has no changes")
+    staged = _git(project, "diff", "--cached", "--name-only", "--no-renames", "-z", "--", *normalized)
+    if not staged.strip():
+        raise StoryLoopError("目标路径没有改动；请先修正判据文件，再重新运行修复命令", code="GIT_BLOCKED")
     try:
         # Commits carry the repository's own configured identity: the loop acts for its user.
         prefix = [] if identity is None else ["-c", f"user.name={identity[0]}",
