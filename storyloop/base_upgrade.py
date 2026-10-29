@@ -10,16 +10,16 @@ from pathlib import Path
 from .baseline import (_foundation_paths, _git, _sha256, _tracked_files,
                        load_baseline, load_project_config)
 from .changes import _save, load_change
-from .models import StoryLoopError, identifier, require, text
+from .models import identifier, require, text
 from .path_security import repository_relative
 from .product_contract import validate_product
 from .project_boundaries import _write_base_proposal, audit_base_scope, base_scope_path_allowed
-from .project_profile import base_commands_digest, effective_base_profile, is_ci_path, matches_test_root
+from .project_profile import base_commands_digest, effective_base_profile, is_ci_path
 from .project_profile import layer_commands
 from .project_git import changed_paths
 from .smoke_runner import run_commands_at_commit, run_commands_isolated
-from .system_smoke import adopt_system_smoke, load_system_smoke, run_system_smoke_isolated, validate_manifest
-from .state_format import is_system_smoke_path
+from .system_smoke import adopt_system_smoke, load_system_smoke_at_commit, run_system_smoke_isolated
+from .base_criteria import check_base_criteria
 from .storage import load_json, locked, write_json
 from .lesson_store import load_lessons_at
 from .lessons import scope_matches
@@ -148,7 +148,7 @@ def establish_old_green(project: Path, change: dict, state: dict) -> dict:
                 f"Old base {name} layer is not green")
     require(any(layer_commands(profile, name) for name in layers),
             "Old base has no configured regression commands")
-    manifest = load_system_smoke(project)
+    manifest = load_system_smoke_at_commit(project, source)
     require(manifest is not None, "Old base has no installed system smoke suite")
     smoke = run_commands_at_commit(project, source,
                                    [item["command"] for item in manifest["tests"]], timeout)
@@ -189,52 +189,8 @@ def base_candidate_paths(project: Path, change: dict, state: dict) -> list[str]:
             "Base committed paths differ from approved contract; extra: " + ", ".join(extra)
             + "; missing: " + ", ".join(missing))
     audit_base_scope(project, change, actual)
-    check_base_criteria(project, state, expected)
+    check_base_criteria(project, change, state, expected)
     return sorted(actual)
-
-
-def check_base_criteria(project: Path, state: dict, approved: set[str]) -> None:
-    """Keep original smoke IDs, referenced checks, and test files in a human base candidate."""
-    roots = load_project_config(project)["profile"].get("test_roots") or []
-    if not any(is_system_smoke_path(path) or matches_test_root(path, roots)
-               for path in approved):
-        return
-    before = _criteria_tree_paths(project, state["source_head"])
-    after = _criteria_tree_paths(project, "HEAD")
-    missing_tests = sorted(path for path in before - after if matches_test_root(path, roots))
-    missing_checks: list[str] = []
-    missing_ids: list[str] = []
-    manifest_path = "acceptance/smoke/manifest.json"
-    if any(is_system_smoke_path(path) for path in approved) and manifest_path in before:
-        original = _criteria_manifest(project, state["source_head"], manifest_path)
-        candidate = _criteria_manifest(project, "HEAD", manifest_path) if manifest_path in after else None
-        old_ids = {row["id"] for row in original["tests"]}
-        new_ids = {row["id"] for row in candidate["tests"]} if candidate else set()
-        missing_ids = sorted(old_ids - new_ids)
-        references = {arg.removeprefix("./") for row in original["tests"]
-                      for arg in row["command"]}
-        missing_checks = sorted(path for path in (before - after) & references
-                                if is_system_smoke_path(path))
-        if manifest_path not in after:
-            missing_checks.insert(0, manifest_path)
-    if missing_ids or missing_checks or missing_tests:
-        raise StoryLoopError(
-            f"Base 候选删除了原有判据：冒烟用例 ID={missing_ids}，"
-            f"冒烟检查文件={missing_checks}，测试文件={missing_tests}。"
-            "请恢复这些用例/文件并提交修订候选后重新运行 storyloop run；"
-            "或撤回本次 base 变更。")
-
-
-def _criteria_tree_paths(project: Path, revision: str) -> set[str]:
-    return set(_git(project, "ls-tree", "-r", "--name-only", "-z", revision).split("\0")) - {""}
-
-
-def _criteria_manifest(project: Path, revision: str, path: str) -> dict:
-    try:
-        raw = json.loads(_git(project, "show", f"{revision}:{path}"))
-    except json.JSONDecodeError as exc:
-        raise StoryLoopError("Base system smoke manifest is invalid JSON") from exc
-    return validate_manifest(raw)
 
 
 

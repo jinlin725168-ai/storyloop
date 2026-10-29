@@ -163,6 +163,7 @@ rank = 7
 "readiness" = { module = "onboarding", zone = "mutable" }
 "readiness_lineage" = { module = "onboarding", zone = "mutable" }
 "base_upgrade" = { module = "onboarding", zone = "mutable" }
+"base_criteria" = { module = "onboarding", zone = "mutable" }
 "base_follow" = { module = "onboarding", zone = "mutable" }
 "base_build_config" = { module = "onboarding", zone = "mutable" }
 "base_execution" = { module = "lifecycle", zone = "mutable" }

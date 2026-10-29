@@ -181,6 +181,7 @@ def _last_verdict(state: dict, details: dict) -> dict | None:
 def _evidence(state: dict, details: dict) -> list[str]:
     routed = (state.get("routed") or {}).get("findings") or []
     evidence = [item["location"] for item in routed if isinstance(item, dict) and item.get("location")]
+    evidence += list(details.get("criteria_summary") or [])
     violations = details.get("violations") or state.get("violations") or []
     evidence += [item.get("path", "") for item in violations if isinstance(item, dict)]
     acceptance = details.get("acceptance") or state.get("acceptance") or {}

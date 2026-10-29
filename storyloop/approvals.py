@@ -83,7 +83,8 @@ def version_snapshot(project: Path) -> dict:
 def _base_approval(project: Path, tier: str | None) -> dict:
     require(tier in {None, "heavy"}, "Base changes require the heavy tier")
     profile, supplement = effective_base_profile(project, load_project_config(project)["profile"])
-    binding = {"tier": "heavy", "base_commands_sha256": base_commands_digest(profile)}
+    binding = {"tier": "heavy", "base_commands_sha256": base_commands_digest(profile),
+               "criteria_test_roots": list(profile.get("test_roots") or [])}
     if supplement is not None:
         binding["base_build_config_sha256"] = supplement
     return binding

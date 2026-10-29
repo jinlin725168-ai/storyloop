@@ -12,6 +12,7 @@ from storyloop.base_upgrade import propose_base_change
 from storyloop.manual_acceptance import record_manual_acceptance
 from storyloop.onboarding_cli import bootstrap_with_project_checks
 from storyloop.project_loop import run_change
+from storyloop.storage import load_json, write_json
 from storyloop.system_smoke import load_system_smoke
 from tests.test_baseline_behavior import git, repository
 
@@ -119,6 +120,71 @@ class BaseCriteriaPreservationTests(unittest.TestCase):
         result = self._candidate(["pom.xml"],
                                  lambda: (self.root / "pom.xml").write_text("<project>new</project>\n"))
         self.assertEqual(result["status"], "BASE_REVIEW_REQUIRED")
+
+    def test_rejected_smoke_case_can_be_restored_and_pass(self):
+        proposal = propose_base_change(self.root, ["acceptance/smoke/manifest.json",
+                                                   "acceptance/smoke/new.py"], "扩充系统冒烟")
+        change_id = proposal["change_id"]
+        approve_change(self.root, change_id)
+        run_change(self.root, change_id)
+        (self.root / "acceptance/smoke/new.py").write_text("print('new green')\n", encoding="utf-8")
+        self._write_manifest([self._case("new", "new.py")])
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "first candidate")
+        rejected = run_change(self.root, change_id)
+        self.assertEqual(rejected["status"], "HUMAN_IMPLEMENTATION_REQUIRED")
+        self.assertIn("old", rejected["reason"])
+        self._write_manifest([self._case("old", "old.py"), self._case("new", "new.py")])
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "restore old case")
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+        git(self.root, "config", "user.name", "Independent Reviewer")
+        record_base_review(self.root, change_id, "pass", "已核对原用例")
+        run_change(self.root, change_id)
+        record_manual_acceptance(self.root, change_id, ["BASE-ACCEPT"], "已验收")
+        run_change(self.root, change_id)
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+
+    def test_prepared_smoke_manifest_can_start_human_base(self):
+        proposal = propose_base_change(self.root, ["acceptance/smoke/manifest.json"],
+                                       "预先扩充系统冒烟")
+        change_id = proposal["change_id"]
+        approve_change(self.root, change_id)
+        self._write_manifest([self._case("old", "old.py"), self._case("second", "old.py")])
+        self.assertEqual(run_change(self.root, change_id)["status"],
+                         "HUMAN_IMPLEMENTATION_REQUIRED")
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "prepared candidate")
+        self.assertEqual(run_change(self.root, change_id)["status"], "BASE_REVIEW_REQUIRED")
+
+    def test_changed_local_test_roots_cannot_hide_deleted_original_test(self):
+        proposal = propose_base_change(self.root, ["tests/test_existing.py"], "更新测试")
+        change_id = proposal["change_id"]
+        approve_change(self.root, change_id)
+        run_change(self.root, change_id)
+        config_path = self.root / ".storyloop/config.json"
+        config = load_json(config_path)
+        config["profile"]["test_roots"] = ["nothing"]
+        write_json(config_path, config)
+        (self.root / "tests/test_existing.py").unlink()
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "delete original test")
+        result = run_change(self.root, change_id)
+        self.assertEqual(result["status"], "HUMAN_IMPLEMENTATION_REQUIRED")
+        self.assertIn("tests/test_existing.py", result["reason"])
+
+    def test_review_stop_lists_modified_original_criteria(self):
+        def edit():
+            (self.root / "tests/test_existing.py").write_text("def test_old(): assert True\n", encoding="utf-8")
+            self._write_manifest([{"id": "old", "description": "changed",
+                                   "command": ["{python}", "acceptance/smoke/old.py"],
+                                   "timeout_seconds": 30}])
+
+        result = self._candidate(["tests/test_existing.py", "acceptance/smoke/manifest.json"], edit)
+        self.assertEqual(result["status"], "BASE_REVIEW_REQUIRED")
+        summary = " ".join(result["stop"]["evidence"])
+        self.assertIn("old", summary)
+        self.assertIn("tests/test_existing.py", summary)
 
 
 if __name__ == "__main__":

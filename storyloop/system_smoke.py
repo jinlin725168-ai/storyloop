@@ -13,8 +13,11 @@ and are ignored here: they belong to their changes, not to the system suite.
 from __future__ import annotations
 
 import hashlib
+import io
 from pathlib import Path
 import re
+import subprocess
+import tarfile
 import tempfile
 
 from .models import StoryLoopError, fields, require
@@ -63,6 +66,30 @@ def load_system_smoke(project: Path) -> dict | None:
     require(current == protection["digests"],
             "Protected system smoke suite was modified: " + _describe_drift(protection["digests"], current))
     return validate_manifest(load_json(manifest_path))
+
+
+def load_system_smoke_at_commit(project: Path, commit: str) -> dict | None:
+    """Validate the protected old suite from its locked Git tree, ignoring candidate edits."""
+    project = Path(project).resolve()
+    protection = load_json(project / PROTECTION)
+    require(protection.get("version") == 1 and isinstance(protection.get("digests"), dict),
+            "Invalid system smoke protection state")
+    archive = subprocess.run(["git", "archive", "--format=tar", commit], cwd=project,
+                             capture_output=True, check=True).stdout
+    with tempfile.TemporaryDirectory(prefix="storyloop-old-smoke-") as folder:
+        root = Path(folder)
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            members = [member for member in tar.getmembers()
+                       if member.isfile() and is_system_smoke_path(member.name)]
+            for member in members:
+                safe_target(root, member.name, "source system smoke path")
+            tar.extractall(root, members=members, filter="data")
+        current = _digests(root)
+        require(current == protection["digests"],
+                "Protected source system smoke suite differs: "
+                + _describe_drift(protection["digests"], current))
+        manifest = root / SYSTEM_SMOKE_DIR / "manifest.json"
+        return validate_manifest(load_json(manifest)) if manifest.is_file() else None
 
 
 def system_smoke_digests(project: Path) -> dict[str, str]:
