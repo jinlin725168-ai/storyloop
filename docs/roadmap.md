@@ -1,6 +1,6 @@
 # 路线图
 
-更新：2026-10-27（以 `origin/main` `aaf55f8` 为准）。历史计划在 `docs/plans/`，当前演进计划在 `docs/superpowers/`。
+更新：2026-10-29（以 `origin/main` `1b2c26a` 为准）。历史计划在 `docs/plans/`，当前演进计划在 `docs/superpowers/`。
 
 ## 已完成
 
@@ -37,45 +37,47 @@
 - **CI 调整（[PR #36](https://github.com/jinlin725168-ai/storyloop/pull/36)、[PR #39](https://github.com/jinlin725168-ai/storyloop/pull/39)）**：只改中文文件名文档时正确跳过测试；PR 的 Linux 跑 core、Windows 跑 platform，main 推送两平台仍跑 core；加入仅检查 F/E9 的 ruff 与 CodeQL。
 - **spec-craft 第 2 批（[计划 PR #41](https://github.com/jinlin725168-ai/storyloop/pull/41)、[实现 PR #42](https://github.com/jinlin725168-ai/storyloop/pull/42)）**：团队/个人定制、受保护路径与控制面视图已合入；[一次真实试用](validation/2026-10-24-spec-craft-第2批试用.md)发现行类型、表外假设和问句计数问题。**[PR #44](https://github.com/jinlin725168-ai/storyloop/pull/44)** 已修订技能和测试，未重跑真实试用，不能据此宣称实际模型输出已验证。
 - **架构收敛 E1（[计划 PR #38](https://github.com/jinlin725168-ai/storyloop/pull/38)、[评审修订 PR #40](https://github.com/jinlin725168-ai/storyloop/pull/40)、[实现 PR #43](https://github.com/jinlin725168-ai/storyloop/pull/43)）**：base 合同、旧底座绿证据、人工实现与具名人审、回归验收和幂等版本推进已交付并在独立样本实跑，见[验证记录](validation/2026-10-24-架构收敛-阶段E1-验证.md)。评审中人决定：旧项目使用人工确认的补充配置声明构建命令；合并前中断一律作废本次尝试、保留人的候选后重验。E1 不含代理实现、跨厂商审查或判据注入跑红，也未完成 I13。
-- **架构收敛 E2a（预览；[计划 PR #46](https://github.com/jinlin725168-ai/storyloop/pull/46)、[实现 PR #47](https://github.com/jinlin725168-ai/storyloop/pull/47)）**：代理在独立 worktree 实现，方案经具名人批准，最重档位下执行跨厂商审查；单厂商须由具名人审并说明替代理由。base 默认仍为 human，须显式 `--implementer agent` 启用预览。人决定维持现有威胁模型、不做 OS 级隔离，改用独立 worktree 并以预览合入代理通道。[一次真实试用走通](validation/2026-10-27-E2a-真实试用.md)，发现 6 个问题待修；判据注入跑红留 E2b，撞底座衔接留 E3，I13 未达成。
+- **架构收敛 E2a：已取消，代码将移除（[计划 PR #46](https://github.com/jinlin725168-ai/storyloop/pull/46)、[实现 PR #47](https://github.com/jinlin725168-ai/storyloop/pull/47)）**：曾以预览交付代理实现、跨厂商审查，并有[一次真实试用](validation/2026-10-27-E2a-真实试用.md)走通；试用发现 6 个问题。2026-10-29 的[决策 0018](decisions/0018-base-human-only.md)改为 base 只由人实现，E2a 代码另由 PR 移除；E2b [PR #57](https://github.com/jinlin725168-ai/storyloop/pull/57) 已关闭。
+- **架构收敛 E3（[计划 PR #54](https://github.com/jinlin725168-ai/storyloop/pull/54)、[实现 PR #55](https://github.com/jinlin725168-ai/storyloop/pull/55)）**：功能变更撞底座后生成关联 base 草案，base 通过后合并新底座并重证 RED；[三组真实 Maven 项目试用](validation/2026-10-28-架构收敛E3-真实试用.md)的 base 与功能变更均到 `PASSED`，实现与审查使用测试适配器。阶段 E 以 E1 + E3 收尾；判据路径用例保留守卫另行实现，I13 尚未登记为 guarded。
 
 ## 已知问题
 
-此前偶发 Git 可见性保护错误仍待捕获具体触发路径，诊断已增强，保护规则未放宽。E2a 的独立树与主仓共享 `.git`，StoryLoop 不是沙箱，无法隔离同用户恶意进程及检测与使用之间的竞态；代理应在 CLI 沙箱或无凭证容器中运行，见[PR #47 的已知问题](https://github.com/jinlin725168-ai/storyloop/pull/47)。[E2a 真实试用](validation/2026-10-27-E2a-真实试用.md)另发现 6 个问题待修。判据注入跑红与撞底座衔接仍待 E2b/E3，I13 未达成。
+此前偶发 Git 可见性保护错误仍待捕获具体触发路径，诊断已增强，保护规则未放宽。E2a 代理代码移除前，其独立树与主仓共享 `.git` 的风险仍在，见[PR #47 的已知问题](https://github.com/jinlin725168-ai/storyloop/pull/47)及[试用记录](validation/2026-10-27-E2a-真实试用.md)。改动判据路径时保留原有全部用例的守卫尚未实现，I13 尚未登记为 guarded；E3 试用的限制见[验证记录](validation/2026-10-28-架构收敛E3-真实试用.md)。
 
 新发现的代码与文档不一致记在这里，修复后移到"已完成"。
 
 ## 下一步
 
-目标是两件事：StoryLoop 能迭代自己（1.0 可用性标准，T6），以及每次迭代都能用指标看出能力变好还是变差。后者分四个子项目：1 链路骨架 → 2 需求共创技能 → 3 能力指标 → 4 测试充分性（调研见共享工作区 `research_notes/规格与测试充分性调研/`）。骨架 ①、E1、E2a 预览和 spec-craft 第 1、2 批已完成；E2b 待规划。
+目标是两件事：StoryLoop 能在真实项目及自身上完成一次功能变更闭环（T6 是自举的 1.0 可用性标准），以及每次迭代都能用指标看出能力变好还是变差。后者分四个子项目：1 链路骨架 → 2 需求共创技能 → 3 能力指标 → 4 测试充分性（调研见共享工作区 `research_notes/规格与测试充分性调研/`）。骨架 ①、E1、E3 和 spec-craft 第 1、2 批已完成；E2a、E2b 已取消，base 只走人工通道（[决策 0018](decisions/0018-base-human-only.md)）。
 
 ```mermaid
 flowchart LR
     D["架构收敛 D ✅"] --> T1["骨架 ① ✅"]
     T1 --> E1["架构收敛 E1 ✅"]
-    E1 --> E2a["架构收敛 E2a ✅（预览）"]
-    E2a --> E2b["架构收敛 E2b（待规划）"]
-    E2b --> E3["架构收敛 E3"]
+    E1 --> E3["架构收敛 E3 ✅"]
+    E1 -.-> E2a["E2a 已取消（代码待移除）"]
+    E2a -.-> E2b["E2b 已取消"]
     E3 --> F["架构收敛 F"]
     E3 --> T2["骨架 ②"]
+    E3 --> R["真实项目功能变更闭环"]
     S1["spec-craft 第 1、2 批 ✅"] --> S3["spec-craft 第 3 批"]
     T2 --> S3
     S3 --> S4["第 4 批"]
     S3 --> S5["第 5 批"]
     T2 --> M["子项目 3 指标"]
     S3 --> A4["子项目 4 测试充分性"]
-    E3 --> T6["T6 自举"]
+    R --> T6["T6 自举／自身闭环"]
     T1 --> T6
 ```
 
 **主线（改引擎，按顺序）**
 
-1. **架构收敛 E2b（待规划）→ E3**：E2a 已以预览交付代理实现与审查；E2b 补改动判据时的注入跑红，E3 补功能变更撞底座后的 `blocked_by` 衔接。I13 尚未达成。
-2. **架构收敛 F**：决策 0018、修订 0004，更新 `architecture.md`、`concepts.md`。
-3. **链路骨架 ②**：需求登记，模块、需求、规则、例子的 ID，fix 溯源，docs 类型。与 E 都改合同和生命周期，排在 E 之后。
-4. **spec-craft 第 3 → 4 → 5 批**：合同新字段与 `--from-draft`、需求地图起草、product 角色说明迁移。
-5. **子项目 3 能力指标**、**子项目 4 测试充分性**。
-6. **T6 自举**：设计可在链路骨架 ② 期间开始，实现排在 E 与骨架 ① 之后。
+1. **真实项目的功能变更闭环**：在 E1 + E3 底座通道上验证主线，保留失败与人工介入记录；改动判据路径时保留全部原有用例的守卫另行实现。
+2. **T6 自举与自身功能变更闭环**：推进引擎分离与自身变更的端到端验证；设计可与链路骨架 ② 并行。
+3. **子项目 3 能力指标**：用真实迭代数据判断能力变化；子项目 4 测试充分性随后推进。
+4. **架构收敛 F**：补记“底座来自架构声明”的后续编号决策、修订 0004，更新 `architecture.md`、`concepts.md`。
+5. **链路骨架 ②**：需求登记，模块、需求、规则、例子的 ID，fix 溯源，docs 类型。排在 E 之后。
+6. **spec-craft 第 3 → 4 → 5 批**：合同新字段与 `--from-draft`、需求地图起草、product 角色说明迁移。
 
 **旁线（不碰引擎）**：spec-craft 第 1、2 批及两次 Claude Code 试用已完成；试用发现已写回技能说明，第 3 批仍须验证正式负责人判断与引擎交接。
 
