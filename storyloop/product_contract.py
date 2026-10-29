@@ -127,7 +127,7 @@ def _nature_blocks(value: dict) -> None:
 
 
 def _base(value: object) -> None:
-    fields(value, {"scope", "paths", "must_stay_green"})
+    fields(value, {"scope", "paths", "must_stay_green"}, {"target_proof"})
     require(value["scope"] in {"foundation", "upstream", "ci", "skills", "knowledge"},
             "Invalid base scope")
     require(isinstance(value["paths"], list) and bool(value["paths"]),
@@ -136,6 +136,25 @@ def _base(value: object) -> None:
     require(len(paths) == len(set(paths)), "Duplicate base path")
     require(value["must_stay_green"] == ["full_regression", "system_smoke", "build"],
             "Base contract must keep full regression, system smoke and build green")
+    if "target_proof" in value:
+        proof = value["target_proof"]
+        fields(proof, {"criterion_paths", "check_ref", "violation_path"})
+        require(value["scope"] == "foundation", "Target proof requires foundation scope")
+        criteria = strings(proof["criterion_paths"], "criterion_paths")
+        require(criteria and len(criteria) == len(set(criteria)), "Invalid criterion paths")
+        require(set(criteria) <= set(paths), "Target proof criterion paths must be approved")
+        violation = repository_relative(proof["violation_path"], "violation_path")
+        require(violation in paths and violation not in criteria,
+                "Target proof violation path must be an approved target")
+        ref = proof["check_ref"]
+        require(isinstance(ref, dict), "Invalid target proof check_ref")
+        if ref.get("kind") == "system_smoke":
+            fields(ref, {"kind", "id"})
+            identifier(ref["id"], "smoke id")
+        else:
+            fields(ref, {"kind", "layer"})
+            require(ref["kind"] == "regression" and ref["layer"] in {"unit", "integration", "checks"},
+                    "Invalid target proof check_ref")
 
 
 def _defect(value: object) -> None:

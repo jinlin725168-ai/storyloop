@@ -13,7 +13,8 @@ from .changes import _save, load_change
 from .models import identifier, require, text
 from .path_security import repository_relative
 from .product_contract import validate_product
-from .project_boundaries import _write_base_proposal, audit_base_scope, base_scope_path_allowed
+from .project_boundaries import (_write_base_proposal, audit_base_scope, base_scope_path_allowed,
+                                 validate_base_target_paths)
 from .project_profile import base_commands_digest, effective_base_profile, is_ci_path
 from .project_profile import layer_commands
 from .project_git import changed_paths
@@ -26,7 +27,7 @@ from .lessons import scope_matches
 
 def propose_base_change(project: Path, paths: list[str], reason: str,
                         allow_mutable: bool = False, allow_ci: bool = False,
-                        scope: str | None = None) -> dict:
+                        scope: str | None = None, proof_file: Path | None = None) -> dict:
     """Open a BASE proposal for a planned foundation change (no feature run needed).
 
     `allow_mutable` is for upstream synchronisation, where the imported tree legitimately
@@ -38,6 +39,13 @@ def propose_base_change(project: Path, paths: list[str], reason: str,
     baseline = load_baseline(project)
     reason = text(reason, "base change reason")
     require(isinstance(paths, list) and bool(paths), "Base proposal needs at least one --path")
+    proof = _read_target_proof(proof_file) if proof_file else None
+    if proof is not None:
+        validate_product({"version": 1, "goal": reason, "non_goals": [], "questions": [],
+                          "stories": [], "nature": "base", "base": {
+                              "scope": scope or "foundation", "paths": paths,
+                              "must_stay_green": ["full_regression", "system_smoke", "build"],
+                              "target_proof": proof}})
     changes = []
     for item in paths:
         relative = repository_relative(item, "base path")
@@ -51,7 +59,7 @@ def propose_base_change(project: Path, paths: list[str], reason: str,
         # package.json in a monorepo) is base even when it sits inside a module root.
         integration = relative in baseline["integration_paths"]
         mutable = not integration and any(_inside(relative, root) for root in baseline["module_roots"])
-        require(allow_mutable or not mutable,
+        require((allow_mutable or relative in (proof or {}).get("criterion_paths", []) or not mutable),
                 f"{relative} is inside a mutable module root; change it through a feature, "
                 "or pass --allow-mutable for an upstream sync")
         if ci:
@@ -74,11 +82,20 @@ def propose_base_change(project: Path, paths: list[str], reason: str,
             "Base scope authorization does not match proposal flags")
     require(all(base_scope_path_allowed(scope, item["path"]) for item in changes),
             "Base scope cannot include these paths")
-    path = _write_base_proposal(project, "manual", changes, baseline, reason)
+    validate_base_target_paths(project, [item["path"] for item in changes], proof, scope)
+    path = _write_base_proposal(project, "manual", changes, baseline, reason, proof)
     draft_from_proposal(project, path.stem, scope=scope)
     return {"status": "PROPOSED", "change_id": path.stem, "proposal": str(path),
             "paths": [item["path"] for item in changes],
             "next": f"storyloop approve <project> --change {path.stem}"}
+
+
+def _read_target_proof(path: Path) -> dict:
+    path = Path(path)
+    require(path.is_file() and path.stat().st_size <= 64_000, "Invalid target proof file")
+    proof = json.loads(path.read_text(encoding="utf-8"))
+    require(isinstance(proof, dict), "Invalid target proof JSON")
+    return proof
 
 
 def _inside(relative: str, root: str) -> bool:
@@ -113,11 +130,13 @@ def draft_from_proposal(project: Path, proposal_id: str, *, scope: str) -> dict:
                 and existing["product"]["base"]["scope"] == scope,
                 "Base proposal changed after import")
         return existing
+    base = {"scope": scope, "paths": [item["path"] for item in proposal["changes"]],
+            "must_stay_green": ["full_regression", "system_smoke", "build"]}
+    if "target_proof" in proposal:
+        base["target_proof"] = proposal["target_proof"]
     product = {"version": 1, "goal": proposal.get("reason") or "更新项目底座",
                "non_goals": [], "questions": [], "stories": [], "nature": "base",
-               "base": {"scope": scope,
-                        "paths": [item["path"] for item in proposal["changes"]],
-                        "must_stay_green": ["full_regression", "system_smoke", "build"]}}
+               "base": base}
     validate_product(product)
     timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     state = {"version": 1, "change_id": proposal_id, "status": "DRAFT",

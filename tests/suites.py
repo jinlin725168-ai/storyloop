@@ -31,6 +31,7 @@ FAST = [
 
 # The main flow end to end: contract, RED, implementation, review, report, merge.
 END_TO_END = [
+    "tests.test_base_criterion_contract",
     "tests.test_base_agent_flow", "tests.test_base_agent_end_to_end",
     "tests.test_trace_ids", "tests.test_execution_profile",
     "tests.test_product_e2e", "tests.test_nature_e2e", "tests.test_change_types",
@@ -40,6 +41,7 @@ END_TO_END = [
 
 # Safety boundaries: out-of-scope writes, tampering, path and process containment.
 SAFETY = [
+    "tests.test_base_criterion_safety",
     "tests.test_base_agent_safety", "tests.test_base_agent_recovery",
     "tests.test_base_agent_cleanup_hints",
     "tests.test_base_agent_worktree", "tests.test_base_agent_transport",

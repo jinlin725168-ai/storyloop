@@ -148,6 +148,7 @@ def _maintenance_arguments(child, command):
     elif command == "base-propose":
         child.add_argument("--path", dest="paths", action="append", default=[], required=True)
         child.add_argument("--reason", required=True)
+        child.add_argument("--proof-file", type=Path, help="人声明的判据目标证明 JSON")
         child.add_argument("--allow-mutable", action="store_true",
                            help="上游同步：允许提案包含可变区路径")
         child.add_argument("--allow-ci", action="store_true",
@@ -196,7 +197,7 @@ def dispatch(args) -> dict:
     if args.command == "base-propose":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return propose_base_change(project, args.paths, args.reason, allow_mutable=args.allow_mutable,
-                                   allow_ci=args.allow_ci)
+                                   allow_ci=args.allow_ci, proof_file=args.proof_file)
     if args.command == "base-build-config":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         from .base_build_config import confirm_legacy_base_build

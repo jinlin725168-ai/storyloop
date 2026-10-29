@@ -26,6 +26,8 @@ def audit_base_scope(project: Path, change: dict, paths: set[str]) -> None:
                "upstream": {"UPSTREAM_MUTABLE", "FOUNDATION_CHANGE", "INTEGRATION_CHANGE"},
                "skills": {"FOUNDATION_CHANGE"}, "knowledge": {"FOUNDATION_CHANGE"}}[scope]
     profile = load_project_config(project)["profile"]
+    proof = change["product"]["base"].get("target_proof")
+    criteria = set(proof["criterion_paths"]) if proof else set()
     require(set(categories) == set(change["product"]["base"]["paths"]),
             "Base proposal paths differ from approved contract")
     require("CI_PROTECTED" not in categories.values(),
@@ -34,15 +36,36 @@ def audit_base_scope(project: Path, change: dict, paths: set[str]) -> None:
     for path in paths:
         require(categories.get(path) in allowed and base_scope_path_allowed(scope, path),
                 f"Base scope {scope} cannot write {path}")
-        require(not (is_system_smoke_path(path) or path.startswith("acceptance/changes/")
-                     or matches_test_root(path, profile.get("test_roots") or [])
+        require(not ((is_system_smoke_path(path) or matches_test_root(path, profile.get("test_roots") or []))
+                     and path not in criteria or path.startswith("acceptance/changes/")
                      or path == "acceptance/storyloop-settings.json"),
-                f"Base oracle path requires E2: {path}")
+                f"Base oracle path requires target proof: {path}")
         require(not _git(project, "ls-tree", "HEAD", "--", path).startswith("120000 "),
                 f"Base candidate contains unsafe symlink: {path}")
     if change.get("base_proposal_sha256"):
         require(hashlib.sha256(proposal_path.read_bytes()).hexdigest()
                 == change["base_proposal_sha256"], "Base proposal changed after approval")
+
+
+def validate_base_target_paths(project: Path, paths: list[str], proof: dict | None,
+                               scope: str) -> None:
+    """Allow only exact declared criterion paths, with an old regular target blob."""
+    profile = load_project_config(project)["profile"]
+    criterion = {path for path in paths if is_system_smoke_path(path)
+                 or matches_test_root(path, profile.get("test_roots") or [])}
+    require(not criterion or proof is not None, "Base criterion path requires target proof")
+    if proof is None:
+        return
+    declared = set(proof["criterion_paths"])
+    require(scope == "foundation" and criterion == declared,
+            "Target proof must list every criterion path in foundation scope")
+    require(all(is_system_smoke_path(path) or matches_test_root(path, profile.get("test_roots") or [])
+                for path in declared), "Invalid target proof criterion path")
+    violation = proof["violation_path"]
+    require(violation in paths and violation not in declared,
+            "Target proof violation path must be an approved target")
+    require(_git(project, "ls-tree", "HEAD", "--", violation).startswith("100644 blob "),
+            "Target proof violation path must be an existing regular file")
 
 
 def base_scope_path_allowed(scope: str, path: str) -> bool:
@@ -77,9 +100,7 @@ def role_path_boundary(project: Path, role: str, payload: dict) -> dict:
                  ".storyloop/**"]
     if base_agent:
         forbidden.extend(["reports/storyloop/**", "acceptance/changes/**",
-                          "acceptance/smoke/**", "acceptance/storyloop-settings.json",
-                          ".github/workflows/**", *[f"{root.rstrip('/')}/**"
-                                                   for root in profile.get("test_roots", [])]])
+                          "acceptance/storyloop-settings.json", ".github/workflows/**"])
     forbidden.extend(plan.get("forbidden_paths", []) if isinstance(plan.get("forbidden_paths", []), list) else [])
     return {"writable_paths": sorted(set(writable)), "forbidden_paths": sorted(set(forbidden))}
 
@@ -164,7 +185,7 @@ def _category(relative: str, baseline: dict, change_id: str, test_roots: list[st
 
 def _write_base_proposal(
     project: Path, change_id: str, changes: list[dict], baseline: dict,
-    reason: str | None = None,
+    reason: str | None = None, target_proof: dict | None = None,
 ) -> Path:
     root = project / ".storyloop" / "base-proposals"
     root.mkdir(parents=True, exist_ok=True)
@@ -189,6 +210,7 @@ def _write_base_proposal(
         "source_branch": baseline["source_branch"],
         "changes": changes,
         **({"reason": reason} if reason else {}),
+        **({"target_proof": target_proof} if target_proof else {}),
     }, max_bytes=1_000_000)
     return path
 
