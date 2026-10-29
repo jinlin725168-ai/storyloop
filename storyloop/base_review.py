@@ -6,6 +6,7 @@ from pathlib import Path
 import hashlib
 
 from .baseline import _git
+from .base_criteria import criteria_review_summary
 from .models import require, text
 from .project_receipt import _dirty_paths
 from .run_guards import base_candidate_authors, trusted_base_evidence
@@ -16,6 +17,7 @@ from .storage import load_json, write_json
 
 def pause_base_review(project: Path, change: dict, state: dict) -> dict:
     return pause(project, state, "BASE_REVIEW_REQUIRED",
+                 criteria_summary=criteria_review_summary(project, change, state),
                  next=f"storyloop base-review <project> --change {change['change_id']} "
                       "--verdict pass --note '<核对内容>', then storyloop run")
 

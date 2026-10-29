@@ -18,7 +18,8 @@ from .project_profile import base_commands_digest, effective_base_profile, is_ci
 from .project_profile import layer_commands
 from .project_git import changed_paths
 from .smoke_runner import run_commands_at_commit, run_commands_isolated
-from .system_smoke import adopt_system_smoke, load_system_smoke, run_system_smoke_isolated
+from .system_smoke import adopt_system_smoke, load_system_smoke_at_commit, run_system_smoke_isolated
+from .base_criteria import check_base_criteria
 from .storage import load_json, locked, write_json
 from .lesson_store import load_lessons_at
 from .lessons import scope_matches
@@ -147,7 +148,7 @@ def establish_old_green(project: Path, change: dict, state: dict) -> dict:
                 f"Old base {name} layer is not green")
     require(any(layer_commands(profile, name) for name in layers),
             "Old base has no configured regression commands")
-    manifest = load_system_smoke(project)
+    manifest = load_system_smoke_at_commit(project, source)
     require(manifest is not None, "Old base has no installed system smoke suite")
     smoke = run_commands_at_commit(project, source,
                                    [item["command"] for item in manifest["tests"]], timeout)
@@ -188,6 +189,7 @@ def base_candidate_paths(project: Path, change: dict, state: dict) -> list[str]:
             "Base committed paths differ from approved contract; extra: " + ", ".join(extra)
             + "; missing: " + ", ".join(missing))
     audit_base_scope(project, change, actual)
+    check_base_criteria(project, change, state, expected)
     return sorted(actual)
 
 

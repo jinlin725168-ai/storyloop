@@ -13,8 +13,11 @@ and are ignored here: they belong to their changes, not to the system suite.
 from __future__ import annotations
 
 import hashlib
+import io
 from pathlib import Path
 import re
+import subprocess
+import tarfile
 import tempfile
 
 from .models import StoryLoopError, fields, require
@@ -65,18 +68,43 @@ def load_system_smoke(project: Path) -> dict | None:
     return validate_manifest(load_json(manifest_path))
 
 
+def load_system_smoke_at_commit(project: Path, commit: str) -> dict | None:
+    """Validate the protected old suite from its locked Git tree, ignoring candidate edits."""
+    project = Path(project).resolve()
+    protection = load_json(project / PROTECTION)
+    require(protection.get("version") == 1 and isinstance(protection.get("digests"), dict),
+            "Invalid system smoke protection state")
+    archive = subprocess.run(["git", "archive", "--format=tar", commit], cwd=project,
+                             capture_output=True, check=True).stdout
+    with tempfile.TemporaryDirectory(prefix="storyloop-old-smoke-") as folder:
+        root = Path(folder)
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            members = [member for member in tar.getmembers()
+                       if member.isfile() and is_system_smoke_path(member.name)]
+            for member in members:
+                safe_target(root, member.name, "source system smoke path")
+            tar.extractall(root, members=members, filter="data")
+        current = _digests(root)
+        require(current == protection["digests"],
+                "Protected source system smoke suite differs: "
+                + _describe_drift(protection["digests"], current))
+        manifest = root / SYSTEM_SMOKE_DIR / "manifest.json"
+        return validate_manifest(load_json(manifest)) if manifest.is_file() else None
+
+
 def system_smoke_digests(project: Path) -> dict[str, str]:
     load_system_smoke(project)
     return dict(load_json(Path(project).resolve() / PROTECTION)["digests"])
 
 
-def run_system_smoke_isolated(project: Path) -> dict:
+def run_system_smoke_isolated(project: Path, *, approved_base_candidate: bool = False) -> dict:
     """Run the protected system suite in a disposable Git-visible candidate; SKIPPED when absent."""
     from .smoke_runner import _copy_candidate, _run_test  # noqa: PLC0415  (avoid an import cycle)
     from .boundaries import capture_snapshot, snapshot_changes
 
     project = Path(project).resolve()
-    manifest = load_system_smoke(project)
+    manifest = (validate_manifest(load_json(project / SYSTEM_SMOKE_DIR / "manifest.json"))
+                if approved_base_candidate else load_system_smoke(project))
     if manifest is None:
         return {"status": "SKIPPED", "reason": "NO_SYSTEM_SMOKE_SUITE", "results": []}
     before = capture_snapshot(project, include_control=True, include_ignored=True)
@@ -94,7 +122,8 @@ def run_system_smoke_isolated(project: Path) -> dict:
         status = "FAILED"
     else:
         status = "PASSED"
-    return {"status": status, "results": results, "suite_digests": system_smoke_digests(project)}
+    digests = _digests(project) if approved_base_candidate else system_smoke_digests(project)
+    return {"status": status, "results": results, "suite_digests": digests}
 
 
 def validate_manifest(manifest: object) -> dict:

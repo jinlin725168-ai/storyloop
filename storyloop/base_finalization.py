@@ -57,6 +57,10 @@ def finalize_base_baseline(project: Path, change: dict, state: dict) -> dict:
     if receipt["status"] != "ACCEPTED":
         receipt["status"] = "ACCEPTED"
         write_json(receipt_path, receipt, max_bytes=4_000_000)
+    from .state_format import is_system_smoke_path
+    if any(is_system_smoke_path(path) for path in change["product"]["base"]["paths"]):
+        from .system_smoke import adopt_system_smoke
+        adopt_system_smoke(project)
     _finish_memory_landings(project, change["change_id"])
     return receipt
 
