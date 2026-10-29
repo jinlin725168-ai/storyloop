@@ -6,33 +6,19 @@ from pathlib import Path
 
 from . import __version__
 from .base_upgrade import _changed_since
-from .baseline import _git, load_baseline, load_project_config, verify_baseline
+from .baseline import _git, load_baseline, verify_baseline
 from .models import StoryLoopError, require
 from .project_boundaries import audit_base_scope
 from .project_git import current_branch, start_base
 from .run_state import run_path, save_run
-from .storage import IGNORED, load_json
+from .storage import load_json
 
 
 def choose_implementer(scope: str, requested: str | None) -> str:
-    """Select the one immutable execution mode for a new base run."""
-    require(requested in {None, "human", "agent"}, "Invalid base implementer")
-    require(not (scope == "ci" and requested == "agent"),
-            "CI base changes require human implementation")
-    return requested or "human"
-
-
-def _self_hosted_agent(project: Path, paths: set[str]) -> bool:
-    engine_file = Path(__file__).resolve()
-    root = project.resolve()
-    if not engine_file.is_relative_to(root):
-        return False
-    relative = engine_file.parent.relative_to(root).as_posix()
-    installed = {name.casefold() for name in IGNORED} | {"site-packages", "dist-packages"}
-    if any(part.casefold() in installed for part in relative.split("/")):
-        return False
-    tracked = _git(project, "ls-files", "--cached", "-z", "--", relative)
-    return any(path.endswith(".py") for path in tracked.split("\0"))
+    """Base changes use the E1 human implementation channel."""
+    require(requested in {None, "human"}, "Base agent implementation was removed; "
+            "use --implementer human for a new run")
+    return "human"
 
 
 def _open_state(project: Path, change: dict, implementer: str | None, new_run_state) -> dict:
@@ -48,6 +34,12 @@ def _open_state(project: Path, change: dict, implementer: str | None, new_run_st
 def _resume_state(project: Path, change: dict, implementer: str | None, saved: Path) -> dict:
     state = load_json(saved)
     mode = state.get("implementer", "human")
+    if mode == "agent" and state.get("status") != "PASSED":
+        raise StoryLoopError(
+            "Saved base agent run was removed; preserve this state and branch, then "
+            "create a new approved base change with --implementer human. "
+            "This saved attempt cannot be resumed or reset automatically",
+            code="BASE_AGENT_REMOVED")
     require(state.get("contract_digest") == change["approval"]["contract_digest"]
             and mode in {"human", "agent"}, "Saved base run is invalid")
     require(implementer in {None, mode}, "Saved base implementer cannot change")
@@ -65,15 +57,6 @@ def _resume_state(project: Path, change: dict, implementer: str | None, saved: P
 def _start_state(project: Path, change: dict, implementer: str | None, new_run_state) -> dict:
     change_id = change["change_id"]
     mode = choose_implementer(change["product"]["base"]["scope"], implementer)
-    if mode == "agent":
-        from .role_profiles import enabled, resolve_adapters, role_settings
-        config = load_project_config(project)
-        if enabled(config):
-            adapter = role_settings(config, "implement", "heavy", base=True)["adapter"]
-            if resolve_adapters(config)[adapter]["kind"] == "manual":
-                raise StoryLoopError("Manual adapter cannot implement base changes in a "
-                                     "disposable worktree; start with --implementer human "
-                                     "or configure a command/Codex adapter", code="AGENT_UNAVAILABLE")
     require(change["approval"]["versions"]["engine_version"] == __version__,
             "Approved base engine version differs from the running engine")
     dirty = _git(project, "status", "--porcelain=v1", "--untracked-files=all", "-z")
@@ -82,10 +65,6 @@ def _start_state(project: Path, change: dict, implementer: str | None, new_run_s
     allowed = {item[3:].replace("\\", "/") for item in records}
     require(all(item[:2] in {" M", " D", "??"} for item in records)
             and allowed <= expected, "Prepared base files exceed approved paths")
-    require(mode == "human" or not records,
-            "Agent base implementation needs a clean source worktree; use --implementer human")
-    require(mode != "agent" or not _self_hosted_agent(project, expected),
-            "T6 self-hosted engine base changes need --implementer human or an independent old engine")
     audit_base_scope(project, change, expected)
     baseline = load_baseline(project)
     committed = _changed_since(project, baseline["source_head"])

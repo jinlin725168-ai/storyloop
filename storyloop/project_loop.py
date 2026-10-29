@@ -90,7 +90,7 @@ def _run_change_locked(
     if type_of(change["product"]) == "base":
         require(overrule is None, "Base changes do not use review overrules")
         from .base_execution import run_base_change
-        return run_base_change(project, change, implementer, _new_run_state, services)
+        return run_base_change(project, change, implementer, _new_run_state)
     require(implementer is None, "--implementer is only for base changes")
     saved_path = run_path(project, change_id)
     saved = load_json(saved_path) if saved_path.exists() else None

@@ -9,14 +9,14 @@ import json
 from .approvals import materialize_approved_change
 from .base_upgrade import base_candidate_paths, establish_old_green
 from .baseline import _git, load_project_config
-from .base_run_open import _open_state, choose_implementer
+from .base_run_open import _open_state
 from .git_command import git_is_ancestor
 from .manual_acceptance import load_manual_acceptance
 from .models import StoryLoopError, require
 from .project_git import current_branch, commit_paths, exact_child_commit, finish_feature
 from .project_loop_support import relative_files
 from .project_profile import base_commands_digest, effective_base_profile, layer_commands
-from .run_state import run_path, save_run
+from .run_state import save_run
 from .run_stops import pause
 from .run_transitions import transition
 from .run_guards import (trusted_base_acceptance, trusted_base_evidence, trusted_base_review)
@@ -29,38 +29,25 @@ from .system_smoke import run_system_smoke_isolated
 
 
 def run_base_change(project: Path, change: dict, implementer: str | None,
-                    new_run_state, services=None) -> dict:
-    """Open or resume either base implementation mode on the shared lifecycle."""
-    if (not run_path(project, change["change_id"]).exists()
-            and choose_implementer(change["product"]["base"]["scope"], implementer) == "agent"):
-        _require_agent_vendors(project)
+                    new_run_state) -> dict:
+    """Open or resume the E1 human base implementation lifecycle."""
     state = _open_state(project, change, implementer, new_run_state)
     premerge = state["status"] in BASE_PREMERGE and state.get("base_resume_status") != "FINALIZING"
     merged = _resume_git_merge(project, change, state) if premerge else None
     if merged is not None:
         return merged
-    cleanup = _resume_agent_cleanup(project, change, state)
-    if cleanup is not None:
-        return cleanup
     reason = _premerge_restart_reason(project, change, state)
     if reason is not None:
         return _restart_pause(project, change, state, reason)
     if state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED"}:
-        return _prepare(project, change, state, services)
-    if state["status"] == "DESIGN_APPROVAL_REQUIRED":
-        from .base_design import resume_design
-        return resume_design(project, change, state)
+        return _prepare(project, change, state)
     if state["status"] == "HUMAN_IMPLEMENTATION_REQUIRED":
         return _candidate_to_review(project, change, state)
     if state["status"] == "IMPLEMENTING":
-        if state.get("implementer", "human") == "agent":
-            from .base_agent_execution import implement_base_candidate
-            result = implement_base_candidate(project, change, state, services)
-            return _agent_to_review(project, change, state) if result["status"] == "IMPLEMENTING" else result
         return _restart_pause(project, change, state, "Unfinished base verification")
     if state["status"] == "BASE_REVIEW_REQUIRED":
         from .base_review import review_base_candidate
-        return review_base_candidate(project, change, state, services, _restart_pause)
+        return review_base_candidate(project, change, state, _restart_pause)
     if state["status"] == "MANUAL_ACCEPTANCE_REQUIRED":
         return _finish_after_acceptance(project, change, state)
     if state["status"] == "VERIFIED":
@@ -84,38 +71,6 @@ def run_base_change(project: Path, change: dict, implementer: str | None,
         from .project_loop_finish import passed_result
         return passed_result(state)
     return {"status": state["status"], "change_id": change["change_id"]}
-
-
-def _resume_agent_cleanup(project: Path, change: dict, state: dict) -> dict | None:
-    if not (state["status"] == "WORKSPACE_TAINTED"
-            and state.get("implementer") == "agent"
-            and state.get("interrupted_status") == "IMPLEMENTING"
-            and state.get("base_inflight") == "candidate_verification"
-            and state.get("candidate_commit") and state.get("agent_worktree")):
-        return None
-    if (_git(project, "rev-parse", "HEAD").strip() != state["candidate_commit"]
-            or _dirty_paths(project)):
-        return pause(project, state, "WORKSPACE_TAINTED",
-                     reason="Saved agent candidate or main worktree changed during cleanup; preserve it",
-                     next="Inspect the candidate and worktree anchor before reset")
-    from .base_agent_worktree import agent_cleanup_next, remove_agent_worktree
-    try:
-        remove_agent_worktree(project, state)
-    except (StoryLoopError, OSError) as exc:
-        next_step = (f"Preserve the worktree and inspect its anchor, then storyloop reset "
-                     f"<project> --change {change['change_id']} --reason '<reason>'"
-                     if isinstance(exc, StoryLoopError) and exc.code == "AGENT_ANCHOR_INVALID"
-                     else f"Close worktree file holders, then {agent_cleanup_next(state)}")
-        return pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
-                     next=next_step)
-    transition(project, state, "IMPLEMENTING", event="reset")
-    state.pop("interrupted_status", None)
-    state.pop("stop", None)
-    save_run(project, state)
-    reason = _premerge_restart_reason(project, change, {**state, "base_inflight": None})
-    if reason is not None:
-        return _restart_pause(project, change, state, reason)
-    return _agent_to_review(project, change, state)
 
 
 def _resume_git_merge(project: Path, change: dict, state: dict) -> dict | None:
@@ -146,22 +101,6 @@ def _resume_git_merge(project: Path, change: dict, state: dict) -> dict | None:
 
 def _premerge_restart_reason(project: Path, change: dict, state: dict) -> str | None:
     status = state["status"]
-    if state.get("implementer", "human") == "agent" and status in {
-            "IMPLEMENTING", "BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED"}:
-        if state.get("agent_control_binding"):
-            from .base_agent_execution import agent_binding_changes
-            if agent_binding_changes(project, change["change_id"],
-                                     state.get("agent_control_binding")):
-                return "Protected base configuration changed after the agent call anchor"
-        from .base_design import invalid_reason
-        reason = invalid_reason(project, change, state)
-        if reason:
-            return reason
-        if status == "IMPLEMENTING" and state.get("agent_worktree"):
-            return "Interrupted agent implementation attempt"
-    if status == "DESIGN_APPROVAL_REQUIRED":
-        from .base_design import invalid_reason
-        return invalid_reason(project, change, state)
     if status == "WORKSPACE_TAINTED" and state.get("base_resume_status") != "FINALIZING":
         return "Interrupted base attempt"
     if status == "VERIFIED" and current_branch(project) == state["feature_branch"]:
@@ -170,8 +109,6 @@ def _premerge_restart_reason(project: Path, change: dict, state: dict) -> str | 
                   "IMPLEMENTING", "BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED"}:
         if state.get("base_inflight"):
             return "Base attempt interrupted before checkpoint"
-        if status == "IMPLEMENTING" and state.get("base_design") and not state.get("base_design_approval"):
-            return "Base design stop was interrupted"
     if status not in {"BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED"}:
         return None
     if (_git(project, "rev-parse", "HEAD").strip() != state.get("candidate_commit")
@@ -210,13 +147,12 @@ def _restart_pause(project: Path, change: dict, state: dict, reason: str,
                       "to reverify the retained human candidate")
 
 
-def record_base_review(project: Path, change_id: str, verdict: str, note: str,
-                       human_review_reason: str | None = None) -> dict:
+def record_base_review(project: Path, change_id: str, verdict: str, note: str) -> dict:
     """Bind a named independent human review to one committed candidate."""
     project = Path(project).resolve()
     with locked(project):
         from .base_review import record_human_review
-        return record_human_review(project, change_id, verdict, note, human_review_reason)
+        return record_human_review(project, change_id, verdict, note)
 
 
 def _review_path(project: Path, change_id: str) -> Path:
@@ -289,23 +225,7 @@ def _candidate_to_review(project: Path, change: dict, state: dict) -> dict:
                         "base_evidence_sha256": _evidence_sha256(project, change["change_id"])})
     state.pop("base_inflight", None)
     from .base_review import pause_base_review
-    return pause_base_review(project, change, state, _restart_pause)
-
-
-def _agent_to_review(project: Path, change: dict, state: dict) -> dict:
-    """Verify the one engine-owned candidate without accepting a prior attempt's evidence."""
-    try:
-        from .run_guards import guard_g1
-        base_candidate_paths(project, change, state)
-        guard_g1(project, state, {})
-        evidence = _verify_candidate(project, change, state)
-    except StoryLoopError as exc:
-        return _restart_pause(project, change, state, str(exc))
-    state.update(base_evidence=evidence, candidate_sha256=evidence["candidate_sha256"],
-                 base_evidence_sha256=_evidence_sha256(project, change["change_id"]))
-    state.pop("base_inflight", None)
-    from .base_review import pause_base_review
-    return pause_base_review(project, change, state, _restart_pause)
+    return pause_base_review(project, change, state)
 
 
 def _prove_old_green(project: Path, change: dict, state: dict) -> None:
@@ -378,12 +298,8 @@ def _verified_report(project: Path, change: dict, state: dict, evidence: dict,
               "manual_acceptance": records,
               "build_note": "项目声明无构建步骤" if evidence["build"]["status"] == "DECLARED_ABSENT" else None}
     report["review_mode"] = review.get("mode", "human_e1")
-    if review.get("mode") == "human_substitute":
-        report["human_review_reason"] = review["human_review_reason"]
     if evidence.get("oracle_skills_approval") is not None:
         report["oracle_skills_approval"] = evidence["oracle_skills_approval"]
-    if state.get("engine_warning"):
-        report["engine_warning"] = state["engine_warning"]
     path = project / "reports/storyloop" / change["change_id"] / "report.json"
     write_json(path, report, max_bytes=8_000_000)
     write_text_atomic(path.with_suffix(".md"), _base_markdown(report))
@@ -398,20 +314,16 @@ def _verified_report(project: Path, change: dict, state: dict, evidence: dict,
 
 
 def _base_markdown(report: dict) -> str:
-    from .base_review import review_findings_markdown
     lines = [f"# {report['change_id']} base 验证报告", "", f"目标：{report['goal']}", "",
              "## 批准路径", "", *(f"- `{path}`" for path in report["paths"]), "",
              "## 审查与人工验收", "", f"审查者：{report['review']['reviewer']}",
              f"结论：{report['review']['verdict']}",
              f"人工验收：{report['manual_acceptance'][0]['note']}"]
-    lines += review_findings_markdown(report["review"])
     if report.get("build_note"):
         lines += ["", report["build_note"]]
     if report.get("oracle_skills_approval"):
         paths = report["oracle_skills_approval"]["paths"]
         lines += ["", "Oracle 技能确认：" + "、".join(f"`{path}`" for path in paths)]
-    if report.get("engine_warning"):
-        lines += ["", "警告：" + report["engine_warning"]]
     if report.get("merge_commit"):
         lines += ["", f"合并提交：`{report['merge_commit']}`"]
     return "\n".join(lines) + "\n"
@@ -451,17 +363,7 @@ def _finalize_base(project: Path, change: dict, state: dict) -> dict:
     return passed_result(state)
 
 
-def _require_agent_vendors(project: Path) -> None:
-    from .adapter_capabilities import require_base_review_vendors
-    from .role_profiles import enabled
-    config = load_project_config(project)
-    if enabled(config):
-        require_base_review_vendors(project, config)
-
-
-def _prepare(project: Path, change: dict, state: dict, services=None) -> dict:
-    if state.get("implementer", "human") == "agent":
-        _require_agent_vendors(project)
+def _prepare(project: Path, change: dict, state: dict) -> dict:
     change_id = change["change_id"]
     contract_root = materialize_approved_change(project, change_id)
     paths = relative_files(project, [contract_root])
@@ -479,9 +381,6 @@ def _prepare(project: Path, change: dict, state: dict, services=None) -> dict:
     transition(project, state, "IMPLEMENTING", event="base_green_ready")
     state.pop("base_inflight", None)
     save_run(project, state)
-    if state.get("implementer", "human") == "agent":
-        from .base_design import propose_design
-        return propose_design(project, change, state, services)
     return pause(project, state, "HUMAN_IMPLEMENTATION_REQUIRED",
                  next=f"Commit the approved paths on {state['feature_branch']}, then "
                       f"storyloop run <project> --change {change_id}")

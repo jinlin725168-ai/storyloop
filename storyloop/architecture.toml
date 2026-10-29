@@ -167,11 +167,6 @@ rank = 7
 "base_build_config" = { module = "onboarding", zone = "mutable" }
 "base_execution" = { module = "lifecycle", zone = "mutable" }
 "base_run_open" = { module = "lifecycle", zone = "mutable" }
-"base_design" = { module = "implementation", zone = "mutable" }
-"base_agent_execution" = { module = "implementation", zone = "mutable" }
-"base_agent_worktree" = { module = "implementation", zone = "mutable" }
-"base_agent_transfer" = { module = "implementation", zone = "mutable" }
-"engine_source_safety" = { module = "implementation", zone = "mutable" }
 "base_review" = { module = "implementation", zone = "mutable" }
 "base_finalization" = { module = "lifecycle", zone = "mutable" }
 "foundation_survey" = { module = "onboarding", zone = "mutable" }

@@ -62,9 +62,8 @@ def _require_conforming(value: dict, schema: dict, trace: dict) -> dict:
 def _manual(project: Path, request: dict, schema: dict, trace: dict) -> dict:
     request_id = _request_id(request)
     envelope = {**request, "request_id": request_id, "instructions": trace["instructions"]}
-    control = Path(trace.get("control_project", project))
-    request_path = control / ".storyloop" / "requests" / f"project-{request['role']}.json"
-    response_path = control / ".storyloop" / "responses" / f"project-{request['role']}.json"
+    request_path = project / ".storyloop" / "requests" / f"project-{request['role']}.json"
+    response_path = project / ".storyloop" / "responses" / f"project-{request['role']}.json"
     write_json(request_path, envelope, max_bytes=2_000_000)
     if not response_path.exists():
         raise StoryLoopError(
@@ -121,9 +120,7 @@ def _codex(project: Path, request: dict, config: dict, schema: dict, trace: dict
     trace["telemetry"] = telemetry
     thread: str | None = None
     next_prompt = prompt
-    control = Path(trace.get("control_project", project))
-    base_implementation = request.get("payload", {}).get("mode") == "base-implement"
-    with tempfile.TemporaryDirectory(dir=control / ".storyloop", prefix="schema-") as folder:
+    with tempfile.TemporaryDirectory(dir=project / ".storyloop", prefix="schema-") as folder:
         schema_file = Path(folder) / "response-schema.json"
         schema_file.write_text(json.dumps(request["response_schema"], ensure_ascii=False), encoding="utf-8")
         output_schema = ["--output-schema", str(schema_file)]
@@ -142,14 +139,14 @@ def _codex(project: Path, request: dict, config: dict, schema: dict, trace: dict
             try:
                 result = _parse(content)
             except StoryLoopError:
-                if base_implementation or not thread or repair == CODEX_REPAIR_LIMIT:
+                if not thread or repair == CODEX_REPAIR_LIMIT:
                     raise
                 next_prompt = CODEX_REPAIR_PROMPT
                 continue
             body, errors = conform(result, schema)
             if errors:
                 trace["schema_errors"] = errors
-                if not base_implementation and thread and repair < CODEX_REPAIR_LIMIT:
+                if thread and repair < CODEX_REPAIR_LIMIT:
                     next_prompt = CODEX_SCHEMA_REPAIR_PROMPT.format(errors="\n".join(errors))
                     continue
                 return _require_conforming(result, schema, trace)
@@ -182,8 +179,7 @@ def _codex_executable() -> list[str]:
 
 def _codex_once(project: Path, argv: list[str], prompt: str, timeout: int, telemetry: dict,
                 trace: dict) -> str:
-    control = Path(trace.get("control_project", project))
-    with tempfile.NamedTemporaryFile(dir=control / ".storyloop", suffix=".response",
+    with tempfile.NamedTemporaryFile(dir=project / ".storyloop", suffix=".response",
                                      delete=False) as handle:
         output = Path(handle.name)
     try:

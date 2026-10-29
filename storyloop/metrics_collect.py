@@ -112,8 +112,6 @@ def _record(root: Path, change_id: str, change: dict | None, run: dict | None,
     record = {"change_id": change_id, "has_report": report is not None, "gaps": gaps}
     _identity_fields(record, gaps, change, run, report)
     _preferred_fields(record, gaps, change_id, report, run, discrepancies)
-    record["base_review_mode"] = (_string(_nested(report, "review_mode"))
-                                  or _string(_nested(run, "base_review", "mode")))
     _run_fields(record, gaps, root, change_id, run, missing)
     _link_fields(record, change, run, report)
     _commit_fields(record, gaps, change_id, report, run, discrepancies)

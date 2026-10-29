@@ -114,9 +114,6 @@ PLAN_OPTION = _obj({
 ROUTING_PLAN = _obj({'main_option': STRING,
                     'options': {'type': 'array', 'items': PLAN_OPTION},
                     'questions': STRINGS, 'design': STRING, 'facts': FACTS})
-BASE_DESIGN = _obj({'summary': STRING, 'steps': STRINGS, 'risks': STRINGS,
-                    'rollback': STRING, 'questions': STRINGS})
-
 CONSISTENCY = _obj({
     'verdict': {'type': 'string', 'enum': ['coherent', 'blocked', 'needs_input']},
     'summary': STRING, 'questions': STRINGS,
@@ -269,8 +266,6 @@ def _selected_schema(role: str, payload: dict) -> dict:
         return SCHEMAS["smoke-maintenance"]
     if role == "design" and payload.get("mode") == "routing-plan":
         return ROUTING_PLAN
-    if role == "design" and payload.get("mode") == "base-plan":
-        return BASE_DESIGN
     if role == 'review' and payload.get('mode') == 'consistency':
         return CONSISTENCY
     if role in {"implement", "review"} and payload.get("routing_tier"):

@@ -35,12 +35,6 @@ from .models import StoryLoopError
 from .report_evidence import MAX_RUN_BYTES, _read_object
 
 
-def base_human_review_substitutions(records: list[dict]) -> dict:
-    """Count E2a's explicit single-vendor substitutions separately from E1 review."""
-    candidates = [record for record in records if record.get("base_review_mode") == "human_substitute"]
-    return metric("base_human_review_substitutions", len(candidates), len(records),
-                  [_id(record) for record in candidates])
-
 def first_pass(records: list[dict]) -> dict:
     """M1: passed changes without any recorded correction failure."""
     passed, first, missing = [], [], []

@@ -41,7 +41,6 @@ def parser() -> argparse.ArgumentParser:
         "report": "定位某次变更的验收报告",
         "base-propose": "为计划中的底座改动开一个 BASE 提案（无需先触发功能变更）",
         "base-build-config": "为旧项目具名确认底座构建命令，不改已冻结的 config.json",
-        "base-design-approve": "具名批准代理提出的 base 实施方案",
         "base-update": "兼容旧 BASE 提案：待批准提案导入变更草案，历史回执继续恢复",
         "base-review": "由独立的人对已提交的底座候选记录具名审查",
         "answer": "回答代理在 NEEDS_INPUT 停点提出的问题（--answer 可重复，按问题顺序）",
@@ -117,10 +116,6 @@ def _product_arguments(child, command):
         child.add_argument("--change", dest="change_id", required=True)
         child.add_argument("--verdict", choices=("pass", "fail"), required=True)
         child.add_argument("--note", required=True)
-        child.add_argument("--human-review", metavar="REASON")
-    elif command == "base-design-approve":
-        child.add_argument("--change", dest="change_id", required=True)
-        child.add_argument("--plan-id", required=True)
     elif command == "base-build-config":
         child.add_argument("--commands-json", required=True,
                            help="构建命令 argv 数组的 JSON；[] 明确表示无构建步骤")
@@ -156,8 +151,8 @@ def _maintenance_arguments(child, command):
         child.add_argument("--replan", action="store_true")
         child.add_argument("--reason")
         child.add_argument("--change", dest="change_id", required=True)
-        child.add_argument("--implementer", choices=("agent", "human"),
-                           help="base 实现者；默认人工，agent 为预览模式（CI 禁止）")
+        child.add_argument("--implementer", choices=("human",),
+                           help="base 实现者；仅支持人工通道（默认）")
         child.add_argument("--confirm-oracle-skills", action="store_true",
                            help="明确确认本次 base 候选对生效 Oracle 技能的修改")
         child.add_argument("--overrule", help="不同意审查对 ORACLE_DEFECT / NEEDS_SPEC_FIX 的判定：写明理由")
@@ -211,11 +206,7 @@ def dispatch(args) -> dict:
         return confirmed_upgrade(project, args.proposal, args.confirm_oracle_skills)
     if args.command == "base-review":
         from .base_execution import record_base_review
-        return record_base_review(project, args.change_id, args.verdict, args.note,
-                                  args.human_review)
-    if args.command == "base-design-approve":
-        from .base_design import approve_base_design
-        return approve_base_design(project, args.change_id, args.plan_id)
+        return record_base_review(project, args.change_id, args.verdict, args.note)
     if args.command == "skills":
         if args.view is not None:
             require(bool(args.view), "Skill view name must not be empty")
@@ -331,6 +322,8 @@ def _is_product_project(project: Path) -> bool:
 
 def _error_stop(args, exc: StoryLoopError) -> dict | None:
     """Best-effort stop context; a damaged run must not mask the original error."""
+    if exc.code == "BASE_AGENT_REMOVED":
+        return None
     change_id = getattr(args, "change_id", None)
     if exc.code in BLOCKED or exc.code == "NEEDS_INPUT":
         if not change_id or not (args.project.resolve() / ".storyloop/state/runs" / f"{change_id}.json").exists():
