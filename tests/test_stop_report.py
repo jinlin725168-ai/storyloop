@@ -26,6 +26,48 @@ def state_for(status: str, **extra) -> dict:
 
 
 class StopReportTests(unittest.TestCase):
+    def test_characterization_oracle_stop_routes_to_its_own_repair(self):
+        state = state_for("ORACLE_DEFECT", characterization={
+            "status": "GREEN", "tests": ["tests/test_lock.py"], "commits": ["abc"]},
+            routed={"source": "review", "target": "oracle", "findings": [{
+                "location": "tests/test_lock.py:4", "message": "locks changed behavior"}]})
+        stop = build_stop("/p", state, "ORACLE_DEFECT", {})
+        self.assertIn("--suite characterization", stop["resume"])
+        self.assertIn("--suite characterization", stop["options"][0]["command"])
+
+    def test_saved_oracle_stop_from_old_engine_shows_characterization_repair(self):
+        state = state_for("ORACLE_DEFECT", characterization={
+            "status": "GREEN", "tests": ["tests/test_lock.py"], "commits": ["abc"]},
+            routed={"source": "review", "target": "oracle", "findings": [{
+                "location": "tests/test_lock.py:4", "message": "locks changed behavior"}]})
+        state["stop"] = build_stop("/p", state, "ORACLE_DEFECT", {})
+        state["stop"]["options"][0]["command"] = "storyloop acceptance-repair /p --change FEAT-1 --reason old"
+        state["stop"]["resume"] = "storyloop run /p --change FEAT-1"
+        self.assertIn("--suite characterization", stop_of("/p", state)["resume"])
+
+    def test_feature_design_stop_shows_selected_option_and_complete_plan_location(self):
+        option = {"id": "main", "summary": "更新提示", "touched": ["storyloop/run_hints.py"],
+                  "risks": {"compatibility": {"value": "yes", "reason": "旧调用方"}}}
+        state = state_for("DESIGN_APPROVAL_REQUIRED", planning={"plan": {
+            "status": "DONE", "id": "plan-id", "main_option": "main", "options": [option],
+            "design": "## Decisions\n保留错误码\n## Risks\n旧调用方"}})
+        stop = build_stop("/p", state, "DESIGN_APPROVAL_REQUIRED", {})
+        view = "\n".join(render_stop(stop))
+        for expected in ("更新提示", "Decisions", "storyloop/run_hints.py", "Risks",
+                         ".storyloop/state/runs/FEAT-1.json"):
+            self.assertIn(expected, view)
+
+    def test_design_summary_marks_truncation_and_total(self):
+        option = {"id": "main", "summary": "short", "touched": [f"app/{i}.py" for i in range(10)],
+                  "risks": {f"r{i}": {"reason": "risk"} for i in range(10)}}
+        state = state_for("DESIGN_APPROVAL_REQUIRED", planning={"plan": {
+            "status": "DONE", "id": "plan-id", "main_option": "main", "options": [option],
+            "design": "## Decisions\n" + "choice " * 100}})
+        rendered = "\n".join(render_stop(build_stop("/p", state, "DESIGN_APPROVAL_REQUIRED", {})))
+        self.assertIn("共 10 项", rendered)
+        self.assertIn("完整内容见 .storyloop/state/runs/FEAT-1.json", rendered)
+
+
     def test_e1_human_base_review_keeps_named_human_command(self):
         stop = build_stop("/project", state_for("BASE_REVIEW_REQUIRED", implementer="human"),
                           "BASE_REVIEW_REQUIRED", {})

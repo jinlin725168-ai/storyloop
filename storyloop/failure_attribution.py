@@ -13,6 +13,18 @@ from pathlib import PurePosixPath
 from typing import Callable
 
 TARGETS = ("implementation", "oracle", "contract")
+
+
+def characterization_oracle(state: dict) -> bool:
+    """Route findings in tests committed by this run's characterization gate."""
+    characterization = state.get("characterization") or {}
+    if not characterization.get("commits"):
+        return False
+    tests = set(characterization.get("tests") or [])
+    findings = (state.get("routed") or {}).get("findings") or []
+    return bool(findings) and all(
+        isinstance(item, dict) and location_file(item.get("location")) in tests
+        for item in findings)
 LAYER_NAMES = ("unit", "integration", "acceptance", "smoke", "checks")
 LOCATION = re.compile(r"^(?P<path>[^:]+?)(?::\d+)*$")
 EVIDENCE_LOCATION = re.compile(r"[^:]+:[1-9][0-9]*(?::[1-9][0-9]*)?")

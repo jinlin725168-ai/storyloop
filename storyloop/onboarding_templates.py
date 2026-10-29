@@ -29,7 +29,10 @@ def render(stacks: list[str]) -> dict[str, bytes]:
         "unit_commands": [], "integration_commands": [], "check_commands": [],
         "base_build_commands": [],
         "module_roots": [], "test_roots": [], "integration_paths": [],
-        "candidate_allow": [], "scratch_paths": [], "stacks": stacks})
+        "candidate_allow": [],
+        "scratch_paths": (["__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache"]
+                          if "python" in stacks else []),
+        "stacks": stacks})
     manifest = {
         "version": 1, "template_version": 1, "engine_version": __version__, "helper_api": 1,
         "stacks": stacks, "reviewed": {"settings": False, "guide": False},
