@@ -15,7 +15,8 @@ from .system_smoke import validate_manifest
 
 def _blob_oid(project: Path, commit: str, relative: str) -> str:
     row = _git(project, "ls-tree", commit, "--", relative).strip()
-    require(row.startswith("100644 blob "), f"Criterion input is not a regular Git blob: {relative}")
+    require(row.startswith(("100644 blob ", "100755 blob ")),
+            f"Criterion input is not a regular Git blob: {relative}")
     return row.split(" ", 3)[2].split("\t", 1)[0]
 
 
@@ -60,12 +61,3 @@ def prove_target(project: Path, change: dict, state: dict, profile: dict, timeou
             "criterion_blob_oids": criterion_oids, "check_ref": proof["check_ref"],
             "commands": commands, "violation": violation, "candidate": normal,
             "contract_digest": state["contract_digest"]}
-
-
-def run_candidate_smoke(project: Path, candidate: str, timeout: int) -> dict:
-    manifest_oid = _blob_oid(project, candidate, "acceptance/smoke/manifest.json")
-    manifest = validate_manifest(json.loads(_blob_bytes(project, manifest_oid)))
-    commands = [item["command"] for item in manifest["tests"]]
-    return run_commands_at_commit(project, candidate, commands, timeout)
-
-

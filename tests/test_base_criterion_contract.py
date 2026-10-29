@@ -11,7 +11,7 @@ from storyloop.changes import contract_digest, load_change
 from storyloop.models import StoryLoopError
 from storyloop.project_boundaries import audit_base_scope
 from storyloop.storage import write_json
-from tests.test_baseline_behavior import repository
+from tests.test_baseline_behavior import git, repository
 
 
 class BaseCriterionContractTests(unittest.TestCase):
@@ -66,6 +66,22 @@ class BaseCriterionContractTests(unittest.TestCase):
         with self.assertRaisesRegex(StoryLoopError, "scope|foundation"):
             propose_base_change(self.root, ["pom.xml", "acceptance/smoke/check_coordinates.py"],
                                 "更新坐标", proof_file=self.proof(), scope="skills")
+
+    def test_executable_git_blob_is_still_a_regular_violation_target(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            (root / "pom.xml").chmod(0o755)
+            git(root, "update-index", "--chmod=+x", "pom.xml")
+            git(root, "commit", "-q", "-m", "regular executable target")
+            bootstrap_project(root, {"test_commands": [], "base_build_commands": []})
+            proof = root / ".storyloop/proof-input.json"
+            write_json(proof, {"criterion_paths": ["acceptance/smoke/check_coordinates.py"],
+                               "check_ref": {"kind": "system_smoke", "id": "coordinates"},
+                               "violation_path": "pom.xml"})
+            proposal = propose_base_change(root, ["pom.xml", "acceptance/smoke/check_coordinates.py"],
+                                           "新增判据", proof_file=proof)
+            self.assertEqual(proposal["status"], "PROPOSED")
 
 
 if __name__ == "__main__":

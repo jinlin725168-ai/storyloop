@@ -26,7 +26,7 @@
 | `document` | `--change ID [--design FILE] [--capability NAME]` | `DOCUMENTED` |
 | `smoke-propose` | `--change ID` | `SMOKE_PROPOSED` |
 | `smoke-apply` | `--change ID` | `SMOKE_APPLIED` 或 `SMOKE_UPDATE_FAILED` |
-| `base-propose` | `--path P [--path P …] --reason TEXT [--allow-mutable] [--allow-ci]` | `PROPOSED` |
+| `base-propose` | `--path P [--path P …] --reason TEXT [--allow-mutable] [--allow-ci] [--proof-file JSON]` | `PROPOSED` |
 | `base-update` | `--proposal BASE-ID [--confirm-oracle-skills]` | 旧 `PROPOSED` 返回 `APPROVAL_REQUIRED`；历史已接受回执返回 `BASELINE_UPGRADED` |
 | `base-design-approve` | `--change BASE-ID --plan-id SHA256` | `DESIGN_APPROVED`，具名批准当前代理方案 |
 | `base-review` | `--change BASE-ID --verdict pass\|fail --note TEXT [--human-review REASON]` | `REVIEW_RECORDED`；单厂商人工替代须给至少 12 字理由，审查人须独立于全部候选作者和提交者 |
@@ -43,11 +43,21 @@
 
 ### E2a 底座代理实现（预览）
 
-新 base 变更默认由人实现。显式执行 `run --change BASE-ID --implementer agent` 才进入代理预览通道，先完成旧底座绿，再生成方案并停在 `DESIGN_APPROVAL_REQUIRED`。人阅读 `.storyloop/state/base-designs/BASE-ID.json`，用 `base-design-approve --plan-id` 具名批准；下一次 `run` 进入实现，再一次 `run` 调用代理。引擎先在项目工作树外创建 detached Git worktree，代理只以它为工作目录；引擎在该树审计合同批准的精确路径，再把合格内容搬回干净的 base 分支并提交候选。base 代理实现支持 command 与 Codex 适配器；manual 适配器需要跨停点保留请求和执行目录，因此会在创建临时树前明确拒绝，请改选 `--implementer human`。Codex 临时响应以及其他适配器的请求、响应与账本由引擎写在原项目控制面。中断时按运行状态保存的路径删除整棵临时 worktree，不自动清理主工作区的人类改动。判据路径（系统冒烟、`acceptance/changes/**`、声明的 `test_roots`、`acceptance/storyloop-settings.json`）在 E2a 仍拒绝代理修改；**E2b 完成前，不得把设计 §4.2 的判据隔离注入跑红视为已交付**。
+新 base 变更默认由人实现。显式执行 `run --change BASE-ID --implementer agent` 才进入代理预览通道，先完成旧底座绿，再生成方案并停在 `DESIGN_APPROVAL_REQUIRED`。人阅读 `.storyloop/state/base-designs/BASE-ID.json`，用 `base-design-approve --plan-id` 具名批准；下一次 `run` 进入实现，再一次 `run` 调用代理。引擎先在项目工作树外创建 detached Git worktree，代理只以它为工作目录；引擎在该树审计合同批准的精确路径，再把合格内容搬回干净的 base 分支并提交候选。base 代理实现支持 command 与 Codex 适配器；manual 适配器需要跨停点保留请求和执行目录，因此会在创建临时树前明确拒绝，请改选 `--implementer human`。Codex 临时响应以及其他适配器的请求、响应与账本由引擎写在原项目控制面。中断时按运行状态保存的路径删除整棵临时 worktree，不自动清理主工作区的人类改动。E2a 时所有判据路径均拒绝代理修改；E2b 仅按下节的目标证明开放精确路径，`acceptance/changes/**` 和 settings 仍拒绝。
 
 不同厂商由适配器握手的 `vendor` 判定；缺失或相同都不能证明独立审查，`degrade` 不会把 base 审查回落给实现厂商。只有项目可配置的适配器均证明属于同一个 vendor 时，具名人可用 `base-review --human-review '至少 12 字理由'` 替代代理审查，随后仍须 `accept --criterion BASE-ACCEPT`。报告增量提供 `review_mode`、`human_review_reason`，metrics 单列 `base_human_review_substitutions`；E1 普通人工审查不计替代。
 
-合并源分支之前，代理通道一旦中断或产物失配，会作废方案、候选、证据、审查和验收并回合同提交；源分支是否已包含候选依 Git 事实判断。源分支已合并后仅按既有回执和底座版本流程幂等推进。T6 引擎分离前，本仓库引擎、守卫、适配器及其判据不可交给本仓库代理修改，可显式选 `--implementer human`。E3 的扩展审查能力未在本批实现。
+合并源分支之前，代理通道一旦中断或产物失配，会作废方案、候选、证据、审查和验收并回合同提交；源分支是否已包含候选依 Git 事实判断。源分支已合并后仅按既有回执和底座版本流程幂等推进。T6 引擎分离前，本仓库引擎、守卫、适配器及其判据不可交给本仓库代理修改，可显式选 `--implementer human`。
+
+### E2b 判据目标证明
+
+base 提案修改项目级系统冒烟或声明的回归测试根目录时，先由人写 `--proof-file` JSON，声明全部本次修改的判据路径、检查引用以及已存在且同属批准路径的目标文件。例如：
+
+```json
+{"criterion_paths":["acceptance/smoke/manifest.json","acceptance/smoke/check_coordinates.py"],"check_ref":{"kind":"system_smoke","id":"coordinates"},"violation_path":"pom.xml"}
+```
+
+人批准提案后，引擎用候选提交的检查运行两次：先在隔离副本把目标换为源提交的 Git blob，要求普通测试失败；再在原候选上要求通过。`check_ref` 也可引用已配置的 `unit`、`integration` 或 `checks` 回归层。红绿证据绑定源 blob、候选 tree 和判据 blob 的 Git OID；报告同时保留人工审查与 `BASE-ACCEPT`。其他 base 变更仍按原人工验收流程。
 
 ### spec-craft 项目定制视图
 

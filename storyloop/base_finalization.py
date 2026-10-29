@@ -54,6 +54,9 @@ def finalize_base_baseline(project: Path, change: dict, state: dict) -> dict:
         _require_baseline(_dict_digest(candidate) == receipt["candidate_baseline_digest"],
                           "Base candidate baseline changed during recovery")
         write_json(baseline_path, candidate, max_bytes=8_000_000)
+    if change["product"]["base"].get("target_proof"):
+        from .system_smoke import adopt_system_smoke
+        adopt_system_smoke(project)
     if receipt["status"] != "ACCEPTED":
         receipt["status"] = "ACCEPTED"
         write_json(receipt_path, receipt, max_bytes=4_000_000)

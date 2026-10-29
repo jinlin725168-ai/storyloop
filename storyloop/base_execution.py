@@ -23,7 +23,7 @@ from .run_guards import (trusted_base_acceptance, trusted_base_evidence, trusted
 from .run_recovery import (BASE_PREMERGE, base_source_contains_candidate,
                            manual_base_merge_error, restart_base_attempt)
 from .project_receipt import _dirty_paths, recover_completed_merge
-from .base_review import base_report_markdown
+from .base_review import base_report_markdown as _base_markdown
 from .smoke_runner import implementation_digest, run_commands_isolated
 from .storage import locked, write_json, write_text_atomic
 from .system_smoke import run_system_smoke_isolated
@@ -240,8 +240,8 @@ def _verify_candidate(project: Path, change: dict, state: dict) -> dict:
                 f"Base candidate {name} layer did not pass")
     proof = change["product"]["base"].get("target_proof")
     if proof:
-        from .base_criterion_probe import run_candidate_smoke
-        smoke = run_candidate_smoke(project, state["candidate_commit"], timeout)
+        from .system_smoke import run_smoke_at_commit
+        smoke = run_smoke_at_commit(project, state["candidate_commit"], timeout)
     else:
         smoke = run_system_smoke_isolated(project)
     require(smoke["status"] == "PASSED", "Base candidate system smoke did not pass")
@@ -397,7 +397,7 @@ def _verified_report(project: Path, change: dict, state: dict, evidence: dict,
         report["engine_warning"] = state["engine_warning"]
     path = project / "reports/storyloop" / change["change_id"] / "report.json"
     write_json(path, report, max_bytes=8_000_000)
-    write_text_atomic(path.with_suffix(".md"), base_report_markdown(report))
+    write_text_atomic(path.with_suffix(".md"), _base_markdown(report))
     paths = [path.relative_to(project).as_posix(),
              path.with_suffix(".md").relative_to(project).as_posix()]
     commit = commit_paths(project, paths,
@@ -413,7 +413,7 @@ def _base_receipt(project: Path, change: dict, state: dict) -> dict:
     report = authoritative_report(project, state)
     report["merge_commit"] = state["merge_commit"]
     receipt_bytes = ((json.dumps(report, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
-                     base_report_markdown(report).encode("utf-8"))
+                     _base_markdown(report).encode("utf-8"))
     receipt_commit = ensure_merge_receipt(project, state, receipt_bytes)
     transition(project, state, "FINALIZING", event="finalizing",
                updates={"integration_commit": receipt_commit})

@@ -64,7 +64,8 @@ def validate_base_target_paths(project: Path, paths: list[str], proof: dict | No
     violation = proof["violation_path"]
     require(violation in paths and violation not in declared,
             "Target proof violation path must be an approved target")
-    require(_git(project, "ls-tree", "HEAD", "--", violation).startswith("100644 blob "),
+    require(_git(project, "ls-tree", "HEAD", "--", violation).startswith(
+        ("100644 blob ", "100755 blob ")),
             "Target proof violation path must be an existing regular file")
 
 
@@ -78,7 +79,8 @@ def verify_target_binding(project: Path, change: dict, state: dict, evidence: di
 
     def oid(commit: str, path: str) -> str:
         row = _git(project, "ls-tree", commit, "--", path).strip()
-        require(row.startswith("100644 blob "), "Target proof Git blob changed")
+        require(row.startswith(("100644 blob ", "100755 blob ")),
+                "Target proof Git blob changed")
         return row.split(" ", 3)[2].split("\t", 1)[0]
 
     require(result.get("contract_digest") == state["contract_digest"]

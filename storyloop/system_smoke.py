@@ -13,6 +13,7 @@ and are ignored here: they belong to their changes, not to the system suite.
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 import re
 import tempfile
@@ -95,6 +96,16 @@ def run_system_smoke_isolated(project: Path) -> dict:
     else:
         status = "PASSED"
     return {"status": status, "results": results, "suite_digests": system_smoke_digests(project)}
+
+
+def run_smoke_at_commit(project: Path, commit: str, timeout: int) -> dict:
+    """Run a base candidate's committed suite before its protection digest is adopted."""
+    from .baseline import _git
+    from .smoke_runner import run_commands_at_commit
+    manifest = validate_manifest(json.loads(_git(
+        project, "show", f"{commit}:{SYSTEM_SMOKE_DIR}/manifest.json")))
+    return run_commands_at_commit(project, commit,
+                                  [item["command"] for item in manifest["tests"]], timeout)
 
 
 def validate_manifest(manifest: object) -> dict:
