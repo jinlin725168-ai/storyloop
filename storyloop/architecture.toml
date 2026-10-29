@@ -133,6 +133,7 @@ rank = 7
 "facts" = { module = "implementation", zone = "mutable" }
 "failure_attribution" = { module = "implementation", zone = "mutable" }
 "project_loop_failures" = { module = "implementation", zone = "mutable" }
+"base_collision" = { module = "implementation", zone = "mutable" }
 "review_context" = { module = "verification", zone = "mutable" }
 "review_disposition" = { module = "verification", zone = "mutable" }
 "finding_disposition" = { module = "verification", zone = "mutable" }
@@ -162,6 +163,7 @@ rank = 7
 "readiness" = { module = "onboarding", zone = "mutable" }
 "readiness_lineage" = { module = "onboarding", zone = "mutable" }
 "base_upgrade" = { module = "onboarding", zone = "mutable" }
+"base_follow" = { module = "onboarding", zone = "mutable" }
 "base_build_config" = { module = "onboarding", zone = "mutable" }
 "base_execution" = { module = "lifecycle", zone = "mutable" }
 "base_run_open" = { module = "lifecycle", zone = "mutable" }

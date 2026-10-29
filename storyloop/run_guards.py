@@ -42,7 +42,16 @@ def guard_g1(project: Path, state: dict, context: dict) -> None:
         return
     require(bool(set(floor) & {"acceptance_red", "defect_reproduction_red", "structural_red"}),
             "Change type lacks a supported RED floor")
-    read_red_evidence(project, state["change_id"])
+    red = read_red_evidence(project, state["change_id"])
+    if state.get("blocked_by"):
+        head = _git(project, "rev-parse", "HEAD").strip()
+        lock_commit = (state.get("characterization") or {}).get("status") == "GREEN"
+        require((head == state["contract_commit"] or
+                 (lock_commit and _git(project, "merge-base", head,
+                                       state["contract_commit"]).strip() == state["contract_commit"]))
+                and red.get("head_commit") == state["contract_commit"]
+                and red["evidence_sha256"] == state.get("red_evidence_sha256"),
+                "Blocking base requires fresh RED evidence on the merged contract")
 
 
 def _guard_base_green(project: Path, state: dict) -> None:

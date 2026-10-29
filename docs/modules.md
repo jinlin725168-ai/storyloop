@@ -80,6 +80,7 @@
 |  | `failure_attribution` | 可变区 | 判定失败尝试的修复责任与闭环是否仍有进展 | `check_findings`、`failure_signature`、`finding_key`、`layer_attribution`、`location_file`、`next_mode`、`no_progress`、`route` |
 |  | `planning` | 可变区 | 运行锁内、特征化与实现之前的 L2 分档方案 | `assess_plan`、`ensure_routing_plan`、`plan_projection`、`required_locks`、`review_focus`、`selected_option` |
 |  | `planning_validation` | 可变区 | 结构化角色方案字段与确定性范围校验 | `option_scope`、`validate_plan` |
+|  | `base_collision` | 可变区 | 保存撞底座参考、关联草案并恢复本轮可归属候选 | `link_base_collision` |
 |  | `project_loop_failures` | 可变区 | 记录失败尝试并路由到问题责任方 | `apply_overrule`、`epoch_of`、`record_boundary`、`record_failure`、`require_routed_choice`、`route_review` |
 |  | `project_loop_gates` | 可变区 | RED 与首次实现之间的方案、特征化两道门 | `characterize_paths`、`design_plan`、`ensure_characterization`、`ensure_design`、`resume_characterization`、`uncharacterized_paths` |
 | 验证 | `consistency` | 可变区 | 批准后、特征化前的重档只读一致性审查 | `ensure_consistency`、`invalidate_consistency`、`overrule_consistency` |
@@ -106,6 +107,7 @@
 |  | `routing_state` | 可变区 | 提供纯分流快照及按版本区分的执行预算 | `advance_tier`、`is_routed`、`open_routing`、`run_config` |
 |  | `routing_upgrade` | 可变区 | 单调升级 L3 范围评估并使旧方案失效 | `check_l3`、`enforce_forbidden_paths` |
 | 接入与底座 | `base_upgrade` | 可变区 | 生成 base 草案、旧底座 G1 与历史回执兼容读取 | `propose_base_change`、`upgrade_baseline` |
+|  | `base_follow` | 可变区 | 核验已通过的关联 base 并合并回原功能分支 | `merge_blocking_base` |
 |  | `base_build_config` | 可变区 | 在无在途批准时记录旧项目构建命令的人工确认 | `confirm_legacy_base_build` |
 |  | `foundation_survey` | 可变区 | 受保护的底座知识库摸底与扩展说明 | `foundation_payload`、`survey_foundation` |
 |  | `onboarding` | 可变区 | 两阶段仓库接入：先草案，再建立干净且已提交的底座 | `scaffold_project` |

@@ -55,6 +55,14 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
             return (f"代理触碰了 CI 路径；先撤回越界改动，再由人运行 storyloop base-propose "
                     f"{project} --path <CI路径> --reason '<原因>' --allow-ci，批准新 BASE 后在底座分支重放；"
                     f"完成底座变更后再 {run}")
+        if details.get("blocked_by"):
+            base = shlex.quote(str(details["blocked_by"]))
+            source = shlex.quote(str(details.get("source_branch", "<source-branch>")))
+            feature = shlex.quote(str(details.get("feature_branch", "<feature-branch>")))
+            return (f"底座草案 {base} 已生成：git switch {source}；"
+                    f"storyloop approve {project} --change {base}；"
+                    f"storyloop run {project} --change {base} --implementer human；"
+                    f"base 通过后 git switch {feature}，再 {run} 自动合并并重证")
         proposal = details.get("base_proposal")
         named = f"（提案 {Path(str(proposal)).stem}）" if proposal else ""
         return (f"底座改动要独立迭代{named}：storyloop base-update {project} --proposal <BASE-ID> "

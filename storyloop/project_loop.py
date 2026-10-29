@@ -22,6 +22,7 @@ from .cross_vendor import prepare_run
 from .cost_limits import check_before_call
 from .answers import _pending as _unanswered, load_answers
 from .baseline import _git, load_baseline, load_project_config, verify_baseline
+from .base_follow import merge_blocking_base
 from .boundaries import capture_snapshot  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .changes import load_change
 from .change_types import type_of
@@ -32,6 +33,7 @@ from .failure_attribution import layer_attribution, next_mode
 from .facts import merge_facts
 from .models import StoryLoopError, require, text
 from .project_boundaries import audit_project_changes
+from .project_boundaries import _changed_paths
 from .project_contracts import validate_agent_summary, validate_review  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .project_git import current_branch, start_feature
 from .project_loop_finish import (complete_change, finalize_change, finish_merged, finish_receipting,
@@ -49,7 +51,7 @@ from .project_loop_failures import (apply_overrule, epoch_of, record_boundary, r
 from .project_loop_support import control_digest, run_path, save_run  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .run_stops import pause
 from .oracle_counts import check_layers
-from .project_preparation import _prepare_acceptance
+from .project_preparation import _prepare_acceptance, reprove_after_base
 from .project_profile import layer_commands
 from .processutil import redact, redaction_prefix
 from .system_smoke import run_system_smoke_isolated  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
@@ -147,6 +149,16 @@ def _resume_and_prepare(project: Path, change: dict, state: dict, services: Loop
         return finish_receipting(project, change, state)
     if state["status"] == "FINALIZING":
         return finalize_change(project, change, state)
+    if state["status"] == "BASE_CHANGE_REQUIRED" and state.get("blocked_by"):
+        parents = _git(project, "rev-list", "--parents", "-n", "1", "HEAD").split()
+        merged = len(parents) == 3 and parents[2] == state["source_head"]
+        if not merged:
+            return pause(project, state, "BASE_CHANGE_REQUIRED", blocked_by=state["blocked_by"],
+                         base_proposal=state.get("base_proposal"),
+                         violations=state.get("violations", []))
+        paused = reprove_after_base(project, change, state)
+        if paused is not None:
+            return paused
     if fresh or state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}:
         paused = _prepare_acceptance(project, change, services, state)
         if paused is not None:
@@ -184,10 +196,14 @@ def _open_run(project: Path, change: dict, routing: dict | None = None) -> tuple
                     else state.get("feature_branch"))
         require(current == expected, "Resume the saved StoryLoop branch")
         if state["status"] != "RECEIPTING":
-            verify_baseline(
-                project, resume=state["status"] not in {"MERGED", "FINALIZING"}
-            )
-            _follow_base_upgrade(project, state)
+            if state.get("blocked_by"):
+                _follow_base_upgrade(project, state)
+                verify_baseline(project, resume=True)
+            else:
+                verify_baseline(
+                    project, resume=state["status"] not in {"MERGED", "FINALIZING"}
+                )
+                _follow_base_upgrade(project, state)
         return state, int(state.get("attempt", 0)) + 1, False
     return _start_run(project, change, routing)
 
@@ -203,6 +219,7 @@ def _start_run(project: Path, change: dict, routing: dict | None) -> tuple[dict,
     verify_baseline(project)
     state = _new_run_state(project, change_id, start_feature(project, change_id),
                            change["approval"]["contract_digest"])
+    state["e3_collision"] = True
     if routing is not None:
         state["routing"] = routing
     state["skills_used"] = role_skill_versions(project, load_project_config(project).get("profile", {}).get("stacks", []))
@@ -216,6 +233,9 @@ def _follow_base_upgrade(project: Path, state: dict) -> None:
     movement of the source branch is still refused at completion."""
     baseline = load_baseline(project)
     if baseline["source_head"] == state["source_head"] or state["status"] in {"MERGED", "FINALIZING"}:
+        return
+    if state.get("blocked_by"):
+        merge_blocking_base(project, state, baseline)
         return
     # A run may start after legal prose commits; its older BASE is not a new upgrade.
     if _git(project, "merge-base", baseline["source_head"], state["source_head"]).strip() \
@@ -248,6 +268,7 @@ def _run_attempt(
                "mode": state["mode"],
                "design_plan": design_plan(state),
                **({"routing_tier": state["routing"]["effective_tier"]} if is_routed(change, state) else {})}
+    preexisting = set(_changed_paths(project))
     saved = cost_resume.candidate(project, state)
     response, touched = saved or write_safely(project, change_id, lambda: _implement_answer(services, project, context))
     if "_contract_error" in response:
@@ -255,11 +276,11 @@ def _run_attempt(
         return record_failure(project, state, {"attempt": state["attempt"], "contract": {
             "status": "INVALID", "message": response["_contract_error"]}}, "implement")
     cost_resume.checkpoint(project, state, response, touched)
-    return _judge_attempt(project, change, state, services, config, response, touched)
+    return _judge_attempt(project, change, state, services, config, response, touched, preexisting)
 
 
 def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServices, config: dict,
-                   response: dict, touched: set[str]) -> dict | None:
+                   response: dict, touched: list, preexisting: set[str]) -> dict | None:
     """Apply deterministic gates to one valid implement response."""
     change_id = change["change_id"]
     validate_agent_summary(response)
@@ -270,7 +291,7 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
     require_git_visible(touched, boundary)
     enforce_forbidden_paths(state, boundary)
     if boundary["violations"]:
-        return record_boundary(project, state, boundary)
+        return record_boundary(project, state, boundary, touched, preexisting)
     release_errata()
     if response["questions"]:
         return pause(project, state, "NEEDS_INPUT", questions=response["questions"])

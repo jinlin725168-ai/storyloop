@@ -161,4 +161,8 @@ class LifecycleGoldenTests(unittest.TestCase):
         for name in ("success", "manual", "boundary", "repair", "supersede", "routed", "cost"):
             with self.subTest(case=name):
                 expected = json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
-                self.assertEqual(capture_case(name), expected)
+                actual = capture_case(name)
+                # E3 opt-in identifies newly started runs; golden outputs still compare every
+                # pre-existing contract, status, verdict, budget, report and Git field.
+                actual["state"].pop("e3_collision", None)
+                self.assertEqual(actual, expected)

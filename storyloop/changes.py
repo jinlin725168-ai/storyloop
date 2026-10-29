@@ -70,7 +70,7 @@ def load_change(project: Path, change_id: str) -> dict:
     }
     from .models import require
     optional = {"supersedes", "superseded_by", "routing_version", "intake",
-                "base_proposal_sha256"}
+                "base_proposal_sha256", "blocked_by"}
     require(required <= set(value) <= required | optional and value["version"] == 1,
             "Invalid change state")
     require(value["change_id"] == change_id, "Change state identity mismatch")
@@ -79,6 +79,10 @@ def load_change(project: Path, change_id: str) -> dict:
                 and isinstance(value["base_proposal_sha256"], str)
                 and len(value["base_proposal_sha256"]) == 64,
                 "Invalid base proposal digest")
+    if "blocked_by" in value:
+        require(nature_of(value["product"]) != "base"
+                and isinstance(value["blocked_by"], str)
+                and value["blocked_by"].startswith("BASE-"), "Invalid blocking base change")
     require(value["status"] in {
         "DRAFT", "APPROVED", "RUNNING", "PASSED", "PAUSED", "FAILED", "SUPERSEDED",
     },
@@ -221,6 +225,12 @@ def write_change_preview(project: Path, state: dict) -> None:
         f"## 澄清记录\n\n{_clarification_lines(product.get('clarifications', []))}\n\n"
         f"## 待决问题\n\n{questions}\n"
     )
+    if product.get("nature") == "base" and state.get("base_proposal_sha256"):
+        source = Path(project) / ".storyloop/base-proposals" / f"{state['change_id']}.json"
+        if source.is_file():
+            reference = load_json(source).get("reference")
+            if isinstance(reference, dict) and isinstance(reference.get("path"), str):
+                proposal += f"\n## 原变更参考\n\n`{reference['path']}`（仅供参考，不进入合同或实现）。\n"
     _write_text(root / "proposal.md", proposal)
     capability = capability_of(product, state["change_id"])
     main_path = Path(project).resolve() / "openspec" / "specs" / capability / "spec.md"

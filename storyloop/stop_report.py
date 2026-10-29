@@ -249,6 +249,9 @@ def _stop_actions(project: Path | str, state: dict, status: str, details: dict
     options = routing_options(project, change_id, status, {**state, **details}) or _options(
         status, project_text, change_id, bool(state.get("routed")),
         details.get("ci_requires_human_proposal", False))
+    if status == "BASE_CHANGE_REQUIRED" and details.get("blocked_by"):
+        options = [{"action": "批准已生成的底座草案", "command": _command(
+            "storyloop", "approve", project_text, "--change", details["blocked_by"])}]
     blocker = details.get("error") or state.get("error") or BLOCKERS.get(status, status)
     if status == "DESIGN_APPROVAL_REQUIRED":
         if (change_id.startswith("BASE-") and state.get("implementer") == "agent"

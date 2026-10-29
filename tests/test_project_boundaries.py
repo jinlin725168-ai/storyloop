@@ -13,6 +13,20 @@ from tests.test_baseline_behavior import git, repository
 
 
 class ProjectBoundaryTests(unittest.TestCase):
+    def test_repeated_feature_boundary_audit_reuses_base_proposal(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            (root / "pom.xml").write_text("<project><dependency/></project>\n", encoding="utf-8")
+
+            first = audit_project_changes(root, "FEAT-20261028-001")
+            second = audit_project_changes(root, "FEAT-20261028-001")
+
+            self.assertEqual(first["status"], "BASE_CHANGE_REQUIRED")
+            self.assertEqual(second["base_proposal"], first["base_proposal"])
+            self.assertEqual(len(list((root / ".storyloop/base-proposals").glob("BASE-*.json"))), 1)
+
     def test_type_writable_scope_controls_module_and_role_paths(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
