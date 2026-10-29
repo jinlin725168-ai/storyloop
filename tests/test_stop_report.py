@@ -33,25 +33,6 @@ class StopReportTests(unittest.TestCase):
         self.assertIn("--verdict pass", stop["options"][0]["command"])
         self.assertNotIn("--human-review", stop["options"][0]["command"])
 
-    def test_base_design_summary_is_bounded_and_single_line(self):
-        plan = {"plan_id": "p", "goal": "目标\n" + "长" * 500,
-                "change_id": "BASE-1", "summary": "代理方案摘要",
-                "paths": ["a.txt"] * 20, "steps": ["步骤\n说明"] * 20,
-                "risks": ["风险"] * 20, "rollback": "回退\n说明"}
-        stop = build_stop("/project", state_for("DESIGN_APPROVAL_REQUIRED", change_id="BASE-1",
-                                                implementer="agent", base_design=plan),
-                          "DESIGN_APPROVAL_REQUIRED", {})
-        summary = stop["plan_summary"]
-        self.assertLessEqual(len(summary["goal"]), 240)
-        self.assertFalse(any("\n" in value for value in
-                             [summary["goal"], summary["rollback"], *summary["steps"]]))
-        self.assertLessEqual(len(summary["paths"]), 8)
-        self.assertLessEqual(len(summary["steps"]), 5)
-        self.assertEqual(summary["summary"], "代理方案摘要")
-        rendered = "\n".join(render_stop(stop))
-        self.assertIn("共 20 项", rendered)
-        self.assertIn(".storyloop/state/base-designs/BASE-1.json", rendered)
-
     def test_feature_design_stop_does_not_use_base_approval_or_stale_next(self):
         state = state_for("DESIGN_APPROVAL_REQUIRED", nature="feature",
                           next="storyloop accept /p --change FEAT-1 --criterion old")
@@ -59,13 +40,6 @@ class StopReportTests(unittest.TestCase):
         self.assertNotIn("底座方案", str(stop))
         self.assertNotIn("accept", stop["resume"])
         self.assertIn("approve", stop["resume"])
-
-    def test_review_mode_field_drives_stop_even_if_hint_text_is_misleading(self):
-        state = state_for("BASE_REVIEW_REQUIRED", implementer="agent",
-                          base_review_mode="distinct", next="storyloop adapters check <project>")
-        stop = build_stop("/p", state, "BASE_REVIEW_REQUIRED", {})
-        self.assertIn("跨厂商", stop["blocker"])
-        self.assertEqual(stop["options"][0]["action"], "触发跨厂商代理审查")
 
     def test_post_l3_ready_does_not_override_current_execution_phase(self):
         state = state_for('MANUAL_ACCEPTANCE_REQUIRED',

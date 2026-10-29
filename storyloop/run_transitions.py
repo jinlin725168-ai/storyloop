@@ -73,7 +73,7 @@ TRANSITIONS = {
     # Pre-merge interruptions discard the entire attempt; only human commits survive.
     "base_restart": frozenset((source, target) for source in {
         "CONTRACT_COMMITTED", "IMPLEMENTING", "HUMAN_IMPLEMENTATION_REQUIRED",
-        "DESIGN_APPROVAL_REQUIRED", "BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED",
+        "BASE_REVIEW_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED",
         "VERIFIED", "WORKSPACE_TAINTED",
     } for target in {"CONTRACT_COMMITTED", "HUMAN_IMPLEMENTATION_REQUIRED"}),
     "base_baseline_recheck": frozenset({("WORKSPACE_TAINTED", "FINALIZING")}),

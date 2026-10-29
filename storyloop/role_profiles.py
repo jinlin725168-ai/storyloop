@@ -38,13 +38,7 @@ def resolve_adapters(config: dict) -> dict[str, dict]:
     return result
 
 
-def base_payload(payload: dict) -> bool:
-    change = payload.get("change")
-    return (isinstance(change, dict) and isinstance(change.get("product"), dict)
-            and change["product"].get("nature") == "base")
-
-
-def role_settings(config: dict, role: str, routing_tier: str | None, *, base: bool = False) -> dict:
+def role_settings(config: dict, role: str, routing_tier: str | None) -> dict:
     """Resolve the adapter and requested tier for one engine role."""
     routing = routing_tier or "standard"
     require(isinstance(routing, str) and routing in ROUTING, "Invalid routing tier")
@@ -56,9 +50,6 @@ def role_settings(config: dict, role: str, routing_tier: str | None, *, base: bo
     adapter = override.get("adapter", roles.get("default_adapter", "default"))
     require(isinstance(adapter, str) and adapter in adapters, "Role references an unknown adapter")
     tier = _tier(role, routing, override.get("tier"))
-    if base:
-        require(routing == "heavy" and tier == "strong",
-                "Base agent roles require the heavy routing tier and strong model tier")
     reason = override.get("reason")
     if "reason" in override:
         require(isinstance(reason, str) and bool(reason.strip()), "Role reason must be nonempty text")
@@ -89,7 +80,7 @@ def build_profile(project: Path, config: dict, role: str, payload: dict, state: 
     """Build the optional request extension; absence preserves legacy request bytes."""
     if not enabled(config):
         return None
-    settings = role_settings(config, role, _routing_tier(payload, state), base=base_payload(payload))
+    settings = role_settings(config, role, _routing_tier(payload, state))
     skills = state.get("skill_snapshots")
     if skills is None:
         skills = [snap for _, snap in selected_snapshots(project, role, (config.get("profile") or {}).get("stacks", []))]

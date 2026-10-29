@@ -5,19 +5,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
-import hashlib
 
 from .changes import load_change
 from .change_types import type_of
 from .baseline import _git
-from .base_agent_worktree import agent_cleanup_next, remove_agent_worktree
 from .git_command import git_is_ancestor
 from .models import StoryLoopError, identifier, require, text
 from .path_security import safe_target
 from .project_git import changed_paths, current_branch
 from .storage import load_json, locked
 from .run_state import save_run
-from .run_stops import pause
 from .run_transitions import transition, RESETTABLE
 from .run_guards import base_report_paths, reset_status as _reset_status
 
@@ -26,22 +23,16 @@ Clock = Callable[[], datetime]
 # (`storyloop run`) or must go through its own command (accept, answer, base-update).
 STALE_KEYS = ("error", "questions", "pending", "verified", "candidate_sha256", "next", "stop")
 BASE_PREMERGE = frozenset({"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED", "IMPLEMENTING",
-                           "HUMAN_IMPLEMENTATION_REQUIRED", "DESIGN_APPROVAL_REQUIRED",
+                           "HUMAN_IMPLEMENTATION_REQUIRED",
                            "BASE_REVIEW_REQUIRED",
                            "MANUAL_ACCEPTANCE_REQUIRED", "VERIFIED", "WORKSPACE_TAINTED"})
 BASE_ATTEMPT_KEYS = ("old_green_sha256", "base_evidence", "base_evidence_sha256",
-                     "base_design", "base_design_sha256", "base_design_approval",
-                     "base_design_approval_sha256",
-                     "base_review", "base_review_sha256", "base_review_mode",
+                     "base_review", "base_review_sha256",
                      "manual_acceptance_sha256",
                      "candidate_commit", "candidate_sha256", "base_inflight",
                      "implementation_commit", "report_commit", "report_sha256",
                      "acceptance_evidence_sha256", "review", "stop", "next", "error", "pending",
-                     "interrupted_status", "base_resume_status", "baseline_issue",
-                     "agent_call_contract", "agent_call_head", "agent_control_binding",
-                     "agent_engine_digest", "engine_warning", "agent_worktree",
-                     "agent_before_inventory", "agent_after_inventory",
-                     "agent_adapter", "agent_vendor")
+                     "interrupted_status", "base_resume_status", "baseline_issue")
 
 
 def reset_run(project: Path, change_id: str, reason: str, now: Clock | None = None) -> dict:
@@ -81,6 +72,9 @@ def _reset_locked(project: Path, change_id: str, reason: str, now: Clock | None)
 
 def _reset_base(project: Path, change: dict, state: dict, reason: str,
                 now: Clock | None) -> dict:
+    require(state.get("implementer", "human") != "agent",
+            "Saved base agent run was removed; preserve its branch and state, then create "
+            "a new approved base change with --implementer human")
     require(state.get("status") in BASE_PREMERGE
             and state.get("base_resume_status") != "FINALIZING"
             and not base_source_contains_candidate(project, state),
@@ -101,13 +95,14 @@ def _reset_base(project: Path, change: dict, state: dict, reason: str,
 
 def restart_base_attempt(project: Path, state: dict, rejected: bool = False) -> str:
     """Discard only engine artifacts; leave the human's committed implementation intact."""
+    require(state.get("implementer", "human") != "agent",
+            "Saved base agent run was removed; preserve its branch and state, then create "
+            "a new approved base change with --implementer human")
     require(state.get("contract_commit"), "Base restart needs the committed contract")
     require(not base_source_contains_candidate(project, state),
             "Merged base runs cannot restart; resume finalization with storyloop run")
     require(current_branch(project) == state.get("feature_branch"),
             "Resume the saved StoryLoop base branch before restarting")
-    if state.get("implementer", "human") == "agent":
-        return _restart_agent_base(project, state)
     candidate = state.get("candidate_commit")
     head = _git(project, "rev-parse", "HEAD").strip()
     if head == state["contract_commit"]:
@@ -136,100 +131,6 @@ def restart_base_attempt(project: Path, state: dict, rejected: bool = False) -> 
         state["rejected_candidate_commit"] = candidate
     save_run(project, state)
     return target
-
-
-def _restart_agent_base(project: Path, state: dict) -> str:
-    """Discard the anchored checkout; preserve dirty main worktrees and extra commits."""
-    try:
-        remove_agent_worktree(project, state)
-    except StoryLoopError as exc:
-        next_step = (f"storyloop reset <project> --change {state['change_id']} "
-                     "--reason '<reason>'" if exc.code == "AGENT_ANCHOR_INVALID"
-                     else agent_cleanup_next(state))
-        pause(project, state, "WORKSPACE_TAINTED", reason=str(exc),
-              next=next_step)
-        return "WORKSPACE_TAINTED"
-    issue = _agent_preflight_issue(project, state)
-    if issue is not None:
-        reason, next_step = issue
-        pause(project, state, "WORKSPACE_TAINTED", reason=reason, next=next_step)
-        return "WORKSPACE_TAINTED"
-    issue = _agent_branch_issue(project, state)
-    if issue is not None:
-        reason, next_step = issue
-        pause(project, state, "WORKSPACE_TAINTED", reason=reason, next=next_step)
-        return "WORKSPACE_TAINTED"
-    if _git(project, "rev-parse", "HEAD").strip() != state["contract_commit"]:
-        _git(project, "reset", "--soft", state["contract_commit"])
-        _git(project, "read-tree", "--reset", "-u", "HEAD")
-    _discard_base_files(project, state)
-    transition(project, state, "CONTRACT_COMMITTED", event="base_restart")
-    for key in BASE_ATTEMPT_KEYS:
-        state.pop(key, None)
-    save_run(project, state)
-    return "CONTRACT_COMMITTED"
-
-
-def _agent_preflight_issue(project: Path, state: dict) -> tuple[str, str] | None:
-    from .base_agent_execution import agent_binding_changes
-    design = project / ".storyloop/state/base-designs" / f"{state['change_id']}.json"
-    expected_design = state.get("base_design_sha256")
-    if expected_design and design.is_file() and hashlib.sha256(design.read_bytes()).hexdigest() != expected_design:
-        return ("A saved base design file was edited outside the engine",
-                "Preserve the edited design, inspect it, and restore or move it before "
-                f"storyloop reset <project> --change {state['change_id']} --reason '<reason>'")
-    anchor = state.get("agent_call_head")
-    if anchor is not None and anchor != state["contract_commit"]:
-        return ("Agent call HEAD does not match the committed contract anchor",
-                "Preserve the branch and inspect the saved agent call anchor before reset")
-    bound = state.get("agent_control_binding")
-    if bound is not None and agent_binding_changes(project, state["change_id"], bound):
-        if not _agent_cache_only_change(project, state, bound):
-            return ("Agent changed protected base configuration after the saved call anchor",
-                    "Restore the protected configuration from a trusted copy, then "
-                    f"storyloop reset <project> --change {state['change_id']} --reason '<reason>'")
-    return None
-
-
-def _agent_branch_issue(project: Path, state: dict) -> tuple[str, str] | None:
-    from .base_agent_execution import AGENT_EMAIL, AGENT_NAME
-    head = _git(project, "rev-parse", "HEAD").strip()
-    contract = state["contract_commit"]
-    if _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip():
-        return ("Main worktree has uncommitted changes; attribution is unknown",
-                "Preserve or commit the human changes, then "
-                f"storyloop reset <project> --change {state['change_id']} --reason '<reason>'")
-    if head != contract:
-        source_ref = f"refs/heads/{state['source_branch']}"
-        try:
-            source_contains_head = git_is_ancestor(project, head, source_ref)
-        except StoryLoopError as exc:
-            raise StoryLoopError("Cannot inspect the base source branch before agent restart; "
-                                 "restore its ref and retry", code="BASE_SOURCE_UNAVAILABLE") from exc
-        require(not source_contains_head, manual_base_merge_error(
-            state, "source already contains the unsaved agent candidate"))
-    if head != contract:
-        candidate = state.get("candidate_commit")
-        if candidate and head != candidate and _report_tail(project, state, candidate, head):
-            head = candidate
-        parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
-        identity = _git(project, "show", "-s", "--format=%an <%ae>|%cn <%ce>", head).strip()
-        expected = f"{AGENT_NAME} <{AGENT_EMAIL}>|{AGENT_NAME} <{AGENT_EMAIL}>"
-        if len(parents) != 2 or parents[1] != contract or identity != expected:
-            return ("Base branch has an extra or unattributed commit after the agent anchor",
-                    "Preserve the branch, inspect git log, and remove the unexpected commit "
-                    "manually before storyloop reset")
-    return None
-
-
-def _agent_cache_only_change(project: Path, state: dict, bound: dict) -> bool:
-    from .base_agent_execution import agent_binding_changes
-    changed = agent_binding_changes(project, state["change_id"], bound)
-    cache = project / ".storyloop/state/adapters.json"
-    if changed != {".storyloop/state/adapters.json"} or not cache.is_file() or cache.is_symlink():
-        return False
-    cache.unlink()  # A legitimate post-call recheck invalidates the entire attempt.
-    return True
 
 
 def base_source_contains_candidate(project: Path, state: dict) -> bool:

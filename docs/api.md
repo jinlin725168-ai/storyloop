@@ -16,7 +16,7 @@
 | `survey` | `[--reason TEXT] [--from FILE]` | `SURVEYED` |
 | `change` | `--idea TEXT [--slug NAME]`、`--change ID --message TEXT` 或 `--supersede ID --message TEXT [--reason TEXT]`；`[--no-interactive]` | 变更状态（`DRAFT`） |
 | `approve` | `--change ID [--no-interactive]` 或 `--draft KIND/ID`（二者互斥） | 运行状态（见第二节）或 `APPLIED` |
-| `run` | `--change ID [--implementer agent\|human] [--overrule TEXT] [--no-interactive]` | 运行状态；新 base 默认人工，显式 `--implementer agent` 启用代理预览（CI 禁止），旧 E1 运行保持人工模式 |
+| `run` | `--change ID [--implementer human] [--overrule TEXT] [--no-interactive]` | 运行状态；base 仅由人实现，`--implementer human` 可省略 |
 | `status` | `--change ID` | 变更状态，附 `run`、`telemetry`、`next`、`stop` |
 | `log` | `--change ID` | `LOG` |
 | `answer` | `--change ID --answer TEXT [--answer TEXT …]` | `ANSWERED` |
@@ -28,8 +28,7 @@
 | `smoke-apply` | `--change ID` | `SMOKE_APPLIED` 或 `SMOKE_UPDATE_FAILED` |
 | `base-propose` | `--path P [--path P …] --reason TEXT [--allow-mutable] [--allow-ci]` | `PROPOSED` |
 | `base-update` | `--proposal BASE-ID [--confirm-oracle-skills]` | 旧 `PROPOSED` 返回 `APPROVAL_REQUIRED`；历史已接受回执返回 `BASELINE_UPGRADED` |
-| `base-design-approve` | `--change BASE-ID --plan-id SHA256` | `DESIGN_APPROVED`，具名批准当前代理方案 |
-| `base-review` | `--change BASE-ID --verdict pass\|fail --note TEXT [--human-review REASON]` | `REVIEW_RECORDED`；单厂商人工替代须给至少 12 字理由，审查人须独立于全部候选作者和提交者 |
+| `base-review` | `--change BASE-ID --verdict pass\|fail --note TEXT` | `REVIEW_RECORDED`；审查人须独立于全部候选作者和提交者 |
 | `ci` | `--change ID` | `PASSED` 或 `FAILED` |
 | `metrics` | `[--since YYYY-MM-DD] [--ci-results DIR] [--save]` | `METRICS` |
 | `report` | `--change ID` | `REPORT`（报告路径） |
@@ -41,13 +40,12 @@
 
 各命令的用法见 [使用指南](product-iteration-guide.md)。两阶段接入、onboarding.json、`{storyloop_harness}` argv、可信 case 及公开 helper API 见[版本化冒烟执行器](smoke-harness.md)。scaffold 幂等只接受未改草案；人工补齐后按干净提交执行原 init。init 失败按写入内容归属回滚，不覆盖并发修改。
 
-### E2a 底座代理实现（预览）
+### E1 底座人工实现
 
-新 base 变更默认由人实现。显式执行 `run --change BASE-ID --implementer agent` 才进入代理预览通道，先完成旧底座绿，再生成方案并停在 `DESIGN_APPROVAL_REQUIRED`。人阅读 `.storyloop/state/base-designs/BASE-ID.json`，用 `base-design-approve --plan-id` 具名批准；下一次 `run` 进入实现，再一次 `run` 调用代理。引擎先在项目工作树外创建 detached Git worktree，代理只以它为工作目录；引擎在该树审计合同批准的精确路径，再把合格内容搬回干净的 base 分支并提交候选。base 代理实现支持 command 与 Codex 适配器；manual 适配器需要跨停点保留请求和执行目录，因此会在创建临时树前明确拒绝，请改选 `--implementer human`。Codex 临时响应以及其他适配器的请求、响应与账本由引擎写在原项目控制面。中断时按运行状态保存的路径删除整棵临时 worktree，不自动清理主工作区的人类改动。判据路径（系统冒烟、`acceptance/changes/**`、声明的 `test_roots`、`acceptance/storyloop-settings.json`）在 E2a 仍拒绝代理修改；**E2b 完成前，不得把设计 §4.2 的判据隔离注入跑红视为已交付**。
+base 变更只走人工实现通道：批准后运行 `storyloop run --change BASE-ID` 锁定合同、证明旧底座绿，并停在 `HUMAN_IMPLEMENTATION_REQUIRED`。人在 `storyloop/BASE-ID` 分支提交批准的路径；再次运行会核对 G1、候选回归、系统冒烟和构建，然后停在 `BASE_REVIEW_REQUIRED`。独立审查者执行 `base-review --verdict pass --note`，再由人记录 `BASE-ACCEPT` 验收。报告、合并、底座版本推进和回执沿用 E1 流程。
 
-不同厂商由适配器握手的 `vendor` 判定；缺失或相同都不能证明独立审查，`degrade` 不会把 base 审查回落给实现厂商。只有项目可配置的适配器均证明属于同一个 vendor 时，具名人可用 `base-review --human-review '至少 12 字理由'` 替代代理审查，随后仍须 `accept --criterion BASE-ACCEPT`。报告增量提供 `review_mode`、`human_review_reason`，metrics 单列 `base_human_review_substitutions`；E1 普通人工审查不计替代。
+已有 `implementer=agent` 的在途试用状态保持原样，但不能继续执行；请保留状态和分支，另开批准的 base 变更并使用人工通道。
 
-合并源分支之前，代理通道一旦中断或产物失配，会作废方案、候选、证据、审查和验收并回合同提交；源分支是否已包含候选依 Git 事实判断。源分支已合并后仅按既有回执和底座版本流程幂等推进。T6 引擎分离前，本仓库引擎、守卫、适配器及其判据不可交给本仓库代理修改，可显式选 `--implementer human`。E3 的扩展审查能力未在本批实现。
 
 ### spec-craft 项目定制视图
 
@@ -216,7 +214,6 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 - `command` 适配器：请求（含 `instructions`）从 stdin 输入，stdout 返回结果。
 - `manual` 适配器：请求另带 `request_id`，写到 `.storyloop/requests/project-<role>.json`；人把 `{request_id, result}` 写到 `.storyloop/responses/project-<role>.json` 后重跑原命令。
 - `codex` 适配器：把“角色说明 + `Request:` + 请求 JSON”作为提示词交给 `codex exec`；implement、characterize 用 `workspace-write` 沙箱，其他角色 `read-only`。
-- base 代理实现（预览）的独立 worktree 不是沙箱。command 适配器只把 cwd 和请求工作目录指向临时树，需使用代理 CLI 自带沙箱（例如 Codex `workspace-write`）或无凭证容器限制可写根。引擎审计独立树时只使用 state 锚定的 Git 注册目录和工作树路径，不读取树内 `.git` 指针，并禁用该调用的 fsmonitor、外部 diff 与已配置的 Git 文件过滤器；共享 `.git`、用户 Git 配置及同用户进程仍不隔离。base Codex 格式失败时作废尝试并新开受限调用，不用缺少 `-C`/沙箱选项的 `exec resume`。当前引擎源码由项目 Git 跟踪时，base 请选择 `--implementer human`；调用后源码摘要变化或无法计算只提醒核查及重新安装，不阻断运行或 reset。
 - 代理进程只拿到白名单环境变量（`PATH`、`HOME`、`TEMP`、`TMP`、`JAVA_HOME`、`USERPROFILE` 等），名字含 KEY、TOKEN、PASSWORD、SECRET、CREDENTIAL 的一律剔除。
 - `openspec/foundation/README.md` 存在时，除 survey 外每个角色的 payload 自动多一项 `foundation: {version, documents:[path]}`。
 - 合同提交存在且经验层校验通过时，除 survey 和复盘外的角色还会收到 `lessons`：核心层带正文；普通层最多 10 条，只含 `id`、`summary`、`path`、`status`。没有 `openspec/lessons/` 时不注入该字段。
