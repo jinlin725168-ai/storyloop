@@ -310,8 +310,7 @@ class RoutedEndToEndTests(unittest.TestCase):
         approve_design(root, identifier, pause['plan_id'])
         self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
 
-    def test_reviewed_characterization_defect_can_be_repaired_on_old_code(self):
-        from storyloop.acceptance_repair import repair_smoke
+    def test_reviewed_characterization_defect_routes_to_supersede(self):
         from tests.test_structured_output import passing_review
         root, identifier, services = self.case('heavy')
         paused = run_change(root, identifier, services)
@@ -326,61 +325,14 @@ class RoutedEndToEndTests(unittest.TestCase):
                                   'message': 'characterization locks a behavior the contract changes'}],
                     'questions': []}
 
-        old_source = (root / 'app/service.py').read_bytes()
-        def dirty_implement(project, context):
-            result = services.implement(project, context)
-            (project / 'app/service.py').write_bytes(old_source + b'# candidate edit\n')
-            return result
-        stopped = run_change(root, identifier, replace(
-            services, implement=dirty_implement, review=defective_review))
+        stopped = run_change(root, identifier, replace(services, review=defective_review))
         self.assertEqual(stopped['status'], 'ORACLE_DEFECT', stopped)
-        self.assertIn('--suite characterization', stopped['next'])
-        path = root / 'tests/test_lock.py'
-        path.write_text(path.read_text(encoding='utf-8').replace(
-            'self.assertEqual(serve(), "ok")', 'self.assertIn(serve(), ("ok", "new"))'),
-            encoding='utf-8')
-        result = repair_smoke(root, identifier, 'old assertion conflicts with AC-3',
-                              suite='characterization')
-        self.assertEqual(result['status'], 'CHARACTERIZATION_REPAIRED', result)
-        state = load_run_state(root, identifier)
-        self.assertEqual(state['attempt'], 0)
-        self.assertEqual(state['characterization']['status'], 'GREEN')
-        self.assertNotIn('routed', state)
-        self.assertEqual((root / 'app/service.py').read_bytes(), old_source)
-        self.assertFalse((root / 'modules/orders/service.py').exists())
-        replanned = run_change(root, identifier, services)
-        self.assertEqual(replanned['status'], 'DESIGN_APPROVAL_REQUIRED')
-        approve_design(root, identifier, replanned['plan_id'])
-        self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
-
-    def test_characterization_repair_clears_l3_checkpoint_and_resamples_unit_floor(self):
-        from storyloop.acceptance_repair import repair_characterization
-        from storyloop.storage import write_json
-        from unittest.mock import patch
-        root, identifier, services = self.case('heavy')
-        pause = run_change(root, identifier, services)
-        approve_design(root, identifier, pause['plan_id'])
-        # Obtain a real characterized run, then model the reviewed oracle defect.
-        run_change(root, identifier, services)
-        state = load_run_state(root, identifier)
-        state['status'] = 'ORACLE_DEFECT'
-        state['review_disposition'] = {'status': 'ORACLE_DEFECT', 'findings': [
-            {'target': 'oracle', 'location': 'tests/test_lock.py:1'}]}
-        state['planning'].update(origin='L3', phase='READY', execution_digest='stale',
-                                 characterization_input='stale')
-        state.setdefault('oracle', {}).setdefault('baseline', {})['unit'] = [999]
-        write_json(root / '.storyloop/state/runs' / f'{identifier}.json', state)
-        path = root / 'tests/test_lock.py'
-        path.write_text(path.read_text(encoding='utf-8') + '\n# repaired\n', encoding='utf-8')
-        with patch('storyloop.failure_attribution.characterization_oracle', return_value=True), \
-                patch('storyloop.acceptance_repair._reprove_red', return_value={'evidence_sha256': 'test'}):
-            result = repair_characterization(root, {'change_id': identifier, 'product': {}},
-                                             state, 'repair old lock')
-        self.assertEqual(result['status'], 'CHARACTERIZATION_REPAIRED')
-        self.assertEqual(state['planning']['phase'], 'REPLAN')
-        self.assertNotIn('execution_digest', state['planning'])
-        self.assertNotIn('characterization_input', state['planning'])
-        self.assertNotEqual(state['oracle']['baseline']['unit'], [999])
+        self.assertIn(f'--supersede {identifier}', stopped['next'])
+        self.assertNotIn('acceptance-repair', stopped['next'])
+        self.assertEqual(load_run_state(root, identifier)['status'], 'ORACLE_DEFECT')
+        from storyloop.acceptance_repair import repair_smoke
+        with self.assertRaisesRegex(StoryLoopError, f'--supersede {identifier}'):
+            repair_smoke(root, identifier, 'wrong characterization')
 
     def test_base_upgrade_invalidates_plan_then_replan_completes(self):
         from storyloop.base_upgrade import upgrade_baseline

@@ -4,9 +4,8 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
-from storyloop.characterization_baseline import _baseline, run_characterization_baseline
+from storyloop.characterization_baseline import _baseline
 
 
 def _git(root: Path, *args: str) -> str:
@@ -40,26 +39,6 @@ class BaselinePathSpellingTests(unittest.TestCase):
         # On Windows runners the temp folder is spelled with a short name (RUNNER~1).
         with tempfile.TemporaryDirectory() as folder:
             self.assertEqual(_baseline(self.project, Path(folder), self.head), {'app/service.py'})
-
-    def test_deleted_lock_is_absent_from_old_code_copy(self):
-        target = self.project / 'tests/test_old.py'
-        target.parent.mkdir()
-        target.write_text('raise AssertionError("obsolete")\n', encoding='utf-8')
-        _git(self.project, 'add', '.')
-        _git(self.project, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'lock')
-        target.unlink()
-
-        def observe(candidate, commands, timeout, patterns):
-            self.assertFalse((candidate / 'tests/test_old.py').exists())
-            return {'status': 'PASSED', 'results': []}
-
-        with patch('storyloop.characterization_baseline.load_project_config', return_value={
-                'profile': {'test_roots': ['tests']}}), \
-                patch('storyloop.characterization_baseline.project_patterns', return_value=[]), \
-                patch('storyloop.characterization_baseline.run_commands', side_effect=observe):
-            result = run_characterization_baseline(self.project, [['true']], 10, {
-                'tests': [], 'changed': ['tests/test_old.py']})
-        self.assertEqual(result['status'], 'PASSED')
 
 
 if __name__ == '__main__':

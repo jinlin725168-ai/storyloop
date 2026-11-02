@@ -214,9 +214,9 @@ def _stop_actions(project: Path | str, state: dict, status: str, details: dict
     if status == "ORACLE_DEFECT":
         from .failure_attribution import characterization_oracle
         if characterization_oracle({**state, **details}):
-            options[0] = {"action": "修正特征化测试并重证旧代码", "command": _command(
-                "storyloop", "acceptance-repair", project_text, "--change", change_id,
-                "--suite", "characterization", "--reason", "<修正理由>")}
+            options[0] = {"action": "作废变更并重开", "command": _command(
+                "storyloop", "change", project_text, "--supersede", change_id,
+                "--reason", "<原因>", "--message", "<重新描述需求>")}
     if status == "BASE_CHANGE_REQUIRED" and details.get("blocked_by"):
         options = [{"action": "批准已生成的底座草案", "command": _command(
             "storyloop", "approve", project_text, "--change", details["blocked_by"])}]

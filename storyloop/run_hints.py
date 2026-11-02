@@ -79,9 +79,9 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
     if status == "ORACLE_DEFECT":
         from .failure_attribution import characterization_oracle
         if characterization_oracle(details):
-            return (f"特征化测试锁定了合同要改变的行为；先按审查理由修正停止报告中的测试，"
-                    f"再 storyloop acceptance-repair {where} --suite characterization "
-                    f"--reason <修正理由>，引擎会在旧代码上重证为绿并作废当前尝试；然后 {run}")
+            return (f"特征化测试锁定了合同要改变的行为；请作废本次变更并运行 "
+                    f"storyloop change {where} --supersede {change_id} --reason <原因> "
+                    "--message <重新描述需求> 重开")
         return (f"验收判据被判定存在缺陷，请根据停止报告中的证据修正：storyloop acceptance-repair {where} "
                 f"--reason <哪条断言写错了> 让 acceptance 角色修正，再 {run}")
     if status == "EXISTING_GREEN":

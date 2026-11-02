@@ -23,7 +23,6 @@ from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, without_m
 from .smoke import suite_relative, suite_root as acceptance_suite_root
 from .smoke_runner import run_commands_at_commit, run_smoke_isolated
 from .storage import load_json
-from .planning_choice import selected_option
 
 if TYPE_CHECKING:  # the loop imports this module; the services type is only an annotation
     from .run_services import LoopServices
@@ -33,7 +32,7 @@ if TYPE_CHECKING:  # the loop imports this module; the services type is only an 
 
 
 def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServices | None = None,
-                 now=None, *, suite: str = "acceptance") -> dict:
+                 now=None) -> dict:
     """Let the smoke owner fix test defects in its own suite, then re-prove RED at the contract commit.
 
     The implementer never touches the suite; a human must judge that the failure is a test
@@ -55,12 +54,10 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     if _git(project, "diff", "--cached", "--no-renames", "--name-only", "-z").strip("\0"):
         raise StoryLoopError("暂存区有候选改动；先用 git restore --staged -- <候选路径> 取消暂存，"
                              "核对工作区后重试修复命令", code="GIT_BLOCKED")
-    if suite == "characterization":
-        return repair_characterization(project, change, state, reason, now=now)
-    require(suite == "acceptance", "Unknown repair suite")
     from .failure_attribution import characterization_oracle
     require(not characterization_oracle(state),
-            "缺陷位于特征化测试；请先修正该测试，再运行 acceptance-repair --suite characterization")
+            f"特征化测试与合同冲突；请作废本次变更并运行 storyloop change {project} "
+            f"--supersede {change_id} --reason <原因> --message <重新描述需求> 重开")
     if services is None:
         from .default_loop_services import _default_services
         services = _default_services()
@@ -89,12 +86,14 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     return _prove_repaired_suite(project, change, state, commit)
 
 
-def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict,
-                          red: dict | None = None) -> dict:
+def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict) -> dict:
     change_id = change["change_id"]
     try:
-        if red is None:
-            red = _reprove_red(project, change, state)
+        red = read_only_call(
+            project, change_id,
+            lambda: run_smoke_isolated(project, change, expect_red=True, at_commit=state["contract_commit"]),
+            allowed_evidence=RED_EVIDENCE,
+        )
     except StoryLoopError as exc:
         if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
             raise
@@ -107,121 +106,6 @@ def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict
     save_run(project, state)
     return {"status": "ACCEPTANCE_REPAIRED", "change_id": change_id, "commit": commit["commit"],
             "next": f"storyloop run <project> --change {change_id}"}
-
-
-def _reprove_red(project: Path, change: dict, state: dict) -> dict:
-    return read_only_call(project, change["change_id"],
-                          lambda: run_smoke_isolated(project, change, expect_red=True,
-                                                     at_commit=state["contract_commit"]),
-                          allowed_evidence=RED_EVIDENCE)
-
-
-def repair_characterization(project: Path, change: dict, state: dict, reason: str, now=None) -> dict:
-    """Commit a human correction only after its locked tests pass against old code."""
-    verified = _verify_characterization_repair(project, change, state)
-    if isinstance(verified, dict):
-        return verified
-    tests, kept, changed, locks, unit, red = verified
-    _discard_characterization_candidate(project, state, set(tests))
-    previous = state["characterization"]
-    previous["tests"] = kept
-    if locks is not None:
-        previous["locks"] = locks
-    else:
-        state.pop("characterization", None)  # replacement locks are generated on the next run
-    from .oracle_counts import executed_list
-    state.setdefault("oracle", {}).setdefault("baseline", {})["unit"] = executed_list(unit)
-    moment = (now or (lambda: datetime.now(timezone.utc)))().astimezone(timezone.utc).isoformat(timespec="seconds")
-    from .consistency import invalidate_consistency
-    invalidate_consistency(state, replan=True)
-    from .design_approval import clear_l3_replan_checkpoint
-    clear_l3_replan_checkpoint(state)
-    voided = int(state.get("attempt", 0))
-    for key in ("questions", "error", "pending", "acceptance", "next", "routed", "stop", "mode"):
-        state.pop(key, None)
-    ensure_baseline(project, state, change["product"], run_commands_at_commit)
-    transition(project, state, "IMPLEMENTING", event="repair_red",
-               updates={"attempt": 0, "red_evidence_sha256": red["evidence_sha256"]})
-    commit = _commit_repair_paths(project, changed, f"test({change['change_id']}): repair characterization")
-    previous.setdefault("commits", []).append(commit["commit"])
-    state.setdefault("repairs", []).append({"at": moment, "reason": reason, "suite": "characterization",
-                                            "commit": commit["commit"], "voided_attempts": voided})
-    try:
-        save_run(project, state)
-    except Exception:
-        from .baseline import _git
-        # A failed atomic state write must not strand a committed test correction outside state.
-        _git(project, "reset", "--soft", "HEAD^")
-        _git(project, "reset", "-q", "--", *changed)
-        raise
-    return {"status": "CHARACTERIZATION_REPAIRED", "change_id": change["change_id"],
-            "commit": commit["commit"], "next": f"storyloop run <project> --change {change['change_id']}"}
-
-
-def _verify_characterization_repair(project: Path, change: dict, state: dict) -> tuple | dict:
-    """Prove corrected locks and RED before changing the candidate or Git history."""
-    from .baseline import _git, load_project_config
-    from .characterization_baseline import run_characterization_baseline
-    from .characterization_locks import capture_locks
-    from .project_profile import layer_commands
-    from .failure_attribution import characterization_oracle
-
-    require(state.get("status") in {"ORACLE_DEFECT", "EXISTING_GREEN"} and characterization_oracle(state),
-            "停止证据没有指向本变更特征化提交的测试；请修正验收套件或核对审查归属")
-    previous = state["characterization"]
-    tests = sorted(set(previous["tests"]))
-    changed = [path for path in _git(project, "diff", "--no-renames", "--name-only", "-z",
-                                     "--", *tests).split("\0") if path]
-    require(bool(changed), "特征化测试没有改动；请按审查理由先修正测试")
-    config = load_project_config(project)
-    kept = [path for path in tests if (project / path).is_file()]
-    coverage = {path: [test for test in artifacts if test in kept]
-                for path, artifacts in previous.get("locks", {}).items()}
-    coverage = {path: artifacts for path, artifacts in coverage.items() if artifacts}
-    pending = {"tests": kept, "changed": changed, "touched": previous["touched"],
-               "coverage": coverage}
-    locks = capture_locks(project, config, pending) if coverage else None
-    unit = run_characterization_baseline(project, layer_commands(config["profile"], "unit"),
-                                         config["check_timeout_seconds"], pending)
-    require(unit["status"] == "PASSED", "修正后的特征化测试在旧代码上仍不绿；请继续修正")
-    if locks is not None:
-        require(locks == capture_locks(project, config, pending), "重证期间特征化测试发生变化")
-    # Prove every fallible oracle gate before changing Git history. A failed RED keeps the
-    # human's correction in the workspace so the same repair command remains usable.
-    try:
-        red = _reprove_red(project, change, state)
-    except StoryLoopError as exc:
-        if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
-            raise
-        return _unproven_suite(project, state, exc)
-    return tests, kept, changed, locks, unit, red
-
-
-def _discard_characterization_candidate(project: Path, state: dict, tests: set[str]) -> None:
-    """Abandon only candidate paths named by the saved selected option."""
-    from .baseline import _git
-    from .path_security import safe_target
-
-    option = selected_option(state["planning"]["plan"])
-    touched = set(option.get("touched") or [])
-    creates = set(option.get("creates") or [])
-    tracked = {path for path in _git(project, "diff", "--no-renames", "--name-only", "-z").split("\0") if path}
-    untracked = {path for path in _git(project, "ls-files", "--others", "--exclude-standard", "-z").split("\0") if path}
-    candidate_tracked = tracked - tests
-    from .baseline import load_project_config
-    from .project_profile import matches_test_root
-    from .project_loop_guards import scratch_paths, _is_scratch
-    roots = load_project_config(project)["profile"].get("test_roots", [])
-    scratch = scratch_paths(project)
-    def is_scratch(path: str) -> bool:
-        return _is_scratch(path, scratch)
-    extra = sorted(path for path in (candidate_tracked - touched) | (untracked - creates)
-                   if not matches_test_root(path, roots) and not is_scratch(path))
-    require(not extra, "候选之外还有未提交改动；请先人工核对并清理：" + ", ".join(extra[:8]))
-    for path in sorted(path for path in untracked if not is_scratch(path)):
-        safe_target(project, path, "candidate file").unlink()
-    if candidate_tracked:
-        _git(project, "restore", "--worktree", "--", *sorted(candidate_tracked))
 
 
 def _tracked_under(project: Path, relative: str) -> list[str]:

@@ -26,16 +26,17 @@ def state_for(status: str, **extra) -> dict:
 
 
 class StopReportTests(unittest.TestCase):
-    def test_characterization_oracle_stop_routes_to_its_own_repair(self):
+    def test_characterization_oracle_stop_routes_to_supersede(self):
         state = state_for("ORACLE_DEFECT", characterization={
             "status": "GREEN", "tests": ["tests/test_lock.py"], "commits": ["abc"]},
             routed={"source": "review", "target": "oracle", "findings": [{
                 "location": "tests/test_lock.py:4", "message": "locks changed behavior"}]})
         stop = build_stop("/p", state, "ORACLE_DEFECT", {})
-        self.assertIn("--suite characterization", stop["resume"])
-        self.assertIn("--suite characterization", stop["options"][0]["command"])
+        self.assertIn("change /p --supersede FEAT-1 --reason", stop["resume"])
+        self.assertIn("change /p --supersede FEAT-1 --reason", stop["options"][0]["command"])
+        self.assertNotIn("acceptance-repair", str(stop))
 
-    def test_saved_oracle_stop_from_old_engine_shows_characterization_repair(self):
+    def test_saved_oracle_stop_from_old_engine_shows_supersede(self):
         state = state_for("ORACLE_DEFECT", characterization={
             "status": "GREEN", "tests": ["tests/test_lock.py"], "commits": ["abc"]},
             routed={"source": "review", "target": "oracle", "findings": [{
@@ -43,7 +44,7 @@ class StopReportTests(unittest.TestCase):
         state["stop"] = build_stop("/p", state, "ORACLE_DEFECT", {})
         state["stop"]["options"][0]["command"] = "storyloop acceptance-repair /p --change FEAT-1 --reason old"
         state["stop"]["resume"] = "storyloop run /p --change FEAT-1"
-        self.assertIn("--suite characterization", stop_of("/p", state)["resume"])
+        self.assertIn("change /p --supersede FEAT-1 --reason", stop_of("/p", state)["resume"])
 
     def test_feature_design_stop_shows_selected_option_and_complete_plan_location(self):
         option = {"id": "main", "summary": "更新提示", "touched": ["storyloop/run_hints.py"],

@@ -8,7 +8,6 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
 
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project, load_project_config
@@ -80,79 +79,6 @@ class CandidateTests(unittest.TestCase):
 
 
 class SmokeRepairTests(unittest.TestCase):
-    def test_failed_red_proof_does_not_commit_characterization_repair(self):
-        from storyloop.acceptance_repair import repair_characterization
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            (root / 'tests').mkdir()
-            (root / 'tests/test_lock.py').write_text('assert True\n', encoding='utf-8')
-            state = {'status': 'ORACLE_DEFECT', 'characterization': {
-                'tests': ['tests/test_lock.py'], 'touched': [], 'locks': {}},
-                'planning': {'plan': {'main_option': 'main', 'options': [
-                    {'id': 'main', 'touched': [], 'creates': []}]}}}
-            with patch('storyloop.failure_attribution.characterization_oracle', return_value=True), \
-                    patch('storyloop.baseline._git', return_value='tests/test_lock.py\0'), \
-                    patch('storyloop.baseline.load_project_config', return_value={
-                        'profile': {'unit_commands': [], 'test_roots': ['tests']},
-                        'check_timeout_seconds': 10}), \
-                    patch('storyloop.characterization_baseline.run_characterization_baseline',
-                          return_value={'status': 'PASSED', 'results': []}), \
-                    patch('storyloop.acceptance_repair._reprove_red',
-                          side_effect=StoryLoopError('weak oracle', code='EXISTING_GREEN')), \
-                    patch('storyloop.acceptance_repair._unproven_suite',
-                          return_value={'status': 'EXISTING_GREEN'}), \
-                    patch('storyloop.acceptance_repair.commit_paths') as commit:
-                result = repair_characterization(root, {'change_id': 'X-1'}, state, 'fix test')
-            self.assertEqual(result['status'], 'EXISTING_GREEN')
-            commit.assert_not_called()
-
-    def test_characterization_state_write_failure_rolls_back_test_commit(self):
-        from storyloop.acceptance_repair import repair_characterization
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            (root / 'tests').mkdir()
-            (root / 'tests/test_lock.py').write_text('assert True\n', encoding='utf-8')
-            state = {'status': 'ORACLE_DEFECT', 'change_id': 'FIX-20261101-001',
-                     'contract_commit': 'old', 'characterization': {
-                         'tests': ['tests/test_lock.py'], 'touched': [], 'locks': {}},
-                     'planning': {'plan': {'main_option': 'main', 'options': [
-                         {'id': 'main', 'touched': [], 'creates': []}]}}}
-            with patch('storyloop.failure_attribution.characterization_oracle', return_value=True), \
-                    patch('storyloop.baseline._git', return_value='tests/test_lock.py\0') as git_call, \
-                    patch('storyloop.baseline.load_project_config', return_value={
-                        'profile': {'unit_commands': [], 'test_roots': ['tests']},
-                        'check_timeout_seconds': 10}), \
-                    patch('storyloop.characterization_baseline.run_characterization_baseline',
-                          return_value={'status': 'PASSED', 'results': []}), \
-                    patch('storyloop.acceptance_repair._reprove_red',
-                          return_value={'evidence_sha256': 'red'}), \
-                    patch('storyloop.acceptance_repair.ensure_baseline'), \
-                    patch('storyloop.acceptance_repair.transition'), \
-                    patch('storyloop.acceptance_repair._discard_characterization_candidate'), \
-                    patch('storyloop.acceptance_repair.commit_paths',
-                          return_value={'commit': 'repair-commit'}), \
-                    patch('storyloop.acceptance_repair.save_run', side_effect=OSError('disk full')):
-                with self.assertRaisesRegex(OSError, 'disk full'):
-                    repair_characterization(root, {'change_id': state['change_id'], 'product': {}},
-                                            state, 'repair')
-            self.assertIn(('reset', '--soft', 'HEAD^'), [call.args[1:] for call in git_call.call_args_list])
-
-    def test_characterization_discard_keeps_scratch_and_accepts_new_test_files(self):
-        from storyloop.acceptance_repair import _discard_characterization_candidate
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            repository(root)
-            bootstrap_project(root, {'test_roots': ['tests'], 'scratch_paths': ['scratch']})
-            (root / 'scratch').mkdir()
-            (root / 'scratch/keep.txt').write_text('human output', encoding='utf-8')
-            (root / 'tests').mkdir()
-            (root / 'tests/new_test.py').write_text('assert True\n', encoding='utf-8')
-            state = {'planning': {'plan': {'main_option': 'main', 'options': [
-                {'id': 'main', 'touched': [], 'creates': []}]}}}
-            _discard_characterization_candidate(root, state, set())
-            self.assertTrue((root / 'scratch/keep.txt').exists())
-            self.assertFalse((root / 'tests/new_test.py').exists())
-
     def test_repair_rejects_staged_candidate_with_actionable_instruction(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
