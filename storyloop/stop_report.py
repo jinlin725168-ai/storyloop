@@ -212,6 +212,22 @@ def _stop_actions(project: Path | str, state: dict, status: str, details: dict
     if status == "BASE_CHANGE_REQUIRED" and details.get("blocked_by"):
         options = [{"action": "批准已生成的底座草案", "command": _command(
             "storyloop", "approve", project_text, "--change", details["blocked_by"])}]
+        context = {**state, **details}
+        if context.get("legacy_paths"):
+            paths = " ".join(shlex.quote(str(path)) for path in context["legacy_paths"])
+            source = shlex.quote(str(context.get("source_branch", "<source-branch>")))
+            feature = shlex.quote(str(context.get("feature_branch", "<feature-branch>")))
+            base = shlex.quote(str(context["blocked_by"]))
+            quoted_project = shlex.quote(project_text)
+            options[0]["action"] = (
+                f"先用 git stash push -u -- {paths} 保存遗留业务改动；"
+                "用 git status --short 检查并另行保存其他改动，确保工作区干净；"
+                f"git switch {source}；"
+                f"storyloop approve {quoted_project} --change {base}；"
+                f"storyloop run {quoted_project} --change {base} --implementer human；"
+                f"base 通过后 git switch {feature}，先 storyloop run {quoted_project} "
+                f"--change {shlex.quote(change_id)} 自动合并并重证；"
+                "完成后由你决定取回或丢弃暂存的改动")
     blocker = details.get("error") or state.get("error") or BLOCKERS.get(status, status)
     if status == "WORKSPACE_TAINTED" and details.get("base_resume_status") == "FINALIZING":
         options = [{"action": "恢复已批准 baseline 后继续", "command": _command(
