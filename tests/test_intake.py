@@ -112,6 +112,13 @@ class IntakeTests(unittest.TestCase):
         with self.assertRaises(StoryLoopError):
             self.assess(item)
 
+    def test_bad_role_evidence_location_is_marked_repairable(self):
+        item = assessed_product()
+        item['assessment']['criteria'][0]['evidence']['locations'] = ['../outside.py:1']
+        with self.assertRaises(StoryLoopError) as caught:
+            self.assess(item)
+        self.assertTrue(caught.exception.details.get('repairable'))
+
     def test_profile_and_policy_changes_invalidate_bindings(self):
         from storyloop.storage import load_json
         for field in ('profile', 'routing'):

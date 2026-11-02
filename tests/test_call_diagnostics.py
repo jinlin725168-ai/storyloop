@@ -14,6 +14,7 @@ from storyloop import cli
 from storyloop.call_log import CALLS_ROOT
 from storyloop.change_log import change_log, render_log
 from storyloop.models import StoryLoopError
+from storyloop.run_hints import next_step
 from storyloop.project_agents import invoke_project_agent
 from storyloop.project_loop import LoopServices, run_change
 from storyloop.telemetry import ledger_entries
@@ -78,6 +79,12 @@ class CallRecordTests(unittest.TestCase):
 
 
 class LogAndNextStepTests(unittest.TestCase):
+    def test_run_hint_without_change_id_never_invents_one(self):
+        hint = next_step("BLOCKED", None, "/tmp/project")
+        self.assertNotIn("<change-id>", hint or "")
+        self.assertNotIn("storyloop log", hint or "")
+        self.assertIsNone(next_step(None, None, "/tmp/project"))
+
     def test_errors_before_change_id_do_not_suggest_placeholder_log_or_run(self):
         for command, code in (("change", "BLOCKED"), ("init", "BLOCKED"),
                               ("change", "NEEDS_INPUT")):

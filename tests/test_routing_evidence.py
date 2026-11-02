@@ -44,6 +44,36 @@ class EvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(StoryLoopError, "existing touched"):
             measure_scope(self.root, self.head, scope, validate_policy(None))
 
+    def test_test_symbol_does_not_affect_business_reference_signal(self):
+        scope = {"touched": ["app/service.py", "tests/test_service.py"], "creates": [],
+                 "interfaces": [], "symbols": [
+                     {"path": "app/service.py", "symbol": "serve"},
+                     {"path": "tests/test_service.py", "symbol": "ServiceTests"},
+                 ]}
+        with patch("storyloop.routing_evidence._reference_count",
+                   side_effect=lambda project, commit, symbol, profile: {
+                       "serve": 1, "ServiceTests": 100}[symbol]) as counted:
+            result = measure_scope(self.root, self.head, scope, validate_policy(None))
+        self.assertEqual(result["signals"]["max_references"], 1)
+        self.assertTrue(result["signals"]["complete"])
+        self.assertEqual(counted.call_count, 1)
+
+    def test_role_scope_errors_are_marked_without_marking_git_failures(self):
+        scopes = [
+            {"touched": ["app"], "creates": [], "interfaces": [], "symbols": []},
+            {"touched": [], "creates": ["app"], "interfaces": [], "symbols": []},
+            {"touched": ["app/service.py"], "creates": [], "interfaces": [],
+             "symbols": [{"path": "app", "symbol": "serve"}]},
+        ]
+        for scope in scopes:
+            with self.subTest(scope=scope), self.assertRaises(StoryLoopError) as caught:
+                measure_scope(self.root, self.head, scope, validate_policy(None))
+            self.assertTrue(caught.exception.details.get("repairable"))
+        with patch("storyloop.routing_evidence._tree_paths", side_effect=StoryLoopError("Git evidence unavailable")):
+            with self.assertRaises(StoryLoopError) as git_error:
+                measure_scope(self.root, self.head, scopes[0], validate_policy(None))
+        self.assertFalse(git_error.exception.details.get("repairable"))
+
     def test_scope_rejects_parent_traversal(self):
         scope = {"touched": ["../outside.py"], "creates": [],
                  "interfaces": [], "symbols": []}

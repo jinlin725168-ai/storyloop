@@ -373,10 +373,7 @@ def main(argv: list[str] | None = None) -> int:
         stop = _error_stop(args, exc)
         if stop is not None:
             error["stop"] = stop
-        if not change_id and args.command in {"change", "init"}:
-            hint = "检查错误并重试原命令；此时尚未创建变更，无可查看的 change id"
-        else:
-            hint = stop["resume"] if stop else next_step(exc.code, change_id, args.project.resolve(), exc.details)
+        hint = stop["resume"] if stop else next_step(exc.code, change_id, args.project.resolve(), exc.details)
         if hint:
             error["next"] = hint
         print(json.dumps(_redact_value(error), ensure_ascii=False), file=sys.stderr)

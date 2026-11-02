@@ -127,12 +127,14 @@ class SemanticRepairIntegrationTests(unittest.TestCase):
             from tests.test_intake import assessed_product
             from storyloop.product_cli import product_answer
             readiness_repository(root)
-            for field in ('line', 'touched'):
+            for field in ('line', 'touched', 'directory'):
                 invalid = assessed_product()
                 if field == 'line':
                     invalid['assessment']['criteria'][0]['evidence']['locations'] = ['app/service.py:999']
-                else:
+                elif field == 'touched':
                     invalid['assessment']['scope']['touched'] = ['app/missing.py']
+                else:
+                    invalid['assessment']['scope']['touched'] = ['app']
                 answers = [invalid, assessed_product()]
                 requests = []
                 def call(request):
@@ -142,6 +144,24 @@ class SemanticRepairIntegrationTests(unittest.TestCase):
                     product_answer(root, {'idea': 'x'}, call, None)
                     self.assertEqual(len(requests), 2)
                     self.assertIn('validation_errors', requests[1])
+
+    def test_product_answer_uses_repair_marker_not_error_text(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            from tests.routing_support import readiness_repository
+            from tests.test_intake import assessed_product
+            from storyloop.product_cli import product_answer
+            readiness_repository(root)
+            answers = [assessed_product(), assessed_product()]
+            requests = []
+            def call(request):
+                requests.append(request)
+                return answers.pop(0)
+            with patch('storyloop.intake.assess_intake', side_effect=[
+                StoryLoopError('renamed role evidence error', details={'repairable': True}), {}]):
+                product_answer(root, {'idea': 'x'}, call, None)
+            self.assertEqual(len(requests), 2)
+            self.assertEqual(requests[1]['validation_errors'], ['renamed role evidence error'])
 
     def test_change_repairs_one_semantically_invalid_product(self):
         with tempfile.TemporaryDirectory() as folder:

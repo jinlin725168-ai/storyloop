@@ -7,6 +7,7 @@ import re
 import shutil
 from pathlib import Path
 from .change_types import definition_for, type_of
+from .errors import require_role_evidence, role_evidence_error
 from .assessment import validate_assessment
 from .baseline import _git, load_project_config
 from .models import StoryLoopError, require
@@ -144,12 +145,15 @@ def _validate_locations(project: Path, commit: str, assessment: dict) -> None:
     for proof in proofs:
         for location in proof['locations']:
             match = re.fullmatch(r'(.+):([1-9][0-9]*)', location)
-            require(match is not None, 'Evidence location must be path:line')
-            path = repository_relative(match[1], 'evidence path')
+            require_role_evidence(match is not None, 'Evidence location must be path:line')
+            try:
+                path = repository_relative(match[1], 'evidence path')
+            except StoryLoopError as exc:
+                raise role_evidence_error(exc) from exc
             if path not in lines:
                 content = _evidence_content(project, commit, path, verify_commit=not lines)
                 lines[path] = len(content.splitlines())
-            require(int(match[2]) <= lines[path], 'Evidence line absent at source commit')
+            require_role_evidence(int(match[2]) <= lines[path], 'Evidence line absent at source commit')
 
 
 def _evidence_content(project: Path, commit: str, path: str, verify_commit: bool = True) -> str:
@@ -157,7 +161,7 @@ def _evidence_content(project: Path, commit: str, path: str, verify_commit: bool
     if verify_commit:
         _git(project, 'cat-file', '-e', f'{commit}^{{commit}}')
     visible = _git(project, 'ls-tree', '-z', '--name-only', commit, '--', path).split('\0')
-    require(path in visible, f'Evidence path absent at source commit {commit}: {path}')
+    require_role_evidence(path in visible, f'Evidence path absent at source commit {commit}: {path}')
     return _git(project, 'show', f'{commit}:{path}')
 
 

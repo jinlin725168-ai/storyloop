@@ -182,21 +182,8 @@ def product_answer(project: Path, payload: dict, call, invoke_project_agent) -> 
         source = "intake"
         project_intake(project, value)
 
-    role_location_errors = (
-        "Invalid routing scope", "scope.", "A path cannot be both", "Touched paths must",
-        "Created paths must", "Invalid symbol entry", "Symbol path must",
-        "Declared symbol is absent", "Evidence location must", "Evidence line absent",
-        "Evidence path absent", "Invalid evidence path", "Invalid touched path",
-        "Invalid created path", "Invalid symbol path", "Invalid interface", "Invalid symbol",
-        "evidence path is required", "evidence path must be repository-relative",
-        "symbol path is required", "symbol path must be repository-relative",
-        "touched path is required", "touched path must be repository-relative",
-        "created path is required", "created path must be repository-relative",
-        "Unsafe evidence path", "Unsafe symbol path", "Unsafe touched path",
-        "Unsafe created path",
-    )
     def repairable(exc):
-        return source == "product" or str(exc).startswith(role_location_errors)
+        return source == "product" or exc.details.get("repairable") is True
 
     operation = lambda: answer_with_repair(
         call or (lambda request: invoke_project_agent(project, "product", request)),
