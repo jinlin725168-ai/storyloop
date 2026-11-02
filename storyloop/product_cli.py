@@ -168,14 +168,26 @@ def product_answer(project: Path, payload: dict, call, invoke_project_agent) -> 
     from .baseline import _git
     payload = {**payload, "routing_version": 1,
                "source_commit": _git(project, "rev-parse", "HEAD").strip()}
+    from .intake import project_intake
+    source = "product"
+
     def validate(value):
+        nonlocal source
+        source = "product"
         if isinstance(value, dict) and "current_product" not in payload and "slug" in value:
             if not isinstance(value["slug"], str) or not SLUG.fullmatch(value["slug"]):
                 value.pop("slug")
         validate_product(value)
         require(isinstance(value.get("assessment"), dict), "Product assessment is required")
+        source = "intake"
+        project_intake(project, value)
+
+    def repairable(exc):
+        return source == "product" or exc.details.get("repairable") is True
+
     operation = lambda: answer_with_repair(
-        call or (lambda request: invoke_project_agent(project, "product", request)), payload, validate)
+        call or (lambda request: invoke_project_agent(project, "product", request)),
+        payload, validate, repairable=repairable)
     return read_only_call(project, payload.get("change_id", "pending"), operation)
 
 

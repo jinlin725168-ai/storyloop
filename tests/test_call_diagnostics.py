@@ -14,6 +14,7 @@ from storyloop import cli
 from storyloop.call_log import CALLS_ROOT
 from storyloop.change_log import change_log, render_log
 from storyloop.models import StoryLoopError
+from storyloop.run_hints import next_step
 from storyloop.project_agents import invoke_project_agent
 from storyloop.project_loop import LoopServices, run_change
 from storyloop.telemetry import ledger_entries
@@ -78,6 +79,24 @@ class CallRecordTests(unittest.TestCase):
 
 
 class LogAndNextStepTests(unittest.TestCase):
+    def test_run_hint_without_change_id_never_invents_one(self):
+        hint = next_step("BLOCKED", None, "/tmp/project")
+        self.assertNotIn("<change-id>", hint or "")
+        self.assertNotIn("storyloop log", hint or "")
+        self.assertIsNone(next_step(None, None, "/tmp/project"))
+
+    def test_errors_before_change_id_do_not_suggest_placeholder_log_or_run(self):
+        for command, code in (("change", "BLOCKED"), ("init", "BLOCKED"),
+                              ("change", "NEEDS_INPUT")):
+            with self.subTest(command=command, code=code), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                with patch("storyloop.cli.dispatch", side_effect=StoryLoopError("bad answer", code=code)):
+                    with patch("sys.stdout", new_callable=io.StringIO), patch("sys.stderr", new_callable=io.StringIO) as err:
+                        self.assertEqual(cli.main([command, str(root)]), 2)
+                result = json.loads(err.getvalue())
+                self.assertNotIn("<change-id>", result.get("next", ""))
+                self.assertNotIn("storyloop log", result.get("next", ""))
+
     def test_log_names_the_failed_gate_of_each_attempt(self):
         temporary, root, change_id = approved_change()
         services = LoopServices(generate_smoke=lambda project, state: smoke_payload(change_id),

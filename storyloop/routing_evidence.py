@@ -9,6 +9,7 @@ import re
 import shutil
 
 from .baseline import GIT_ENVIRONMENT, load_project_config
+from .errors import require_role_evidence, role_evidence_error
 from .models import StoryLoopError, require
 from .path_security import repository_relative, safe_target
 from .processutil import MAX_OUTPUT, run_process
@@ -31,7 +32,8 @@ def measure_scope(project: Path, commit: str, scope: dict, policy: dict) -> dict
     business_existing = sorted(set(touched) - excluded)
     business_created = sorted(set(creates) - excluded)
     reference_values = [_reference_count(project, commit, item["symbol"], profile)
-                        for item in symbols if item["path"] in covered]
+                        for item in symbols if item["path"] in covered
+                        and item["path"] in business_existing]
     all_covered = set(business_existing) <= covered
     maximum = 0 if not business_existing else _known_max(reference_values, all_covered)
     risks = {key: _risk(key, touched + creates, policy) for key in ("sensitive", "guard")}
@@ -105,15 +107,17 @@ def _reference_count(project: Path, commit: str, symbol: str, profile: dict) -> 
 
 
 def _validated_scope(project: Path, commit: str, scope: object, profile: dict) -> tuple:
-    require(isinstance(scope, dict) and set(scope) == SCOPE_FIELDS, "Invalid routing scope")
+    require_role_evidence(isinstance(scope, dict) and set(scope) == SCOPE_FIELDS,
+                          "Invalid routing scope")
     for field in ("touched", "creates", "interfaces", "symbols"):
-        require(isinstance(scope[field], list), f"scope.{field} must be a list")
+        require_role_evidence(isinstance(scope[field], list), f"scope.{field} must be a list")
     existing = _tree_paths(project, commit)
     touched = _paths(project, scope["touched"], "touched path")
     creates = _paths(project, scope["creates"], "created path")
-    require(set(touched).isdisjoint(creates), "A path cannot be both touched and created")
-    require(set(touched) <= existing, "Touched paths must exist at the contract commit")
-    require(not set(creates) & existing, "Created paths must not exist at the contract commit")
+    require_role_evidence(set(touched).isdisjoint(creates), "A path cannot be both touched and created")
+    require_role_evidence(set(touched) <= existing, "Touched paths must exist at the contract commit")
+    require_role_evidence(not set(creates) & existing,
+                          "Created paths must not exist at the contract commit")
     interfaces = _texts(scope["interfaces"], "interface", 1000)
     symbols, covered = _symbols(project, commit, scope["symbols"], touched, existing, profile)
     return touched, creates, interfaces, symbols, covered
@@ -123,13 +127,15 @@ def _symbols(project: Path, commit: str, values: list, touched: list[str],
              existing: set[str], profile: dict) -> tuple[list, set[str]]:
     result, covered = [], set()
     for item in values:
-        require(isinstance(item, dict) and set(item) == {"path", "symbol"}, "Invalid symbol entry")
+        require_role_evidence(isinstance(item, dict) and set(item) == {"path", "symbol"},
+                              "Invalid symbol entry")
         path = _paths(project, [item["path"]], "symbol path")[0]
-        require(path in existing and path in touched and _is_business(path, profile),
-                "Symbol path must be an existing touched business file")
+        require_role_evidence(path in existing and path in touched
+                              and (_is_business(path, profile) or _is_test(path, profile)),
+                              "Symbol path must be an existing touched business or test file")
         _validate_symbol(item["symbol"])
         association = _symbol_at_path(project, commit, path, item["symbol"])
-        require(association is not False, "Declared symbol is absent at the contract commit")
+        require_role_evidence(association is not False, "Declared symbol is absent at the contract commit")
         if association is True:
             covered.add(path)
         result.append({"path": path, "symbol": item["symbol"]})
@@ -147,18 +153,22 @@ def _symbol_at_path(project: Path, commit: str, path: str, symbol: str) -> bool 
 def _paths(project: Path, values: list, label: str) -> list[str]:
     result = []
     for value in values:
-        path = repository_relative(value, label)
-        safe_target(project, path, label)
+        try:
+            path = repository_relative(value, label)
+            safe_target(project, path, label)
+        except StoryLoopError as exc:
+            raise role_evidence_error(exc) from exc
         result.append(path)
     return sorted(set(result))
 
 
 def _texts(values: list, label: str, limit: int) -> list[str]:
     for value in values:
-        require(isinstance(value, str) and bool(value.strip()), f"{label} must be nonempty text")
-        require("\x00" not in value and "\n" not in value and "\r" not in value,
-                f"Invalid {label}")
-        require(len(value) <= limit, f"{label} is too long")
+        require_role_evidence(isinstance(value, str) and bool(value.strip()),
+                              f"{label} must be nonempty text")
+        require_role_evidence("\x00" not in value and "\n" not in value and "\r" not in value,
+                              f"Invalid {label}")
+        require_role_evidence(len(value) <= limit, f"{label} is too long")
     return sorted(set(values))
 
 

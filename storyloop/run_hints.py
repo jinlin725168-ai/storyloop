@@ -34,6 +34,9 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
     options = routing_options(project, change_id, status, details)
     if options:
         return options[0]["command"]
+    if not change_id:
+        return ("检查错误并重试原命令；此时尚未创建变更，无可查看的 change id"
+                if status else None)
     project = shlex.quote(str(project))
     change = shlex.quote(change_id or "<change-id>")
     where = f"{project} --change {change}"
