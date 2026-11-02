@@ -40,8 +40,9 @@ def record_failure(project: Path, state: dict, entry: dict, attribution: str) ->
 def record_boundary(project: Path, state: dict, boundary: dict,
                     touched: list | None = None, preexisting: set[str] | None = None) -> dict:
     """Record a boundary verdict once before preserving the existing boundary stop."""
+    linked_base = None
     if touched is not None and state.get("e3_collision") is True:
-        link_base_collision(project, state, boundary, touched, preexisting or set())
+        linked_base = link_base_collision(project, state, boundary, touched, preexisting or set())
     attribution = "base" if any(
         item.get("category") == "FOUNDATION_CHANGE" for item in boundary.get("violations") or []) else "implement"
     entry = {"attempt": state["attempt"], "boundary": boundary}
@@ -49,6 +50,13 @@ def record_boundary(project: Path, state: dict, boundary: dict,
     if stopped is not None:
         return stopped
     details = {"violations": boundary["violations"], "base_proposal": boundary["base_proposal"]}
+    state.pop("legacy_paths", None)
+    if linked_base:
+        legacy_paths = sorted({item["path"] for item in boundary["allowed"]
+                               if item["category"] == "FEATURE"
+                               and item["path"] in (preexisting or set())})
+        if legacy_paths:
+            details["legacy_paths"] = legacy_paths
     if state.get("blocked_by"):
         details["blocked_by"] = state["blocked_by"]
     if boundary.get("ci_requires_human_proposal"):

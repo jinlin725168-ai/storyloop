@@ -68,6 +68,26 @@ class StopReportTests(unittest.TestCase):
         self.assertIn("共 10 项", rendered)
         self.assertIn("完整内容见 .storyloop/state/runs/FEAT-1.json", rendered)
 
+    def test_linked_base_with_legacy_paths_shows_stash_before_base_and_resume(self):
+        state = state_for("BASE_CHANGE_REQUIRED", blocked_by="BASE-1")
+        details = {"blocked_by": "BASE-1", "legacy_paths": ["modules/orders/service.py"],
+                   "source_branch": "main", "feature_branch": "feature/one"}
+        stop = build_stop("/p", state, "BASE_CHANGE_REQUIRED", details)
+        option = stop["options"][0]
+        self.assertEqual(option["command"], "storyloop approve /p --change BASE-1")
+        self.assertIn("git stash push -u -- modules/orders/service.py", option["action"])
+        self.assertLess(option["action"].index("先 storyloop run"),
+                        option["action"].index("取回或丢弃暂存"))
+
+    def test_linked_base_stop_keeps_parseable_approval_command(self):
+        stop = build_stop("/p", state_for("BASE_CHANGE_REQUIRED", blocked_by="BASE-1"),
+                          "BASE_CHANGE_REQUIRED", {"blocked_by": "BASE-1"})
+        self.assertIn({
+            "action": "批准已生成的底座草案",
+            "command": "storyloop approve /p --change BASE-1",
+        }, stop["options"])
+        args = parser().parse_args(shlex.split(stop["options"][0]["command"])[1:])
+        self.assertEqual(args.change_id, "BASE-1")
 
     def test_e1_human_base_review_keeps_named_human_command(self):
         stop = build_stop("/project", state_for("BASE_REVIEW_REQUIRED", implementer="human"),

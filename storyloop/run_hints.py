@@ -55,6 +55,16 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
             base = shlex.quote(str(details["blocked_by"]))
             source = shlex.quote(str(details.get("source_branch", "<source-branch>")))
             feature = shlex.quote(str(details.get("feature_branch", "<feature-branch>")))
+            legacy_paths = details.get("legacy_paths") or []
+            if legacy_paths:
+                paths = " ".join(shlex.quote(str(path)) for path in legacy_paths)
+                return (f"先用 git stash push -u -- {paths} 保存遗留业务改动；"
+                        "用 git status --short 检查并另行保存其他改动，确保工作区干净；"
+                        f"git switch {source}；"
+                        f"storyloop approve {project} --change {base}；"
+                        f"storyloop run {project} --change {base} --implementer human；"
+                        f"base 通过后 git switch {feature}，先 {run} 自动合并并重证；"
+                        "完成后由你决定取回或丢弃暂存的改动")
             return (f"底座草案 {base} 已生成：git switch {source}；"
                     f"storyloop approve {project} --change {base}；"
                     f"storyloop run {project} --change {base} --implementer human；"
