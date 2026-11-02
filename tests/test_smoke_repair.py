@@ -79,36 +79,6 @@ class CandidateTests(unittest.TestCase):
 
 
 class SmokeRepairTests(unittest.TestCase):
-    def test_project_imports_stop_as_oracle_defect_before_red(self):
-        for imported in ('from tests.test_baseline_behavior import git', 'import storyloop'):
-            with self.subTest(imported=imported), tempfile.TemporaryDirectory() as folder:
-                root = Path(folder)
-                repository(root)
-                (root / 'storyloop').mkdir()
-                (root / 'storyloop/__init__.py').write_text('VALUE = 1\n', encoding='utf-8')
-                git(root, 'add', '.')
-                git(root, 'commit', '-q', '-m', 'project package')
-                bootstrap_project(root, {'test_commands': [], 'module_roots': ['storyloop'],
-                                         'test_roots': ['tests']})
-                value = rich_product(); value['questions'] = []
-                change_id = create_change(root, 'orders', value, now=lambda: NOW)['change_id']
-                approve_change(root, change_id, now=lambda: NOW)
-                payload = good_payload(change_id)
-                payload['files'][0]['content'] = imported + '\nraise SystemExit(1)\n'
-                stopped = run_change(root, change_id, services(change_id, lambda p, s: payload))
-                self.assertEqual(stopped['status'], 'ORACLE_DEFECT', stopped)
-                self.assertIn('验收用例', stopped['error'])
-                self.assertIn('测试进程', stopped['error'])
-                self.assertIn('acceptance-repair', stopped['next'])
-                self.assertNotIn('ModuleNotFoundError', stopped['error'])
-                self.assertTrue(load_run_state(root, change_id)['contract_commit'])
-                with self.assertRaisesRegex(StoryLoopError, '测试进程'):
-                    repair_smoke(root, change_id, 'bad import remains',
-                                 services(change_id, lambda p, s: payload))
-                repaired = repair_smoke(root, change_id, 'remove in-process project import',
-                                        services(change_id, lambda p, s: good_payload(change_id)))
-                self.assertEqual(repaired['status'], 'ACCEPTANCE_REPAIRED')
-
     def test_contract_committed_before_red_can_repair_a_self_writing_suite(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

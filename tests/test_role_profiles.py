@@ -13,6 +13,12 @@ class RoleProfileTests(unittest.TestCase):
         self.assertIn('Path.cwd()', prompt)
         self.assertIn('subprocess', prompt)
         self.assertIn('payload.change.repair', prompt)
+        self.assertIn('from storyloop.testing.smoke_harness.v1 import HarnessError', prompt)
+        self.assertIn('"missing": True', prompt)
+        self.assertIn('raise HarnessError', prompt)
+        self.assertIn('assertFalse', prompt)
+        self.assertNotIn('check=True', prompt)
+        self.assertNotIn('no `import storyloop`', prompt)
 
     def test_legacy_adapter_becomes_default_without_changing_kind(self):
         resolved = resolve_adapters({"adapter": "command", "agent_command": ["agent"]})

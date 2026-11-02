@@ -22,24 +22,6 @@ NOW = datetime(2026, 9, 16, tzinfo=timezone.utc)
 
 
 class SmokeOutputLimitTests(unittest.TestCase):
-    def test_project_import_guard_checks_only_explicit_import_statements(self):
-        from storyloop.acceptance_import_guard import _check_source
-        for source in ('import storyloop\n', 'from tests.test_helpers import git\n'):
-            with self.subTest(source=source), self.assertRaisesRegex(StoryLoopError, '测试进程'):
-                _check_source(source, 'flow.py', {'storyloop', 'tests'})
-        _check_source('import json\nfrom .helpers import prepare\n', 'flow.py', {'storyloop', 'tests'})
-
-    def test_nested_source_root_does_not_invent_top_level_module(self):
-        from storyloop.acceptance_import_guard import _project_names
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            (root / 'src/main/java').mkdir(parents=True)
-            with patch('storyloop.acceptance_import_guard.load_project_config', return_value={
-                    'profile': {'module_roots': ['src/main/java'], 'test_roots': []}}):
-                names = _project_names(root)
-        self.assertIn('src', names)
-        self.assertNotIn('main', names)
-
     def test_redaction_receives_only_the_persisted_output_prefix(self):
         seen = []
 
