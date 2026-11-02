@@ -9,6 +9,7 @@
 - 单个函数不超过 50 行，单个文件不超过 500 行；复杂逻辑写清楚"为什么"。
 - 提交信息用 `type(scope): subject` 中文描述，见根目录 CLAUDE 规范。
 - 早期独立实例模式与 v2 Stage/DAG 引擎已删除（本地 tag `archive/legacy-modes` 保存了删除前的状态），不要再引入按实例目录或 Stage 配置工作的代码路径。
+- 新增或删除 `storyloop/` 下的 Python 模块时，同步 `acceptance/onboarding.json` 的 `source_files`；FAST 组的 `test_onboarding_source_files` 会核对 Git 跟踪文件，避免自身 dogfood 的冒烟镜像缺模块。
 
 ## 先写测试
 

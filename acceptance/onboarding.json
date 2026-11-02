@@ -109,6 +109,7 @@
         "storyloop/oracle_skill_approval.py",
         "storyloop/path_security.py",
         "storyloop/planning.py",
+        "storyloop/planning_choice.py",
         "storyloop/planning_validation.py",
         "storyloop/principles.py",
         "storyloop/process_bootstrap.py",
