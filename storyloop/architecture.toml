@@ -88,6 +88,7 @@ rank = 7
 "project_profile" = { module = "project_contract", zone = "base" }
 "state_format" = { module = "project_contract", zone = "base" }
 "smoke" = { module = "project_contract", zone = "base" }
+"acceptance_import_guard" = { module = "oracle", zone = "mutable" }
 "onboarding_manifest" = { module = "project_contract", zone = "base" }
 "testing.smoke_harness.*" = { module = "project_contract", zone = "base" }
 "baseline" = { module = "evidence_kernel", zone = "base", split = "D" }

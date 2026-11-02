@@ -64,6 +64,8 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     require(isinstance(generated, dict) and {"files", "manifest"} <= set(generated) <= {"files", "manifest", "lessons_used", "errata"},
             "Smoke agent returned an invalid contract")
     files = without_manifest_echo(generated["files"])
+    from .acceptance_import_guard import check_generated_imports
+    check_generated_imports(project, files)
     previous = _tracked_under(project, suite_relative(project, change_id))  # replaced files are committed as deletions
     install_smoke_suite(project, change, files, generated["manifest"], replace=True)
     for name in (RED_EVIDENCE, RESULT_EVIDENCE):

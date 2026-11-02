@@ -55,6 +55,9 @@ def _prepare_acceptance(
                       "contract_commit": contract_commit,
                       **_lesson_snapshot(project, contract_commit)})
         save_run(project, state)
+    stopped = _check_acceptance_imports(project, smoke_root, state)
+    if stopped is not None:
+        return stopped
     try:
         red = _ensure_red_evidence(project, change, state["contract_commit"])
     except StoryLoopError as exc:
@@ -68,6 +71,18 @@ def _prepare_acceptance(
     transition(project, state, "IMPLEMENTING", event="red_ready",
                updates={"red_evidence_sha256": red["evidence_sha256"]})
     save_run(project, state)
+    return None
+
+
+def _check_acceptance_imports(project: Path, smoke_root: Path, state: dict) -> dict | None:
+    from .acceptance_import_guard import check_suite_imports
+    try:
+        check_suite_imports(project, smoke_root)
+    except StoryLoopError as exc:
+        if exc.code != "ORACLE_DEFECT":
+            raise
+        return pause(project, state, "ORACLE_DEFECT", error=str(exc),
+                     acceptance={"status": "ORACLE_DEFECT", "reason": str(exc)})
     return None
 
 

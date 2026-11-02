@@ -2,9 +2,18 @@ import unittest
 
 from storyloop.models import StoryLoopError
 from storyloop.role_profiles import resolve_adapters, role_settings
+from storyloop.role_instructions import INSTRUCTIONS
 
 
 class RoleProfileTests(unittest.TestCase):
+    def test_acceptance_instruction_uses_candidate_subprocess_for_project_imports(self):
+        prompt = INSTRUCTIONS['acceptance']
+        self.assertIn('profile.module_roots', prompt)
+        self.assertIn('profile.test_roots', prompt)
+        self.assertIn('Path.cwd()', prompt)
+        self.assertIn('subprocess', prompt)
+        self.assertIn('payload.change.repair', prompt)
+
     def test_legacy_adapter_becomes_default_without_changing_kind(self):
         resolved = resolve_adapters({"adapter": "command", "agent_command": ["agent"]})
         self.assertEqual(resolved, {"default": {"kind": "command", "agent_command": ["agent"]}})
