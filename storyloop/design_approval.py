@@ -208,15 +208,7 @@ def _replan_locked(project: Path, change_id: str, reason: str) -> dict:
                                               'attempt': state.get('attempt', 0)})
     for key in ('plan', 'assessment', 'continue_heavy', 'split', 'pending_option'):
         planning.pop(key, None)
-    if planning.get('origin') == 'L3':
-        # Compatibility for older READY checkpoints that still carry a completed write intent.
-        if (planning.get('execution_digest') and planning.get('processed_candidate')
-                == planning.get('candidate_digest')):
-            from .routing_restore import retire_restore
-            retire_restore(state)
-        planning['phase'] = 'REPLAN'
-        planning.pop('execution_digest', None)
-        planning.pop('characterization_input', None)
+    clear_l3_replan_checkpoint(state)
     # Explicit replan retires the old candidate's execution/review evidence.
     # Ordinary cost-stop resume still requires the original candidate digest.
     for key in ('cost_candidate', 'pending_review', 'review_disposition'):
@@ -226,6 +218,22 @@ def _replan_locked(project: Path, change_id: str, reason: str) -> dict:
     transition(project, state, 'DESIGN_REVISION_REQUIRED', event='design_replan', updates={'phase': 'planning'})
     save_run(project, state)
     return deepcopy(state)
+
+
+def clear_l3_replan_checkpoint(state: dict) -> None:
+    """Retire L3's completed write intent whenever its plan is invalidated."""
+    planning = state.get('planning', {})
+    if planning.get('origin') != 'L3':
+        return
+    if (planning.get('execution_digest') and planning.get('processed_candidate')
+            == planning.get('candidate_digest')):
+        from .routing_restore import retire_restore
+        retire_restore(state)
+    planning['phase'] = 'REPLAN'
+    planning.pop('execution_digest', None)
+    planning.pop('characterization_input', None)
+    for key in ('cost_candidate', 'pending_review', 'review_disposition'):
+        state.pop(key, None)
 
 
 def _split_suggestions(change: dict) -> dict:

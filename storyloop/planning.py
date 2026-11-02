@@ -15,18 +15,13 @@ from .routing_policy import evaluate
 from .change_types import definition_for
 from .routing_state import advance_tier
 from .semantic_repair import answer_with_repair
+from .planning_choice import selected_option
 
 
 def required_locks(tier: str, nature: str, touched: list[str]) -> list[str]:
     """Heavy and refactor work lock all selected existing paths before implementation."""
     required = "characterization" in definition_for(nature).required_stages
     return sorted(set(touched)) if tier == 'heavy' or required else []
-
-
-def selected_option(plan: dict) -> dict:
-    """Project the explicitly approved option, or the main option before approval."""
-    selected = (plan.get('approval') or {}).get('option_id', plan['main_option'])
-    return next(option for option in plan['options'] if option['id'] == selected)
 
 
 def ensure_routing_plan(project: Path, change: dict, state: dict, services,

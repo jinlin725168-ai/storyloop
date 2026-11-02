@@ -305,8 +305,9 @@ def _plan_summary(state: dict) -> list[str]:
     plan = (state.get("planning") or {}).get("plan") or {}
     if plan.get("status") != "DONE" or not plan.get("options"):
         return []
-    selected = (plan.get("approval") or {}).get("option_id", plan["main_option"])
-    option = next(item for item in plan["options"] if item["id"] == selected)
+    from .planning_choice import selected_option
+    option = selected_option(plan)
+    selected = option['id']
     location = f".storyloop/state/runs/{state['change_id']}.json → planning.plan"
     paths = [str(item) for item in option.get("touched", []) + option.get("creates", [])]
     risks = [f"{name}: {value.get('reason', value.get('value', ''))}"

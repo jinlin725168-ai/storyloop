@@ -25,6 +25,16 @@ from tests.test_project_loop import smoke_payload
 
 
 class RoutedEndToEndTests(unittest.TestCase):
+    def test_characterization_context_only_names_changed_behavior(self):
+        from storyloop.project_loop_gates import _changing_behaviors
+        change = {'product': {'stories': [{'acceptance': [
+            {'id': 'AC-1', 'row_type': 'positive', 'then': 'new'},
+            {'id': 'AC-2', 'row_type': 'regression', 'then': 'kept'},
+            {'id': 'AC-3', 'row_type': 'state_preservation', 'then': 'kept'},
+            {'id': 'AC-4', 'row_type': 'non_goal', 'then': 'kept'},
+        ]}]}}
+        self.assertEqual([item['id'] for item in _changing_behaviors(change)], ['AC-1'])
+
     def case(self, tier):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
@@ -342,6 +352,35 @@ class RoutedEndToEndTests(unittest.TestCase):
         self.assertEqual(replanned['status'], 'DESIGN_APPROVAL_REQUIRED')
         approve_design(root, identifier, replanned['plan_id'])
         self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
+
+    def test_characterization_repair_clears_l3_checkpoint_and_resamples_unit_floor(self):
+        from storyloop.acceptance_repair import repair_characterization
+        from storyloop.storage import write_json
+        from unittest.mock import patch
+        root, identifier, services = self.case('heavy')
+        pause = run_change(root, identifier, services)
+        approve_design(root, identifier, pause['plan_id'])
+        # Obtain a real characterized run, then model the reviewed oracle defect.
+        run_change(root, identifier, services)
+        state = load_run_state(root, identifier)
+        state['status'] = 'ORACLE_DEFECT'
+        state['review_disposition'] = {'status': 'ORACLE_DEFECT', 'findings': [
+            {'target': 'oracle', 'location': 'tests/test_lock.py:1'}]}
+        state['planning'].update(origin='L3', phase='READY', execution_digest='stale',
+                                 characterization_input='stale')
+        state.setdefault('oracle', {}).setdefault('baseline', {})['unit'] = [999]
+        write_json(root / '.storyloop/state/runs' / f'{identifier}.json', state)
+        path = root / 'tests/test_lock.py'
+        path.write_text(path.read_text(encoding='utf-8') + '\n# repaired\n', encoding='utf-8')
+        with patch('storyloop.failure_attribution.characterization_oracle', return_value=True), \
+                patch('storyloop.acceptance_repair._reprove_red', return_value={'evidence_sha256': 'test'}):
+            result = repair_characterization(root, {'change_id': identifier, 'product': {}},
+                                             state, 'repair old lock')
+        self.assertEqual(result['status'], 'CHARACTERIZATION_REPAIRED')
+        self.assertEqual(state['planning']['phase'], 'REPLAN')
+        self.assertNotIn('execution_digest', state['planning'])
+        self.assertNotIn('characterization_input', state['planning'])
+        self.assertNotEqual(state['oracle']['baseline']['unit'], [999])
 
     def test_base_upgrade_invalidates_plan_then_replan_completes(self):
         from storyloop.base_upgrade import upgrade_baseline

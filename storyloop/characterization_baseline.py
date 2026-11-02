@@ -37,6 +37,9 @@ def run_characterization_baseline(project, commands, timeout, pending):
                     target.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(source, target)
                     paths.add(relative)
+                elif target.is_file():
+                    target.unlink()
+                    paths.discard(relative)
             digest = _files_digest(candidate, sorted(paths))
             result = run_commands(candidate, commands, timeout, project_patterns(project))
     finally:
