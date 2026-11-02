@@ -35,6 +35,15 @@ class EvidenceTests(unittest.TestCase):
             "complete": False,
         })
 
+    def test_symbol_may_name_an_existing_touched_test_file_only(self):
+        scope = {"touched": ["tests/test_service.py"], "creates": [], "interfaces": [],
+                 "symbols": [{"path": "tests/test_service.py", "symbol": "ServiceTests"}]}
+        result = measure_scope(self.root, self.head, scope, validate_policy(None))
+        self.assertEqual(result["scope"]["symbols"], scope["symbols"])
+        scope["touched"] = []
+        with self.assertRaisesRegex(StoryLoopError, "existing touched"):
+            measure_scope(self.root, self.head, scope, validate_policy(None))
+
     def test_scope_rejects_parent_traversal(self):
         scope = {"touched": ["../outside.py"], "creates": [],
                  "interfaces": [], "symbols": []}

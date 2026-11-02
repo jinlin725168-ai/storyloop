@@ -78,6 +78,18 @@ class CallRecordTests(unittest.TestCase):
 
 
 class LogAndNextStepTests(unittest.TestCase):
+    def test_errors_before_change_id_do_not_suggest_placeholder_log_or_run(self):
+        for command, code in (("change", "BLOCKED"), ("init", "BLOCKED"),
+                              ("change", "NEEDS_INPUT")):
+            with self.subTest(command=command, code=code), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                with patch("storyloop.cli.dispatch", side_effect=StoryLoopError("bad answer", code=code)):
+                    with patch("sys.stdout", new_callable=io.StringIO), patch("sys.stderr", new_callable=io.StringIO) as err:
+                        self.assertEqual(cli.main([command, str(root)]), 2)
+                result = json.loads(err.getvalue())
+                self.assertNotIn("<change-id>", result.get("next", ""))
+                self.assertNotIn("storyloop log", result.get("next", ""))
+
     def test_log_names_the_failed_gate_of_each_attempt(self):
         temporary, root, change_id = approved_change()
         services = LoopServices(generate_smoke=lambda project, state: smoke_payload(change_id),

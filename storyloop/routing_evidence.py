@@ -125,8 +125,9 @@ def _symbols(project: Path, commit: str, values: list, touched: list[str],
     for item in values:
         require(isinstance(item, dict) and set(item) == {"path", "symbol"}, "Invalid symbol entry")
         path = _paths(project, [item["path"]], "symbol path")[0]
-        require(path in existing and path in touched and _is_business(path, profile),
-                "Symbol path must be an existing touched business file")
+        require(path in existing and path in touched
+                and (_is_business(path, profile) or _is_test(path, profile)),
+                "Symbol path must be an existing touched business or test file")
         _validate_symbol(item["symbol"])
         association = _symbol_at_path(project, commit, path, item["symbol"])
         require(association is not False, "Declared symbol is absent at the contract commit")

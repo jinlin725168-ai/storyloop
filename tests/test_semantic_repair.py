@@ -85,6 +85,64 @@ class AnswerWithRepairTests(unittest.TestCase):
 
 
 class SemanticRepairIntegrationTests(unittest.TestCase):
+    def test_change_does_not_retry_git_validation_failure(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            from tests.routing_support import readiness_repository
+            from storyloop.product_cli import product_answer
+            readiness_repository(root)
+            calls = []
+            def call(request):
+                calls.append(request)
+                return assessed_product()
+            from tests.test_intake import assessed_product
+            with patch('storyloop.intake.assess_intake', side_effect=StoryLoopError('Unknown Git commit')):
+                with self.assertRaisesRegex(StoryLoopError, 'Unknown Git commit'):
+                    product_answer(root, {'idea': 'x'}, call, None)
+            self.assertEqual(len(calls), 1)
+
+    def test_change_repairs_invalid_product_symbol_location(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            from tests.routing_support import readiness_repository
+            from tests.test_intake import assessed_product
+            from storyloop.readiness import inspect_readiness, approve_readiness
+            readiness_repository(root)
+            ready = inspect_readiness(root)
+            approve_readiness(root, ready['digest'], 'Local tests')
+            invalid = assessed_product()
+            invalid['assessment']['scope']['symbols'][0]['path'] = 'tests/test_service.py'
+            answers = [invalid, assessed_product()]
+            with patch("storyloop.cli.invoke_project_agent", side_effect=lambda p, r, payload: answers.pop(0)) as call:
+                created = dispatch(parser().parse_args([
+                    "change", str(root), "--idea", "增加预订", "--no-interactive",
+                ]))
+            self.assertEqual(created["status"], "DRAFT")
+            self.assertIn("Symbol path", call.call_args_list[1].args[2]["validation_errors"][0])
+
+    def test_product_answer_repairs_bad_evidence_line_and_touched_path(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            from tests.routing_support import readiness_repository
+            from tests.test_intake import assessed_product
+            from storyloop.product_cli import product_answer
+            readiness_repository(root)
+            for field in ('line', 'touched'):
+                invalid = assessed_product()
+                if field == 'line':
+                    invalid['assessment']['criteria'][0]['evidence']['locations'] = ['app/service.py:999']
+                else:
+                    invalid['assessment']['scope']['touched'] = ['app/missing.py']
+                answers = [invalid, assessed_product()]
+                requests = []
+                def call(request):
+                    requests.append(request)
+                    return answers.pop(0)
+                with self.subTest(field=field):
+                    product_answer(root, {'idea': 'x'}, call, None)
+                    self.assertEqual(len(requests), 2)
+                    self.assertIn('validation_errors', requests[1])
+
     def test_change_repairs_one_semantically_invalid_product(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
