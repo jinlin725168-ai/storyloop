@@ -26,6 +26,20 @@ class RoutedLockTests(unittest.TestCase):
         self.assertEqual(paused['status'], 'DESIGN_APPROVAL_REQUIRED')
         approve_design(self.root, self.identifier, paused['plan_id'])
 
+    def test_characterization_receives_behavior_to_change_and_instruction_to_avoid_it(self):
+        from storyloop.role_instructions import INSTRUCTIONS
+        observed = {}
+        def characterize(project, context):
+            observed.update(context)
+            return {'summary': 'No lock', 'touched': [], 'tests': [], 'questions': []}
+        services = self.services(characterize)
+        self.approve(services)
+        with self.assertRaises(StoryLoopError):
+            run_change(self.root, self.identifier, services)
+        self.assertTrue(observed['changing_behaviors'])
+        self.assertIn('不得锁定', INSTRUCTIONS['characterize'])
+        self.assertIn('特征化缺陷', INSTRUCTIONS['review'])
+
     def test_empty_characterization_cannot_claim_planned_paths(self):
         services = self.services(lambda p, c: {
             'summary': 'No locks', 'touched': [], 'tests': [], 'questions': []})

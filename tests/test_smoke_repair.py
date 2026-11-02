@@ -79,6 +79,40 @@ class CandidateTests(unittest.TestCase):
 
 
 class SmokeRepairTests(unittest.TestCase):
+    def test_repair_rejects_staged_candidate_with_actionable_instruction(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"test_commands": []})
+            value = rich_product(); value["questions"] = []
+            change_id = create_change(root, "orders", value, now=lambda: NOW)["change_id"]
+            approve_change(root, change_id, now=lambda: NOW)
+            run_change(root, change_id, services(change_id, lambda p, s: defective_payload(change_id)))
+            git(root, "add", "modules/orders/service.py")
+            head = git(root, "rev-parse", "HEAD")
+            with self.assertRaisesRegex(StoryLoopError, "git restore --staged") as caught:
+                repair_smoke(root, change_id, "wrong oracle", services(
+                    change_id, lambda p, s: good_payload(change_id)))
+            self.assertEqual(caught.exception.code, "GIT_BLOCKED")
+            self.assertEqual(git(root, "rev-parse", "HEAD"), head)
+
+    def test_noop_repair_does_not_commit_dirty_candidate(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"test_commands": []})
+            value = rich_product(); value["questions"] = []
+            change_id = create_change(root, "orders", value, now=lambda: NOW)["change_id"]
+            approve_change(root, change_id, now=lambda: NOW)
+            run_change(root, change_id, services(change_id, lambda p, s: defective_payload(change_id)))
+            head = git(root, "rev-parse", "HEAD")
+            with self.assertRaisesRegex(StoryLoopError, "没有改动|no changes") as caught:
+                repair_smoke(root, change_id, "wrong oracle", services(
+                    change_id, lambda p, s: defective_payload(change_id)))
+            self.assertEqual(caught.exception.code, "GIT_BLOCKED")
+            self.assertEqual(git(root, "rev-parse", "HEAD"), head)
+            self.assertIn("modules/", git(root, "status", "--porcelain"))
+
     def test_contract_committed_before_red_can_repair_a_self_writing_suite(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

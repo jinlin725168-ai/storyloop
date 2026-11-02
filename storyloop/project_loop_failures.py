@@ -108,6 +108,12 @@ def _pause_routed(project: Path, state: dict, target: str, findings: list[dict])
 def require_routed_choice(state: dict, overrule: str | None) -> None:
     routed = state.get("status") in ROUTED_STOPS.values() and state.get("routed")
     if routed and not overrule:
+        from .failure_attribution import characterization_oracle
+        if characterization_oracle(state):
+            require(False, f"{state['status']}：特征化测试与合同冲突；请用 storyloop change <project> "
+                           f"--supersede {state['change_id']} --reason <原因> "
+                           "--message <重新描述需求> 作废本次变更并重开；"
+                           "不同意这个判定用 storyloop run --overrule <理由>")
         require(False, f"{state['status']}：审查判定问题不在实现。修正判据用 storyloop acceptance-repair "
                        "--reason <原因>；合同缺陷用 storyloop change --supersede；"
                        "不同意这个判定用 storyloop run --overrule <理由>")

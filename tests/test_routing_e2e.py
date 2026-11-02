@@ -25,6 +25,16 @@ from tests.test_project_loop import smoke_payload
 
 
 class RoutedEndToEndTests(unittest.TestCase):
+    def test_characterization_context_only_names_changed_behavior(self):
+        from storyloop.project_loop_gates import _changing_behaviors
+        change = {'product': {'stories': [{'acceptance': [
+            {'id': 'AC-1', 'row_type': 'positive', 'then': 'new'},
+            {'id': 'AC-2', 'row_type': 'regression', 'then': 'kept'},
+            {'id': 'AC-3', 'row_type': 'state_preservation', 'then': 'kept'},
+            {'id': 'AC-4', 'row_type': 'non_goal', 'then': 'kept'},
+        ]}]}}
+        self.assertEqual([item['id'] for item in _changing_behaviors(change)], ['AC-1'])
+
     def case(self, tier):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
@@ -35,6 +45,18 @@ class RoutedEndToEndTests(unittest.TestCase):
                            characterize=Mock(wraps=services.characterize),
                            review=Mock(wraps=services.review))
         return root, change['change_id'], observed
+
+    def test_design_summary_is_visible_in_status_and_log(self):
+        from storyloop.change_log import change_log
+        from storyloop.cli import dispatch, parser
+        root, identifier, services = self.case('heavy')
+        paused = run_change(root, identifier, services)
+        self.assertEqual(paused['status'], 'DESIGN_APPROVAL_REQUIRED')
+        status = dispatch(parser().parse_args(['status', str(root), '--change', identifier]))
+        log = change_log(root, identifier)
+        for result in (paused, status, log):
+            self.assertIn('Implement the approved contract', str(result['stop']))
+            self.assertIn('Decisions', str(result['stop']))
 
     def test_light_standard_heavy_real_gates_and_call_counts(self):
         for tier, design_calls, lock_calls in [('light', 0, 0), ('standard', 1, 0), ('heavy', 1, 1)]:
@@ -287,6 +309,30 @@ class RoutedEndToEndTests(unittest.TestCase):
         self.assertEqual(pause['status'], 'DESIGN_APPROVAL_REQUIRED')
         approve_design(root, identifier, pause['plan_id'])
         self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
+
+    def test_reviewed_characterization_defect_routes_to_supersede(self):
+        from tests.test_structured_output import passing_review
+        root, identifier, services = self.case('heavy')
+        paused = run_change(root, identifier, services)
+        approve_design(root, identifier, paused['plan_id'])
+
+        def defective_review(project, context):
+            if context.get('mode') == 'consistency':
+                return passing_review(project, context)
+            return {'verdict': 'fail', 'summary': 'lock conflicts with contract',
+                    'findings': [{'target': 'oracle', 'criterion_id': 'AC-1',
+                                  'location': 'tests/test_lock.py:4',
+                                  'message': 'characterization locks a behavior the contract changes'}],
+                    'questions': []}
+
+        stopped = run_change(root, identifier, replace(services, review=defective_review))
+        self.assertEqual(stopped['status'], 'ORACLE_DEFECT', stopped)
+        self.assertIn(f'--supersede {identifier}', stopped['next'])
+        self.assertNotIn('acceptance-repair', stopped['next'])
+        self.assertEqual(load_run_state(root, identifier)['status'], 'ORACLE_DEFECT')
+        from storyloop.acceptance_repair import repair_smoke
+        with self.assertRaisesRegex(StoryLoopError, f'--supersede {identifier}'):
+            repair_smoke(root, identifier, 'wrong characterization')
 
     def test_base_upgrade_invalidates_plan_then_replan_completes(self):
         from storyloop.base_upgrade import upgrade_baseline

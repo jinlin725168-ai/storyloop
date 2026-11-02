@@ -87,6 +87,7 @@ rank = 7
 "git_command" = { module = "git", zone = "base" }
 "project_profile" = { module = "project_contract", zone = "base" }
 "state_format" = { module = "project_contract", zone = "base" }
+"planning_choice" = { module = "foundation", zone = "base" }
 "smoke" = { module = "project_contract", zone = "base" }
 "onboarding_manifest" = { module = "project_contract", zone = "base" }
 "testing.smoke_harness.*" = { module = "project_contract", zone = "base" }

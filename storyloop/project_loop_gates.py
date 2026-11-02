@@ -34,9 +34,17 @@ from .smoke_runner import run_commands_at_commit
 from .project_profile import layer_commands, matches_test_root
 from .characterization_baseline import run_characterization_baseline
 from .storage import load_json
+from .state_format import criterion_expects_red
 
 if TYPE_CHECKING:  # the loop imports this module; the services type is only an annotation
     from .run_services import LoopServices
+
+
+def _changing_behaviors(change: dict) -> list[dict]:
+    return [{"id": criterion["id"], "given": criterion.get("given"),
+             "when": criterion.get("when"), "then": criterion.get("then")}
+            for story in change["product"]["stories"]
+            for criterion in story.get("acceptance", []) if criterion_expects_red(criterion)]
 
 
 def design_plan(state: dict) -> dict | None:
@@ -195,7 +203,8 @@ def characterize_paths(project: Path, change: dict, state: dict, services: LoopS
                            if not matches_test_root(p, profile.get('test_roots', []))]
     context = {"change": change, "test_roots": profile["test_roots"], "extend": list(extend or []),
                "characterization": previous if previous.get("status") == "GREEN" else None,
-               "design": plan}
+               "design": plan,
+               "changing_behaviors": _changing_behaviors(change)}
     response, written = write_safely(project, change_id, lambda: services.characterize(project, context))
     require(isinstance(response, dict) and isinstance(response.get("summary"), str)
             and isinstance(response.get("touched"), list) and isinstance(response.get("tests"), list)

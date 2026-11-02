@@ -87,6 +87,11 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
                 f"--reason <原因>；实现问题就提高 .storyloop/config.json 的 max_attempts 后 {run}，"
                 f"或另开新变更（运行开始后合同不能修订）")
     if status == "ORACLE_DEFECT":
+        from .failure_attribution import characterization_oracle
+        if characterization_oracle(details):
+            return (f"特征化测试锁定了合同要改变的行为；请作废本次变更并运行 "
+                    f"storyloop change {where} --supersede {change_id} --reason <原因> "
+                    "--message <重新描述需求> 重开")
         return (f"验收判据被判定存在缺陷，请根据停止报告中的证据修正：storyloop acceptance-repair {where} "
                 f"--reason <哪条断言写错了> 让 acceptance 角色修正，再 {run}")
     if status == "EXISTING_GREEN":

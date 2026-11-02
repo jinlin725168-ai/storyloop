@@ -50,6 +50,14 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
             f"Acceptance repair needs a committed contract that has not completed "
             f"(current: {state.get('status')})")
     require(current_branch(project) == state["feature_branch"], "Check out the run's feature branch first")
+    from .baseline import _git
+    if _git(project, "diff", "--cached", "--no-renames", "--name-only", "-z").strip("\0"):
+        raise StoryLoopError("暂存区有候选改动；先用 git restore --staged -- <候选路径> 取消暂存，"
+                             "核对工作区后重试修复命令", code="GIT_BLOCKED")
+    from .failure_attribution import characterization_oracle
+    require(not characterization_oracle(state),
+            f"特征化测试与合同冲突；请作废本次变更并运行 storyloop change {project} "
+            f"--supersede {change_id} --reason <原因> --message <重新描述需求> 重开")
     if services is None:
         from .default_loop_services import _default_services
         services = _default_services()
@@ -69,7 +77,7 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     for name in (RED_EVIDENCE, RESULT_EVIDENCE):
         (project / ".storyloop/evidence" / change_id / name).unlink(missing_ok=True)
     paths = sorted(set(relative_files(project, [suite_root])) | set(previous))
-    commit = commit_paths(project, paths, f"test({change_id}): repair acceptance suite")
+    commit = _commit_repair_paths(project, paths, f"test({change_id}): repair acceptance suite")
     moment = (now or (lambda: datetime.now(timezone.utc)))().astimezone(timezone.utc).isoformat(timespec="seconds")
     from .consistency import invalidate_consistency
     invalidate_consistency(state, replan=True)
@@ -103,6 +111,16 @@ def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict
 def _tracked_under(project: Path, relative: str) -> list[str]:
     from .baseline import _git
     return [path for path in _git(project, "ls-files", "-z", "--", relative).split("\0") if path]
+
+
+def _commit_repair_paths(project: Path, paths: list[str], message: str) -> dict:
+    try:
+        return commit_paths(project, paths, message)
+    except StoryLoopError as exc:
+        if str(exc) == "目标路径没有可提交的改动":
+            raise StoryLoopError("目标路径没有改动；请先修正判据文件，再重新运行修复命令",
+                                 code="GIT_BLOCKED") from exc
+        raise
 
 
 def _unproven_suite(project: Path, state: dict, error: StoryLoopError) -> dict:
