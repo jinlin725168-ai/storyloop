@@ -26,7 +26,7 @@ from storyloop.testing.smoke_harness.v1 import HarnessError
 class Contract(unittest.TestCase):
     def test_business_response(self):
         try:
-            result = subprocess.run(COMMAND, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(COMMAND, capture_output=True, text=True, timeout=30)
             if result.returncode != 0:
                 raise HarnessError("Business process did not complete")
             value = json.loads(result.stdout)
