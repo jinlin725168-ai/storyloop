@@ -1,0 +1,29 @@
+# 接入规范草案
+
+未初始化、需人工补全。先审阅并提交，再使用原 init 锁定；初始化不代表 readiness READY。
+
+- 填写 module_roots、test_roots 和 integration_paths，明确哪些模块可写。
+- acceptance/tools、此规范、settings 和 onboarding.json 必须留在底座保护范围。
+- 单元、集成、验收、系统冒烟、静态检查分别选择真实执行命令；不得用空通过脚本代替。
+- 冒烟只接收 manifest 指定的 case，不自动发现目录，也不附加 acceptance/ui。
+- source_files 只能填写明确安全文件；不扫描目录，不复制 .env、密钥或凭证。
+- 依赖需预热；依赖缓存显式声明，构建输出使用每次独占 scratch，不下载或安装。
+- 明确 build/start/ready/run_case/cleanup；不用的阶段需 not_applicable 及理由。
+- 请人工确认 settings 中的 `base_build_commands`：空数组明确表示项目没有构建步骤；有构建步骤时填写 argv 命令。
+- 数据隔离、业务断言、只读健康探针和必要的权限须由项目确定。本模板不配置数据库或登录。
+- 运行 0 表示实际执行全绿，1 仅表示行为断言失败，2 表示环境/配置/清理错误或零执行。
+- 完成后将 onboarding.json 的 reviewed 标记为 true 并提交；后续修改保护文件走 BASE。
+
+## 项目约定（人工填写）
+
+模块所有权、测试目录、集成入口、命令与缓存寻址、只读健康条件、仍有的 readiness 缺口。
+
+### 本仓库（StoryLoop 自身）
+
+- 可写模块：`storyloop/`（引擎）、`docs/`、`examples/`；测试在 `tests/`，按 `tests/suites.py` 归属登记新测试模块。
+- 底座：`pyproject.toml`、`acceptance/**`、`.github/**`、`storyloop_cli.py` 及根目录其它文件。
+- 单元层运行 `python tests/run.py --suite core`；静态检查运行 `python -m ruff check storyloop tests examples`（需在引擎解释器环境中安装 ruff==0.8.4）；无集成命令。
+- 约定：中文用户可见文案；`tests/test_architecture.py` 保持零豁免，新模块须在 `storyloop/architecture.toml` 与 `docs/modules.md` 登记；函数不超过 50 行、文件不超过 500 行。
+- 系统冒烟只校验 CLI 版本与帮助可用；业务断言写在变更自己的验收用例中。
+
+- 被测业务就是 StoryLoop 自身：验收用例不得在测试进程内 import `storyloop` 或 `tests`；须通过候选镜像中的子进程加载被测代码，避免误用已安装的引擎包。

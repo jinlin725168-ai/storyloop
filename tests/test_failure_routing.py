@@ -20,6 +20,7 @@ from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, load_run_state, run_change
 from storyloop.project_loop_support import save_run
 from storyloop.project_loop_failures import record_boundary
+from storyloop.run_hints import next_step
 from storyloop.project_boundaries import audit_project_changes
 from storyloop.storage import write_json
 from tests.support import product
@@ -111,6 +112,19 @@ class EvidenceLocationTests(unittest.TestCase):
 
 
 class ReviewRoutingTests(unittest.TestCase):
+    def test_linked_base_hint_without_legacy_paths_keeps_original_wording(self):
+        self.assertEqual(
+            next_step("BASE_CHANGE_REQUIRED", "FEAT-1", "/p", {
+                "blocked_by": "BASE-1", "source_branch": "main",
+                "feature_branch": "feature/one",
+            }),
+            "底座草案 BASE-1 已生成：git switch main；"
+            "storyloop approve /p --change BASE-1；"
+            "storyloop run /p --change BASE-1 --implementer human；"
+            "base 通过后 git switch feature/one，再 storyloop run /p "
+            "--change FEAT-1 自动合并并重证",
+        )
+
     def test_cli_forwards_overrule_only_on_the_first_run(self):
         args = parser().parse_args(["run", ".", "--change", "FEAT-1", "--overrule", "human reason"])
         seen = []
@@ -292,6 +306,7 @@ class BoundaryAttributionTests(unittest.TestCase):
             root = Path(folder)
             change_id = approved(root, max_attempts=3, add_core=True, add_pom=True)
             calls = []
+            before_collision = {}
 
             def implement(project, context):
                 calls.append(context["attempt"])
@@ -300,6 +315,11 @@ class BoundaryAttributionTests(unittest.TestCase):
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_text("VALUE = 2\n", encoding="utf-8")
                 else:
+                    before_collision["content"] = (
+                        project / "modules/orders/service.py").read_bytes()
+                    before_collision["status"] = git(project, "status", "--porcelain")
+                    before_collision["branch"] = git(project, "branch", "--show-current")
+                    before_collision["stash"] = git(project, "stash", "list")
                     (project / "pom.xml").write_text("<project/>\n", encoding="utf-8")
                 return {"summary": "candidate", "questions": []}
 
@@ -312,8 +332,16 @@ class BoundaryAttributionTests(unittest.TestCase):
             self.assertEqual(calls, [1, 2])
             self.assertEqual((root / "modules/orders/service.py").read_text(), "VALUE = 2\n")
             self.assertEqual((root / "pom.xml").read_text(), "<project>old</project>\n")
+            self.assertEqual((root / "modules/orders/service.py").read_bytes(),
+                             before_collision["content"])
+            self.assertEqual(git(root, "status", "--porcelain"), before_collision["status"])
+            self.assertEqual(git(root, "branch", "--show-current"), before_collision["branch"])
+            self.assertEqual(git(root, "stash", "list"), before_collision["stash"])
             self.assertEqual(load_run_state(root, change_id)["blocked_by"],
                              Path(result["base_proposal"]).stem)
+            self.assertIn("git stash push -u -- modules/orders/service.py", result["next"])
+            self.assertLess(result["next"].index("先 storyloop run"),
+                            result["next"].index("取回或丢弃暂存"))
 
     def test_unowned_write_during_boundary_stop_preserves_workspace(self):
         with tempfile.TemporaryDirectory() as folder:
