@@ -11,6 +11,16 @@ from tests.test_structured_output import passing_review
 
 
 class RoutedLockTests(unittest.TestCase):
+    def test_one_characterization_oracle_finding_restarts_even_with_other_oracle_findings(self):
+        from unittest.mock import patch
+        from storyloop.project_loop_failures import reviewed_characterization_conflict
+        state = {"characterization": {"tests": ["tests/test_characterize_new.py"],
+                                       "commits": ["lock"]}}
+        findings = [{"target": "oracle", "location": "tests/test_characterize_new.py:3"},
+                    {"target": "oracle", "location": "acceptance/changes/X/test.py:5"}]
+        with patch("storyloop.project_loop_failures._checked_findings", return_value=findings):
+            self.assertTrue(reviewed_characterization_conflict(self.root, {}, state, {}))
+
     # Reuse real readiness, approval, and heavy run fixture.
     setUp = test_routing_state.RunRoutingTests.setUp
 
@@ -31,7 +41,7 @@ class RoutedLockTests(unittest.TestCase):
         observed = {}
         def characterize(project, context):
             observed.update(context)
-            return {'summary': 'No lock', 'touched': [], 'tests': [], 'questions': []}
+            return {'summary': 'No lock', 'touched': [], 'tests': [], 'questions': [], 'claims': []}
         services = self.services(characterize)
         self.approve(services)
         with self.assertRaises(StoryLoopError):
@@ -42,7 +52,7 @@ class RoutedLockTests(unittest.TestCase):
 
     def test_empty_characterization_cannot_claim_planned_paths(self):
         services = self.services(lambda p, c: {
-            'summary': 'No locks', 'touched': [], 'tests': [], 'questions': []})
+            'summary': 'No locks', 'touched': [], 'tests': [], 'questions': [], 'claims': []})
         self.approve(services)
         with self.assertRaisesRegex(StoryLoopError, 'coverage|artifact'):
             run_change(self.root, self.identifier, services)
@@ -53,7 +63,9 @@ class RoutedLockTests(unittest.TestCase):
     def test_declared_coverage_without_test_artifacts_is_rejected(self):
         services = self.services(lambda p, c: {
             'summary': 'Claimed lock', 'touched': ['app/service.py'],
-            'tests': ['tests/missing.py'], 'questions': []})
+            'tests': ['tests/missing.py'], 'questions': [], 'claims': [
+                {'test': 'tests/missing.py', 'behavior': 'old behavior',
+                 'symbols': [], 'criterion_ids': []}]})
         self.approve(services)
         with self.assertRaisesRegex(StoryLoopError, 'artifact'):
             run_change(self.root, self.identifier, services)
@@ -66,7 +78,9 @@ class RoutedLockTests(unittest.TestCase):
                 'class Lock(unittest.TestCase):\n'
                 '    def test_serve(self):\n        self.assertEqual(serve(), "ok")\n')
             return {'summary': 'Undeclared', 'touched': [],
-                    'tests': ['tests/test_lock.py'], 'questions': []}
+                    'tests': ['tests/test_lock.py'], 'questions': [], 'claims': [
+                        {'test': 'tests/test_lock.py', 'behavior': 'old serve result',
+                         'symbols': [], 'criterion_ids': []}]}
         services = self.services(characterize)
         self.approve(services)
         with self.assertRaisesRegex(StoryLoopError, 'coverage'):

@@ -7,12 +7,15 @@ from pathlib import Path
 
 from .evidence_locations import evidence_location_exists
 from .base_collision import link_base_collision
-from .failure_attribution import check_findings, failure_signature, finding_key, no_progress, route
-from .models import require, text
+from .failure_attribution import (check_findings, failure_signature, finding_key, location_file,
+                                  no_progress, route)
+from .models import StoryLoopError, require, text
 from .project_loop_support import save_run
 from .run_transitions import transition
 from .run_stops import pause
 from .smoke import suite_relative
+from .baseline import _git
+from .path_security import safe_target
 
 ROUTED_STOPS = {"oracle": "ORACLE_DEFECT", "contract": "NEEDS_SPEC_FIX"}
 
@@ -94,6 +97,58 @@ def route_review(project: Path, change: dict, state: dict, review: dict,
         return record_failure(project, state, entry, "implement")
     state["failures"].append(_failure(state, entry, target))
     return _pause_routed(project, state, target, findings)
+
+
+def reviewed_characterization_conflict(project: Path, change: dict, state: dict,
+                                       review: dict) -> bool:
+    """Accept only evidenced oracle findings in this run's characterization files."""
+    tests = set((state.get('characterization') or {}).get('tests') or [])
+    if not tests or not (state.get('characterization') or {}).get('commits'):
+        return False
+    findings = [item for item in _checked_findings(project, change, state, review)
+                if item.get('target') == 'oracle']
+    return any(location_file(item.get('location')) in tests for item in findings)
+
+
+def discard_characterization_attempt(project: Path, state: dict, boundary: dict) -> None:
+    """Drop the reviewed candidate and the entire lock batch, retaining its parent commit."""
+    commits = (state.get('characterization') or {}).get('commits') or []
+    if not commits or _git(project, 'rev-parse', 'HEAD').strip() != commits[-1]:
+        raise StoryLoopError('Characterization restart requires its last lock commit at HEAD',
+                             code='WORKSPACE_TAINTED')
+    anchor = _git(project, 'rev-parse', f'{commits[0]}^').strip()
+    changed = [path for path in _git(project, 'diff', '--no-renames', '--name-only', '-z',
+                                     anchor).split('\0') if path]
+    untracked = [path for path in _git(project, 'ls-files', '--others', '--exclude-standard', '-z')
+                 .split('\0') if path]
+    allowed = {item['path'] for item in boundary['allowed']}
+    allowed.update((state.get('characterization') or {}).get('tests') or [])
+    extra = sorted((set(changed) | set(untracked)) - allowed)
+    if extra:
+        raise StoryLoopError('Unrelated workspace changes prevent characterization restart: '
+                             + ', '.join(extra[:8]), code='WORKSPACE_TAINTED')
+    for path in untracked:
+        target = safe_target(project, path, 'discarded candidate')
+        if not target.is_file() or target.is_symlink():
+            raise StoryLoopError('Unsafe candidate file prevents characterization restart: ' + path,
+                                 code='WORKSPACE_TAINTED')
+    _git(project, 'reset', '--soft', anchor)
+    if changed:
+        _git(project, 'restore', '--source', anchor, '--staged', '--worktree', '--', *changed)
+    for path in untracked:
+        safe_target(project, path, 'discarded candidate').unlink()
+    failures = state.get('failures') or []
+    if (failures and failures[-1].get('attempt') == state['attempt']
+            and failures[-1].get('attribution') == 'oracle'):
+        state.setdefault('voided_characterization_reviews', []).append(failures.pop())
+    state.pop('characterization', None)
+    state.setdefault('oracle', {}).setdefault('baseline', {}).pop('unit', None)
+    for key in ('pending_review', 'cost_candidate', 'verified', 'candidate_sha256', 'mode',
+                'routed', 'acceptance', 'error', 'next', 'stop'):
+        state.pop(key, None)
+    consumed = (state.get('planning') or {}).get('consumed_attempt', 0)
+    state['attempt'] = max(consumed, state['attempt'] - 1)
+    save_run(project, state)
 
 
 def _pause_routed(project: Path, state: dict, target: str, findings: list[dict]) -> dict:

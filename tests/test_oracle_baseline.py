@@ -137,8 +137,10 @@ class BaselineFloorTests(unittest.TestCase):
                 if context["extend"]:
                     (project / "tests/test_lock.py").write_text("pass\n", encoding="utf-8")
                     return {"summary": "locked", "touched": context["extend"], "tests": ["tests/test_lock.py"],
-                            "questions": []}
-                return {"summary": "nothing existing changes", "touched": [], "tests": [], "questions": []}
+                            "questions": [], "claims": [{"test": "tests/test_lock.py",
+                            "behavior": "old behavior invariant", "symbols": [], "criterion_ids": []}]}
+                return {"summary": "nothing existing changes", "touched": [], "tests": [],
+                        "questions": [], "claims": []}
 
             def implement(project, context):
                 implementer(True)(project, context)

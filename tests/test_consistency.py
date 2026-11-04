@@ -166,7 +166,9 @@ class ConsistencyGateTests(unittest.TestCase):
                 '    def test_behavior(self):\n'
                 "        self.assertEqual(serve(), 'ok')\n")
             return {'summary': 'Lock existing behavior', 'touched': ['app/service.py'],
-                    'tests': ['tests/test_lock.py'], 'questions': []}
+                    'tests': ['tests/test_lock.py'], 'questions': [], 'claims': [
+                        {'test': 'tests/test_lock.py', 'behavior': 'serve keeps old invariant',
+                         'symbols': [], 'criterion_ids': []}]}
         services = replace(self.services, characterize=characterize,
                            implement=lambda p, c: {'summary': 'Reached implementation',
                                                    'questions': ['Stop at implementation']})
