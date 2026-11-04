@@ -1,6 +1,7 @@
 """Stopping is represented by one evidence-backed, shell-safe report (2a section 6)."""
 
 from pathlib import Path
+from copy import deepcopy
 import shlex
 import unittest
 from unittest.mock import patch
@@ -9,6 +10,7 @@ from storyloop.cli import parser
 from storyloop.run_stops import pause, pause_for_boundary
 from storyloop.run_recovery import reset_run
 from storyloop.stop_report import STOP_STATUSES, build_stop, failure_view, render_stop, stop_of
+from storyloop.run_hints import next_step
 
 
 KEYS = {
@@ -75,7 +77,8 @@ class StopReportTests(unittest.TestCase):
         stop = build_stop("/p", state, "BASE_CHANGE_REQUIRED", details)
         option = stop["options"][0]
         self.assertEqual(option["command"], "storyloop approve /p --change BASE-1")
-        self.assertIn("git stash push -u -- modules/orders/service.py", option["action"])
+        self.assertIn("git -C /p --literal-pathspecs stash push -u -- modules/orders/service.py", option["action"])
+        self.assertEqual(option["action"], next_step("BASE_CHANGE_REQUIRED", "FEAT-1", "/p", details))
         self.assertLess(option["action"].index("先 storyloop run"),
                         option["action"].index("取回或丢弃暂存"))
 
@@ -88,6 +91,22 @@ class StopReportTests(unittest.TestCase):
         }, stop["options"])
         args = parser().parse_args(shlex.split(stop["options"][0]["command"])[1:])
         self.assertEqual(args.change_id, "BASE-1")
+
+    def test_saved_base_stop_refreshes_action_without_changing_state(self):
+        details = {"blocked_by": "BASE-1", "legacy_paths": ["[ab].py"],
+                   "source_branch": "main", "feature_branch": "feature/one"}
+        run = state_for("BASE_CHANGE_REQUIRED", **details)
+        run["stop"] = build_stop("/p", run, "BASE_CHANGE_REQUIRED", details)
+        run["stop"]["options"][0]["action"] = "先用 git stash push -u -- '[ab].py' 保存遗留业务改动"
+        saved = deepcopy(run)
+        shown = stop_of("/p", run)
+        action = shown["options"][0]["action"]
+        self.assertIn("git -C /p --literal-pathspecs stash push -u -- '[ab].py'", action)
+        self.assertIn("git -C /p status --short", action)
+        self.assertIn("git -C /p switch main", action)
+        self.assertIn("git -C /p switch feature/one", action)
+        self.assertEqual(run, saved)
+        self.assertIsNot(shown, run["stop"])
 
     def test_e1_human_base_review_keeps_named_human_command(self):
         stop = build_stop("/project", state_for("BASE_REVIEW_REQUIRED", implementer="human"),
