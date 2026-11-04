@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import shlex
 from .routing_report import routing_options
+from .stop_report import base_legacy_action
 
 
 def append_pending_memory(project: Path | str, value: str | None) -> str | None:
@@ -37,6 +38,7 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
     if not change_id:
         return ("检查错误并重试原命令；此时尚未创建变更，无可查看的 change id"
                 if status else None)
+    project_path = project
     project = shlex.quote(str(project))
     change = shlex.quote(change_id or "<change-id>")
     where = f"{project} --change {change}"
@@ -55,23 +57,17 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
                     f"{project} --path <CI路径> --reason '<原因>' --allow-ci，批准新 BASE 后在底座分支重放；"
                     f"完成底座变更后再 {run}")
         if details.get("blocked_by"):
+            git_project = shlex.quote(str(Path(project_path).resolve()))
             base = shlex.quote(str(details["blocked_by"]))
             source = shlex.quote(str(details.get("source_branch", "<source-branch>")))
             feature = shlex.quote(str(details.get("feature_branch", "<feature-branch>")))
             legacy_paths = details.get("legacy_paths") or []
             if legacy_paths:
-                paths = " ".join(shlex.quote(str(path)) for path in legacy_paths)
-                return (f"先用 git stash push -u -- {paths} 保存遗留业务改动；"
-                        "用 git status --short 检查并另行保存其他改动，确保工作区干净；"
-                        f"git switch {source}；"
-                        f"storyloop approve {project} --change {base}；"
-                        f"storyloop run {project} --change {base} --implementer human；"
-                        f"base 通过后 git switch {feature}，先 {run} 自动合并并重证；"
-                        "完成后由你决定取回或丢弃暂存的改动")
-            return (f"底座草案 {base} 已生成：git switch {source}；"
+                return base_legacy_action(project_path, change_id, details)
+            return (f"底座草案 {base} 已生成：git -C {git_project} switch {source}；"
                     f"storyloop approve {project} --change {base}；"
                     f"storyloop run {project} --change {base} --implementer human；"
-                    f"base 通过后 git switch {feature}，再 {run} 自动合并并重证")
+                    f"base 通过后 git -C {git_project} switch {feature}，再 {run} 自动合并并重证")
         proposal = details.get("base_proposal")
         named = f"（提案 {Path(str(proposal)).stem}）" if proposal else ""
         return (f"底座改动要独立迭代{named}：storyloop base-update {project} --proposal <BASE-ID> "
