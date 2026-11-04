@@ -107,7 +107,8 @@ def _clear_checks(project: Path, state: dict) -> None:
     state.pop('consistency', None)
     if not (state['planning'].get('origin') == 'L3'
             and state.get('characterization', {}).get('status') == 'GREEN'):
-        retired = (state.get('characterization') or {}).get('tests') or []
+        retired = list((state.get('characterization') or {}).get('tests') or [])
+        retired.extend((state.get('pending_characterization') or {}).get('tests') or [])
         if retired:
             state['retired_characterization_tests'] = sorted(
                 set(state.get('retired_characterization_tests') or []) | set(retired))

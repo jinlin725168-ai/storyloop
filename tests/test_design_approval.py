@@ -311,6 +311,7 @@ class DesignApprovalTests(unittest.TestCase):
         state = load_run_state(self.root, self.identifier)
         self.assertEqual(seen, ['main', option])
         self.assertEqual(state['characterization']['status'], 'GREEN')
+        self.assertIn('tests/test_lock.py', state['retired_characterization_tests'])
         self.assertEqual(set(state['characterization']['locks']), {'app/service.py'})
         self.assertEqual(state['attempt'], 1)
 
