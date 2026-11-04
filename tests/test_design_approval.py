@@ -278,13 +278,16 @@ class DesignApprovalTests(unittest.TestCase):
         def characterize(project, context):
             seen.append(context['design']['id'])
             expected = 'wrong' if len(seen) == 1 else 'ok'
-            (project / 'tests/test_lock.py').write_text(
+            name = 'tests/test_lock.py' if len(seen) == 1 else 'tests/test_lock_2.py'
+            (project / name).write_text(
                 'import unittest\nfrom app.service import serve\n'
                 'class Lock(unittest.TestCase):\n'
                 '    def test_behavior(self):\n'
                 f'        self.assertEqual(serve(), {expected!r})\n')
             return {'summary': 'Lock serve', 'touched': ['app/service.py'],
-                    'tests': ['tests/test_lock.py'], 'questions': []}
+                    'tests': [name], 'questions': [], 'claims': [
+                        {'test': name, 'behavior': 'serve keeps old invariant',
+                         'symbols': [], 'criterion_ids': []}]}
         services = LoopServices(lambda p, c: smoke_payload(self.identifier),
                                 lambda p, c: {'summary': 'Reached implement', 'questions': ['Stop here']},
                                 passing_review, characterize=characterize, design=lambda p, c: response)
@@ -300,10 +303,13 @@ class DesignApprovalTests(unittest.TestCase):
         self.assertEqual(state['routing']['limit'], 4)
         for key in ('pending_characterization', 'stop', 'unit', 'error', 'next'):
             self.assertNotIn(key, state)
+        failed = self.root / 'tests/test_lock.py'
+        self.assertFalse(failed.exists(), 'retired red characterization test must be removed')
         self.assertEqual(run_change(self.root, self.identifier, services)['status'], 'NEEDS_INPUT')
         state = load_run_state(self.root, self.identifier)
         self.assertEqual(seen, ['main', option])
         self.assertEqual(state['characterization']['status'], 'GREEN')
+        self.assertIn('tests/test_lock.py', state['retired_characterization_tests'])
         self.assertEqual(set(state['characterization']['locks']), {'app/service.py'})
         self.assertEqual(state['attempt'], 1)
 

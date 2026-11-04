@@ -165,4 +165,6 @@ class LifecycleGoldenTests(unittest.TestCase):
                 # E3 opt-in identifies newly started runs; golden outputs still compare every
                 # pre-existing contract, status, verdict, budget, report and Git field.
                 actual["state"].pop("e3_collision", None)
+                # New characterization claims are additive; keep the frozen old fields comparable.
+                (actual["state"].get("characterization") or {}).pop("claims", None)
                 self.assertEqual(actual, expected)

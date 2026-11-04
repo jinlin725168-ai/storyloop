@@ -37,6 +37,7 @@ def observed_scope(project: Path, state: dict, config: dict) -> dict:
     baseline = load_baseline(project)
     roots = config['profile'].get('test_roots', [])
     protected_tests = set((state.get('characterization') or {}).get('tests', []))
+    protected_tests.update(state.get('retired_characterization_tests') or [])
     for key in ('touched', 'creates'):
         actual[key] = [p for p in actual[key] if p not in protected_tests and
                        _category(p, baseline, state['change_id'], roots) in {'FEATURE', 'TEST'}]

@@ -110,7 +110,7 @@ class RoutedEndToEndTests(unittest.TestCase):
     def test_empty_lock_response_is_rejected_before_implementation(self):
         root, identifier, services = self.case('heavy')
         services = replace(services, characterize=Mock(return_value={
-            'summary': 'No locks', 'touched': [], 'tests': [], 'questions': []}))
+            'summary': 'No locks', 'touched': [], 'tests': [], 'questions': [], 'claims': []}))
         pause = run_change(root, identifier, services)
         approve_design(root, identifier, pause['plan_id'])
         with self.assertRaisesRegex(StoryLoopError, 'coverage|artifact'):
@@ -310,14 +310,18 @@ class RoutedEndToEndTests(unittest.TestCase):
         approve_design(root, identifier, pause['plan_id'])
         self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
 
-    def test_reviewed_characterization_defect_routes_to_supersede(self):
+    def test_reviewed_characterization_defect_restarts_l3_without_budget_cost(self):
         from tests.test_structured_output import passing_review
         root, identifier, services = self.case('heavy')
         paused = run_change(root, identifier, services)
         approve_design(root, identifier, paused['plan_id'])
 
+        reviewed = []
         def defective_review(project, context):
             if context.get('mode') == 'consistency':
+                return passing_review(project, context)
+            reviewed.append(context)
+            if len(reviewed) > 1:
                 return passing_review(project, context)
             return {'verdict': 'fail', 'summary': 'lock conflicts with contract',
                     'findings': [{'target': 'oracle', 'criterion_id': 'AC-1',
@@ -325,14 +329,13 @@ class RoutedEndToEndTests(unittest.TestCase):
                                   'message': 'characterization locks a behavior the contract changes'}],
                     'questions': []}
 
-        stopped = run_change(root, identifier, replace(services, review=defective_review))
-        self.assertEqual(stopped['status'], 'ORACLE_DEFECT', stopped)
-        self.assertIn(f'--supersede {identifier}', stopped['next'])
-        self.assertNotIn('acceptance-repair', stopped['next'])
-        self.assertEqual(load_run_state(root, identifier)['status'], 'ORACLE_DEFECT')
-        from storyloop.acceptance_repair import repair_smoke
-        with self.assertRaisesRegex(StoryLoopError, f'--supersede {identifier}'):
-            repair_smoke(root, identifier, 'wrong characterization')
+        result = run_change(root, identifier, replace(services, review=defective_review))
+        self.assertNotEqual(result['status'], 'ORACLE_DEFECT', result)
+        if result['status'] == 'DESIGN_APPROVAL_REQUIRED':
+            approve_design(root, identifier, result['plan_id'])
+            result = run_change(root, identifier, replace(services, review=defective_review))
+        self.assertEqual(result['status'], 'PASSED', result)
+        self.assertEqual(load_run_state(root, identifier)['attempt'], 1)
 
     def test_base_upgrade_invalidates_plan_then_replan_completes(self):
         from storyloop.base_upgrade import upgrade_baseline

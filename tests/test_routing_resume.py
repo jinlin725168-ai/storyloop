@@ -101,7 +101,9 @@ class L3ResumeTests(unittest.TestCase):
                 'class Lock(unittest.TestCase):\n'
                 '    def test_serve(self): self.assertEqual(serve(), "ok")\n')
             return {'summary': 'lock', 'touched': ['app/service.py'],
-                    'tests': ['tests/test_lock.py'], 'questions': []}
+                    'tests': ['tests/test_lock.py'], 'questions': [], 'claims': [
+                        {'test': 'tests/test_lock.py', 'behavior': 'serve keeps old invariant',
+                         'symbols': [], 'criterion_ids': []}]}
         return replace(services, characterize=characterize), calls
 
     def test_crash_after_characterization_rebinds_once_without_repeating_lock(self):

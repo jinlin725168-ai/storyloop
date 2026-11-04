@@ -4,15 +4,20 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+import hashlib
 
 from .evidence_locations import evidence_location_exists
 from .base_collision import link_base_collision
-from .failure_attribution import check_findings, failure_signature, finding_key, no_progress, route
+from .failure_attribution import (check_findings, failure_signature, finding_key, location_file,
+                                  no_progress, route)
 from .models import require, text
 from .project_loop_support import save_run
 from .run_transitions import transition
 from .run_stops import pause
 from .smoke import suite_relative
+from .baseline import _git
+from .path_security import safe_target
+from .boundaries import capture_snapshot
 
 ROUTED_STOPS = {"oracle": "ORACLE_DEFECT", "contract": "NEEDS_SPEC_FIX"}
 
@@ -93,7 +98,82 @@ def route_review(project: Path, change: dict, state: dict, review: dict,
     if target == "implementation":
         return record_failure(project, state, entry, "implement")
     state["failures"].append(_failure(state, entry, target))
+    if target == 'oracle' and reviewed_characterization_conflict(project, change, state, review):
+        state['characterization_pause_digest'] = characterization_workspace_digest(project)
     return _pause_routed(project, state, target, findings)
+
+
+def reviewed_characterization_conflict(project: Path, change: dict, state: dict,
+                                       review: dict) -> bool:
+    """Accept only evidenced oracle findings in this run's characterization files."""
+    tests = set((state.get('characterization') or {}).get('tests') or [])
+    if not tests or not (state.get('characterization') or {}).get('commits'):
+        return False
+    checked = _checked_findings(project, change, state, review)
+    findings = [item for item in checked if item.get('target') == 'oracle']
+    return (bool(findings) and not any(item.get('target') == 'contract' for item in checked)
+            and all(location_file(item.get('location')) in tests for item in findings))
+
+
+def characterization_conflict_evidence(project: Path, change: dict, state: dict,
+                                       review: dict) -> list[dict]:
+    tests = set((state.get('characterization') or {}).get('tests') or [])
+    return [item for item in _checked_findings(project, change, state, review)
+            if item.get('target') == 'oracle' and location_file(item.get('location')) in tests]
+
+
+def characterization_workspace_digest(project: Path) -> str:
+    """Bind a routed pause to business-file bytes without recording their contents."""
+    result = hashlib.sha256()
+    for path, fingerprint in capture_snapshot(project).entries:
+        result.update(f'{path}\0{fingerprint.sha256}\0{fingerprint.kind}\0{fingerprint.mode}\n'.encode())
+    return result.hexdigest()
+
+
+def discard_characterization_attempt(project: Path, state: dict, boundary: dict,
+                                     evidence: list[dict]) -> bool:
+    """Drop the reviewed candidate and the entire lock batch, retaining its parent commit."""
+    commits = (state.get('characterization') or {}).get('commits') or []
+    if not commits or _git(project, 'rev-parse', 'HEAD').strip() != commits[-1]:
+        return False
+    anchor = _git(project, 'rev-parse', f'{commits[0]}^').strip()
+    if any(_git(project, 'rev-list', '--parents', '-n', '1', commit).split()[1:]
+           != [anchor if index == 0 else commits[index - 1]]
+           for index, commit in enumerate(commits)):
+        return False
+    changed = [path for path in _git(project, 'diff', '--no-renames', '--name-only', '-z',
+                                     anchor).split('\0') if path]
+    untracked = [path for path in _git(project, 'ls-files', '--others', '--exclude-standard', '-z')
+                 .split('\0') if path]
+    allowed = {item['path'] for item in boundary['allowed']}
+    allowed.update((state.get('characterization') or {}).get('tests') or [])
+    extra = sorted((set(changed) | set(untracked)) - allowed)
+    if extra:
+        return False
+    for path in untracked:
+        target = safe_target(project, path, 'discarded candidate')
+        if not target.is_file() or target.is_symlink():
+            return False
+    _git(project, 'reset', '--soft', anchor)
+    if changed:
+        _git(project, 'restore', '--source', anchor, '--staged', '--worktree', '--', *changed)
+    for path in untracked:
+        safe_target(project, path, 'discarded candidate').unlink()
+    failures = state.get('failures') or []
+    if (failures and failures[-1].get('attempt') == state['attempt']
+            and failures[-1].get('attribution') == 'oracle'):
+        state.setdefault('voided_characterization_reviews', []).append(failures.pop())
+    state['characterization_conflict_restarts'] = state.get('characterization_conflict_restarts', 0) + 1
+    state['characterization_conflict_evidence'] = evidence
+    state.pop('characterization_pause_digest', None)
+    state.pop('characterization', None)
+    for key in ('pending_review', 'cost_candidate', 'verified', 'candidate_sha256', 'mode',
+                'routed', 'acceptance', 'error', 'next', 'stop'):
+        state.pop(key, None)
+    consumed = (state.get('planning') or {}).get('consumed_attempt', 0)
+    state['attempt'] = max(consumed, state['attempt'] - 1)
+    save_run(project, state)
+    return True
 
 
 def _pause_routed(project: Path, state: dict, target: str, findings: list[dict]) -> dict:

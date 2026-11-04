@@ -130,6 +130,21 @@ def _resume_and_prepare(project: Path, change: dict, state: dict, services: Loop
                         config: dict, fresh: bool, overrule: str | None) -> dict | None:
     change_id = change['change_id']
     state.pop("stop", None)
+    if state['status'] == 'ORACLE_DEFECT' and not overrule:
+        from .project_loop_failures import (characterization_conflict_evidence,
+                                            characterization_workspace_digest,
+                                            discard_characterization_attempt,
+                                            reviewed_characterization_conflict)
+        prior = (state.get('failures') or [{}])[-1].get('review') or {}
+        if (state.get('characterization_conflict_restarts', 0) < 1
+                and reviewed_characterization_conflict(project, change, state, prior)):
+            require(state.get('characterization_pause_digest') == characterization_workspace_digest(project),
+                    'Workspace changed since ORACLE_DEFECT; keep the hand edits and use '
+                    'storyloop change --supersede, or restore the paused workspace before run')
+            boundary = audit_project_changes(project, change_id)
+            evidence = characterization_conflict_evidence(project, change, state, prior)
+            if discard_characterization_attempt(project, state, boundary, evidence):
+                return prepare_execution(project, change, state, services, config)
     require_routed_choice(state, overrule)
     if overrule:
         routed = apply_overrule(project, state, overrule)
@@ -337,6 +352,15 @@ def _verify_attempt(project, change, state, services, config, boundary):
         return result
     if verdict == "needs_input" and layers_green(layers):
         return pause(project, state, "NEEDS_INPUT", questions=review["questions"])
+    if verdict == "fail":
+        from .project_loop_failures import (characterization_conflict_evidence,
+                                            discard_characterization_attempt,
+                                            reviewed_characterization_conflict)
+        if (state.get('characterization_conflict_restarts', 0) < 1
+                and reviewed_characterization_conflict(project, change, state, review)):
+            evidence = characterization_conflict_evidence(project, change, state, review)
+            if discard_characterization_attempt(project, state, boundary, evidence):
+                return prepare_execution(project, change, state, services, config)
     if verdict == "fail" or not layers_green(layers):
         return route_review(project, change, state, review, layers)
     verified = {"boundary": boundary, "layers": layers, "review": review}

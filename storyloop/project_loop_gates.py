@@ -11,11 +11,13 @@ from .errata import defer_errata, release_errata
 
 from pathlib import Path
 from typing import TYPE_CHECKING
+import hashlib
 
 from .planning import plan_projection, required_locks
 from .change_types import definition_for
 from .routing_restore import restore_lock_paths
-from .characterization_locks import (capture_locks, routed_coverage, require_saved_coverage, verified_locks)
+from .characterization_locks import (capture_locks, routed_coverage, require_saved_coverage,
+                                     validate_behavior_claims, verified_locks)
 from .answers import load_answers
 from .baseline import _git
 from .facts import merge_facts
@@ -35,6 +37,9 @@ from .project_profile import layer_commands, matches_test_root
 from .characterization_baseline import run_characterization_baseline
 from .storage import load_json
 from .state_format import criterion_expects_red
+from .semantic_repair import answer_with_repair
+from .boundaries import capture_snapshot
+from .path_security import safe_target
 
 if TYPE_CHECKING:  # the loop imports this module; the services type is only an annotation
     from .run_services import LoopServices
@@ -204,8 +209,10 @@ def characterize_paths(project: Path, change: dict, state: dict, services: LoopS
     context = {"change": change, "test_roots": profile["test_roots"], "extend": list(extend or []),
                "characterization": previous if previous.get("status") == "GREEN" else None,
                "design": plan,
-               "changing_behaviors": _changing_behaviors(change)}
-    response, written = write_safely(project, change_id, lambda: services.characterize(project, context))
+               "changing_behaviors": _changing_behaviors(change),
+               "conflict_review": state.get('characterization_conflict_evidence') or []}
+    response, written = _isolated_characterization_answer(
+        project, change, state, services, config, context)
     require(isinstance(response, dict) and isinstance(response.get("summary"), str)
             and isinstance(response.get("touched"), list) and isinstance(response.get("tests"), list)
             and all(isinstance(p, str) for p in response["touched"] + response["tests"]),
@@ -233,10 +240,83 @@ def characterize_paths(project: Path, change: dict, state: dict, services: LoopS
         require(exists_at(project, state["contract_commit"], path) and not matches_test_root(path, profile["test_roots"]),
                 f"Characterized path must be an existing non-test file: {path}")
     pending = {"touched": touched, "tests": sorted(set(response["tests"]) | set(changed)), "changed": changed,
-               "extend": list(extend or [])}
+               "extend": list(extend or []),
+               "claims": {item['test']: item for item in response['claims']},
+               "created_sha256": {path: hashlib.sha256(
+                   safe_target(project, path, 'characterization test').read_bytes()).hexdigest()
+                   for path in changed}}
     if coverage is not None:
         pending['coverage'] = coverage
     return _verify_characterization(project, change_id, state, config, pending)
+
+
+def _isolated_characterization_answer(project: Path, change: dict, state: dict, services,
+                                      config: dict, context: dict) -> tuple[dict, list]:
+    """Reject old-test edits and changed-behavior claims, then let the role rewrite once."""
+    roots = config['profile']['test_roots']
+    existing, saved = _existing_characterization_files(project, roots)
+    changed_ids = {item['id'] for item in context['changing_behaviors']}
+    written = []
+
+    def call(request):
+        nonlocal written
+        if written:
+            _restore_rejected_tests(project, written, existing, saved)
+        response, written = write_safely(project, change['change_id'],
+                                         lambda: services.characterize(project, request))
+        return response
+
+    def validate(response):
+        require(isinstance(response, dict) and isinstance(response.get('tests'), list)
+                and all(isinstance(path, str) for path in response['tests']),
+                'Characterization agent returned an invalid result')
+        changed = {item.path for item in written if not item.path.endswith('/')}
+        if any(not matches_test_root(path, roots) for path in changed):
+            return  # The existing boundary audit owns out-of-test writes.
+        unclaimed = changed - set(response['tests'])
+        require(not unclaimed, 'Characterization must declare every new test file: '
+                + ', '.join(sorted(unclaimed)))
+        old = sorted(path for path in set(response['tests']) | changed
+                     if path in existing and matches_test_root(path, roots))
+        require(not old, 'Characterization must create new dedicated test files; existing: '
+                + ', '.join(old))
+        validate_behavior_claims(response, changed_ids)
+
+    try:
+        response = answer_with_repair(call, context, validate)
+    except StoryLoopError:
+        if written:
+            _restore_rejected_tests(project, written, existing, saved)
+        raise
+    return response, written
+
+
+def _existing_characterization_files(project: Path, roots: list[str]) -> tuple[set[str], dict]:
+    existing = {path for path, _ in capture_snapshot(project).entries}
+    dirty = set(_git(project, 'diff', '--no-renames', '--name-only', '-z').split('\0'))
+    dirty.update(_git(project, 'ls-files', '--others', '--exclude-standard', '-z').split('\0'))
+    saved = {}
+    for path in dirty & existing:
+        if matches_test_root(path, roots):
+            target = safe_target(project, path, 'characterization test')
+            if target.is_file():
+                saved[path] = (target.read_bytes(), target.stat().st_mode)
+    return existing, saved
+
+
+def _restore_rejected_tests(project: Path, written: list, existing: set[str], saved: dict) -> None:
+    for item in written:
+        path = item.path
+        target = safe_target(project, path, 'rejected characterization test')
+        if path in saved:
+            content, mode = saved[path]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+            target.chmod(mode)
+        elif path in existing:
+            _git(project, 'restore', '--worktree', '--', path)
+        elif target.is_file():
+            target.unlink()
 
 
 def _verify_characterization(project: Path, change_id: str, state: dict, config: dict,
@@ -264,7 +344,8 @@ def _verify_characterization(project: Path, change_id: str, state: dict, config:
     state["characterization"] = {"status": "GREEN",
                                  "touched": sorted(set(previous.get("touched", [])) | set(pending["touched"])),
                                  "tests": sorted(set(previous.get("tests", [])) | set(pending["tests"])),
-                                 "commits": commits}
+                                 "commits": commits,
+                                 "claims": {**previous.get('claims', {}), **pending.get('claims', {})}}
     if locks is not None:
         state['characterization'].update(
             locks=locks, touched=sorted(locks),
