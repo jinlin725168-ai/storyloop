@@ -65,7 +65,9 @@ def install(root, identifier, name, product, calls=None, split=False, budget=6):
         {"role": "acceptance", "result": acceptance},
         {"role": "design", "result": design},
         {"role": "characterize", "result": {"summary": "Lock existing service",
-         "touched": ["app/service.py"], "tests": [lock_path], "questions": []},
+         "touched": ["app/service.py"], "tests": [lock_path], "questions": [],
+         "claims": [{"test": lock_path, "behavior": "serve retains its stable result",
+                     "symbols": [], "criterion_ids": []}]},
          "creates": [{"path": lock_path, "content": lock_source}]},
         {"role": "review", "mode": "retrospective", "result": {
             "lessons": [], "errata": [], "uncovered_concepts": [],
