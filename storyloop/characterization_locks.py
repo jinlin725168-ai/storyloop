@@ -65,8 +65,7 @@ def capture_locks(project: Path, config: dict, pending: dict) -> dict:
     return locks
 
 
-def validate_behavior_claims(response: dict, changing_ids: set[str],
-                             changed_symbols: set[tuple[str, str]]) -> None:
+def validate_behavior_claims(response: dict, changing_ids: set[str]) -> None:
     """Check explicit lock declarations against the approved behavior being changed."""
     tests = response['tests']
     claims = response.get('claims')
@@ -86,10 +85,6 @@ def validate_behavior_claims(response: dict, changing_ids: set[str],
         overlapping_ids = changing_ids & set(claim['criterion_ids'])
         require(not overlapping_ids,
                 'Characterization locks changed acceptance condition: ' + ', '.join(sorted(overlapping_ids)))
-        symbols = {(item['path'], item['symbol']) for item in claim['symbols']}
-        overlap = changed_symbols & symbols
-        require(not overlap, 'Characterization locks changed symbol: ' +
-                ', '.join(f'{path}:{symbol}' for path, symbol in sorted(overlap)))
     require(len(set(names)) == len(names) and set(names) == set(tests),
             'Characterization claims must identify each test exactly once')
 

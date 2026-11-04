@@ -61,15 +61,13 @@ class TestRootMatchingTests(unittest.TestCase):
 
 
 class CharacterizationGateTests(unittest.TestCase):
-    def test_claim_overlapping_contract_symbol_is_rejected(self):
+    def test_claim_may_lock_unchanged_behavior_of_touched_symbol(self):
         from storyloop.characterization_locks import validate_behavior_claims
-        from storyloop.models import StoryLoopError
         answer = {"tests": ["tests/test_characterize_service.py"], "claims": [{
             "test": "tests/test_characterize_service.py", "behavior": "old service wording",
             "symbols": [{"path": "modules/orders/service.py", "symbol": "serve"}],
             "criterion_ids": []}]}
-        with self.assertRaisesRegex(StoryLoopError, "serve"):
-            validate_behavior_claims(answer, set(), {("modules/orders/service.py", "serve")})
+        validate_behavior_claims(answer, set())
 
     def test_unclaimed_new_test_is_not_silently_added_to_locks(self):
         temporary, root, change_id = _repo({"unit_commands": [UNIT], "test_roots": ["tests"]})
@@ -185,6 +183,37 @@ class CharacterizationGateTests(unittest.TestCase):
         finally:
             temporary.cleanup()
 
+    def test_repeated_conflict_stops_after_one_restart_and_explains_the_rejected_lock(self):
+        temporary, root, change_id = _repo({"unit_commands": [UNIT], "test_roots": ["tests"]})
+        contexts = []
+
+        def characterize(project, context):
+            contexts.append(context)
+            self.assertLessEqual(len(contexts), 2, 'characterization restarted more than once')
+            return self._characterize(project, context)
+
+        def implement(project, context):
+            (project / "modules/orders/service.py").write_text("VALUE = 1\n", encoding="utf-8")
+            return {"summary": "done", "questions": []}
+
+        def review(project, context):
+            return {"verdict": "fail", "summary": "old wording conflicts with AC-1",
+                    "findings": [{"target": "oracle", "criterion_id": "AC-1",
+                                  "location": "tests/test_characterize_service.py:5",
+                                  "message": "old wording must change"}], "questions": []}
+
+        try:
+            services = LoopServices(generate_smoke=lambda p, c: smoke_payload(change_id),
+                                    implement=implement, review=review, characterize=characterize)
+            self.assertEqual(run_change(root, change_id, services)["status"], "ORACLE_DEFECT")
+            self.assertEqual(len(contexts), 2)
+            self.assertIn("tests/test_characterize_service.py",
+                          str(contexts[1]["conflict_review"]))
+            self.assertIn("old wording must change", str(contexts[1]["conflict_review"]))
+            self.assertEqual(load_run_state(root, change_id)["attempt"], 1)
+        finally:
+            temporary.cleanup()
+
     def test_saved_reviewed_characterization_conflict_resumes_the_same_restart(self):
         from unittest.mock import patch
         temporary, root, change_id = _repo({"unit_commands": [UNIT], "test_roots": ["tests"]})
@@ -209,7 +238,7 @@ class CharacterizationGateTests(unittest.TestCase):
         try:
             services = LoopServices(generate_smoke=lambda p, c: smoke_payload(change_id),
                                     implement=implement, review=review, characterize=characterize)
-            with patch("storyloop.project_loop_failures.reviewed_characterization_conflict",
+            with patch("storyloop.project_loop_failures.discard_characterization_attempt",
                        return_value=False):
                 self.assertEqual(run_change(root, change_id, services)["status"], "ORACLE_DEFECT")
             self.assertEqual(run_change(root, change_id, services)["status"], "PASSED")
@@ -217,6 +246,63 @@ class CharacterizationGateTests(unittest.TestCase):
             final = load_run_state(root, change_id)
             self.assertEqual(final["attempt"], 1)
             self.assertFalse(any(item.get("attribution") == "oracle" for item in final["failures"]))
+        finally:
+            temporary.cleanup()
+
+    def _paused_conflict(self):
+        from storyloop.changes import load_change
+        from storyloop.project_loop_failures import route_review
+        temporary, root, change_id = _repo({"unit_commands": [UNIT], "test_roots": ["tests"]})
+        services = self._services(change_id, lambda p, c: {
+            "summary": "pause before implementation", "questions": ["wait"]},
+            self._characterize, [])
+        self.assertEqual(run_change(root, change_id, services)["status"], "NEEDS_INPUT")
+        state = load_run_state(root, change_id)
+        review = {"verdict": "fail", "summary": "lock conflicts",
+                  "findings": [{"target": "oracle", "criterion_id": "AC-1",
+                                "location": "tests/test_characterize_service.py:5",
+                                "message": "old wording conflicts"}], "questions": []}
+        self.assertEqual(route_review(root, load_change(root, change_id), state, review)["status"],
+                         "ORACLE_DEFECT")
+        return temporary, root, change_id, services
+
+    def test_extra_commit_after_lock_keeps_oracle_stop_instead_of_hard_error(self):
+        from storyloop.models import StoryLoopError
+        from tests.test_baseline_behavior import git
+        temporary, root, change_id, services = self._paused_conflict()
+        try:
+            git(root, "commit", "--allow-empty", "-qm", "independent follow-up")
+            head = git(root, "rev-parse", "HEAD").strip()
+            with self.assertRaisesRegex(StoryLoopError, "ORACLE_DEFECT.*supersede"):
+                run_change(root, change_id, services)
+            self.assertEqual(git(root, "rev-parse", "HEAD").strip(), head)
+            self.assertEqual(load_run_state(root, change_id)["status"], "ORACLE_DEFECT")
+        finally:
+            temporary.cleanup()
+
+    def test_hand_edits_after_oracle_stop_are_not_discarded_on_resume(self):
+        from storyloop.models import StoryLoopError
+        temporary, root, change_id, services = self._paused_conflict()
+        changed = root / "modules/orders/service.py"
+        changed.write_text("VALUE = 99\n", encoding="utf-8")
+        try:
+            with self.assertRaisesRegex(StoryLoopError, "changed since ORACLE_DEFECT"):
+                run_change(root, change_id, services)
+            self.assertEqual(changed.read_text(encoding="utf-8"), "VALUE = 99\n")
+            self.assertEqual(load_run_state(root, change_id)["status"], "ORACLE_DEFECT")
+        finally:
+            temporary.cleanup()
+
+    def test_discarded_lock_keeps_the_old_unit_count_floor(self):
+        from storyloop.project_boundaries import audit_project_changes
+        from storyloop.project_loop_failures import discard_characterization_attempt
+        temporary, root, change_id, _ = self._paused_conflict()
+        try:
+            state = load_run_state(root, change_id)
+            before = state['oracle']['baseline']['unit']
+            boundary = audit_project_changes(root, change_id)
+            self.assertTrue(discard_characterization_attempt(root, state, boundary, []))
+            self.assertEqual(load_run_state(root, change_id)['oracle']['baseline']['unit'], before)
         finally:
             temporary.cleanup()
 

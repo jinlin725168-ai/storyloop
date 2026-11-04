@@ -11,15 +11,19 @@ from tests.test_structured_output import passing_review
 
 
 class RoutedLockTests(unittest.TestCase):
-    def test_one_characterization_oracle_finding_restarts_even_with_other_oracle_findings(self):
+    def test_characterization_restart_requires_all_oracle_findings_and_no_contract_finding(self):
         from unittest.mock import patch
         from storyloop.project_loop_failures import reviewed_characterization_conflict
         state = {"characterization": {"tests": ["tests/test_characterize_new.py"],
                                        "commits": ["lock"]}}
-        findings = [{"target": "oracle", "location": "tests/test_characterize_new.py:3"},
-                    {"target": "oracle", "location": "acceptance/changes/X/test.py:5"}]
-        with patch("storyloop.project_loop_failures._checked_findings", return_value=findings):
-            self.assertTrue(reviewed_characterization_conflict(self.root, {}, state, {}))
+        own = {"target": "oracle", "location": "tests/test_characterize_new.py:3"}
+        other = {"target": "oracle", "location": "acceptance/changes/X/test.py:5"}
+        contract = {"target": "contract", "location": "openspec/changes/X/spec.md:5"}
+        for findings, expected in (([own], True), ([own, other], False),
+                                   ([own, contract], False)):
+            with self.subTest(findings=findings), patch(
+                    "storyloop.project_loop_failures._checked_findings", return_value=findings):
+                self.assertEqual(reviewed_characterization_conflict(self.root, {}, state, {}), expected)
 
     # Reuse real readiness, approval, and heavy run fixture.
     setUp = test_routing_state.RunRoutingTests.setUp

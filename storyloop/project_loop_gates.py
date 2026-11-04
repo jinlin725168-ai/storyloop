@@ -11,6 +11,7 @@ from .errata import defer_errata, release_errata
 
 from pathlib import Path
 from typing import TYPE_CHECKING
+import hashlib
 
 from .planning import plan_projection, required_locks
 from .change_types import definition_for
@@ -208,7 +209,8 @@ def characterize_paths(project: Path, change: dict, state: dict, services: LoopS
     context = {"change": change, "test_roots": profile["test_roots"], "extend": list(extend or []),
                "characterization": previous if previous.get("status") == "GREEN" else None,
                "design": plan,
-               "changing_behaviors": _changing_behaviors(change)}
+               "changing_behaviors": _changing_behaviors(change),
+               "conflict_review": state.get('characterization_conflict_evidence') or []}
     response, written = _isolated_characterization_answer(
         project, change, state, services, config, context)
     require(isinstance(response, dict) and isinstance(response.get("summary"), str)
@@ -239,7 +241,10 @@ def characterize_paths(project: Path, change: dict, state: dict, services: LoopS
                 f"Characterized path must be an existing non-test file: {path}")
     pending = {"touched": touched, "tests": sorted(set(response["tests"]) | set(changed)), "changed": changed,
                "extend": list(extend or []),
-               "claims": {item['test']: item for item in response['claims']}}
+               "claims": {item['test']: item for item in response['claims']},
+               "created_sha256": {path: hashlib.sha256(
+                   safe_target(project, path, 'characterization test').read_bytes()).hexdigest()
+                   for path in changed}}
     if coverage is not None:
         pending['coverage'] = coverage
     return _verify_characterization(project, change_id, state, config, pending)
@@ -251,7 +256,6 @@ def _isolated_characterization_answer(project: Path, change: dict, state: dict, 
     roots = config['profile']['test_roots']
     existing, saved = _existing_characterization_files(project, roots)
     changed_ids = {item['id'] for item in context['changing_behaviors']}
-    changed_symbols = _changed_characterization_symbols(change, state)
     written = []
 
     def call(request):
@@ -276,7 +280,7 @@ def _isolated_characterization_answer(project: Path, change: dict, state: dict, 
                      if path in existing and matches_test_root(path, roots))
         require(not old, 'Characterization must create new dedicated test files; existing: '
                 + ', '.join(old))
-        validate_behavior_claims(response, changed_ids, changed_symbols)
+        validate_behavior_claims(response, changed_ids)
 
     try:
         response = answer_with_repair(call, context, validate)
@@ -298,15 +302,6 @@ def _existing_characterization_files(project: Path, roots: list[str]) -> tuple[s
             if target.is_file():
                 saved[path] = (target.read_bytes(), target.stat().st_mode)
     return existing, saved
-
-
-def _changed_characterization_symbols(change: dict, state: dict) -> set[tuple[str, str]]:
-    scope = (change['product'].get('assessment') or {}).get('scope') or {}
-    symbols = [*scope.get('symbols', []),
-               *((state.get('routing') or {}).get('scope') or {}).get('symbols', [])]
-    return {(item['path'], item['symbol']) for item in symbols
-            if isinstance(item, dict) and isinstance(item.get('path'), str)
-            and isinstance(item.get('symbol'), str)}
 
 
 def _restore_rejected_tests(project: Path, written: list, existing: set[str], saved: dict) -> None:

@@ -2,6 +2,7 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
+import hashlib
 import json
 
 from .baseline import _git, load_baseline, load_project_config, verify_baseline
@@ -18,6 +19,7 @@ from .run_stops import pause
 from .routing_state import is_routed, run_config
 from .smoke import smoke_digests
 from .storage import load_json, locked
+from .path_security import safe_target
 
 PLANNING_STOPS = {'DESIGN_APPROVAL_REQUIRED', 'DESIGN_REVISION_REQUIRED', 'SPLIT_RECOMMENDED'}
 
@@ -103,6 +105,7 @@ def _record(binding: dict, **fields) -> dict:
 
 
 def _clear_checks(project: Path, state: dict) -> None:
+    _retire_failed_characterization(project, state)
     state['planning'].pop('consistency', None)
     state.pop('consistency', None)
     if not (state['planning'].get('origin') == 'L3'
@@ -119,6 +122,24 @@ def _clear_checks(project: Path, state: dict) -> None:
         for key in ('stop', 'unit', 'error', 'next', 'questions'):
             state.pop(key, None)
         transition(project, state, 'DESIGN_APPROVAL_REQUIRED', event='design_reapprove', updates={'phase': 'planning'})
+
+
+def _retire_failed_characterization(project: Path, state: dict) -> None:
+    if state.get('status') != 'CHARACTERIZATION_FAILED':
+        return
+    pending = state.get('pending_characterization') or {}
+    created = pending.get('created_sha256') or {}
+    untracked = set(_git(project, 'ls-files', '--others', '--exclude-standard', '-z').split('\0'))
+    targets = []
+    for path in pending.get('changed') or []:
+        target = safe_target(project, path, 'retired characterization test')
+        require(path in untracked and path in created and target.is_file()
+                and not target.is_symlink()
+                and hashlib.sha256(target.read_bytes()).hexdigest() == created[path],
+                f'Cannot retire modified characterization test: {path}; restore it before reapproval')
+        targets.append(target)
+    for target in targets:
+        target.unlink()
 
 
 def _valid_design(plan: dict, binding: dict) -> bool:

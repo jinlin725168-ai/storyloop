@@ -303,10 +303,8 @@ class DesignApprovalTests(unittest.TestCase):
         self.assertEqual(state['routing']['limit'], 4)
         for key in ('pending_characterization', 'stop', 'unit', 'error', 'next'):
             self.assertNotIn(key, state)
-        # The failed test belongs to the previous batch. Human repair keeps unit green
-        # while the new characterization call creates its own dedicated file.
         failed = self.root / 'tests/test_lock.py'
-        failed.write_text(failed.read_text().replace("'wrong'", "'ok'"))
+        self.assertFalse(failed.exists(), 'retired red characterization test must be removed')
         self.assertEqual(run_change(self.root, self.identifier, services)['status'], 'NEEDS_INPUT')
         state = load_run_state(self.root, self.identifier)
         self.assertEqual(seen, ['main', option])
