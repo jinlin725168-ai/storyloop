@@ -205,6 +205,25 @@ def _evidence(state: dict, details: dict) -> list[str]:
     return [item for item in dict.fromkeys(evidence) if item]
 
 
+def base_legacy_action(project: Path | str, change_id: str, details: dict) -> str:
+    """Describe the linked base flow without executing any Git command."""
+    root = shlex.quote(str(Path(project).resolve()))
+    project_arg = shlex.quote(str(project))
+    change = shlex.quote(change_id)
+    base = shlex.quote(str(details["blocked_by"]))
+    source = shlex.quote(str(details.get("source_branch", "<source-branch>")))
+    feature = shlex.quote(str(details.get("feature_branch", "<feature-branch>")))
+    paths = " ".join(shlex.quote(str(path)) for path in details["legacy_paths"])
+    run = f"storyloop run {project_arg} --change {change}"
+    return (f"先用 git -C {root} --literal-pathspecs stash push -u -- {paths} 保存遗留业务改动；"
+            f"用 git -C {root} status --short 检查并另行保存其他改动，确保工作区干净；"
+            f"git -C {root} switch {source}；"
+            f"storyloop approve {project_arg} --change {base}；"
+            f"storyloop run {project_arg} --change {base} --implementer human；"
+            f"base 通过后 git -C {root} switch {feature}，先 {run} 自动合并并重证；"
+            "完成后由你决定取回或丢弃暂存的改动")
+
+
 def _stop_actions(project: Path | str, state: dict, status: str, details: dict
                   ) -> tuple[list[dict], str]:
     change_id, project_text = str(state["change_id"]), str(project)
@@ -222,20 +241,7 @@ def _stop_actions(project: Path | str, state: dict, status: str, details: dict
             "storyloop", "approve", project_text, "--change", details["blocked_by"])}]
         context = {**state, **details}
         if context.get("legacy_paths"):
-            paths = " ".join(shlex.quote(str(path)) for path in context["legacy_paths"])
-            source = shlex.quote(str(context.get("source_branch", "<source-branch>")))
-            feature = shlex.quote(str(context.get("feature_branch", "<feature-branch>")))
-            base = shlex.quote(str(context["blocked_by"]))
-            quoted_project = shlex.quote(project_text)
-            options[0]["action"] = (
-                f"先用 git stash push -u -- {paths} 保存遗留业务改动；"
-                "用 git status --short 检查并另行保存其他改动，确保工作区干净；"
-                f"git switch {source}；"
-                f"storyloop approve {quoted_project} --change {base}；"
-                f"storyloop run {quoted_project} --change {base} --implementer human；"
-                f"base 通过后 git switch {feature}，先 storyloop run {quoted_project} "
-                f"--change {shlex.quote(change_id)} 自动合并并重证；"
-                "完成后由你决定取回或丢弃暂存的改动")
+            options[0]["action"] = base_legacy_action(project, change_id, context)
     blocker = details.get("error") or state.get("error") or BLOCKERS.get(status, status)
     if status == "WORKSPACE_TAINTED" and details.get("base_resume_status") == "FINALIZING":
         options = [{"action": "恢复已批准 baseline 后继续", "command": _command(
@@ -287,6 +293,9 @@ def stop_of(project: Path | str, run: dict | None) -> dict | None:
     if run.get("status") not in STOP_STATUSES:
         return None
     if isinstance(saved, dict) and saved.get("status") == run["status"]:
+        if run["status"] == "BASE_CHANGE_REQUIRED" and run.get("legacy_paths"):
+            options, _ = _stop_actions(project, run, run["status"], run)
+            return {**saved, "options": options}
         if run["status"] == "ORACLE_DEFECT":
             from .failure_attribution import characterization_oracle
             if characterization_oracle(run):

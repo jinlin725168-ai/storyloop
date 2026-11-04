@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 import hashlib
 import json
+import shlex
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -112,16 +114,47 @@ class EvidenceLocationTests(unittest.TestCase):
 
 
 class ReviewRoutingTests(unittest.TestCase):
+    def test_base_stash_from_outside_repository_uses_literal_listed_paths(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / "project with space"
+            root.mkdir()
+            repository(root)
+            listed = ["ordinary.py", "[ab].py", ":(exclude)other.py"]
+            (root / "unlisted.py").write_text("original", encoding="utf-8")
+            git(root, "add", "unlisted.py")
+            git(root, "commit", "-m", "tracked unlisted file")
+            for name in [*listed, "a.py", "other.py"]:
+                (root / name).write_text(name, encoding="utf-8")
+            (root / "unlisted.py").write_text("modified", encoding="utf-8")
+            hint = next_step("BASE_CHANGE_REQUIRED", "FEAT-1", root, {
+                "blocked_by": "BASE-1", "legacy_paths": listed,
+                "source_branch": "main", "feature_branch": "feature/one",
+            })
+            command = hint.split("先用 ", 1)[1].split(" 保存遗留", 1)[0]
+            self.assertEqual(shlex.split(command)[:7], [
+                "git", "-C", str(root), "--literal-pathspecs", "stash", "push", "-u"])
+            subprocess.run(command, cwd=folder, shell=True, check=True, capture_output=True, text=True)
+            stashed = set(git(root, "stash", "show", "-u", "--name-only", "stash@{0}").splitlines())
+            self.assertEqual(stashed, set(listed))
+            for name in ("a.py", "other.py", "unlisted.py"):
+                self.assertTrue((root / name).exists(), name)
+            self.assertEqual((root / "unlisted.py").read_text(encoding="utf-8"), "modified")
+            for name in listed:
+                self.assertFalse((root / name).exists(), name)
+            self.assertIn(f"git -C {shlex.quote(str(root))} status --short", hint)
+            self.assertIn(f"git -C {shlex.quote(str(root))} switch main", hint)
+            self.assertIn(f"git -C {shlex.quote(str(root))} switch feature/one", hint)
+
     def test_linked_base_hint_without_legacy_paths_keeps_original_wording(self):
         self.assertEqual(
             next_step("BASE_CHANGE_REQUIRED", "FEAT-1", "/p", {
                 "blocked_by": "BASE-1", "source_branch": "main",
                 "feature_branch": "feature/one",
             }),
-            "底座草案 BASE-1 已生成：git switch main；"
+            "底座草案 BASE-1 已生成：git -C /p switch main；"
             "storyloop approve /p --change BASE-1；"
             "storyloop run /p --change BASE-1 --implementer human；"
-            "base 通过后 git switch feature/one，再 storyloop run /p "
+            "base 通过后 git -C /p switch feature/one，再 storyloop run /p "
             "--change FEAT-1 自动合并并重证",
         )
 
@@ -339,7 +372,8 @@ class BoundaryAttributionTests(unittest.TestCase):
             self.assertEqual(git(root, "stash", "list"), before_collision["stash"])
             self.assertEqual(load_run_state(root, change_id)["blocked_by"],
                              Path(result["base_proposal"]).stem)
-            self.assertIn("git stash push -u -- modules/orders/service.py", result["next"])
+            self.assertIn(f"git -C {root} --literal-pathspecs stash push -u -- modules/orders/service.py",
+                          result["next"])
             self.assertLess(result["next"].index("先 storyloop run"),
                             result["next"].index("取回或丢弃暂存"))
 
