@@ -14,7 +14,7 @@ def _cli(*args):
     except (OSError, subprocess.TimeoutExpired) as error:
         raise HarnessError("CLI subprocess unavailable") from error
     if child.returncode != 0:
-        raise HarnessError(f"CLI exited {child.returncode}")
+        raise AssertionError(f"CLI exited {child.returncode}")
     return child.stdout
 
 
