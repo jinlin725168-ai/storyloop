@@ -41,6 +41,10 @@ END_TO_END = [
 # Safety boundaries: out-of-scope writes, tampering, path and process containment.
 SAFETY = [
     "tests.test_acceptance_preconditions",
+    "tests.test_oracle_tiers.RedByRowTypeTests.test_heavy_regression_failure_is_an_oracle_defect",
+    "tests.test_oracle_tiers.RedByRowTypeTests.test_heavy_new_red_and_regression_green_prove_red",
+    "tests.test_oracle_tiers.RedByRowTypeTests.test_no_judged_test_is_an_oracle_defect",
+    "tests.test_oracle_tiers.RedByRowTypeTests.test_new_rows_red_and_kept_rows_green_prove_red",
     "tests.test_smoke_cli_exit_attribution",
     "tests.test_characterize_boundary_legacy_flow",
     "tests.test_failure_routing.BoundaryAttributionTests."

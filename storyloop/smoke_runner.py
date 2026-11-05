@@ -93,15 +93,19 @@ def _not_run(test: dict) -> dict:
 def _judge_red(results: list[dict], manifest: dict, change: dict) -> None:
     """RED by row type: new-behaviour rows must fail, kept-behaviour rows must already pass.
 
-    Only fast tests decide (heavy ones are recorded, not judged). A failure that executed zero tests
-    is a collection or import error, not a behaviour failure, so it never counts as RED.
+    Fast tests decide when present; otherwise the executed heavy tests decide. A failure that
+    executed zero tests is a collection or import error, not a behaviour failure.
     """
     tiers = {test["id"]: test.get("tier", "fast") for test in manifest["tests"]}
-    fast = [item for item in results if tiers[item["id"]] == "fast"]
+    fast = [item for item in results if tiers[item["id"]] == "fast" and item["status"] != "NOT_RUN"]
+    judged = fast or [item for item in results if item["status"] != "NOT_RUN"]
     tails = [_tail(item) for item in results]
-    fixture_errors = [item for item in fast if item["status"] == "ERROR" and set(
+    if not judged:
+        raise StoryLoopError("Smoke RED proof has no judged tests", code="ORACLE_DEFECT",
+                             details={"results": tails})
+    fixture_errors = [item for item in judged if item["status"] == "ERROR" and set(
         (item.get("counts") or {}).get("diagnostics", [])) == {"precondition"}]
-    broken = [item for item in fast if item["status"] == "ERROR" or (
+    broken = [item for item in judged if item["status"] == "ERROR" or (
         item["status"] == "FAIL" and (item.get("counts") or {}).get("executed") == 0)]
     if any(item not in fixture_errors for item in broken):
         raise StoryLoopError("Smoke RED proof encountered an environment error",
@@ -111,8 +115,8 @@ def _judge_red(results: list[dict], manifest: dict, change: dict) -> None:
                              code="ORACLE_DEFECT", details={"results": tails})
     expects_red = {criterion["id"]: criterion_expects_red(criterion)
                    for story in change["product"]["stories"] for criterion in story["acceptance"]}
-    failed = {criterion for item in fast if item["status"] == "FAIL" for criterion in item["criteria"]}
-    covered = {criterion for item in fast for criterion in item["criteria"]}
+    failed = {criterion for item in judged if item["status"] == "FAIL" for criterion in item["criteria"]}
+    covered = {criterion for item in judged for criterion in item["criteria"]}
     must_hold = sorted(c for c in covered if not expects_red[c] and c in failed)
     if must_hold:
         raise StoryLoopError(
