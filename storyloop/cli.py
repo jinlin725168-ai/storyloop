@@ -338,7 +338,8 @@ def _error_stop(args, exc: StoryLoopError) -> dict | None:
     try:
         run = load_run_state(project, change_id)
         return stop_of(project, run) or build_stop(
-            project, run, exc.code, {"error": redact(str(exc))})
+            project, run, exc.code, {"error": redact(str(exc)),
+                                    "acceptance": exc.details if (exc.details or {}).get("results") else {}})
     except (OSError, ValueError, TypeError, KeyError, StoryLoopError):
         return None
 

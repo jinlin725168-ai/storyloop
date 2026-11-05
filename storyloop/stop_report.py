@@ -189,6 +189,12 @@ def _evidence(state: dict, details: dict) -> list[str]:
     acceptance = details.get("acceptance") or state.get("acceptance") or {}
     for key in ("criteria_failing", "criteria_green"):
         evidence += [f"条件 {criterion}" for criterion in acceptance.get(key) or []]
+    for result in acceptance.get("results") or []:
+        if not isinstance(result, dict) or result.get("status") not in {"FAIL", "ERROR"}:
+            continue
+        output = "\n".join(str(result.get(key) or "") for key in ("stdout", "stderr")).strip()
+        prefix = f"{result.get('id', '验收用例')} {result['status']}: "
+        evidence.append(prefix + (output or "无输出")[-(1500 - len(prefix)):])
     for item in details.get("pending") or state.get("pending") or []:
         criterion = item.get("criterion_id") or item.get("id") if isinstance(item, dict) else item
         evidence.append(f"条件 {criterion}")

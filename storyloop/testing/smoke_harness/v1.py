@@ -2,6 +2,7 @@
 
 validate_cases(project: Path, cases: list[str], roots: list[str] | None = None) -> list[str]
 python_cases(project: Path, cases: list[str], timeout: float = 60, *, cwd: Path | None = None) -> Result
+precondition(condition: bool, message: str) -> None marks an invalid fixture; it does not prove RED.
 Result(executed=0, failed=0, errors=0, skipped=0, diagnostics=()): immutable counts; .code is strict 0/1/2.
 Context(project: Path, cases: list[str], executor: dict): protected invocation inputs.
   .start_service(argv: list[str], cwd: Path) -> Service registers automatic tree cleanup.
@@ -31,5 +32,6 @@ from .health import free_port, wait_http  # noqa: F401  # 兼容再导出：v1 �
 from .lifecycle import Context, run_hooks  # noqa: F401  # 兼容再导出：v1 公共辅助 API
 from .processes import Service, run_command  # noqa: F401  # 兼容再导出：v1 公共辅助 API
 from .python_runner import python_cases  # noqa: F401  # 兼容再导出：v1 公共辅助 API
+from .python_runner import precondition  # noqa: F401  # v1 验收夹具前提辅助 API
 from .results import Result  # noqa: F401  # 兼容再导出：v1 公共辅助 API
 from .scratch import Scratch  # noqa: F401  # 兼容再导出：v1 公共辅助 API
