@@ -1,6 +1,6 @@
 # 路线图
 
-更新：2026-10-29（以 `origin/main` `1b2c26a` 为准）。历史计划在 `docs/plans/`，当前演进计划在 `docs/superpowers/`。
+更新：2026-11-05（以 `origin/main` `72f2b51` 为准）。历史计划在 `docs/plans/`，当前演进计划在 `docs/superpowers/`。
 
 ## 已完成
 
@@ -37,54 +37,57 @@
 - **CI 调整（[PR #36](https://github.com/jinlin725168-ai/storyloop/pull/36)、[PR #39](https://github.com/jinlin725168-ai/storyloop/pull/39)）**：只改中文文件名文档时正确跳过测试；PR 的 Linux 跑 core、Windows 跑 platform，main 推送两平台仍跑 core；加入仅检查 F/E9 的 ruff 与 CodeQL。
 - **spec-craft 第 2 批（[计划 PR #41](https://github.com/jinlin725168-ai/storyloop/pull/41)、[实现 PR #42](https://github.com/jinlin725168-ai/storyloop/pull/42)）**：团队/个人定制、受保护路径与控制面视图已合入；[一次真实试用](validation/2026-10-24-spec-craft-第2批试用.md)发现行类型、表外假设和问句计数问题。**[PR #44](https://github.com/jinlin725168-ai/storyloop/pull/44)** 已修订技能和测试，未重跑真实试用，不能据此宣称实际模型输出已验证。
 - **架构收敛 E1（[计划 PR #38](https://github.com/jinlin725168-ai/storyloop/pull/38)、[评审修订 PR #40](https://github.com/jinlin725168-ai/storyloop/pull/40)、[实现 PR #43](https://github.com/jinlin725168-ai/storyloop/pull/43)）**：base 合同、旧底座绿证据、人工实现与具名人审、回归验收和幂等版本推进已交付并在独立样本实跑，见[验证记录](validation/2026-10-24-架构收敛-阶段E1-验证.md)。评审中人决定：旧项目使用人工确认的补充配置声明构建命令；合并前中断一律作废本次尝试、保留人的候选后重验。E1 不含代理实现、跨厂商审查或判据注入跑红，也未完成 I13。
-- **架构收敛 E2a：已取消，代码将移除（[计划 PR #46](https://github.com/jinlin725168-ai/storyloop/pull/46)、[实现 PR #47](https://github.com/jinlin725168-ai/storyloop/pull/47)）**：曾以预览交付代理实现、跨厂商审查，并有[一次真实试用](validation/2026-10-27-E2a-真实试用.md)走通；试用发现 6 个问题。2026-10-29 的[决策 0018](decisions/0018-base-human-only.md)改为 base 只由人实现，E2a 代码另由 PR 移除；E2b [PR #57](https://github.com/jinlin725168-ai/storyloop/pull/57) 已关闭。
-- **架构收敛 E3（[计划 PR #54](https://github.com/jinlin725168-ai/storyloop/pull/54)、[实现 PR #55](https://github.com/jinlin725168-ai/storyloop/pull/55)）**：功能变更撞底座后生成关联 base 草案，base 通过后合并新底座并重证 RED；[三组真实 Maven 项目试用](validation/2026-10-28-架构收敛E3-真实试用.md)的 base 与功能变更均到 `PASSED`，实现与审查使用测试适配器。阶段 E 以 E1 + E3 收尾；判据路径用例保留守卫另行实现，I13 尚未登记为 guarded。
+- **架构收敛 E2a：已取消并移除代码（[计划 PR #46](https://github.com/jinlin725168-ai/storyloop/pull/46)、[实现 PR #47](https://github.com/jinlin725168-ai/storyloop/pull/47)、[移除 PR #59](https://github.com/jinlin725168-ai/storyloop/pull/59)）**：曾以预览交付代理实现、跨厂商审查，并有[一次真实试用](validation/2026-10-27-E2a-真实试用.md)走通；试用发现 6 个问题。2026-10-29 的[决策 0018](decisions/0018-base-human-only.md)改为 base 只由人实现；E2b [PR #57](https://github.com/jinlin725168-ai/storyloop/pull/57) 已关闭。
+- **架构收敛 E3（[计划 PR #54](https://github.com/jinlin725168-ai/storyloop/pull/54)、[实现 PR #55](https://github.com/jinlin725168-ai/storyloop/pull/55)）**：功能变更撞底座后生成关联 base 草案，base 通过后合并新底座并重证 RED；[三组真实 Maven 项目试用](validation/2026-10-28-架构收敛E3-真实试用.md)的 base 与功能变更均到 `PASSED`，实现与审查使用测试适配器。阶段 E 以 E1 + E3 收尾；人工 base 判据路径用例保留守卫由 [PR #60](https://github.com/jinlin725168-ai/storyloop/pull/60) 落地，I13 声明仍为 `pending`。
+- **自举障碍修复（PR [#75](https://github.com/jinlin725168-ai/storyloop/pull/75)、[#81](https://github.com/jinlin725168-ai/storyloop/pull/81)、[#84](https://github.com/jinlin725168-ai/storyloop/pull/84)、[#85](https://github.com/jinlin725168-ai/storyloop/pull/85)）**：特征化隔离新测试并处理冲突锁定；同一测试文件可声明多条行为；RED 前提错误不再算行为失败，停点展示有界失败摘要；设计规划会列出固定旧行为的测试和快照文件（legacy 的 `touched` 仍只含非测试文件）。
+- **自举产出并回（PR [#78](https://github.com/jinlin725168-ai/storyloop/pull/78)、[#83](https://github.com/jinlin725168-ai/storyloop/pull/83)、[#79](https://github.com/jinlin725168-ai/storyloop/pull/79)）**：底座暂存提示及已有测试改动提示已并回，CLI 冒烟非零退出正确归为行为失败；命令无法启动等仍归环境错误。
+- **StoryLoop 自身 dogfood 1～6**：六次尝试中四次到 `PASSED`；dogfood6 全 Codex（实现与审查）54 分钟到 `PASSED`，验收修复 1 次、实现一轮、审查一次通过。实现与审查同厂商，独立性较弱；2026-11-05 人决定长期使用 Codex，避免占用 Claude 额度（见 [#65](https://github.com/jinlin725168-ai/storyloop/issues/65)）。数据来自共享工作区未入库的 `storyloop-dogfood-findings.md` 和 `storyloop-dogfood3-findings.md` 第 34 条；dogfood6 代码并回另见 [PR #87](https://github.com/jinlin725168-ai/storyloop/pull/87)，不计入本页 main 基线。
 
 ## 已知问题
 
-此前偶发 Git 可见性保护错误仍待捕获具体触发路径，诊断已增强，保护规则未放宽。E2a 代理代码移除前，其独立树与主仓共享 `.git` 的风险仍在，见[PR #47 的已知问题](https://github.com/jinlin725168-ai/storyloop/pull/47)及[试用记录](validation/2026-10-27-E2a-真实试用.md)。改动判据路径时保留原有全部用例的守卫尚未实现，I13 尚未登记为 guarded；E3 试用的限制见[验证记录](validation/2026-10-28-架构收敛E3-真实试用.md)。
+此前偶发 Git 可见性保护错误仍待捕获具体触发路径，诊断已增强，保护规则未放宽。I13 声明仍为 `pending`；E3 试用的限制见[验证记录](validation/2026-10-28-架构收敛E3-真实试用.md)。
 
 新发现的代码与文档不一致记在这里，修复后移到"已完成"。
 
 ## 下一步
 
-目标是两件事：StoryLoop 能在真实项目及自身上完成一次功能变更闭环（T6 是自举的 1.0 可用性标准），以及每次迭代都能用指标看出能力变好还是变差。后者分四个子项目：1 链路骨架 → 2 需求共创技能 → 3 能力指标 → 4 测试充分性（调研见共享工作区 `research_notes/规格与测试充分性调研/`）。骨架 ①、E1、E3 和 spec-craft 第 1、2 批已完成；E2a、E2b 已取消，base 只走人工通道（[决策 0018](decisions/0018-base-human-only.md)）。
+2026-11-05 人决定按以下四阶段推进，先压低自举中的非例行人工介入，再用数据检验能力，随后扩到真实项目和多故事变更，最后推进需求与测试充分性。审查角色长期使用 Codex：接受与实现同厂商、独立性较弱的取舍，不占 Claude 额度（[#65](https://github.com/jinlin725168-ai/storyloop/issues/65)）。base 仍只走人工通道（[决策 0018](decisions/0018-base-human-only.md)）。
+
+1. **压低人工**：验收修复若不改变已批准方案涉及的文件与接口，就沿用该方案，仍执行方案一致性审查；Python 接入模板默认将 `.ruff_cache`、`*.egg-info/` 等声明为临时路径；修正 `approve` 在 intake `NEEDS_INPUT` 时错误的下一步提示；报告只入库摘要（[#64](https://github.com/jinlin725168-ai/storyloop/issues/64)）。**门**：连续两次自举的非例行人工介入均不超过 1 次。
+2. **能力指标（子项目 3）**：`storyloop metrics` 从遥测自动统计调用、耗时、验收修复和人工介入，并按轮对比。**门**：能复现 dogfood 数据表。
+3. **扩面**：在真实项目做 2～3 个故事的功能变更；RuoYi 用真实模型跑一次撞底座（E3 此前只用测试适配器）。**门**：真实项目多故事功能变更到 `PASSED`。
+4. **需求与充分性**：推进 spec-craft 第 3～5 批、链路骨架 ②、子项目 4 测试充分性；架构收敛 F 的文档补充可随时插入。
 
 ```mermaid
 flowchart LR
     D["架构收敛 D ✅"] --> T1["骨架 ① ✅"]
     T1 --> E1["架构收敛 E1 ✅"]
     E1 --> E3["架构收敛 E3 ✅"]
-    E1 -.-> E2a["E2a 已取消（代码待移除）"]
+    E1 -.-> E2a["E2a 已取消（代码已移除）"]
     E2a -.-> E2b["E2b 已取消"]
-    E3 --> F["架构收敛 F"]
-    E3 --> T2["骨架 ②"]
-    E3 --> R["真实项目功能变更闭环"]
+    E3 --> P1["① 压低人工：连续 2 次自举 ≤1 次介入"]
+    T1 --> P1
+    P1 --> P2["② 能力指标：复现 dogfood 数据表"]
+    P2 --> P3["③ 扩面：真实项目多故事 PASSED"]
+    P3 --> P4["④ 需求与充分性"]
+    E3 --> P3
+    E3 -.-> F["架构收敛 F：文档可随时插入"]
+    P2 --> M["子项目 3：metrics 遥测对比"]
+    P3 --> R["2～3 故事；RuoYi 真实模型撞底座"]
+    P4 --> T2["骨架 ②"]
     S1["spec-craft 第 1、2 批 ✅"] --> S3["spec-craft 第 3 批"]
     T2 --> S3
     S3 --> S4["第 4 批"]
     S3 --> S5["第 5 批"]
-    T2 --> M["子项目 3 指标"]
-    S3 --> A4["子项目 4 测试充分性"]
-    R --> T6["T6 自举／自身闭环"]
-    T1 --> T6
+    P4 --> A4["子项目 4：测试充分性"]
+    S3 --> A4
 ```
 
-**主线（改引擎，按顺序）**
-
-1. **真实项目的功能变更闭环**：在 E1 + E3 底座通道上验证主线，保留失败与人工介入记录；改动判据路径时保留全部原有用例的守卫另行实现。
-2. **T6 自举与自身功能变更闭环**：推进引擎分离与自身变更的端到端验证；设计可与链路骨架 ② 并行。
-3. **子项目 3 能力指标**：用真实迭代数据判断能力变化；子项目 4 测试充分性随后推进。
-4. **架构收敛 F**：补记“底座来自架构声明”的后续编号决策、修订 0004，更新 `architecture.md`、`concepts.md`。
-5. **链路骨架 ②**：需求登记，模块、需求、规则、例子的 ID，fix 溯源，docs 类型。排在 E 之后。
-6. **spec-craft 第 3 → 4 → 5 批**：合同新字段与 `--from-draft`、需求地图起草、product 角色说明迁移。
-
-**旁线（不碰引擎）**：spec-craft 第 1、2 批及两次 Claude Code 试用已完成；试用发现已写回技能说明，第 3 批仍须验证正式负责人判断与引擎交接。
-
-按需启动：老仓库迁移工具、上游同步自动化、多变更并行、Windows 真实产品迭代闭环。仅在真实需求或外环信号出现时启动总体设计列出的其他延后项。
+阶段 4 的 spec-craft 仍须验证正式负责人判断与引擎交接；老仓库迁移、上游同步自动化、多变更并行和 Windows 真实产品闭环按实际需求启动。
 
 ## 明确不做
 
 - 不做 CI 系统、部署、push。
 - 不做操作系统级沙箱；需要强隔离时用容器。
 - 不让引擎自动修改规格迁就代码。
+- 暂不处理 [#80](https://github.com/jinlin725168-ai/storyloop/issues/80) 与 [#56](https://github.com/jinlin725168-ai/storyloop/issues/56) 的底座合并后边界恢复（以底座向后兼容为前提）；E2a/E2b 已取消，[PR #50](https://github.com/jinlin725168-ai/storyloop/pull/50) 的脱敏整体设计搁置。
