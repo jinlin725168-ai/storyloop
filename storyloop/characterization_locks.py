@@ -70,7 +70,6 @@ def validate_behavior_claims(response: dict, changing_ids: set[str]) -> None:
     tests = response['tests']
     claims = response.get('claims')
     require(isinstance(claims, list), 'Characterization must declare behavior for every test')
-    require(len(claims) == len(tests), 'Characterization claims must match its test files')
     names = []
     for claim in claims:
         require(isinstance(claim, dict) and isinstance(claim.get('test'), str)
@@ -85,8 +84,8 @@ def validate_behavior_claims(response: dict, changing_ids: set[str]) -> None:
         overlapping_ids = changing_ids & set(claim['criterion_ids'])
         require(not overlapping_ids,
                 'Characterization locks changed acceptance condition: ' + ', '.join(sorted(overlapping_ids)))
-    require(len(set(names)) == len(names) and set(names) == set(tests),
-            'Characterization claims must identify each test exactly once')
+    require(set(names) <= set(tests), 'Characterization claim names an undeclared test file')
+    require(set(tests) <= set(names), 'Characterization must declare behavior for every test file')
 
 
 def require_saved_coverage(project: Path, state: dict, config: dict, required: list[str]) -> None:

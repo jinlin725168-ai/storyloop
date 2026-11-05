@@ -12,6 +12,7 @@ FAST = [
     "tests.test_baseline_api", "tests.test_baseline_behavior", "tests.test_baseline_cli",
     "tests.test_baseline_contract", "tests.test_candidate_allow", "tests.test_change_approval",
     "tests.test_change_report", "tests.test_changes_behavior", "tests.test_changes_contract",
+    "tests.test_characterization_claims",
     "tests.test_ci_runner", "tests.test_claude_adapter", "tests.test_claude_role_profiles",
     "tests.test_codex_adapter", "tests.test_core", "tests.test_correction_views",
     "tests.test_failure_attribution", "tests.test_final_role_boundaries", "tests.test_forbidden_path_legacy",
@@ -39,6 +40,7 @@ END_TO_END = [
 # Safety boundaries: out-of-scope writes, tampering, path and process containment.
 SAFETY = [
     "tests.test_smoke_cli_exit_attribution",
+    "tests.test_characterization.CharacterizationGateTests.test_multiple_claims_for_one_file_survive_the_gate",
     "tests.test_characterize_base_hint_flow", "tests.test_characterize_base_stop_report",
     "tests.test_custom_protection",
     "tests.test_base_contract", "tests.test_base_lifecycle", "tests.test_base_compatibility",

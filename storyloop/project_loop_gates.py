@@ -239,9 +239,12 @@ def characterize_paths(project: Path, change: dict, state: dict, services: LoopS
     for path in touched:
         require(exists_at(project, state["contract_commit"], path) and not matches_test_root(path, profile["test_roots"]),
                 f"Characterized path must be an existing non-test file: {path}")
+    claims = {}
+    for item in response['claims']:
+        claims.setdefault(item['test'], []).append(item)
     pending = {"touched": touched, "tests": sorted(set(response["tests"]) | set(changed)), "changed": changed,
                "extend": list(extend or []),
-               "claims": {item['test']: item for item in response['claims']},
+               "claims": claims,
                "created_sha256": {path: hashlib.sha256(
                    safe_target(project, path, 'characterization test').read_bytes()).hexdigest()
                    for path in changed}}
