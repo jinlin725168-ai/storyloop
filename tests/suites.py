@@ -41,6 +41,13 @@ END_TO_END = [
 # Safety boundaries: out-of-scope writes, tampering, path and process containment.
 SAFETY = [
     "tests.test_acceptance_preconditions",
+    "tests.test_routing_e2e.RoutedEndToEndTests.test_oracle_repair_reproves_red_and_keeps_approved_plan",
+    "tests.test_consistency.ConsistencyGateTests.test_acceptance_repair_keeps_approval_but_design_review_can_block",
+    "tests.test_consistency.ConsistencyGateTests.test_standard_repair_review_retries_after_needs_input",
+    "tests.test_consistency.ConsistencyGateTests.test_changed_scope_replans_after_acceptance_repair",
+    "tests.test_consistency.ConsistencyGateTests.test_changed_risk_replans_after_acceptance_repair",
+    "tests.test_consistency.ConsistencyGateTests.test_invalid_approval_does_not_survive_acceptance_repair",
+    "tests.test_consistency.ConsistencyGateTests.test_l3_origin_does_not_survive_acceptance_repair",
     "tests.test_oracle_tiers.RedByRowTypeTests.test_heavy_regression_failure_is_an_oracle_defect",
     "tests.test_oracle_tiers.RedByRowTypeTests.test_heavy_new_red_and_regression_green_prove_red",
     "tests.test_oracle_tiers.RedByRowTypeTests.test_no_judged_test_is_an_oracle_defect",

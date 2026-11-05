@@ -281,7 +281,7 @@ class RoutedEndToEndTests(unittest.TestCase):
         self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
         self.assertEqual(events, ['characterize', 'implement'])
 
-    def test_oracle_repair_reproves_red_and_requires_new_approval(self):
+    def test_oracle_repair_reproves_red_and_keeps_approved_plan(self):
         from storyloop.acceptance_repair import repair_smoke
         from tests.test_consistency import coherent, finding
         from tests.routing_support import routed_acceptance
@@ -295,6 +295,8 @@ class RoutedEndToEndTests(unittest.TestCase):
         with self.assertRaisesRegex(StoryLoopError, 'repair'):
             replan(root, identifier, 'Cannot evade defective oracle')
         services.implement.assert_not_called()
+        previous = load_run_state(root, identifier)['planning']['plan']
+        design_calls = services.design.call_count
         def repaired(project, context):
             payload = routed_acceptance(identifier)
             payload['files'][0]['content'] += '\n# corrected oracle obligation\n'
@@ -304,11 +306,19 @@ class RoutedEndToEndTests(unittest.TestCase):
         state = load_run_state(root, identifier)
         self.assertEqual(state['attempt'], 0)
         self.assertTrue(state['red_evidence_sha256'])
-        self.assertNotIn('plan', state['planning'])
-        pause = run_change(root, identifier, services)
-        self.assertEqual(pause['status'], 'DESIGN_APPROVAL_REQUIRED')
-        approve_design(root, identifier, pause['plan_id'])
+        self.assertEqual(len(state['repairs']), 1)
+        current = state['planning']['plan']
+        self.assertEqual(current['options'], previous['options'])
+        self.assertEqual(current['approval']['actor'], previous['approval']['actor'])
+        self.assertEqual(current['approval']['time'], previous['approval']['time'])
+        self.assertEqual(current['approval']['option_id'], previous['approval']['option_id'])
+        self.assertNotEqual(current['id'], previous['id'])
+        self.assertNotEqual(current['binding']['suite_digest'], previous['binding']['suite_digest'])
+        self.assertEqual(current['approval']['binding'], current['binding'])
         self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
+        self.assertEqual(services.design.call_count, design_calls)
+        modes = [call.args[1].get('mode') for call in services.review.call_args_list]
+        self.assertEqual(modes.count('consistency'), 1)
 
     def test_reviewed_characterization_defect_restarts_l3_without_budget_cost(self):
         from tests.test_structured_output import passing_review

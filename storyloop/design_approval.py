@@ -149,6 +149,79 @@ def _valid_design(plan: dict, binding: dict) -> bool:
             and approval.get('option_id') in {o['id'] for o in plan['options']})
 
 
+def _same_repair_assessment(project: Path, change: dict, state: dict, expected_id: str) -> bool:
+    """Require the selected plan, frozen routing scope and risks to still agree."""
+    assessed = assess_plan(project, change, state, state['planning']['plan'])
+    routing = state['routing']
+    new_risks = {item['risk'] for item in routing.get('risk_updates', [])}
+    accepted = {key for key, value in routing['assessed_risks'].items() if value == 'yes'}
+    return (assessed['id'] == expected_id == state['planning']['assessment']['id']
+            and routing['scope'] == assessed['scope']
+            and routing['assessed_risks'] == assessed['signals']['risks']
+            and not new_risks - accepted)
+
+
+def repair_reuse_snapshot(project: Path, change: dict, state: dict) -> dict | None:
+    """Capture a valid human decision before replacing its bound acceptance suite."""
+    planning = state.get('planning', {})
+    if not is_routed(change, state) or planning.get('origin') == 'L3':
+        return None
+    try:
+        binding = current_binding(project, change, state)
+        plan = planning['plan']
+        assessment_id = planning['assessment']['id']
+        if not _valid_design(plan, binding) or not _same_repair_assessment(
+                project, change, state, assessment_id):
+            return None
+        continuation = planning.get('continue_heavy')
+        if continuation and not _valid_continue(state, binding, planning['assessment']):
+            return None
+        return {'binding': binding, 'assessment_id': assessment_id, 'plan_id': plan['id']}
+    except (StoryLoopError, KeyError, TypeError, ValueError):
+        return None
+
+
+def rebind_repaired_plan(project: Path, change: dict, state: dict, snapshot: dict | None) -> bool:
+    """Rebind only the suite digest; leave the selected option and human decision intact."""
+    planning = state.get('planning', {})
+    if not snapshot or planning.get('origin') == 'L3':
+        return False
+    try:
+        plan = planning['plan']
+        if plan['id'] != snapshot['plan_id'] or not _same_repair_assessment(
+                project, change, state, snapshot['assessment_id']):
+            return False
+        from .routing_upgrade import observed_scope, scope_expanded
+        actual = observed_scope(project, state, load_project_config(project))
+        if scope_expanded(state['routing']['scope'], actual):
+            return False
+        binding = {**snapshot['binding'], 'suite_digest': digest(smoke_digests(project, change))}
+        if not approval_matches(plan['approval'], snapshot['binding']):
+            return False
+        updated = deepcopy(plan)
+        updated['binding'] = binding
+        updated['id'] = digest({key: value for key, value in updated.items()
+                                if key not in {'id', 'status', 'approval'}})
+        updated['approval']['binding'] = deepcopy(binding)
+        updated['approval']['plan_id'] = updated['id']
+        continuation = deepcopy(planning.get('continue_heavy'))
+        if continuation:
+            continuation['binding'] = deepcopy(binding)
+        previous = planning['plan'], planning.get('continue_heavy')
+        planning['plan'] = updated
+        if continuation:
+            planning['continue_heavy'] = continuation
+        try:
+            if not _valid_design(updated, current_binding(project, change, state)):
+                raise StoryLoopError('Repaired plan approval is stale')
+        except StoryLoopError:
+            planning['plan'], planning['continue_heavy'] = previous
+            return False
+        return True
+    except (StoryLoopError, KeyError, TypeError, ValueError):
+        return False
+
+
 def approve_design(project: Path, change_id: str, plan_id: str, *, option_id: str | None = None) -> dict:
     """Record explicit design approval without executing any role or resuming the run."""
     project = Path(project).resolve()
@@ -232,7 +305,7 @@ def _replan_locked(project: Path, change_id: str, reason: str) -> dict:
     planning = state['planning']
     planning.setdefault('history', []).append({'reason': reason, 'plan': planning.get('plan'),
                                               'attempt': state.get('attempt', 0)})
-    for key in ('plan', 'assessment', 'continue_heavy', 'split', 'pending_option'):
+    for key in ('plan', 'assessment', 'continue_heavy', 'split', 'pending_option', 'review_repaired_suite'):
         planning.pop(key, None)
     if planning.get('origin') == 'L3':
         # Compatibility for older READY checkpoints that still carry a completed write intent.

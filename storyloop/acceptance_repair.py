@@ -68,6 +68,8 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     request = {**change, "repair": {"reason": reason, "existing_files": existing,
                                     "manifest": load_json(suite_root / "manifest.json"),
                                     "failure_evidence": evidence}}
+    from .design_approval import repair_reuse_snapshot
+    reuse = repair_reuse_snapshot(project, change, state)
     generated = read_only_call(project, change_id, lambda: services.generate_smoke(project, request))
     require(isinstance(generated, dict) and {"files", "manifest"} <= set(generated) <= {"files", "manifest", "lessons_used", "errata"},
             "Smoke agent returned an invalid contract")
@@ -79,14 +81,13 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
     paths = sorted(set(relative_files(project, [suite_root])) | set(previous))
     commit = _commit_repair_paths(project, paths, f"test({change_id}): repair acceptance suite")
     moment = (now or (lambda: datetime.now(timezone.utc)))().astimezone(timezone.utc).isoformat(timespec="seconds")
-    from .consistency import invalidate_consistency
-    invalidate_consistency(state, replan=True)
     state.setdefault("repairs", []).append({"at": moment, "reason": reason, "commit": commit["commit"],
                                             "voided_attempts": int(state.get("attempt", 0))})
-    return _prove_repaired_suite(project, change, state, commit)
+    return _prove_repaired_suite(project, change, state, commit, reuse)
 
 
-def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict) -> dict:
+def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict,
+                          reuse: dict | None = None) -> dict:
     change_id = change["change_id"]
     try:
         red = read_only_call(
@@ -97,7 +98,15 @@ def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict
     except StoryLoopError as exc:
         if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
             raise
+        from .consistency import invalidate_consistency
+        invalidate_consistency(state, replan=True)
         return _unproven_suite(project, state, exc)
+    from .consistency import invalidate_consistency
+    from .design_approval import rebind_repaired_plan
+    retained = rebind_repaired_plan(project, change, state, reuse)
+    invalidate_consistency(state, replan=not retained)
+    if retained:
+        state['planning']['review_repaired_suite'] = True
     for key in ("questions", "error", "pending", "acceptance", "next", "routed", "stop", "mode"):
         state.pop(key, None)
     ensure_baseline(project, state, change["product"], run_commands_at_commit)
