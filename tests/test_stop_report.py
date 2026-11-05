@@ -137,7 +137,8 @@ class StopReportTests(unittest.TestCase):
         cli = parser()
         for status in STOP_STATUSES:
             stop = build_stop("/tmp/project with space", state_for(status), status, {})
-            self.assertEqual(set(stop), KEYS, status)
+            expected = KEYS | ({"review_findings"} if status == "DESIGN_REVISION_REQUIRED" else set())
+            self.assertEqual(set(stop), expected, status)
             self.assertTrue(stop["blocker"], status)
             if "--supersede" not in stop["resume"] and "--overrule" not in stop["resume"]:
                 cli.parse_args(shlex.split(stop["resume"])[1:])
