@@ -407,8 +407,9 @@ class BoundaryAttributionTests(unittest.TestCase):
             self.assertEqual(set(result["legacy_paths"]), expected)
             command = result["next"].split("先用 ", 1)[1].split(" 保存", 1)[0]
             tokens = shlex.split(command)
-            self.assertEqual(tokens[:8], ["git", "-C", str(root), "--literal-pathspecs",
-                                          "stash", "push", "-u", "--"])
+            self.assertEqual(tokens[:2], ["git", "-C"])
+            self.assertEqual(Path(tokens[2]).resolve(), root.resolve())
+            self.assertEqual(tokens[3:8], ["--literal-pathspecs", "stash", "push", "-u", "--"])
             self.assertEqual(set(tokens[8:]), expected)
             subprocess.run(tokens, cwd=folder, check=True, capture_output=True, text=True)
             stashed = set(git(root, "stash", "show", "-u", "--name-only", "stash@{0}").splitlines())
