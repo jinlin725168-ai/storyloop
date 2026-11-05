@@ -6,6 +6,15 @@ from storyloop.role_instructions import INSTRUCTIONS
 
 
 class RoleProfileTests(unittest.TestCase):
+    def test_design_lists_existing_assertions_and_snapshots_of_changed_behavior(self):
+        prompt = INSTRUCTIONS['design']
+        for phrase in ('test_roots', 'fixtures', 'assertions', 'golden', 'snapshot',
+                       'touched', 'update with the requirement', 'not characterization locks'):
+            self.assertIn(phrase, prompt)
+
+    def test_legacy_design_touched_still_excludes_test_files(self):
+        self.assertIn('`touched` is every EXISTING non-test file', INSTRUCTIONS['design'])
+
     def test_acceptance_instruction_uses_candidate_subprocess_for_project_imports(self):
         prompt = INSTRUCTIONS['acceptance']
         self.assertIn('profile.module_roots', prompt)
