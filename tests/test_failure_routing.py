@@ -377,6 +377,44 @@ class BoundaryAttributionTests(unittest.TestCase):
             self.assertLess(result["next"].index("先 storyloop run"),
                             result["next"].index("取回或丢弃暂存"))
 
+    def test_linked_collision_stashes_preexisting_feature_and_deleted_tests(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / "project with space"
+            root.mkdir()
+            fixtures = {"tests/test_changed.py": b"VALUE = 1\n",
+                        "tests/test_removed.py": b"VALUE = 1\n"}
+            change_id = approved(root, add_pom=True, foundation_files=fixtures)
+            config = load_project_config(root)
+            config["profile"]["test_roots"] = ["tests"]
+            write_json(root / ".storyloop/config.json", config)
+            expected = {"modules/orders/service.py", *fixtures}
+
+            def implement(project, context):
+                if context["attempt"] == 1:
+                    feature = project / "modules/orders/service.py"
+                    feature.parent.mkdir(parents=True, exist_ok=True)
+                    feature.write_text("VALUE = 2\n", encoding="utf-8")
+                    (project / "tests/test_changed.py").write_text("VALUE = 2\n", encoding="utf-8")
+                    (project / "tests/test_removed.py").unlink()
+                else:
+                    (project / "pom.xml").write_text("<project>new</project>\n", encoding="utf-8")
+                return {"summary": "candidate", "questions": []}
+
+            result = run_change(root, change_id, LoopServices(
+                generate_smoke=lambda project, state: smoke_payload(change_id),
+                implement=implement, review=failing_review()))
+            self.assertEqual(result["status"], "BASE_CHANGE_REQUIRED")
+            self.assertEqual(set(result["legacy_paths"]), expected)
+            command = result["next"].split("先用 ", 1)[1].split(" 保存", 1)[0]
+            tokens = shlex.split(command)
+            self.assertEqual(tokens[:8], ["git", "-C", str(root), "--literal-pathspecs",
+                                          "stash", "push", "-u", "--"])
+            self.assertEqual(set(tokens[8:]), expected)
+            subprocess.run(tokens, cwd=folder, check=True, capture_output=True, text=True)
+            stashed = set(git(root, "stash", "show", "-u", "--name-only", "stash@{0}").splitlines())
+            self.assertEqual(stashed, expected)
+            self.assertEqual(git(root, "status", "--porcelain=v1", "--untracked-files=all"), "")
+
     def test_unowned_write_during_boundary_stop_preserves_workspace(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

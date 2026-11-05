@@ -58,7 +58,7 @@ def record_boundary(project: Path, state: dict, boundary: dict,
     state.pop("legacy_paths", None)
     if linked_base:
         legacy_paths = sorted({item["path"] for item in boundary["allowed"]
-                               if item["category"] == "FEATURE"
+                               if item["category"] in {"FEATURE", "TEST"}
                                and item["path"] in (preexisting or set())})
         if legacy_paths:
             details["legacy_paths"] = legacy_paths
