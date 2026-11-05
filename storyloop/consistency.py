@@ -77,7 +77,7 @@ def invalidate_consistency(state: dict, *, replan: bool = False) -> None:
     planning.pop('consistency', None)
     planning.pop('dependency_evidence', None)
     if replan:
-        for key in ('plan', 'assessment', 'continue_heavy', 'pending_option'):
+        for key in ('plan', 'assessment', 'continue_heavy', 'pending_option', 'review_repaired_suite'):
             planning.pop(key, None)
 
 
@@ -109,7 +109,7 @@ def ensure_consistency(project: Path, change: dict, state: dict, services) -> di
         invalidate_consistency(state)
         return pause(project, state, 'NEEDS_INPUT', phase='planning', questions=[str(exc)])
     state['planning']['dependency_evidence'] = dependencies
-    if state['routing']['effective_tier'] != 'heavy':
+    if state['routing']['effective_tier'] != 'heavy' and not state['planning'].get('review_repaired_suite'):
         save_run(project, state)
         return None
     binding = {**binding, 'plan_id': plan['id'], 'option_id': selected_option(plan)['id'],
@@ -157,6 +157,7 @@ def _outcome(project: Path, state: dict, record: dict) -> dict | None:
     status = consistency_status(findings)
     record['status'] = status
     if status == 'COHERENT':
+        state['planning'].pop('review_repaired_suite', None)
         save_run(project, state)
         return None
     if status == 'DESIGN_REVISION_REQUIRED':

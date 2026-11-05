@@ -25,7 +25,8 @@ def invalidate_planning(state: dict, reason: str) -> None:
     planning.setdefault('history', []).append({'reason': reason, 'plan': planning.get('plan'),
                                               'attempt': state.get('attempt', 0)})
     for key in ('plan', 'assessment', 'consistency', 'dependency_evidence',
-                'continue_heavy', 'pending_option', 'execution_digest', 'characterization_input'):
+                'continue_heavy', 'pending_option', 'execution_digest', 'characterization_input',
+                'review_repaired_suite'):
         planning.pop(key, None)
 
 

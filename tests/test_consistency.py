@@ -194,7 +194,7 @@ class ConsistencyGateTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertEqual(self.state['characterization'], {'status': 'GREEN'})
 
-    def test_acceptance_repair_reproves_red_then_requires_new_l2_approval(self):
+    def _repair_after_oracle_block(self, mutate=None):
         self.prepared()
         from storyloop.smoke import suite_relative
         from storyloop.acceptance_repair import repair_smoke
@@ -204,21 +204,77 @@ class ConsistencyGateTests(unittest.TestCase):
             finding('oracle', path.relative_to(self.root).as_posix() + ':1')]}
         self.services = replace(self.services, review=lambda p, c: response)
         self.assertEqual(run_change(self.root, self.identifier, self.services)['status'], 'ORACLE_DEFECT')
+        previous = deepcopy(load_run_state(self.root, self.identifier)['planning']['plan'])
+        if mutate:
+            state = load_run_state(self.root, self.identifier)
+            mutate(state)
+            save_run(self.root, state)
         def repaired(project, context):
             payload = smoke_payload(self.identifier)
             payload['files'][0]['content'] += '\n# repaired oracle reference\n'
             return payload
         repair_smoke(self.root, self.identifier, 'Correct oracle obligation',
                      replace(self.services, generate_smoke=repaired))
-        state = load_run_state(self.root, self.identifier)
-        self.assertNotIn('plan', state['planning'])
+        return previous, load_run_state(self.root, self.identifier)
+
+    def test_acceptance_repair_keeps_approval_but_design_review_can_block(self):
+        previous, state = self._repair_after_oracle_block()
+        self.assertEqual(state['planning']['plan']['approval']['time'], previous['approval']['time'])
+        self.assertEqual(state['planning']['plan']['approval']['option_id'], previous['approval']['option_id'])
+        self.assertNotEqual(state['planning']['plan']['binding']['suite_digest'],
+                            previous['binding']['suite_digest'])
         self.assertNotIn('consistency', state['planning'])
         self.assertEqual(state['attempt'], 0)
+        self.assertEqual(len(state['repairs']), 1)
+        self.services = replace(self.services, review=lambda p, c: {
+            **coherent(), 'verdict': 'blocked', 'findings': [finding()]})
         self.assertEqual(run_change(self.root, self.identifier, self.services)['status'],
-                         'DESIGN_APPROVAL_REQUIRED')
+                         'DESIGN_REVISION_REQUIRED')
         state = load_run_state(self.root, self.identifier)
-        self.assertNotIn('approval', state['planning']['plan'])
+        self.assertEqual(state['planning']['consistency']['findings'], [finding()])
+        from storyloop.stop_report import render_stop
+        self.assertIn('阻塞方案意见', '\n'.join(render_stop(state['stop'])))
         self.assertEqual(self.calls, [])
+
+    def test_standard_repair_review_retries_after_needs_input(self):
+        self.prepared()
+        from storyloop.answers import record_answers
+        self.state['routing']['effective_tier'] = 'standard'
+        self.state['planning']['review_repaired_suite'] = True
+        responses = [{**coherent(), 'verdict': 'needs_input', 'questions': ['Clarify repaired oracle']},
+                     coherent()]
+        calls = []
+        self.services = replace(self.services,
+                                review=lambda p, c: calls.append(c) or responses[len(calls) - 1])
+        self.assertEqual(ensure_consistency(self.root, self.change, self.state, self.services)['status'],
+                         'NEEDS_INPUT')
+        record_answers(self.root, self.identifier, ['Oracle now covers the contract'])
+        self.assertIsNone(ensure_consistency(self.root, self.change, self.state, self.services))
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(self.state['planning']['consistency']['verdict'], 'coherent')
+
+    def test_changed_scope_replans_after_acceptance_repair(self):
+        def expand(state):
+            state['routing']['scope']['creates'].append('app/extra.py')
+        _, state = self._repair_after_oracle_block(expand)
+        self.assertNotIn('plan', state['planning'])
+
+    def test_changed_risk_replans_after_acceptance_repair(self):
+        def elevate(state):
+            state['routing']['assessed_risks']['sensitive'] = 'yes'
+        _, state = self._repair_after_oracle_block(elevate)
+        self.assertNotIn('plan', state['planning'])
+
+    def test_invalid_approval_does_not_survive_acceptance_repair(self):
+        def invalidate(state):
+            state['planning']['plan']['approval']['actor'] = 'agent'
+        _, state = self._repair_after_oracle_block(invalidate)
+        self.assertNotIn('plan', state['planning'])
+
+    def test_l3_origin_does_not_survive_acceptance_repair(self):
+        _, state = self._repair_after_oracle_block(
+            lambda run: run['planning'].update(origin='L3'))
+        self.assertNotIn('plan', state['planning'])
 
 
     def test_overrule_preserves_remaining_oracle_then_design_blockers(self):
