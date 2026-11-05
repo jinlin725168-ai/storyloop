@@ -3,9 +3,11 @@
 import json
 from pathlib import Path
 import re
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from storyloop.changes import load_change
 from storyloop.cli import _error_stop
@@ -22,6 +24,41 @@ def _test(case: str) -> dict:
 
 
 class AcceptancePreconditionTests(unittest.TestCase):
+    def test_command_case_precondition_is_repairable_oracle_defect(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            case = root / "case.py"
+            case.write_text(
+                "import sys, unittest\n"
+                f"sys.path.insert(0, {str(Path(__file__).resolve().parents[1])!r})\n"
+                "from storyloop.testing.smoke_harness.v1 import precondition\n"
+                "class Case(unittest.TestCase):\n"
+                "    def test_fixture(self):\n"
+                "        precondition(False, 'missing fixture root')\n"
+                "unittest.main()\n", encoding="utf-8")
+            test = {**_test("case.py"), "command": [sys.executable, "case.py"]}
+            result = _run_test(root, test, [])
+            self.assertEqual(result["status"], "ERROR")
+            self.assertEqual(result["counts"]["diagnostics"], ["precondition"])
+            with self.assertRaises(StoryLoopError) as caught:
+                _judge_red([result], {"tests": [test]}, {"product": product()})
+            self.assertEqual(caught.exception.code, "ORACLE_DEFECT")
+            stop = build_stop(root, {"change_id": "FEAT-fixture", "status": "CONTRACT_COMMITTED"},
+                              "ORACLE_DEFECT", {"acceptance": caught.exception.details})
+            self.assertIn("missing fixture root", "\n".join(stop["evidence"]))
+            self.assertTrue(any("acceptance-repair" in option["command"] for option in stop["options"]))
+
+    def test_process_timeout_still_dominates_command_precondition_marker(self):
+        test = {**_test("case.py"), "command": [sys.executable, "case.py"]}
+        outcome = {"contained": True, "timed_out": True, "returncode": 1,
+                   "stdout": "Ran 1 test in 0.01s\n\nFAILED (errors=1)",
+                   "stderr": "STORYLOOP_PRECONDITION_FAILED: fixture unavailable\n"}
+        with patch("storyloop.smoke_runner.run_process", return_value=outcome):
+            result = _run_test(Path("/tmp"), test, [])
+        with self.assertRaises(StoryLoopError) as caught:
+            _judge_red([result], {"tests": [test]}, {"product": product()})
+        self.assertEqual(caught.exception.code, "BLOCKED")
+
     def test_failed_precondition_is_oracle_defect_with_output_in_stop(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -105,6 +142,23 @@ class AcceptancePreconditionTests(unittest.TestCase):
                 "results": [{"id": "SMOKE-1", "status": "ERROR", "stderr": "environment marker"}]})
             stop = _error_stop(SimpleNamespace(project=root, change_id="FEAT-fixture", command="run"), error)
             self.assertIn("environment marker", "\n".join(stop["evidence"]))
+
+    def test_repair_error_stop_shows_bounded_red_output(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            path = root / ".storyloop/state/runs/FEAT-fixture.json"
+            path.parent.mkdir(parents=True)
+            path.write_text(json.dumps({"change_id": "FEAT-fixture", "status": "ORACLE_DEFECT"}),
+                            encoding="utf-8")
+            for code in ("BLOCKED", "ORACLE_DEFECT"):
+                with self.subTest(code=code):
+                    error = StoryLoopError("RED reproof failed", code=code, details={
+                        "results": [{"id": "SMOKE-1", "status": "ERROR",
+                                     "stderr": "x" * 2000 + " repair output marker"}]})
+                    stop = _error_stop(SimpleNamespace(project=root, change_id="FEAT-fixture",
+                                                       command="acceptance-repair"), error)
+                    self.assertIn("repair output marker", "\n".join(stop["evidence"]))
+                    self.assertLessEqual(max(map(len, stop["evidence"])), 1500)
 
     def test_stop_evidence_keeps_case_id_with_bounded_output(self):
         output = "x" * 2000 + " final marker"

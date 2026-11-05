@@ -30,10 +30,15 @@ def _unittest(text: str) -> dict | None:
         return None
     tail = _last(r"^(?:OK|FAILED)\b(.*)$", text)
     extra = tail.group(1) if tail else ""
-    failed = sum(int(n) for n in re.findall(r"(?:failures|errors)=(\d+)", extra))
+    failures = re.search(r"failures=(\d+)", extra)
+    errors = re.search(r"errors=(\d+)", extra)
     skipped = re.search(r"skipped=(\d+)", extra)
     skip = int(skipped.group(1)) if skipped else 0
-    return {"executed": int(ran.group(1)) - skip, "failed": failed, "skipped": skip}
+    result = {"executed": int(ran.group(1)) - skip,
+              "failed": int(failures.group(1)) if failures else 0, "skipped": skip}
+    if errors and int(errors.group(1)):
+        result["errors"] = int(errors.group(1))
+    return result
 
 
 def _pytest(text: str) -> dict | None:

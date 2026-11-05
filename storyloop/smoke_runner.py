@@ -374,8 +374,18 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> 
     )
     counts = (harness_counts(outcome) if test["command"][0] == "{storyloop_harness}" else
               count_tests(argv, str(outcome.get("stdout", "")) + "\n" + str(outcome.get("stderr", "")), patterns))
+    if (counts.get("parser") == "unittest" and counts.get("errors")
+            and outcome.get("contained") is True and not any(
+                outcome.get(key) for key in ("timed_out", "truncated", "error"))
+            and outcome.get("returncode") == 1):
+        markers = sum(line.startswith("STORYLOOP_PRECONDITION_FAILED: ") for line in
+                      str(outcome.get("stderr", "")).splitlines())
+        if markers == counts["errors"] and not counts["failed"]:
+            counts["diagnostics"] = ["precondition"]
     if (outcome.get("contained") is not True or outcome.get("timed_out")
             or outcome.get("truncated") or outcome.get("error")):
+        status = "ERROR"
+    elif counts.get("errors", 0) > 0:
         status = "ERROR"
     elif outcome.get("returncode") == 0:
         status = "PASS"
