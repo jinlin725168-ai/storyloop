@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import shlex
 from .cost_limits import stop_fields, render_usage
+from .processutil import redact
 from .routing_report import STATUSES, routing_options, routing_view  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 
 
@@ -255,6 +256,25 @@ def _stop_actions(project: Path | str, state: dict, status: str, details: dict
     return options, blocker
 
 
+def _review_findings(findings: list[dict]) -> list[dict]:
+    """Project blocking review findings into bounded, redacted stop summaries."""
+    result = []
+    for finding in findings:
+        if not isinstance(finding, dict) or finding.get("blocking") is not True:
+            continue
+        target = str(finding.get("target") or "")
+        severity = "阻塞"
+        prefix = f"目标：{target}；严重度：{severity}；内容："
+        separator = "；位置："
+        message = " ".join(redact(str(finding.get("message") or "")).split())[:160]
+        location = " ".join(redact(str(finding.get("location") or "")).split())
+        location = location[:max(0, 300 - len(prefix) - len(message) - len(separator))]
+        summary = f"{prefix}{message}{separator}{location}"
+        result.append({"target": target, "severity": severity, "message": message,
+                       "location": location, "summary": summary})
+    return result
+
+
 def build_stop(project: Path | str, state: dict, status: str, details: dict) -> dict:
     """Construct the stable report shape without changing the supplied run state."""
     change_id = str(state["change_id"])
@@ -284,6 +304,10 @@ def build_stop(project: Path | str, state: dict, status: str, details: dict) -> 
                    or routed else
                    _command("storyloop", "run", project, "--change", change_id)),
     }
+    if status == "DESIGN_REVISION_REQUIRED":
+        findings = details.get("findings")
+        result["review_findings"] = _review_findings(
+            findings if findings is not None else state.get("findings") or [])
     return result
 
 
@@ -299,6 +323,8 @@ def stop_of(project: Path | str, run: dict | None) -> dict | None:
     if run.get("status") not in STOP_STATUSES:
         return None
     if isinstance(saved, dict) and saved.get("status") == run["status"]:
+        if run["status"] == "DESIGN_REVISION_REQUIRED" and "review_findings" not in saved:
+            return {**saved, "review_findings": _review_findings(run.get("findings") or [])}
         if run["status"] == "BASE_CHANGE_REQUIRED" and run.get("legacy_paths"):
             options, _ = _stop_actions(project, run, run["status"], run)
             return {**saved, "options": options}
@@ -314,6 +340,9 @@ def stop_of(project: Path | str, run: dict | None) -> dict | None:
 def render_stop(stop: dict) -> list[str]:
     """Render the report in the decision order defined by the design."""
     lines = [f"阻塞点：{stop['blocker']}"] + render_usage(stop)
+    if stop.get("status") == "DESIGN_REVISION_REQUIRED" and stop.get("review_findings"):
+        lines.append("阻塞方案意见：")
+        lines += [f"  - {item['summary']}" for item in stop["review_findings"]]
     for key, heading in (("evidence", "证据"), ("facts", "代理陈述事实"), ("questions", "问题")):
         if stop.get(key):
             lines.append(f"{heading}：")
