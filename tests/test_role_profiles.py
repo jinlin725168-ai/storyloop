@@ -12,6 +12,9 @@ class RoleProfileTests(unittest.TestCase):
                        'touched', 'update with the requirement', 'not characterization locks'):
             self.assertIn(phrase, prompt)
 
+    def test_legacy_design_touched_still_excludes_test_files(self):
+        self.assertIn('`touched` is every EXISTING non-test file', INSTRUCTIONS['design'])
+
     def test_acceptance_instruction_uses_candidate_subprocess_for_project_imports(self):
         prompt = INSTRUCTIONS['acceptance']
         self.assertIn('profile.module_roots', prompt)

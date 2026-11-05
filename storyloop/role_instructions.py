@@ -261,7 +261,7 @@ INSTRUCTIONS = {
         + FOUNDATION_NOTE + LESSONS_NOTE + " Follow extension.md for where each layer's files go, reuse what "
         "building-blocks.md lists, and respect modules.md's dependency direction. Read the existing code "
         "you intend to change. Return exactly {summary:string, touched:[string], design:string, questions:[string]}: "
-        "`touched` is every EXISTING file the implementation will modify (repository-relative; files "
+        "`touched` is every EXISTING non-test file the implementation will modify (repository-relative; files "
         "that will merely be created are described in the design, not listed here); `design` is Markdown with "
         "## Context, ## Goals, ## Decisions (each: Choice, Rationale, Alternatives considered), ## Files "
         "(every file to create or modify with its responsibility), ## Data And Interfaces (tables, columns, "
