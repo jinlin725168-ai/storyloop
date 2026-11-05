@@ -3,13 +3,36 @@ import contextlib
 import types
 import os
 from pathlib import Path
+import sys
 import time
 import unittest
 
 from ...models import StoryLoopError, require
+from ...processutil import redact
 from .cases import validate_cases
 from .results import Result
 from .protected_cases import case_bytes, case_directory, protected_cases
+
+
+class FixturePreconditionError(Exception):
+    """A protected case could not establish the fixture needed to test behavior."""
+
+
+def precondition(condition: bool, message: str) -> None:
+    """Mark a fixture failure without counting it as a behavior assertion failure."""
+    if not condition:
+        raise FixturePreconditionError(message)
+
+
+class _CaseResult(unittest.TestResult):
+    def __init__(self):
+        super().__init__()
+        self.precondition_messages = []
+
+    def addError(self, test, error):
+        super().addError(test, error)
+        if isinstance(error[1], FixturePreconditionError):
+            self.precondition_messages.append(f"{test.id()}: {error[1]}")
 
 def python_cases(project: Path, cases: list[str], timeout: float = 60, *, cwd: Path | None = None) -> Result:
     """Measure protected tests directly; business code must run in separate subprocesses.
@@ -45,11 +68,17 @@ def _one_case(project: Path, relative: str) -> Result:
                 contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
             exec(compile(source, str(project / relative), "exec"), module.__dict__)
             suite = unittest.defaultTestLoader.loadTestsFromModule(module)
-            result = unittest.TestResult()
+            result = _CaseResult()
             suite.run(result)
+        if result.precondition_messages:
+            summary = "\n".join(result.precondition_messages[-3:])[-1500:]
+            print(redact(summary), file=sys.__stderr__)
         skipped = len(result.skipped) + len(result.expectedFailures)
         counts = Result(executed=result.testsRun - skipped, failed=len(result.failures),
-                        errors=len(result.errors) + len(result.unexpectedSuccesses), skipped=skipped)
+                        errors=len(result.errors) + len(result.unexpectedSuccesses), skipped=skipped,
+                        diagnostics=(("precondition",) if result.precondition_messages
+                                     and len(result.precondition_messages) == len(result.errors)
+                                     and not result.unexpectedSuccesses else ()))
         return counts if counts.executed else counts + Result(errors=1)
     except BaseException:
         return Result(errors=1, diagnostics=("runner",))

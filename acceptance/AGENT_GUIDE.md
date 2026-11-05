@@ -27,3 +27,37 @@
 - 系统冒烟只校验 CLI 版本与帮助可用；业务断言写在变更自己的验收用例中。
 
 - 被测业务就是 StoryLoop 自身：验收用例不得在测试进程内 import `storyloop` 或 `tests`；须通过候选镜像中的子进程加载被测代码，避免误用已安装的引擎包。
+- 构造变更与运行状态夹具时，优先用公开 CLI（`storyloop init`、`storyloop change` 等）或公开函数生成，不要手写状态 JSON。确需手写变更文件时，`product` 的 `version`、`goal`、`non_goals`、`questions`、`stories` 必须完整；下面是可由 `load_change` 读取的最小示例，实际验收应按合同填写故事与判据：
+
+```json storyloop-change-fixture
+{
+  "version": 1,
+  "change_id": "FEAT-fixture",
+  "status": "DRAFT",
+  "revision": 1,
+  "idea": "核对现有行为",
+  "product": {
+    "version": 1,
+    "goal": "核对现有行为",
+    "non_goals": [],
+    "questions": [],
+    "stories": [{
+      "id": "ST-1", "title": "核对行为", "as_a": "使用者",
+      "want": "执行现有流程", "so_that": "确认结果",
+      "rules": [], "out_of_scope": [], "depends_on": [],
+      "acceptance": [{
+        "id": "AC-1", "given": "已有夹具", "when": "执行流程",
+        "then": "返回预期结果", "kind": "automated"
+      }]
+    }]
+  },
+  "created_at": "2026-11-05T00:00:00Z",
+  "updated_at": "2026-11-05T00:00:00Z",
+  "history": [],
+  "approval": null
+}
+```
+
+- 调用 `bootstrap_project` 前先在设置中声明 `module_roots` 和 `test_roots`。含 `:`、`[ab]` 等特殊字符的测试路径须在 bootstrap 之后创建；baseline 路径安全检查会拒绝已跟踪的 `:` 路径。
+- 每个 RED 用例先用 `storyloop.testing.smoke_harness.v1.precondition` 核对夹具前提，再断言被测行为；夹具错误不能当成行为失败来证明 RED。
+- 这里仅从受信安装的 harness 导入 `precondition`；被测候选 StoryLoop 代码仍须在子进程中加载。

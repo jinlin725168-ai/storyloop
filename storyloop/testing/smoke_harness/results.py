@@ -8,7 +8,8 @@ from ...models import require
 PREFIX = "STORYLOOP_HARNESS_V1="
 COUNTS = ("executed", "failed", "errors", "skipped")
 STAGES = {"launch", "input", "source_sync", "dependency_cache", "build", "start", "ready",
-          "run_case", "runner", "import", "timeout", "cleanup", "service_exit", "service_cleanup"}
+          "run_case", "runner", "import", "timeout", "cleanup", "service_exit", "service_cleanup",
+          "precondition"}
 
 
 @dataclass(frozen=True)

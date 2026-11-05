@@ -98,14 +98,21 @@ def _judge_red(results: list[dict], manifest: dict, change: dict) -> None:
     """
     tiers = {test["id"]: test.get("tier", "fast") for test in manifest["tests"]}
     fast = [item for item in results if tiers[item["id"]] == "fast"]
+    tails = [_tail(item) for item in results]
+    fixture_errors = [item for item in fast if item["status"] == "ERROR" and set(
+        (item.get("counts") or {}).get("diagnostics", [])) == {"precondition"}]
     broken = [item for item in fast if item["status"] == "ERROR" or (
         item["status"] == "FAIL" and (item.get("counts") or {}).get("executed") == 0)]
-    require(not broken, "Smoke RED proof encountered an environment error")
+    if any(item not in fixture_errors for item in broken):
+        raise StoryLoopError("Smoke RED proof encountered an environment error",
+                             details={"results": tails})
+    if fixture_errors:
+        raise StoryLoopError("Smoke RED proof failed a fixture precondition",
+                             code="ORACLE_DEFECT", details={"results": tails})
     expects_red = {criterion["id"]: criterion_expects_red(criterion)
                    for story in change["product"]["stories"] for criterion in story["acceptance"]}
     failed = {criterion for item in fast if item["status"] == "FAIL" for criterion in item["criteria"]}
     covered = {criterion for item in fast for criterion in item["criteria"]}
-    tails = [_tail(item) for item in results]
     must_hold = sorted(c for c in covered if not expects_red[c] and c in failed)
     if must_hold:
         raise StoryLoopError(
@@ -123,7 +130,7 @@ def _judge_red(results: list[dict], manifest: dict, change: dict) -> None:
 def _tail(result: dict) -> dict:
     """A bounded copy of one test result for a stop record (full output stays in the evidence)."""
     return {"id": result.get("id"), "status": result.get("status"),
-            "stdout": str(result.get("stdout", ""))[-6000:], "stderr": str(result.get("stderr", ""))[-6000:]}
+            "stdout": str(result.get("stdout", ""))[-1500:], "stderr": str(result.get("stderr", ""))[-1500:]}
 
 
 def run_smoke_isolated(project: Path, change: dict, expect_red: bool = False,
