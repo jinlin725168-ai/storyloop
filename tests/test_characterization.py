@@ -119,7 +119,7 @@ class CharacterizationGateTests(unittest.TestCase):
             state = load_run_state(root, change_id)
             self.assertNotIn("tests/test_existing.py", state["characterization"]["tests"])
             self.assertEqual(state["characterization"]["claims"]["tests/test_characterize_service.py"]
-                             ["behavior"], "VALUE remains present")
+                             [0]["behavior"], "VALUE remains present")
             self.assertNotIn("tests/test_existing.py", {
                 test for artifacts in state["characterization"].get("locks", {}).values()
                 for test in artifacts})
@@ -340,6 +340,31 @@ class CharacterizationGateTests(unittest.TestCase):
             subjects = git(root, "log", "--format=%s", "-6").splitlines()
             self.assertIn(f"test({change_id}): characterize touched paths", subjects)
             self.assertTrue((root / "tests/test_characterize_service.py").is_file())
+        finally:
+            temporary.cleanup()
+
+    def test_multiple_claims_for_one_file_survive_the_gate(self):
+        temporary, root, change_id = _repo({"unit_commands": [UNIT], "test_roots": ["tests"]})
+
+        def characterize(project, context):
+            answer = self._characterize(project, context)
+            test = root / answer["tests"][0]
+            test.write_text(GREEN_TEST + "    def test_value_remains_int(self):\n"
+                            "        self.assertIsInstance(service.VALUE, int)\n", encoding="utf-8")
+            answer["claims"].append({"test": answer["tests"][0], "behavior": "VALUE remains an int",
+                                      "symbols": [], "criterion_ids": []})
+            return answer
+
+        def implement(project, context):
+            (project / "modules/orders/service.py").write_text("VALUE = 1\n", encoding="utf-8")
+            return {"summary": "done", "questions": []}
+
+        try:
+            result = run_change(root, change_id, self._services(change_id, implement, characterize, []))
+            self.assertEqual(result["status"], "PASSED")
+            claims = load_run_state(root, change_id)["characterization"]["claims"]
+            self.assertEqual([claim["behavior"] for claim in claims["tests/test_characterize_service.py"]],
+                             ["VALUE remains present", "VALUE remains an int"])
         finally:
             temporary.cleanup()
 
