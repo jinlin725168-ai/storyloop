@@ -40,6 +40,9 @@ END_TO_END = [
 # Safety boundaries: out-of-scope writes, tampering, path and process containment.
 SAFETY = [
     "tests.test_smoke_cli_exit_attribution",
+    "tests.test_characterize_boundary_legacy_flow",
+    "tests.test_failure_routing.BoundaryAttributionTests."
+    "test_linked_collision_stashes_preexisting_feature_and_deleted_tests",
     "tests.test_characterization.CharacterizationGateTests.test_multiple_claims_for_one_file_survive_the_gate",
     "tests.test_characterize_base_hint_flow", "tests.test_characterize_base_stop_report",
     "tests.test_custom_protection",
