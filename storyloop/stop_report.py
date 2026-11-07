@@ -196,6 +196,11 @@ def _evidence(state: dict, details: dict) -> list[str]:
         output = "\n".join(str(result.get(key) or "") for key in ("stdout", "stderr")).strip()
         prefix = f"{result.get('id', '验收用例')} {result['status']}: "
         evidence.append(prefix + (output or "无输出")[-(1500 - len(prefix)):])
+    if state.get("status") == "ORACLE_DEFECT" and acceptance.get("fixture_repairable") is True:
+        automatic = [item for item in state.get("repairs") or [] if item.get("automatic") is True]
+        for index, item in enumerate(automatic, 1):
+            if item.get("failure_summary"):
+                evidence.append(f"自动修复 {index}: {item['failure_summary']}")
     for item in details.get("pending") or state.get("pending") or []:
         criterion = item.get("criterion_id") or item.get("id") if isinstance(item, dict) else item
         evidence.append(f"条件 {criterion}")

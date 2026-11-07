@@ -43,6 +43,7 @@ class AcceptancePreconditionTests(unittest.TestCase):
             with self.assertRaises(StoryLoopError) as caught:
                 _judge_red([result], {"tests": [test]}, {"product": product()})
             self.assertEqual(caught.exception.code, "ORACLE_DEFECT")
+            self.assertIn("fixture precondition", str(caught.exception))
             stop = build_stop(root, {"change_id": "FEAT-fixture", "status": "CONTRACT_COMMITTED"},
                               "ORACLE_DEFECT", {"acceptance": caught.exception.details})
             self.assertIn("missing fixture root", "\n".join(stop["evidence"]))
@@ -150,6 +151,27 @@ class AcceptancePreconditionTests(unittest.TestCase):
                    for index, test in enumerate(tests)]
         with self.assertRaises(StoryLoopError) as caught:
             _judge_red(results, {"tests": tests}, {"product": product()})
+        self.assertEqual(caught.exception.code, "BLOCKED")
+
+    def test_all_executed_unittest_errors_are_repairable_fixture_defects(self):
+        test = _test("cases/b.py")
+        result = {"id": "SMOKE-1", "criteria": ["AC-1"], "status": "ERROR",
+                  "returncode": 2, "timed_out": False, "stdout": "", "stderr": "ModuleNotFoundError: fixture",
+                  "counts": {"executed": 1, "failed": 0, "errors": 1, "parser": "unittest"}}
+        with self.assertRaises(StoryLoopError) as caught:
+            _judge_red([result], {"tests": [test]}, {"product": product()})
+        self.assertEqual(caught.exception.code, "ORACLE_DEFECT")
+        self.assertTrue(caught.exception.details["fixture_repairable"])
+
+    def test_truncated_unittest_error_stays_an_environment_error(self):
+        test = {**_test("case.py"), "command": [sys.executable, "case.py"]}
+        outcome = {"contained": True, "truncated": True, "returncode": 2,
+                   "stdout": "Ran 1 test in 0.01s\n\nFAILED (errors=1)",
+                   "stderr": "ModuleNotFoundError: fixture"}
+        with patch("storyloop.smoke_runner.run_process", return_value=outcome):
+            result = _run_test(Path("/tmp"), test, [])
+        with self.assertRaises(StoryLoopError) as caught:
+            _judge_red([result], {"tests": [test]}, {"product": product()})
         self.assertEqual(caught.exception.code, "BLOCKED")
 
     def test_cli_environment_error_stop_uses_runner_output(self):
