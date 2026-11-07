@@ -60,8 +60,19 @@ def _prepare_acceptance(
     except StoryLoopError as exc:
         if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
             raise
-        return pause(project, state, exc.code, error=str(exc),
-                     acceptance={"status": exc.code, **exc.details})
+        stopped = pause(project, state, exc.code, error=str(exc),
+                        acceptance={"status": exc.code, **exc.details})
+        if exc.details.get("fixture_repairable") is True:
+            from .acceptance_repair import retry_fixture_red
+            from .project_loop_support import run_path
+            from .storage import load_json
+            result = retry_fixture_red(project, change_id, services, stopped)
+            if result["status"] == "ACCEPTANCE_REPAIRED":
+                state.clear()
+                state.update(load_json(run_path(project, change_id)))
+                return None
+            return result
+        return stopped
     ensure_baseline(project, state, change["product"], run_commands_at_commit)
     for key in ("acceptance", "error", "next"):
         state.pop(key, None)

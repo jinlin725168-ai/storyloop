@@ -40,6 +40,7 @@ END_TO_END = [
 
 # Safety boundaries: out-of-scope writes, tampering, path and process containment.
 SAFETY = [
+    "tests.test_acceptance_fixture_retry",
     "tests.test_acceptance_preconditions",
     "tests.test_routing_e2e.RoutedEndToEndTests.test_oracle_repair_reproves_red_and_keeps_approved_plan",
     "tests.test_consistency.ConsistencyGateTests.test_acceptance_repair_keeps_approval_but_design_review_can_block",

@@ -105,14 +105,24 @@ def _judge_red(results: list[dict], manifest: dict, change: dict) -> None:
                              details={"results": tails})
     fixture_errors = [item for item in judged if item["status"] == "ERROR" and set(
         (item.get("counts") or {}).get("diagnostics", [])) == {"precondition"}]
+    all_test_errors = all(
+        item["status"] == "ERROR" and ((item.get("counts") or {}).get("executed") or 0) > 0
+        and (item.get("counts") or {}).get("errors") == (item.get("counts") or {}).get("executed")
+        and (item.get("counts") or {}).get("failed") == 0
+        and not set((item.get("counts") or {}).get("diagnostics", [])) - {"precondition"}
+        and not item.get("timed_out") and item.get("returncode") in (1, 2)
+        for item in judged)
     broken = [item for item in judged if item["status"] == "ERROR" or (
         item["status"] == "FAIL" and (item.get("counts") or {}).get("executed") == 0)]
     if any(item not in fixture_errors for item in broken):
+        if all_test_errors:
+            raise StoryLoopError("Smoke RED proof failed only with test errors",
+                                 code="ORACLE_DEFECT", details={"fixture_repairable": True, "results": tails})
         raise StoryLoopError("Smoke RED proof encountered an environment error",
                              details={"results": tails})
     if fixture_errors:
         raise StoryLoopError("Smoke RED proof failed a fixture precondition",
-                             code="ORACLE_DEFECT", details={"results": tails})
+                             code="ORACLE_DEFECT", details={"fixture_repairable": True, "results": tails})
     expects_red = {criterion["id"]: criterion_expects_red(criterion)
                    for story in change["product"]["stories"] for criterion in story["acceptance"]}
     failed = {criterion for item in judged if item["status"] == "FAIL" for criterion in item["criteria"]}
@@ -374,6 +384,10 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> 
     )
     counts = (harness_counts(outcome) if test["command"][0] == "{storyloop_harness}" else
               count_tests(argv, str(outcome.get("stdout", "")) + "\n" + str(outcome.get("stderr", "")), patterns))
+    execution_error = (outcome.get("contained") is not True or any(
+        outcome.get(key) for key in ("timed_out", "truncated", "error")))
+    if execution_error:
+        counts["diagnostics"] = list(dict.fromkeys([*counts.get("diagnostics", []), "runner"]))
     if (counts.get("parser") == "unittest" and counts.get("errors")
             and outcome.get("contained") is True and not any(
                 outcome.get(key) for key in ("timed_out", "truncated", "error"))
@@ -382,8 +396,7 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> 
                       str(outcome.get("stderr", "")).splitlines())
         if markers == counts["errors"] and not counts["failed"]:
             counts["diagnostics"] = ["precondition"]
-    if (outcome.get("contained") is not True or outcome.get("timed_out")
-            or outcome.get("truncated") or outcome.get("error")):
+    if execution_error:
         status = "ERROR"
     elif counts.get("errors", 0) > 0:
         status = "ERROR"
