@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from contextlib import redirect_stdout
+import io
 import json
 from pathlib import Path
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -14,6 +17,7 @@ from storyloop.baseline import bootstrap_project, load_project_config
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.acceptance_repair import repair_smoke
+from storyloop.cli_output import display
 from storyloop.project_loop import LoopServices, load_run_state, run_change
 from storyloop.smoke_runner import _copy_candidate
 from storyloop.storage import write_json
@@ -138,6 +142,8 @@ class SmokeRepairTests(unittest.TestCase):
                 services(change_id, lambda p, s: good_payload(change_id)), now=lambda: NOW,
             )
             self.assertEqual(result["status"], "ACCEPTANCE_REPAIRED", result)
+            self.assertEqual(shlex.split(result["next"]),
+                             ["storyloop", "run", str(root.resolve()), "--change", change_id])
             repaired = load_run_state(root, change_id)
             self.assertEqual(repaired["status"], "IMPLEMENTING")
             self.assertEqual(repaired["attempt"], 0)
@@ -151,7 +157,7 @@ class SmokeRepairTests(unittest.TestCase):
             self.assertEqual(done["status"], "PASSED", done)
 
     def test_repair_replaces_suite_reproves_red_at_contract_commit_and_run_passes(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory(prefix="repair path ;$ ") as folder:
             root = Path(folder)
             repository(root)
             bootstrap_project(root, {"test_commands": []})
@@ -185,6 +191,19 @@ class SmokeRepairTests(unittest.TestCase):
             result = repair_smoke(root, change_id, "loading-mask locator is a test defect",
                                   services(change_id, repaired_smoke), now=lambda: NOW)
             self.assertEqual(result["status"], "ACCEPTANCE_REPAIRED", result)
+            self.assertEqual(result["change_id"], change_id)
+            self.assertEqual(result["commit"], git(root, "rev-parse", "HEAD"))
+            expected_command = ["storyloop", "run", str(root.resolve()), "--change", change_id]
+            self.assertEqual(shlex.split(result["next"]), expected_command)
+            for as_json in (False, True):
+                with self.subTest(as_json=as_json):
+                    output = io.StringIO()
+                    with redirect_stdout(output):
+                        display(result, complete_json=as_json)
+                    next_value = (json.loads(output.getvalue())["next"] if as_json else
+                                  next(line.removeprefix("next: ") for line in output.getvalue().splitlines()
+                                       if line.startswith("next: ")))
+                    self.assertEqual(shlex.split(next_value), expected_command)
             self.assertEqual(seen["repair"]["reason"], "loading-mask locator is a test defect")
             self.assertTrue(any(f["path"] == "flow.py" for f in seen["repair"]["existing_files"]))
             self.assertFalse(any(f["path"] == "manifest.json" for f in seen["repair"]["existing_files"]))

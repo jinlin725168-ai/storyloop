@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+import shlex
 from typing import TYPE_CHECKING
 
 from .baseline import load_project_config
@@ -156,7 +157,7 @@ def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict
                updates={"attempt": 0, "red_evidence_sha256": red["evidence_sha256"]})
     save_run(project, state)
     return {"status": "ACCEPTANCE_REPAIRED", "change_id": change_id, "commit": commit["commit"],
-            "next": f"storyloop run <project> --change {change_id}"}
+            "next": f"storyloop run {shlex.quote(str(project))} --change {change_id}"}
 
 
 def _failure_summary(error: StoryLoopError) -> str:
