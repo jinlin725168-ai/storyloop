@@ -13,6 +13,16 @@ from storyloop.smoke_runner import run_commands
 
 
 class ParserTests(unittest.TestCase):
+    def test_unittest_errors_are_not_behavior_failures(self):
+        output = "Ran 1 test in 0.01s\n\nFAILED (errors=1)\n"
+        counts = count_tests(["python", "case.py"], output)
+        self.assertEqual((counts["executed"], counts["failed"], counts["errors"]), (1, 0, 1))
+
+    def test_unittest_failures_remain_behavior_failures(self):
+        output = "Ran 1 test in 0.01s\n\nFAILED (failures=1)\n"
+        counts = count_tests(["python", "case.py"], output)
+        self.assertEqual((counts["executed"], counts["failed"], counts.get("errors", 0)), (1, 1, 0))
+
     def test_each_builtin_runner_summary(self):
         samples = {
             "unittest": ("..s\n----\nRan 3 tests in 0.01s\n\nOK (skipped=1)\n", 2, 0),

@@ -329,7 +329,8 @@ def _error_stop(args, exc: StoryLoopError) -> dict | None:
         if not change_id or not (args.project.resolve() / ".storyloop/state/runs" / f"{change_id}.json").exists():
             return build_entry_stop(args.project.resolve(), exc.code,
                                     {**(exc.details or {}), **({"change_id": change_id} if change_id else {})})
-    if not change_id or getattr(args, "command", None) not in {"run", "approve"}:
+    command = getattr(args, "command", None)
+    if not change_id or command not in {"run", "approve", "acceptance-repair", "smoke-repair"}:
         return None
     project = args.project.resolve()
     path = project / ".storyloop/state/runs" / f"{change_id}.json"
@@ -337,7 +338,8 @@ def _error_stop(args, exc: StoryLoopError) -> dict | None:
         return None
     try:
         run = load_run_state(project, change_id)
-        return stop_of(project, run) or build_stop(
+        existing = stop_of(project, run) if command in {"run", "approve"} else None
+        return existing or build_stop(
             project, run, exc.code, {"error": redact(str(exc)),
                                     "acceptance": exc.details if (exc.details or {}).get("results") else {}})
     except (OSError, ValueError, TypeError, KeyError, StoryLoopError):

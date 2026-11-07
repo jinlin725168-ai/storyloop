@@ -21,6 +21,8 @@ class FixturePreconditionError(Exception):
 def precondition(condition: bool, message: str) -> None:
     """Mark a fixture failure without counting it as a behavior assertion failure."""
     if not condition:
+        line = " ".join(str(message)[:1500].split())
+        print("STORYLOOP_PRECONDITION_FAILED: " + redact(line)[:1000], file=sys.__stderr__)
         raise FixturePreconditionError(message)
 
 
