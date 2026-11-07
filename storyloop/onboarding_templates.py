@@ -30,7 +30,8 @@ def render(stacks: list[str]) -> dict[str, bytes]:
         "base_build_commands": [],
         "module_roots": [], "test_roots": [], "integration_paths": [],
         "candidate_allow": [],
-        "scratch_paths": (["__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache"]
+        "scratch_paths": (["__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache",
+                           "*.egg-info", "build", "dist"]
                           if "python" in stacks else []),
         "stacks": stacks})
     manifest = {
