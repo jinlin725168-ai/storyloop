@@ -47,7 +47,7 @@
     "__pycache__",
     ".pytest_cache",
     "build",
-    "storyloop.egg-info",
+    "*.egg-info",
     ".ruff_cache",
     ".mypy_cache"
   ],

@@ -13,6 +13,7 @@ FAST = [
     "tests.test_baseline_contract", "tests.test_candidate_allow", "tests.test_change_approval",
     "tests.test_change_report", "tests.test_changes_behavior", "tests.test_changes_contract",
     "tests.test_characterization_claims", "tests.test_characterize_design_revision_stop_report",
+    "tests.test_characterize_onboarding_scratch", "tests.test_characterize_scratch_docs",
     "tests.test_ci_runner", "tests.test_claude_adapter", "tests.test_claude_role_profiles",
     "tests.test_codex_adapter", "tests.test_core", "tests.test_correction_views",
     "tests.test_design_revision_findings",
@@ -55,6 +56,7 @@ SAFETY = [
     "tests.test_oracle_tiers.RedByRowTypeTests.test_new_rows_red_and_kept_rows_green_prove_red",
     "tests.test_smoke_cli_exit_attribution",
     "tests.test_characterize_boundary_legacy_flow",
+    "tests.test_characterize_scratch_boundaries", "tests.test_characterize_scratch_guards",
     "tests.test_failure_routing.BoundaryAttributionTests."
     "test_linked_collision_stashes_preexisting_feature_and_deleted_tests",
     "tests.test_characterization.CharacterizationGateTests.test_multiple_claims_for_one_file_survive_the_gate",
