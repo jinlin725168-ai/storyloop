@@ -33,7 +33,7 @@ def prepare_execution(project, change, state, services, config):
     result = gate(project, change, state, services, config)
     if result is not None:
         return result
-    for phase, action in [('APPROVAL', lambda: ensure_design_approval(project, change, state, config)),
+    for phase, action in [('APPROVAL', lambda: ensure_design_approval(project, change, state, config, services)),
                           ('CONSISTENCY', lambda: ensure_consistency(project, change, state, services))]:
         if l3:
             state['phase'] = 'planning'

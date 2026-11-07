@@ -95,6 +95,48 @@ class PlanningTests(unittest.TestCase):
         response['options'][0]['symbols'] = []
         self.assertEqual(self.ensure(lambda p, c: response)['status'], 'NEEDS_INPUT')
 
+    def test_incomplete_plan_evidence_gets_one_design_retry(self):
+        self.state['routing'].update(initial_tier='standard', effective_tier='standard')
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            if len(requests) == 1:
+                response['options'][0]['symbols'] = []
+            return response
+
+        self.assertIsNone(self.ensure(design))
+        self.assertEqual(len(requests), 2)
+        self.assertIn('max_references', requests[1]['missing_plan_evidence'])
+        self.assertIn('symbols', requests[1]['evidence_guidance'])
+
+    def test_persistently_incomplete_plan_evidence_stops_after_one_retry(self):
+        self.state['routing'].update(initial_tier='standard', effective_tier='standard')
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            response['options'][0]['symbols'] = []
+            return response
+
+        self.assertEqual(self.ensure(design)['status'], 'NEEDS_INPUT')
+        self.assertEqual(len(requests), 2)
+
+    def test_unknown_plan_risk_still_requires_human_without_retry(self):
+        self.state['routing'].update(initial_tier='standard', effective_tier='standard')
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            response['options'][0]['risks']['migration']['value'] = 'unknown'
+            return response
+
+        self.assertEqual(self.ensure(design)['status'], 'NEEDS_INPUT')
+        self.assertEqual(len(requests), 1)
+
     def test_plan_fields_scope_and_constraints_are_validated(self):
         mutations = [lambda a: a['options'][0].pop('symbols'),
                      lambda a: a['options'].append(deepcopy(a['options'][0])),

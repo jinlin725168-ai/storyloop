@@ -338,7 +338,8 @@ def _split_suggestions(change: dict) -> dict:
                        for index, story in enumerate(change['product']['stories'])]}
 
 
-def ensure_design_approval(project: Path, change: dict, state: dict, config: dict) -> dict | None:
+def ensure_design_approval(project: Path, change: dict, state: dict, config: dict,
+                           services=None) -> dict | None:
     """Validate every DONE plan and enforce split then heavy approval before locks."""
     if not is_routed(change, state):
         return None
@@ -357,6 +358,14 @@ def ensure_design_approval(project: Path, change: dict, state: dict, config: dic
         _clear_checks(project, state)
     assessed = assess_plan(project, change, state, _assessment_plan(state))
     _record_assessment(state, config, assessed)
+    if assessed['decision']['unresolved']:
+        from .planning import retry_plan_evidence
+        revised, assessed, _ = retry_plan_evidence(
+            project, change, state, services, config, plan, assessed)
+        if revised is not plan:
+            state['planning']['plan'] = plan = revised
+            for key in ('continue_heavy', 'consistency', 'pending_option'):
+                state['planning'].pop(key, None)
     if assessed['decision']['unresolved']:
         state['phase'] = 'planning'
         return pause(project, state, 'NEEDS_INPUT', phase='planning', questions=[
