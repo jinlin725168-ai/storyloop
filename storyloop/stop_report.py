@@ -407,7 +407,17 @@ def build_entry_stop(project: Path, status: str, details: dict) -> dict:
     options = routing_options(project, details.get('change_id'), status,
                               {**intake, **details} if risk_stop else details)
     blocker = ('未决风险：' + ', '.join(risks)) if risk_stop else details.get('error', status)
+    evidence = details.get('evidence', details.get('layers', {}))
+    if status == 'PROJECT_NOT_READY':
+        evidence = []
+        for layer, data in (details.get('layers') or {}).items():
+            for result in data.get('results', []):
+                if result.get('status') == 'PASS':
+                    continue
+                tail = result.get('output_tail') or {'message': '无可用输出'}
+                summary = ' '.join(str(value) for value in tail.values() if value)
+                evidence.append(f"{layer} {result.get('id', '?')} {result.get('status', 'ERROR')}: {summary}")
     return {'status': status, 'phase': 'intake', 'blocker': blocker,
-            'evidence': details.get('evidence', details.get('layers', {})),
+            'evidence': evidence,
             'details': details, 'options': options,
             'resume': options[0]['command'] if options else _command('storyloop', 'readiness', project)}
