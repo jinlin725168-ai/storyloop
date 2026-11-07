@@ -59,6 +59,27 @@ class AcceptancePreconditionTests(unittest.TestCase):
             _judge_red([result], {"tests": [test]}, {"product": product()})
         self.assertEqual(caught.exception.code, "BLOCKED")
 
+    def test_command_case_precondition_with_error_exit_two_is_repairable(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "case.py").write_text(
+                "import sys, unittest\n"
+                f"sys.path.insert(0, {str(Path(__file__).resolve().parents[1])!r})\n"
+                "from storyloop.testing.smoke_harness.v1 import precondition\n"
+                "class Case(unittest.TestCase):\n"
+                "    def test_fixture(self):\n"
+                "        precondition(False, 'exit two fixture marker')\n"
+                "outcome = unittest.main(exit=False)\n"
+                "sys.exit(2 if outcome.result.errors else 1 if outcome.result.failures else 0)\n",
+                encoding="utf-8")
+            test = {**_test("case.py"), "command": [sys.executable, "case.py"]}
+            result = _run_test(root, test, [])
+            self.assertEqual(result["returncode"], 2)
+            with self.assertRaises(StoryLoopError) as caught:
+                _judge_red([result], {"tests": [test]}, {"product": product()})
+            self.assertEqual(caught.exception.code, "ORACLE_DEFECT")
+            self.assertEqual(result["counts"]["diagnostics"], ["precondition"])
+
     def test_failed_precondition_is_oracle_defect_with_output_in_stop(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

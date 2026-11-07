@@ -377,7 +377,7 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> 
     if (counts.get("parser") == "unittest" and counts.get("errors")
             and outcome.get("contained") is True and not any(
                 outcome.get(key) for key in ("timed_out", "truncated", "error"))
-            and outcome.get("returncode") == 1):
+            and outcome.get("returncode") in (1, 2)):
         markers = sum(line.startswith("STORYLOOP_PRECONDITION_FAILED: ") for line in
                       str(outcome.get("stderr", "")).splitlines())
         if markers == counts["errors"] and not counts["failed"]:
