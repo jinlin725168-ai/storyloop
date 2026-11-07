@@ -28,6 +28,22 @@ def state_for(status: str, **extra) -> dict:
 
 
 class StopReportTests(unittest.TestCase):
+    def test_project_not_ready_shows_each_failing_check_in_json_and_text(self):
+        from storyloop.stop_report import build_entry_stop
+        details = {'layers': {'checks': {'status': 'FAILED', 'results': [
+            {'id': 'REGRESSION-001', 'status': 'FAIL', 'output_tail': {'stderr': 'last line'}},
+            {'id': 'REGRESSION-002', 'status': 'ERROR',
+             'output_tail': {'message': '无可用输出'}}]}}}
+        stop = build_entry_stop(Path('/project'), 'PROJECT_NOT_READY', details)
+        evidence = str(stop['evidence'])
+        view = '\n'.join(render_stop(stop))
+        for expected in ('REGRESSION-001', 'REGRESSION-002', 'last line',
+                         '无可用输出', 'ERROR'):
+            self.assertIn(expected, evidence)
+            self.assertIn(expected, view)
+        other = build_entry_stop(Path('/project'), 'READINESS_APPROVAL_REQUIRED', details)
+        self.assertEqual(other['evidence'], details['layers'])
+
     def test_characterization_oracle_stop_routes_to_supersede(self):
         state = state_for("ORACLE_DEFECT", characterization={
             "status": "GREEN", "tests": ["tests/test_lock.py"], "commits": ["abc"]},

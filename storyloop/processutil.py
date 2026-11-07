@@ -215,7 +215,8 @@ def run_process(command: list[str], cwd: Path, timeout: int | float,
                 environment_allowlist: Sequence[str] | None = None,
                 source_environment: Mapping[str, str] | None = None,
                 absolute_deadline: float | None = None,
-                max_output: int | None = None) -> dict:
+                max_output: int | None = None,
+                capture_output_tail: bool = False) -> dict:
     """Execute argv, clean its tree, and report whether containment was secure.
 
     `max_output` raises the combined stdout/stderr cap for callers that stream events.
@@ -258,4 +259,14 @@ def run_process(command: list[str], cwd: Path, timeout: int | float,
         for key, handle in (("stdout", output), ("stderr", error)):
             handle.seek(0)
             result[key] = handle.read(limit).decode("utf-8", errors="replace")
+        if capture_output_tail:
+            result["output_tail"] = {}
+            for key, handle in (("stdout", output), ("stderr", error)):
+                handle.seek(0)
+                # Redact the complete captured stream before taking a displayed tail.
+                # A partial stream could expose a credential cut at its boundary.
+                size = os.fstat(handle.fileno()).st_size
+                result["output_tail"][key] = (
+                    handle.read(size).decode("utf-8", errors="replace")
+                    if size <= 2 * limit else "")
     return result

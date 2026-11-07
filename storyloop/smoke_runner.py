@@ -282,7 +282,7 @@ def _require_only_evidence_changed(before, after, allowed: str) -> None:
 
 
 def run_commands(project: Path, commands: list[list[str]], timeout_seconds: int,
-                 patterns: list[dict] | None = None) -> dict:
+                 patterns: list[dict] | None = None, *, capture_output_tail: bool = False) -> dict:
     """Run generic project regression commands with the same safe process contract."""
     require(isinstance(commands, list), "Regression commands must be a list")
     if not commands:
@@ -292,7 +292,8 @@ def run_commands(project: Path, commands: list[list[str]], timeout_seconds: int,
          "timeout_seconds": timeout_seconds}
         for index, command in enumerate(commands, start=1)
     ]
-    results = [_run_test(Path(project).resolve(), item, patterns) for item in tests]
+    results = [_run_test(Path(project).resolve(), item, patterns,
+                         capture_output_tail=capture_output_tail) for item in tests]
     status = "PASSED" if all(item["status"] == "PASS" for item in results) else "FAILED"
     return {"status": status, "results": results}
 
@@ -318,7 +319,7 @@ def run_commands_isolated(
 
 
 def run_commands_at_commit(project: Path, commit: str, commands: list[list[str]], timeout_seconds: int,
-                           exclude: list[str] | tuple = ()) -> dict:
+                           exclude: list[str] | tuple = (), *, capture_output_tail: bool = False) -> dict:
     """Run regression commands on a commit's tree (workspace edits excluded), minus `exclude` paths."""
     project = Path(project).resolve()
     skipped = set(exclude)
@@ -331,7 +332,8 @@ def run_commands_at_commit(project: Path, commit: str, commands: list[list[str]]
             for member in members:
                 safe_target(candidate, member.name, "baseline target")
             tar.extractall(candidate, members=members, filter="data")
-        return run_commands(candidate, commands, timeout_seconds, project_patterns(project))
+        return run_commands(candidate, commands, timeout_seconds, project_patterns(project),
+                            capture_output_tail=capture_output_tail)
 
 
 def git_visible_digest(project: Path) -> str:
@@ -365,9 +367,14 @@ def _files_digest(root: Path, paths: list[str]) -> str:
     return digest.hexdigest()
 
 
-def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> dict:
+def _run_test(project: Path, test: dict, patterns: list[dict] | None = None,
+              *, capture_output_tail: bool = False) -> dict:
     argv = expand_command(test["command"])
     executable = argv[0] if Path(argv[0]).is_absolute() else shutil.which(argv[0])
+    if capture_output_tail and not executable:
+        return {"id": test["id"], "status": "ERROR", "command": argv,
+                "returncode": None, "timed_out": False, "counts": {},
+                "output_tail": {"message": "无可用输出"}}
     require(bool(executable), "Smoke executable is unavailable")
     require(Path(executable).suffix.lower() not in {".cmd", ".bat", ".ps1"},
             "Smoke executable must be native or use an explicit interpreter")
@@ -381,6 +388,7 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> 
         environment_allowlist=["PATH", "SYSTEMROOT", "TEMP", "TMP",
                                "PYTHONDONTWRITEBYTECODE"],
         source_environment=environment,
+        capture_output_tail=capture_output_tail,
     )
     counts = (harness_counts(outcome) if test["command"][0] == "{storyloop_harness}" else
               count_tests(argv, str(outcome.get("stdout", "")) + "\n" + str(outcome.get("stderr", "")), patterns))
@@ -406,7 +414,7 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> 
         status = "FAIL"
     else:
         status = "ERROR"
-    return {
+    result = {
         "id": test["id"],
         "criteria": list(test["criteria"]),
         "command": argv,
@@ -418,6 +426,15 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> 
         "stdout": redact(redaction_prefix(str(outcome.get("stdout", "")), 100_000)),
         "stderr": redact(redaction_prefix(str(outcome.get("stderr", "")), 100_000)),
     }
+    if capture_output_tail and status != "PASS":
+        raw = outcome.get("output_tail") or {}
+        stdout = redact(raw.get("stdout", ""))
+        stderr = redact(raw.get("stderr", ""))
+        stdout_limit = min(len(stdout), 1500 - min(len(stderr), 750))
+        tail = {"stdout": stdout[-stdout_limit:] if stdout_limit else "",
+                "stderr": stderr[-(1500 - stdout_limit):]}
+        result["output_tail"] = tail if any(tail.values()) else {"message": "无可用输出"}
+    return result
 
 
 def _expand(value: str) -> str:

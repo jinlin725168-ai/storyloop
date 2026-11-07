@@ -97,7 +97,8 @@ def system_smoke_digests(project: Path) -> dict[str, str]:
     return dict(load_json(Path(project).resolve() / PROTECTION)["digests"])
 
 
-def run_system_smoke_isolated(project: Path, *, approved_base_candidate: bool = False) -> dict:
+def run_system_smoke_isolated(project: Path, *, approved_base_candidate: bool = False,
+                              capture_output_tail: bool = False) -> dict:
     """Run the protected system suite in a disposable Git-visible candidate; SKIPPED when absent."""
     from .smoke_runner import _copy_candidate, _run_test  # noqa: PLC0415  (avoid an import cycle)
     from .boundaries import capture_snapshot, snapshot_changes
@@ -112,7 +113,9 @@ def run_system_smoke_isolated(project: Path, *, approved_base_candidate: bool = 
         with tempfile.TemporaryDirectory(prefix="storyloop-system-smoke-") as folder:
             candidate = Path(folder)
             _copy_candidate(project, candidate)
-            results = [_run_test(candidate, {**item, "criteria": []}) for item in manifest["tests"]]
+            results = [_run_test(candidate, {**item, "criteria": []},
+                                 capture_output_tail=capture_output_tail)
+                       for item in manifest["tests"]]
     finally:
         if snapshot_changes(before, capture_snapshot(project, include_control=True, include_ignored=True)):
             raise StoryLoopError("System smoke modified the source project", code="WORKSPACE_TAINTED")

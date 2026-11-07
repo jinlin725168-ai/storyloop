@@ -24,6 +24,17 @@ from storyloop.processutil import (
 
 
 class RedactPerformanceTests(unittest.TestCase):
+    def test_opt_in_process_tail_keeps_true_end_without_changing_prefix(self):
+        with tempfile.TemporaryDirectory() as folder:
+            script = "import sys; sys.stdout.write('x'*120000+'TAIL'); sys.stderr.write('ERRTAIL')"
+            normal = run_process([sys.executable, '-c', script], Path(folder), 5)
+            captured = run_process([sys.executable, '-c', script], Path(folder), 5,
+                                   capture_output_tail=True)
+        self.assertNotIn('output_tail', normal)
+        self.assertEqual(captured['stdout'], normal['stdout'])
+        self.assertTrue(captured['output_tail']['stdout'].endswith('TAIL'))
+        self.assertTrue(captured['output_tail']['stderr'].endswith('ERRTAIL'))
+
     def test_url_userinfo_and_existing_labels_keep_their_output(self):
         cases = {
             "https://alice:p:a:s:s@example.test/path": "https://[REDACTED]@example.test/path",
