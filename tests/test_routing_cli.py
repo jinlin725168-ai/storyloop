@@ -123,6 +123,59 @@ class RoutingReportTests(unittest.TestCase):
 
 
 class ProductBoundaryTests(unittest.TestCase):
+    def test_risk_pending_approve_and_run_match_status_without_mutating_draft(self):
+        from storyloop.changes import create_change
+        from storyloop.readiness import inspect_readiness, approve_readiness
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            readiness_repository(root)
+            ready = inspect_readiness(root)
+            approve_readiness(root, ready['digest'], 'local')
+            value = assessed_product()
+            for field in ('sensitive', 'migration'):
+                value['assessment']['risks'][field]['value'] = 'unknown'
+            draft = create_change(root, 'idea', value)
+            change_id = draft['change_id']
+            path = root / '.storyloop/state/changes' / f'{change_id}.json'
+            before = path.read_bytes()
+            status = dispatch(parser().parse_args(['status', folder, '--change', change_id]))
+            self.assertEqual(status['stop']['status'], 'NEEDS_INPUT')
+            self.assertIn('--message', status['next'])
+            for command in ('approve', 'run'):
+                with self.subTest(command=command):
+                    error = io.StringIO()
+                    with redirect_stderr(error), redirect_stdout(io.StringIO()):
+                        self.assertEqual(main([command, folder, '--change', change_id, '--json']), 2)
+                    stopped = json.loads(error.getvalue())
+                    self.assertEqual(stopped['status'], 'NEEDS_INPUT')
+                    self.assertEqual(stopped['next'], status['next'])
+                    self.assertEqual(stopped['stop']['resume'], status['stop']['resume'])
+                    self.assertIn('risks.sensitive', stopped['stop']['blocker'])
+                    self.assertIn('risks.migration', stopped['stop']['blocker'])
+                    self.assertEqual(path.read_bytes(), before)
+                    self.assertFalse((root / '.storyloop/state/runs' / f'{change_id}.json').exists())
+
+    def test_run_pending_risks_keeps_readiness_stop_priority(self):
+        from storyloop.changes import create_change
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            readiness_repository(root)
+            value = assessed_product()
+            value['assessment']['risks']['sensitive']['value'] = 'unknown'
+            draft = create_change(root, 'idea', value)
+            change_id = draft['change_id']
+            for status in ('READINESS_APPROVAL_REQUIRED', 'PROJECT_NOT_READY'):
+                with self.subTest(status=status):
+                    record = {'status': status, 'digest': 'ready-digest', 'layers': {}, 'evidence': []}
+                    with patch('storyloop.readiness._inspect_readiness_locked', return_value=record):
+                        error = io.StringIO()
+                        with redirect_stderr(error), redirect_stdout(io.StringIO()):
+                            self.assertEqual(main(['run', folder, '--change', change_id, '--json']), 2)
+                    stopped = json.loads(error.getvalue())
+                    self.assertEqual(stopped['status'], status)
+                    self.assertEqual(stopped['next'], stopped['stop']['resume'])
+                    self.assertNotIn('--message', stopped['next'])
+
     def test_missing_assessment_repairs_once_and_writes_no_draft(self):
         from storyloop.cli import _product_answer
         from tests.support import product

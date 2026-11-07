@@ -400,8 +400,14 @@ def _plan_section(markdown: str, heading: str) -> str:
 
 def build_entry_stop(project: Path, status: str, details: dict) -> dict:
     """Report a blocked entry without fabricating a run or implementation attempts."""
-    options = routing_options(project, details.get('change_id'), status, details)
-    return {'status': status, 'phase': 'intake', 'blocker': details.get('error', status),
+    intake = details.get('intake') or details
+    unresolved = (intake.get('decision') or {}).get('unresolved') or []
+    risks = [field for field in unresolved if isinstance(field, str) and field.startswith('risks.')]
+    risk_stop = status == 'NEEDS_INPUT' and bool(risks)
+    options = routing_options(project, details.get('change_id'), status,
+                              {**intake, **details} if risk_stop else details)
+    blocker = ('未决风险：' + ', '.join(risks)) if risk_stop else details.get('error', status)
+    return {'status': status, 'phase': 'intake', 'blocker': blocker,
             'evidence': details.get('evidence', details.get('layers', {})),
             'details': details, 'options': options,
             'resume': options[0]['command'] if options else _command('storyloop', 'readiness', project)}
