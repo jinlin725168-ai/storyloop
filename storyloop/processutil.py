@@ -265,8 +265,5 @@ def run_process(command: list[str], cwd: Path, timeout: int | float,
                 handle.seek(0)
                 # Redact the complete captured stream before taking a displayed tail.
                 # A partial stream could expose a credential cut at its boundary.
-                size = os.fstat(handle.fileno()).st_size
-                result["output_tail"][key] = (
-                    handle.read(size).decode("utf-8", errors="replace")
-                    if size <= 2 * limit else "")
+                result["output_tail"][key] = handle.read().decode("utf-8", errors="replace")
     return result
