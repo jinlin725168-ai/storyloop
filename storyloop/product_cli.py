@@ -103,6 +103,15 @@ def dispatch(project: Path, args, run_with_answers, draft_result, load_run_state
         return run_with_answers(project, change_id, interactive=not args.no_interactive)
     if args.command == "run":
         require(change_id, "Product execution needs --change")
+        change = load_change(project, change_id)
+        intake = change.get('intake') or {}
+        unresolved = (intake.get('decision') or {}).get('unresolved') or []
+        if (change['status'] == 'DRAFT' and change.get('routing_version') == 1
+                and intake.get('status') == 'NEEDS_INPUT'
+                and any(field.startswith('risks.') for field in unresolved)):
+            from .readiness import require_readiness
+            require_readiness(project)
+            raise StoryLoopError('NEEDS_INPUT', code='NEEDS_INPUT', details={'intake': intake})
         return run_with_answers(project, change_id, interactive=not args.no_interactive,
                                 overrule=getattr(args, "overrule", None))
     if args.command == "answer":
