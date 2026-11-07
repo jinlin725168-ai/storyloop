@@ -26,6 +26,14 @@ def finding(target='design', location='plan:main/constraints/0', blocking=True):
 
 
 class ConsistencyTests(unittest.TestCase):
+    def test_consistency_instruction_records_weakening_suggestions_without_blocking(self):
+        from storyloop.role_instructions import INSTRUCTIONS
+        instruction = INSTRUCTIONS['review']
+        self.assertIn('regression, state_preservation, non_goal', instruction)
+        self.assertIn('blocking:false', instruction)
+        self.assertIn('positive, degradation, unknown_state, form_parity', instruction)
+        self.assertIn('all blocking findings in one response', instruction)
+
     def test_contract_blocker_has_priority_without_losing_findings(self):
         findings = [finding(target) for target in ('design', 'oracle', 'contract')]
         self.assertEqual(consistency_status(findings), 'NEEDS_SPEC_FIX')

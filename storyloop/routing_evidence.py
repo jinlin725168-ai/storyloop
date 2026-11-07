@@ -28,7 +28,8 @@ def measure_scope(project: Path, commit: str, scope: dict, policy: dict) -> dict
         project, commit, scope, profile)
     artifacts = _artifact_paths(profile)
     tests = set(path for path in touched + creates if _is_test(path, profile))
-    excluded = tests | set(path for path in touched + creates if _inside_any(path, artifacts))
+    excluded = tests | set(path for path in touched + creates
+                           if _inside_any(path, artifacts) or _is_document(path))
     business_existing = sorted(set(touched) - excluded)
     business_created = sorted(set(creates) - excluded)
     reference_values = [_reference_count(project, commit, item["symbol"], profile)
@@ -51,6 +52,11 @@ def measure_scope(project: Path, commit: str, scope: dict, policy: dict) -> dict
     return {"signals": signals, "evidence": evidence,
             "scope": {"touched": touched, "creates": creates,
                       "interfaces": interfaces, "symbols": symbols}}
+
+
+def _is_document(path: str) -> bool:
+    """Documentation paths do not need code symbols or reference counts."""
+    return path.startswith('docs/') or path.endswith('.md')
 
 
 def actual_scope(project: Path, contract_commit: str) -> dict:

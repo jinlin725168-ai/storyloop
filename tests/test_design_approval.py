@@ -1,5 +1,6 @@
 """Explicit human design and split decisions on current run bindings."""
 from copy import deepcopy
+from dataclasses import replace
 import unittest
 from unittest.mock import patch
 
@@ -47,6 +48,27 @@ class DesignApprovalTests(unittest.TestCase):
 
     def approve(self, option=None):
         return approvals.approve_design(self.root, self.identifier, self.plan['id'], option_id=option)
+
+    def test_approval_gate_retries_incomplete_plan_evidence_once(self):
+        from storyloop.baseline import load_project_config
+        from storyloop.planning import assess_plan
+        self.start()
+        complete = assess_plan(self.root, self.change, self.state, self.plan)
+        incomplete = deepcopy(complete)
+        incomplete['decision']['unresolved'] = ['max_references', 'complete']
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            return answer()
+
+        services = replace(self.services, design=design)
+        with patch('storyloop.design_approval.assess_plan', side_effect=[incomplete, complete]):
+            result = approvals.ensure_design_approval(
+                self.root, self.change, self.state, load_project_config(self.root), services)
+        self.assertEqual(result['status'], 'DESIGN_APPROVAL_REQUIRED')
+        self.assertEqual(len(requests), 1)
+        self.assertIn('max_references', requests[0]['missing_plan_evidence'])
 
     def test_explicit_replan_invalidates_candidate_and_review_evidence(self):
         self.start()

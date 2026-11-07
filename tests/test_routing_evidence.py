@@ -58,6 +58,23 @@ class EvidenceTests(unittest.TestCase):
         self.assertTrue(result["signals"]["complete"])
         self.assertEqual(counted.call_count, 1)
 
+    def test_document_scope_needs_no_symbol_or_reference_count(self):
+        (self.root / 'docs').mkdir()
+        (self.root / 'docs/api.md').write_text('# API\n', encoding='utf-8')
+        (self.root / 'docs/notes.txt').write_text('notes\n', encoding='utf-8')
+        (self.root / 'app/README.md').write_text('# App\n', encoding='utf-8')
+        git(self.root, 'add', 'docs/api.md', 'docs/notes.txt', 'app/README.md')
+        git(self.root, 'commit', '-q', '-m', 'docs')
+        head = git(self.root, 'rev-parse', 'HEAD')
+        for path in ('docs/api.md', 'docs/notes.txt', 'app/README.md'):
+            with self.subTest(path=path):
+                scope = {'touched': [path], 'creates': [], 'interfaces': [], 'symbols': []}
+                with patch('storyloop.routing_evidence._reference_count') as count:
+                    result = measure_scope(self.root, head, scope, validate_policy(None))
+                self.assertTrue(result['signals']['complete'])
+                self.assertEqual(result['signals']['max_references'], 0)
+                count.assert_not_called()
+
     def test_role_scope_errors_are_marked_without_marking_git_failures(self):
         scopes = [
             {"touched": ["app"], "creates": [], "interfaces": [], "symbols": []},
