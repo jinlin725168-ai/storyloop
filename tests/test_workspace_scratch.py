@@ -12,11 +12,12 @@ import json
 import os
 
 from storyloop.approvals import approve_change
-from storyloop.boundaries import capture_snapshot
+from storyloop.boundaries import capture_snapshot, snapshot_changes
 from storyloop.baseline import bootstrap_project
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, run_change
+from storyloop.project_loop_guards import _is_scratch
 from tests.support import product
 from tests.test_baseline_behavior import git, repository
 from tests.test_project_loop import smoke_payload
@@ -26,7 +27,7 @@ NOW = datetime(2026, 9, 17, tzinfo=timezone.utc)
 
 def _approved(root: Path, settings: dict) -> str:
     repository(root)
-    (root / ".gitignore").write_text("target/\n", encoding="utf-8")
+    (root / ".gitignore").write_text("target/\n*.egg-info/\n", encoding="utf-8")
     git(root, "add", ".gitignore")
     git(root, "commit", "-q", "-m", "ignore build output")
     bootstrap_project(root, {"test_commands": [], **settings})
@@ -61,6 +62,61 @@ def _services(change_id: str, build_in_place: bool) -> LoopServices:
 
 
 class WorkspaceScratchTests(unittest.TestCase):
+    def test_only_star_is_a_name_wildcard_and_relative_paths_keep_prefix_semantics(self):
+        self.assertTrue(_is_scratch("nested/package.egg-info/PKG-INFO", ["*.egg-info"]))
+        self.assertTrue(_is_scratch("nested/package\nextra.egg-info/file", ["*.egg-info"]))
+        self.assertFalse(_is_scratch("nested/package.egg-info/PKG-INFO", ["other*.egg-info"]))
+        self.assertFalse(_is_scratch("nested/pkg1.egg-info/file", ["pkg?.egg-info"]))
+        self.assertFalse(_is_scratch("nested/pkg1.egg-info/file", ["pkg[1].egg-info"]))
+        self.assertTrue(_is_scratch("cache/artifacts/output.bin", ["cache/artifacts"]))
+        self.assertFalse(_is_scratch("other/artifacts/output.bin", ["cache/artifacts"]))
+
+    def test_glob_skips_root_and_nested_directories_but_not_control(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".storyloop").mkdir()
+            (root / ".storyloop/config.json").write_text(
+                json.dumps({"profile": {"scratch_paths": ["*.egg-info", "state"]}}),
+                encoding="utf-8")
+            before = capture_snapshot(root, include_control=True, include_ignored=True)
+            for relative in ("one.egg-info/PKG-INFO", "nested/two.egg-info/PKG-INFO",
+                             ".storyloop/state/marker"):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("generated", encoding="utf-8")
+            after = capture_snapshot(root, include_control=True, include_ignored=True)
+            changes = [item.path for item in snapshot_changes(before, after)]
+            self.assertFalse(any("egg-info" in path for path in changes))
+            self.assertIn(".storyloop/state/marker", changes)
+
+    def test_glob_output_from_writer_and_reader_preserves_config(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = _approved(root, {"scratch_paths": ["*.egg-info"]})
+            config = root / ".storyloop/config.json"
+            original = json.loads(config.read_text(encoding="utf-8"))["profile"]["scratch_paths"]
+            services = _services(change_id, build_in_place=False)
+
+            def implement(project, context):
+                result = services.implement(project, context)
+                for relative in ("one.egg-info/PKG-INFO", "nested/two.egg-info/PKG-INFO"):
+                    path = project / relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text("generated", encoding="utf-8")
+                return result
+
+            def review(project, context):
+                path = project / "review_pkg/third.egg-info/PKG-INFO"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("generated", encoding="utf-8")
+                return services.review(project, context)
+
+            result = run_change(root, change_id, LoopServices(
+                generate_smoke=services.generate_smoke, implement=implement, review=review))
+            self.assertEqual(result["status"], "PASSED", result)
+            self.assertEqual(json.loads(config.read_text(encoding="utf-8"))["profile"]["scratch_paths"],
+                             original)
+
     def test_snapshot_skips_declared_scratch_directories_even_with_links(self):
         for declared in ([], ["node_modules"]):
             with tempfile.TemporaryDirectory() as folder:
@@ -89,7 +145,7 @@ class WorkspaceScratchTests(unittest.TestCase):
     def test_undeclared_ignored_output_still_taints(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            change_id = _approved(root, {})
+            change_id = _approved(root, {"scratch_paths": ["*.egg-info"]})
             with self.assertRaises(StoryLoopError) as caught:
                 run_change(root, change_id, _services(change_id, build_in_place=True))
             self.assertEqual(caught.exception.code, "WORKSPACE_TAINTED")

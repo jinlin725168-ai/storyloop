@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 from .baseline import _git, load_project_config
-from .boundaries import capture_snapshot, snapshot_changes
+from .boundaries import _scratch_name_matches, capture_snapshot, snapshot_changes
 from .models import StoryLoopError, require
 from .project_loop_support import control_digest
 
@@ -49,7 +49,7 @@ def write_safely(project: Path, change_id: str, operation: Callable[[], dict],
                              exclude_git=exclude_root_git_snapshot)
     changes = snapshot_changes(before, after)
     _require_drafts_unchanged(changes)
-    changes = _without_scratch(changes, scratch_paths(project))
+    changes = _without_scratch(changes, scratch_paths(project), after.skipped_scratch)
     if failure is not None:
         if changes:
             raise StoryLoopError(
@@ -97,7 +97,7 @@ def verify_read_only_snapshot(before, after, allowed_path: str | None,
                               scratch: list[str] | None = None) -> None:
     changes = snapshot_changes(before, after)
     _require_drafts_unchanged(changes)
-    changes = _without_scratch(changes, scratch or [])
+    changes = _without_scratch(changes, scratch or [], after.skipped_scratch)
     unexpected = [item for item in changes
                   if item.path != allowed_path
                   and not _allowed_parent_directory(item.path, allowed_path)]
@@ -136,12 +136,14 @@ def _is_scratch(path: str, scratch: list[str]) -> bool:
     if normalized == ".storyloop" or normalized.startswith(".storyloop/"):
         return False
     parts = normalized.split("/")
-    return any(part == item for part in parts for item in scratch) or any(
+    return any(_scratch_name_matches(part, item) for part in parts
+               for item in scratch if "/" not in item) or any(
         normalized == item.rstrip("/") or normalized.startswith(item.rstrip("/") + "/")
         for item in scratch if "/" in item)
 
 
-def _without_scratch(changes: list, scratch: list[str]) -> list:
+def _without_scratch(changes: list, scratch: list[str],
+                     skipped_scratch: frozenset[str] = frozenset()) -> list:
     """Drop tolerated file changes and directory entries whose only changes are tolerated."""
     files = [item for item in changes if not item.path.endswith("/")]
     kept = [item for item in files if not _is_scratch(item.path, scratch)]
@@ -156,6 +158,8 @@ def _without_scratch(changes: list, scratch: list[str]) -> list:
         under_dropped = any(item.path.startswith(prefix) for item in dropped) or any(
             other.path.startswith(prefix) and _is_scratch(other.path, scratch)
             for other in directories)
+        if entry.kind == "added" and not under_dropped:
+            under_dropped = any(path.startswith(prefix) for path in skipped_scratch)
         if under_kept or not under_dropped:
             result.append(entry)
     return result
