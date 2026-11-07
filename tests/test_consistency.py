@@ -3,6 +3,7 @@ from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from storyloop.consistency import consistency_status, validate_consistency, ensure_consistency
 from storyloop.consistency_locations import validate_plan_location
@@ -235,6 +236,32 @@ class ConsistencyGateTests(unittest.TestCase):
         from storyloop.stop_report import render_stop
         self.assertIn('阻塞方案意见', '\n'.join(render_stop(state['stop'])))
         self.assertEqual(self.calls, [])
+
+    def test_repair_red_exception_discards_old_plan_binding(self):
+        self.prepared()
+        from storyloop.acceptance_repair import repair_smoke
+        from storyloop.smoke import suite_relative
+        from tests.test_project_loop import smoke_payload
+        path = next((self.root / suite_relative(self.root, self.identifier)).rglob('*.py'))
+        response = {**coherent(), 'verdict': 'blocked', 'findings': [
+            finding('oracle', path.relative_to(self.root).as_posix() + ':1')]}
+        self.services = replace(self.services, review=lambda p, c: response)
+        self.assertEqual(run_change(self.root, self.identifier, self.services)['status'], 'ORACLE_DEFECT')
+        self.assertIn('plan', load_run_state(self.root, self.identifier)['planning'])
+
+        def repaired(project, context):
+            payload = smoke_payload(self.identifier)
+            payload['files'][0]['content'] += '\n# repaired suite\n'
+            return payload
+
+        with patch('storyloop.acceptance_repair.run_smoke_isolated', side_effect=RuntimeError('RED crashed')):
+            with self.assertRaisesRegex(RuntimeError, 'RED crashed'):
+                repair_smoke(self.root, self.identifier, 'Repair oracle',
+                             replace(self.services, generate_smoke=repaired))
+        state = load_run_state(self.root, self.identifier)
+        self.assertEqual(len(state['repairs']), 1)
+        self.assertNotIn('plan', state['planning'])
+        self.assertNotIn('red_evidence_sha256', state)
 
     def test_standard_repair_review_retries_after_needs_input(self):
         self.prepared()

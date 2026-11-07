@@ -112,6 +112,10 @@ def _bootstrap_settings(overrides: dict | None) -> tuple[dict, dict, dict]:
         value = settings.pop('max_attempts')
         require(type(value) is int and value > 0, 'Invalid max_attempts')
         budget['max_attempts'] = value
+    if 'acceptance_fixture_retry_limit' in settings:
+        value = settings.pop('acceptance_fixture_retry_limit')
+        require(type(value) is int and 0 <= value <= 5, 'Invalid acceptance_fixture_retry_limit')
+        budget['acceptance_fixture_retry_limit'] = value
     return settings, budget, role_config
 
 
