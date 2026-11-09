@@ -149,6 +149,96 @@ class SmokeSuiteTests(unittest.TestCase):
         with self.assertRaisesRegex(StoryLoopError, "modified its isolated candidate"):
             run_smoke_isolated(self.root, load_change(self.root, self.change_id))
 
+    def test_self_candidate_rejects_shadowed_old_helper_before_red(self):
+        old_helper = self.root / "storyloop/testing/smoke_harness/v1.py"
+        old_helper.parent.mkdir(parents=True)
+        old_helper.write_text("def precondition(ok, message):\n    if not ok: raise RuntimeError(message)\n",
+                              encoding="utf-8")
+        script = ("import unittest\n"
+                  "from storyloop.testing.smoke_harness.v1 import precondition\n"
+                  "class Case(unittest.TestCase):\n"
+                  "    def test_fixture(self): precondition(False, 'missing fixture')\n"
+                  "if __name__ == '__main__': unittest.main()\n")
+        self._install_case(script)
+
+        with self.assertRaises(StoryLoopError) as caught:
+            run_smoke_isolated(self.root, load_change(self.root, self.change_id), expect_red=True)
+        self.assertEqual(caught.exception.code, "ORACLE_DEFECT")
+        self.assertEqual(caught.exception.details["reason"], "HARNESS_SHADOWED")
+        self.assertTrue(caught.exception.details["fixture_repairable"])
+        self.assertIn("test_smoke.py", str(caught.exception.details["failure_evidence"]))
+        self.assertIn("{storyloop_harness}", str(caught.exception))
+        self.assertIn("test_smoke.py", str(caught.exception.details))
+        with self.assertRaises(StoryLoopError) as acceptance_error:
+            run_smoke_isolated(self.root, load_change(self.root, self.change_id), expect_red=False)
+        self.assertNotIn("fixture_repairable", acceptance_error.exception.details)
+
+    def test_ordinary_project_still_runs_its_smoke_suite(self):
+        script = ("import unittest\n"
+                  "class Case(unittest.TestCase):\n"
+                  "    def test_red(self): self.fail('new behavior absent')\n"
+                  "if __name__ == '__main__': unittest.main()\n")
+        self._install_case(script)
+        result = run_smoke_isolated(self.root, load_change(self.root, self.change_id), expect_red=True)
+        self.assertEqual(result["status"], "RED")
+
+    def test_self_candidate_rejects_inline_helper_import(self):
+        helper = self.root / "storyloop/testing/__init__.py"
+        helper.parent.mkdir(parents=True)
+        helper.write_text("", encoding="utf-8")
+        manifest = {"version": 1, "tests": [{"id": "SMOKE-1", "criteria": ["AC-1"],
+                    "command": ["{python}", "-c", "import storyloop.testing.smoke_harness.v1"],
+                    "timeout_seconds": 10}]}
+        install_smoke_suite(self.root, load_change(self.root, self.change_id),
+                            [{"path": "test_smoke.py", "content": "pass\n"}], manifest)
+        with self.assertRaises(StoryLoopError) as caught:
+            run_smoke_isolated(self.root, load_change(self.root, self.change_id), expect_red=True)
+        self.assertEqual(caught.exception.details["reason"], "HARNESS_SHADOWED")
+
+    def test_shadowed_helper_during_acceptance_becomes_actionable_stop(self):
+        from storyloop.project_loop import _verify_attempt
+        state = {"version": 1, "change_id": self.change_id, "status": "IMPLEMENTING",
+                 "attempt": 1, "failures": []}
+        error = StoryLoopError("改用 {storyloop_harness}", code="ORACLE_DEFECT",
+                               details={"reason": "HARNESS_SHADOWED",
+                                        "files": ["acceptance/changes/C/test.py"]})
+        with patch("storyloop.project_loop._run_checks_safely", side_effect=error):
+            result = _verify_attempt(self.root, load_change(self.root, self.change_id),
+                                     state, None, {}, {})
+        self.assertEqual(result["status"], "ORACLE_DEFECT")
+        self.assertIn("HARNESS_SHADOWED", str(result["stop"]))
+        self.assertIn("{storyloop_harness}", str(result["stop"]))
+
+    def test_self_candidate_rejects_literal_importlib_helper_import(self):
+        helper = self.root / "storyloop/testing/__init__.py"
+        helper.parent.mkdir(parents=True)
+        helper.write_text("", encoding="utf-8")
+        manifest = {"version": 1, "tests": [{"id": "SMOKE-1", "criteria": ["AC-1"],
+                    "command": ["{python}", "-c",
+                                "import importlib; importlib.import_module('storyloop.testing.smoke_harness.v1')"],
+                    "timeout_seconds": 10}]}
+        install_smoke_suite(self.root, load_change(self.root, self.change_id),
+                            [{"path": "test_smoke.py", "content": "pass\n"}], manifest)
+        with self.assertRaises(StoryLoopError) as caught:
+            run_smoke_isolated(self.root, load_change(self.root, self.change_id), expect_red=True)
+        self.assertEqual(caught.exception.details["reason"], "HARNESS_SHADOWED")
+
+    def test_self_candidate_accepts_engine_harness_command(self):
+        from storyloop.self_harness_preflight import preflight_self_harness
+        helper = self.root / "storyloop/testing/__init__.py"
+        helper.parent.mkdir(parents=True)
+        helper.write_text("", encoding="utf-8")
+        manifest = {"version": 1, "tests": [{"id": "SMOKE-1", "criteria": ["AC-1"],
+                    "command": ["{storyloop_harness}", "--help"], "timeout_seconds": 10}]}
+        preflight_self_harness(self.root, self.change_id, manifest)
+
+    def _install_case(self, script):
+        manifest = {"version": 1, "tests": [{"id": "SMOKE-1", "criteria": ["AC-1"],
+                    "command": ["{python}", f"acceptance/changes/{self.change_id}/test_smoke.py"],
+                    "timeout_seconds": 10}]}
+        install_smoke_suite(self.root, load_change(self.root, self.change_id),
+                            [{"path": "test_smoke.py", "content": script}], manifest)
+
 
 if __name__ == "__main__":
     unittest.main()

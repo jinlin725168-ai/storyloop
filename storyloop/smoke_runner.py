@@ -18,6 +18,7 @@ from .boundaries import capture_snapshot, snapshot_changes
 from .models import StoryLoopError, require
 from .state_format import criterion_expects_red
 from .harness_command import expand_command, harness_counts
+from .self_harness_preflight import preflight_self_harness
 from .oracle_counts import count_tests, project_patterns
 from .path_security import safe_target
 from .project_profile import GENERATED_PATHS
@@ -36,6 +37,7 @@ def run_smoke(
     project = Path(project).resolve()
     change_id = change["change_id"]
     manifest = load_smoke_manifest(project, change)
+    preflight_self_harness(project, change_id, manifest, expect_red=expect_red)
     started = _timestamp()
     results = _run_tiered(project, manifest["tests"], project_patterns(project), run_all=expect_red)
     errors = [item for item in results if item["status"] == "ERROR"]

@@ -170,6 +170,7 @@
         "storyloop/run_state.py",
         "storyloop/run_stops.py",
         "storyloop/run_transitions.py",
+        "storyloop/self_harness_preflight.py",
         "storyloop/semantic_repair.py",
         "storyloop/skill_custom.py",
         "storyloop/skills.py",

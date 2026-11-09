@@ -27,6 +27,7 @@
 - 系统冒烟只校验 CLI 版本与帮助可用；业务断言写在变更自己的验收用例中。
 
 - 被测业务就是 StoryLoop 自身：验收用例不得在测试进程内 import `storyloop` 或 `tests`；须通过候选镜像中的子进程加载被测代码，避免误用已安装的引擎包。
+- 自举验收若需要 `storyloop.testing` helper，manifest 命令须以 `{storyloop_harness}` 开头，由当前引擎安装包的隔离 launcher 执行。候选侧的测试命令或脚本不得导入 `storyloop.testing.*`；RED 预检命中 `HARNESS_SHADOWED` 时由验收角色按文件证据自动修复，实施阶段验收命中则停给人。业务 CLI/代码仍在候选子进程中运行。
 - 构造变更与运行状态夹具时，优先用公开 CLI（`storyloop init`、`storyloop change` 等）或公开函数生成，不要手写状态 JSON。确需手写变更文件时，`product` 的 `version`、`goal`、`non_goals`、`questions`、`stories` 必须完整；下面是可由 `load_change` 读取的最小示例，实际验收应按合同填写故事与判据：
 
 ```json storyloop-change-fixture
@@ -59,5 +60,26 @@
 ```
 
 - 调用 `bootstrap_project` 前先在设置中声明 `module_roots` 和 `test_roots`。含 `:`、`[ab]` 等特殊字符的测试路径须在 bootstrap 之后创建；baseline 路径安全检查会拒绝已跟踪的 `:` 路径。
-- 每个 RED 用例先用 `storyloop.testing.smoke_harness.v1.precondition` 核对夹具前提，再断言被测行为；夹具错误不能当成行为失败来证明 RED。
-- 这里仅从受信安装的 harness 导入 `precondition`；被测候选 StoryLoop 代码仍须在子进程中加载。
+- 每个 RED 用例先核对夹具前提，再断言被测行为；夹具错误不能当成行为失败来证明 RED。自举 Case 的 `precondition` 等 helper 只在 `{storyloop_harness}` 启动的受保护 executor 中使用，候选侧普通测试进程不导入 `storyloop.testing.*`；被测 StoryLoop 代码仍由候选子进程加载。
+
+最小自举验收示例（假定 onboarding 已配置受保护 executor `acceptance/tools/python_smoke.py`；把 `<change_id>` 换成实际变更 ID）：
+
+```json
+{"version":1,"tests":[{"id":"SMOKE-1","criteria":["AC-1"],"command":["{storyloop_harness}","acceptance/tools/python_smoke.py","acceptance/changes/<change_id>/test_cli.py"],"timeout_seconds":30}]}
+```
+
+```python
+# acceptance/changes/<change_id>/test_cli.py：此 case 由受保护 executor 加载；业务仍在子进程运行。
+import subprocess
+import sys
+import unittest
+from pathlib import Path
+
+class Case(unittest.TestCase):
+    def test_cli(self):
+        result = subprocess.run([sys.executable, "-m", "storyloop", "--version"],
+                                cwd=Path.cwd(), capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0)
+```
+
+需要 `precondition` 时，在受保护 executor 中从引擎包导入并检查前提；不要把 helper 导入写进由 `{python}` 直接执行的候选侧脚本。
