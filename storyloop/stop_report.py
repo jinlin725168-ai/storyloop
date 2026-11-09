@@ -241,12 +241,31 @@ def base_legacy_action(project: Path | str, change_id: str, details: dict) -> st
             "完成后由你决定取回或丢弃暂存的改动")
 
 
+def _convergence_options(status: str, project: str, change_id: str) -> list[dict]:
+    where = (project, "--change", change_id)
+    repair = {"action": "按合同补全判据", "command": _command(
+        "storyloop", "acceptance-repair", *where, "--reason", "<按已批准合同补全判据>")}
+    contract = {"action": "修订合同并重开", "command": _command(
+        "storyloop", "change", project, "--supersede", change_id,
+        "--reason", "<合同修订理由>", "--message", "<合同修订说明>")}
+    overrule = {"action": "驳回归属", "command": _command(
+        "storyloop", "run", *where, "--overrule", "<理由>")}
+    design = {"action": "修订方案", "command": _command(
+        "storyloop", "run", *where, "--replan", "--reason", "<方案修订说明>")}
+    return {"ORACLE_DEFECT": [repair, contract, overrule],
+            "DESIGN_REVISION_REQUIRED": [design],
+            "NEEDS_SPEC_FIX": [contract, overrule]}.get(status, [])
+
+
 def _stop_actions(project: Path | str, state: dict, status: str, details: dict
                   ) -> tuple[list[dict], str]:
     change_id, project_text = str(state["change_id"]), str(project)
     options = routing_options(project, change_id, status, {**state, **details}) or _options(
         status, project_text, change_id, bool(state.get("routed")),
         details.get("ci_requires_human_proposal", False))
+    convergence = details.get("convergence") or {}
+    if convergence.get("exhausted"):
+        options = _convergence_options(status, project_text, change_id) or options
     if status == "ORACLE_DEFECT":
         from .failure_attribution import characterization_oracle
         if characterization_oracle({**state, **details}):
@@ -285,6 +304,19 @@ def _review_findings(findings: list[dict]) -> list[dict]:
     return result
 
 
+def _convergence_view(value: dict) -> dict:
+    """Keep recovery metadata bounded and redact role-provided prose in JSON stops."""
+    return {"criterion_id": redact(str(value.get("criterion_id") or ""))[:80],
+            "round": value.get("round"),
+            "finding_ids": [redact(str(item))[:80] for item in (value.get("finding_ids") or [])[:20]],
+            "missing_spec_fields": [str(item)[:40] for item in (value.get("missing_spec_fields") or [])[:10]],
+            "prior_findings": [{key: redact(str(item.get(key) or ""))[:500]
+                                for key in ("id", "evidence", "message")}
+                               for item in (value.get("prior_findings") or [])[:2]
+                               if isinstance(item, dict)],
+            "exhausted": value.get("exhausted") is True}
+
+
 def build_stop(project: Path | str, state: dict, status: str, details: dict) -> dict:
     """Construct the stable report shape without changing the supplied run state."""
     change_id = str(state["change_id"])
@@ -318,6 +350,8 @@ def build_stop(project: Path | str, state: dict, status: str, details: dict) -> 
         findings = details.get("findings")
         result["review_findings"] = _review_findings(
             findings if findings is not None else state.get("findings") or [])
+    if isinstance(details.get("convergence"), dict):
+        result["convergence"] = _convergence_view(details["convergence"])
     return result
 
 
@@ -350,6 +384,14 @@ def stop_of(project: Path | str, run: dict | None) -> dict | None:
 def render_stop(stop: dict) -> list[str]:
     """Render the report in the decision order defined by the design."""
     lines = [f"阻塞点：{stop['blocker']}"] + render_usage(stop)
+    convergence = stop.get("convergence") or {}
+    if convergence.get("exhausted"):
+        missing = "、".join(convergence.get("missing_spec_fields") or []) or "无"
+        lines.append(f"收敛停止：{convergence.get('criterion_id')} 第{convergence.get('round')}轮；缺少：{missing}")
+        for item in (convergence.get("prior_findings") or [])[:2]:
+            message = redact(str(item.get("message") or ""))[:200]
+            evidence = redact(str(item.get("evidence") or ""))[:200]
+            lines.append(f"  - {item.get('id')}: {message}；证据：{evidence}")
     if stop.get("status") == "DESIGN_REVISION_REQUIRED" and stop.get("review_findings"):
         lines.append("阻塞方案意见：")
         lines += [f"  - {item['summary']}" for item in stop["review_findings"]]

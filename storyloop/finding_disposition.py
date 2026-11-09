@@ -24,7 +24,14 @@ def dispose(findings, thresholds, plan_decisions) -> dict:
             original, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
         confidence = item.get('confidence', 100)
         require(type(confidence) is int and 0 <= confidence <= 100, 'Invalid finding confidence')
-        if item.get('introduced', True) is False:
+        level = item.get('disposition')
+        if level == 'ADVISORY':
+            bucket = 'focus'
+        elif level == 'DECISION_NEEDED':
+            bucket = 'stop'
+        elif level == 'MUST_FIX':
+            bucket = 'stop' if item.get('target') in ('oracle', 'contract') else 'fix'
+        elif item.get('introduced', True) is False:
             item['confidence'] = 0
             bucket = 'legacy_issue'
         elif item.get('target') == 'out_of_scope':

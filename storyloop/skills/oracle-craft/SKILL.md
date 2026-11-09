@@ -26,6 +26,8 @@ description: 如何写 StoryLoop 的判据：验收矩阵的行类型、特征�
 
 入口缺失或有争议时回到合同澄清，不在验收或实现阶段自造入口。
 
+同一 AC 连续被判强度不足时，完整判据规格须一次写明 `inputs`、`preconditions`、已批准 `entry`、`expected`、`negative_boundary` 与 `contract_plan` 对应关系；不得在修复理由中新增合同要求。
+
 ## 执行器退出码
 
 - 0：全部通过
