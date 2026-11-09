@@ -13,6 +13,7 @@ from .models import StoryLoopError, require, text
 from .path_security import safe_target
 from .planning import selected_option
 from .principles import load_principles
+from .product_contract import validate_product
 from .project_git import changed_paths, commit_paths
 from .guarded_calls import read_only_call
 from .project_loop_support import save_run
@@ -21,8 +22,9 @@ from .run_stops import pause
 from .role_schemas import schema_errors, schema_for
 from .routing_state import is_routed
 from .semantic_repair import answer_with_repair
-from .smoke import suite_relative
+from .smoke import _validate_manifest, load_smoke_manifest, suite_relative
 from .storage import write_json
+from .verification_entries import new_format, validate_entry_paths
 
 
 def consistency_status(findings: list[dict]) -> str:
@@ -33,6 +35,62 @@ def consistency_status(findings: list[dict]) -> str:
         if target in targets:
             return status
     return 'COHERENT'
+
+
+def verification_findings(change: dict, manifest: dict, option: dict) -> list[dict]:
+    """Classify the first deterministic three-way mismatch before role review."""
+    product = change['product']
+    if not new_format(product):
+        return []
+    criterion_id = next(c['id'] for story in product['stories'] for c in story['acceptance'])
+    checks = (
+        ('contract', lambda: validate_product(product),
+         f"openspec/changes/{change['change_id']}/stories.json:1"),
+        ('oracle', lambda: _validate_manifest(manifest, change),
+         f"acceptance/changes/{change['change_id']}/manifest.json:1"),
+        ('design', lambda: validate_entry_paths(option, product, manifest),
+         f"plan:{option.get('id', 'main')}/entry_paths"),
+    )
+    for target, check, location in checks:
+        try:
+            check()
+        except StoryLoopError as exc:
+            return [{'target': target, 'criterion_id': criterion_id, 'location': location,
+                     'blocking': True, 'message': str(exc)}]
+    return []
+
+
+def _verification_record(change: dict, manifest: dict, option: dict) -> dict | None:
+    findings = verification_findings(change, manifest, option)
+    if not findings:
+        return None
+    return {'verdict': 'blocked', 'summary': '验证入口三方引用不一致',
+            'questions': [], 'findings': findings}
+
+
+def _verify_entries(project: Path, change: dict, plan: dict) -> dict | None:
+    if not new_format(change['product']):
+        return None
+    try:
+        validate_product(change['product'])
+    except StoryLoopError as exc:
+        criterion_id = next((c['id'] for story in change['product'].get('stories', [])
+                             for c in story.get('acceptance', [])), 'UNKNOWN')
+        return {'verdict': 'blocked', 'summary': '合同验证入口无效', 'questions': [],
+                'findings': [{'target': 'contract', 'criterion_id': criterion_id,
+                              'location': f"openspec/changes/{change['change_id']}/stories.json:1",
+                              'blocking': True, 'message': str(exc)}]}
+    try:
+        manifest = load_smoke_manifest(project, change)
+    except StoryLoopError as exc:
+        criterion_id = next(c['id'] for story in change['product']['stories']
+                            for c in story['acceptance'])
+        findings = [{'target': 'oracle', 'criterion_id': criterion_id,
+                     'location': f"acceptance/changes/{change['change_id']}/manifest.json:1",
+                     'blocking': True, 'message': str(exc)}]
+        return {'verdict': 'blocked', 'summary': '验收 manifest 无效',
+                'questions': [], 'findings': findings}
+    return _verification_record(change, manifest, selected_option(plan))
 
 
 def validate_consistency(answer: object, project: Path, change: dict, state: dict) -> dict:
@@ -109,6 +167,12 @@ def ensure_consistency(project: Path, change: dict, state: dict, services) -> di
         invalidate_consistency(state)
         return pause(project, state, 'NEEDS_INPUT', phase='planning', questions=[str(exc)])
     state['planning']['dependency_evidence'] = dependencies
+    response = _verify_entries(project, change, plan)
+    if response:
+        record = {**response, 'binding': binding,
+                  'status': consistency_status(response['findings'])}
+        state['planning']['consistency'] = record
+        return _outcome(project, state, record)
     if state['routing']['effective_tier'] != 'heavy' and not state['planning'].get('review_repaired_suite'):
         save_run(project, state)
         return None
@@ -143,6 +207,15 @@ def _review(project: Path, change: dict, state: dict, services, path: str) -> di
                'dependency_evidence': deepcopy(state['planning']['dependency_evidence']),
                'answers': load_answers(project, change['change_id']),
                'oracle_path': suite_relative(project, change['change_id'])}
+    if new_format(change['product']):
+        manifest = load_smoke_manifest(project, change)
+        request['verification'] = {
+            'contract_entries': [dict(story_id=story['id'],
+                                      entries=deepcopy(story['verification_entries']))
+                                 for story in change['product']['stories']],
+            'manifest_tests': [{key: deepcopy(test[key]) for key in ('id', 'criteria', 'entry_ids')}
+                               for test in manifest['tests']],
+            'entry_paths': deepcopy(selected_option(state['planning']['plan'])['entry_paths'])}
     response = answer_with_repair(
         lambda context: read_only_call(project, change['change_id'],
                                        lambda: services.review(project, context)),

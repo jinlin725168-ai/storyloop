@@ -237,6 +237,11 @@ def _approve_design_locked(project: Path, change_id: str, plan_id: str, *,
     require(plan_id == plan['id'], 'Stale plan id')
     selected = option_id if option_id is not None else plan['main_option']
     require(selected in {o['id'] for o in plan['options']}, 'Unknown plan option')
+    from .verification_entries import new_format, validate_entry_paths
+    if new_format(change['product']):
+        from .smoke import load_smoke_manifest
+        option = next(item for item in plan['options'] if item['id'] == selected)
+        validate_entry_paths(option, change['product'], load_smoke_manifest(project, change))
     old = plan.get('approval')
     plan['approval'] = _record(binding, plan_id=plan_id, option_id=selected, selected_option=selected)
     assessed = assess_plan(project, change, state, plan)

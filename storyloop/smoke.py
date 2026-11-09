@@ -132,22 +132,30 @@ def _validate_manifest(manifest: object, change: dict) -> dict:
     fields(manifest, {"version", "tests"})
     require(manifest["version"] == 1 and isinstance(manifest["tests"], list)
             and bool(manifest["tests"]), "Smoke manifest needs tests")
+    product = change["product"]
+    new_format = any("verification_entries" in story for story in product["stories"])
+    owners = {entry["id"]: story["id"] for story in product["stories"]
+              for entry in story.get("verification_entries", [])} if new_format else {}
+    criterion_stories = {criterion["id"]: story["id"] for story in product["stories"]
+                         for criterion in story["acceptance"]}
     automated = {
         criterion["id"]: criterion
-        for story in change["product"]["stories"]
+        for story in product["stories"]
         for criterion in story["acceptance"] if criterion["kind"] == "automated"
     }
     seen: set[str] = set()
     covered: set[str] = set()
     for test in manifest["tests"]:
-        _validate_manifest_test(test, automated, seen)
+        _validate_manifest_test(test, automated, seen, owners, criterion_stories, new_format)
         covered.update(test["criteria"])
     require(set(automated) <= covered, "Automated acceptance criteria are uncovered")
     return manifest
 
 
-def _validate_manifest_test(test: dict, automated: dict, seen: set) -> None:
-    fields(test, {"id", "criteria", "command", "timeout_seconds"}, {"tier"})
+def _validate_manifest_test(test: dict, automated: dict, seen: set, owners: dict,
+                            criterion_stories: dict, new_format: bool) -> None:
+    required = {"id", "criteria", "command", "timeout_seconds"}
+    fields(test, required | ({"entry_ids"} if new_format else set()), {"tier"})
     test_id = identifier(test["id"], "smoke test id")
     require(test_id not in seen, "Duplicate smoke test id")
     seen.add(test_id)
@@ -155,6 +163,17 @@ def _validate_manifest_test(test: dict, automated: dict, seen: set) -> None:
             and all(isinstance(item, str) for item in test["criteria"]),
             "Smoke criteria must be a list")
     require(set(test["criteria"]) <= set(automated), "Smoke test references unknown criterion")
+    if new_format:
+        entry_ids = test["entry_ids"]
+        require(isinstance(entry_ids, list) and bool(entry_ids)
+                and all(isinstance(item, str) for item in entry_ids)
+                and len(entry_ids) == len(set(entry_ids)), "Smoke entry_ids must be nonempty and unique")
+        require(set(entry_ids) <= set(owners), "Smoke test references unknown verification entry")
+        story_ids = {criterion_stories[item] for item in test["criteria"]}
+        require(story_ids and {owners[item] for item in entry_ids} <= story_ids,
+                "Smoke test references a cross-story verification entry")
+        require(all(any(owners[item] == story for item in entry_ids) for story in story_ids),
+                "Smoke test lacks an entry for a criterion story")
     tier = test.get("tier", "fast")
     require(tier in {"fast", "heavy"}, "Smoke test tier must be fast or heavy")
     criteria = [automated[item] for item in test["criteria"]]

@@ -78,6 +78,7 @@
 |  | `failure_attribution` | 可变区 | 判定失败尝试的修复责任与闭环是否仍有进展 | `check_findings`、`failure_signature`、`finding_key`、`layer_attribution`、`location_file`、`next_mode`、`no_progress`、`route` |
 |  | `planning` | 可变区 | 运行锁内、特征化与实现之前的 L2 分档方案 | `assess_plan`、`ensure_routing_plan`、`plan_projection`、`required_locks`、`review_focus`、`selected_option` |
 |  | `planning_validation` | 可变区 | 结构化角色方案字段与确定性范围校验 | `option_scope`、`validate_plan` |
+|  | `verification_entries` | 可变区 | 校验合同入口与方案路径对自动判据的覆盖 | `new_format`、`entry_owners`、`validate_entry_paths` |
 |  | `base_collision` | 可变区 | 保存撞底座参考、关联草案并恢复本轮可归属候选 | `link_base_collision` |
 |  | `project_loop_failures` | 可变区 | 记录失败尝试并路由到问题责任方 | `apply_overrule`、`epoch_of`、`record_boundary`、`record_failure`、`require_routed_choice`、`route_review` |
 |  | `project_loop_gates` | 可变区 | RED 与首次实现之间的方案、特征化两道门 | `characterize_paths`、`design_plan`、`ensure_characterization`、`ensure_design`、`resume_characterization`、`uncharacterized_paths` |
