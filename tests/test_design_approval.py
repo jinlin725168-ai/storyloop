@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from storyloop import design_approval as approvals
 from storyloop.models import StoryLoopError
+from storyloop.intervention_events import summarize_interventions
 from storyloop.project_loop import LoopServices, load_run_state, run_change
 from storyloop.project_loop_support import save_run
 from tests import test_routing_state
@@ -104,6 +105,38 @@ class DesignApprovalTests(unittest.TestCase):
         self.assertEqual(first['actor'], 'user')
         self.assertEqual(first['option_id'], 'main')
         self.assertEqual(self.calls, [])
+
+    def test_replan_followed_by_design_approval_counts_one_correction(self):
+        self.start()
+        self.approve()
+        approvals.replan(self.root, self.identifier, 'Reconsider plan')
+        result = run_change(self.root, self.identifier, self.services)
+        self.assertEqual(result['status'], 'DESIGN_APPROVAL_REQUIRED')
+        self.plan = load_run_state(self.root, self.identifier)['planning']['plan']
+        self.approve()
+
+        events = load_run_state(self.root, self.identifier)['intervention_events']
+        row = summarize_interventions([{'change_id': self.identifier,
+                                        'intervention_events': events}])['by_change'][self.identifier]
+        self.assertEqual((row['routine'], row['nonroutine']), (2, 1))
+        self.assertEqual(row['nonroutine_types'], {'replan': 1})
+        self.assertEqual(events[-1].get('follows'), 'replan')
+
+    def test_second_design_approval_without_correction_is_nonroutine(self):
+        response = answer()
+        option = deepcopy(response['options'][0])
+        option.update(id='alternate', creates=['app/extra.py'])
+        response['options'].append(option)
+        self.start(response)
+        self.approve()
+        self.approve('alternate')
+
+        events = load_run_state(self.root, self.identifier)['intervention_events']
+        row = summarize_interventions([{'change_id': self.identifier,
+                                        'intervention_events': events}])['by_change'][self.identifier]
+        self.assertEqual((row['routine'], row['nonroutine']), (1, 1))
+        self.assertEqual(row['nonroutine_types'], {'design_approval': 1})
+        self.assertTrue(events[-1]['repeated'])
 
     def test_changed_selection_remeasures_and_clears_prior_checks(self):
         response = answer()

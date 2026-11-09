@@ -61,8 +61,10 @@ def _approve_locked(project, change_id, approved_by, now, tier) -> dict:
         "approved_at": _timestamp(moment),
     }
     state["updated_at"] = _timestamp(moment)
+    previously_approved = any(isinstance(item, dict) and item.get("kind") == "contract_approval"
+                              for item in state.get("intervention_events", []))
     append_event(state, "contract_approval", source="approve", stop="DRAFT",
-                 at=_timestamp(moment), repeated=state.get("revision", 1) > 1)
+                 at=_timestamp(moment), repeated=previously_approved)
     _write_state(project, state)
     return deepcopy(state)
 

@@ -253,11 +253,22 @@ def _approve_design_locked(project: Path, change_id: str, plan_id: str, *,
     if old:
         _clear_checks(project, state)
     state['planning'].pop('pending_option', None)
-    from .intervention_events import append_event
-    repeated = bool(old) or any(isinstance(item, dict) and item.get("kind") == "design_approval"
-                                for item in state.get("intervention_events", []))
+    from .intervention_events import CORRECTIONS, append_event
+    events = state.get("intervention_events", [])
+    previous = next((index for index in range(len(events) - 1, -1, -1)
+                     if isinstance(events[index], dict) and events[index].get("kind") == "design_approval"), None)
+    follows = None
+    if previous is not None:
+        for event in reversed(events[previous + 1:]):
+            if not isinstance(event, dict):
+                continue
+            kind = event.get("kind")
+            if kind in CORRECTIONS or kind == "acceptance_repair" and event.get("automatic") is not True:
+                follows = kind
+                break
+    repeated = (bool(old) or previous is not None) and follows is None
     append_event(state, "design_approval", source="design-approve",
-                 stop=state.get("status"), repeated=repeated)
+                 stop=state.get("status"), repeated=repeated, follows=follows)
     save_run(project, state)
     return deepcopy(plan['approval'])
 
