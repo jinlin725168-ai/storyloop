@@ -8,7 +8,8 @@ import tempfile
 import unittest
 
 from storyloop.testing.smoke_harness.python_runner import python_cases
-from storyloop.bench_case import _check_inventory, _gold
+from storyloop.bench_case import _check_inventory, _gold, load_case
+from storyloop.changes import contract_digest
 from storyloop.product_contract import validate_product
 from storyloop.requirement_checklist import evaluate_checklist
 from storyloop.smoke import _validate_manifest
@@ -32,7 +33,11 @@ class BenchV2DraftTests(unittest.TestCase):
                 self.assertFalse(case["legacy_seam"])
                 for key in ("case_id", "repository_id", "base_commit", "solution_commit"):
                     self.assertEqual(case[key], old_case[key])
-                self.assertNotIn("approval", contract)
+                self.assertEqual(contract["approval"], {
+                    "approved_by": "jinlin725168-ai", "approved_at": "2026-11-09",
+                    "contract_sha256": contract_digest(contract["product"]),
+                    "note": "人经监工确认的入口方案批准（含 stop_json locator 调整与 dogfood9 ST-2 改 CLI）",
+                })
                 prior = old_contract["product"]
                 derived = json.loads(json.dumps(contract["product"]))
                 for story in derived["stories"]:
@@ -46,6 +51,23 @@ class BenchV2DraftTests(unittest.TestCase):
                                  case["contract_sha256"])
                 self.assertEqual(hashlib.sha256((draft / "gold.json").read_bytes()).hexdigest(),
                                  case["gold_sha256"])
+                self.assertTrue(load_case(draft)["contract_approved"])
+
+    def test_approved_entry_locators_name_the_public_commands(self):
+        expected = {
+            "dogfood3-stash-git-safe": ("VE-BASE-STOP", "stop_json", "storyloop status"),
+            "dogfood5-stash-hint-coverage": ("VE-BASE-STOP", "stop_json", "storyloop status"),
+            "dogfood6-design-revision-findings": ("VE-DESIGN-STOP", "stop_json", "storyloop status"),
+            "dogfood9-scratch-glob": ("VE-ONBOARDING-DRAFT", "cli", "storyloop init"),
+        }
+        for case_id, (entry_id, kind, command) in expected.items():
+            with self.subTest(case=case_id):
+                source = CASES / case_id / "v2"
+                contract = json.loads((source / "contract.json").read_text())
+                entry = next(entry for story in contract["product"]["stories"]
+                             for entry in story["verification_entries"] if entry["id"] == entry_id)
+                self.assertEqual(entry["kind"], kind)
+                self.assertIn(command, entry["locator"])
 
     def test_entries_suite_and_provenance_are_linked(self):
         for draft in sorted(CASES.glob("*/v2")):

@@ -2,6 +2,21 @@
   "VE-BASE-STOP": {
     "chain": [
       {
+        "line": 252,
+        "path": "storyloop/cli.py",
+        "quote": "return _product_dispatch(project, args)"
+      },
+      {
+        "line": 110,
+        "path": "storyloop/product_cli.py",
+        "quote": "if args.command == \"status\":"
+      },
+      {
+        "line": 117,
+        "path": "storyloop/product_cli.py",
+        "quote": "\"stop\": stop_of(project, run) if run else draft_stop(project, change),"
+      },
+      {
         "line": 27,
         "path": "storyloop/run_hints.py",
         "quote": "def next_step(status: str | None, change_id: str | None, project: Path | str = \"<project>\","

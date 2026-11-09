@@ -14,8 +14,8 @@
   "base_commit": "57132666b7e989df1e9d869d1fa88bbb394f9d5a",
   "case_id": "dogfood9-scratch-glob",
   "case_version": 2,
-  "contract_sha256": "5c1258eb53351bbe7d157d1c257608f667851bd57542e2561ee235326b27a94f",
-  "gold_sha256": "5cfdd56b1f4858e47170490dbd96dd387483a269787ec7c6f01e07817e2ae6cd",
+  "contract_sha256": "b538ee58608c52631eeedef2f69d5b577db61d85533e98668647925fcc70334e",
+  "gold_sha256": "cb4492db415ae514919e8977db27252904d04efbae92ceef66bc028713c2458b",
   "legacy_seam": false,
   "python": {
     "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",

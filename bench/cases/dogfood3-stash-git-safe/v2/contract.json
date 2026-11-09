@@ -1,4 +1,10 @@
 {
+  "approval": {
+    "approved_at": "2026-11-09",
+    "approved_by": "jinlin725168-ai",
+    "contract_sha256": "9d8f1511a6361084db4fea49bf697f7d85d66cca8d739acb2c4342738025be79",
+    "note": "人经监工确认的入口方案批准（含 stop_json locator 调整与 dogfood9 ST-2 改 CLI）"
+  },
   "change_id": "FIX-20261104-stash-git-safe",
   "product": {
     "assessment": {
@@ -597,9 +603,9 @@
           {
             "id": "VE-BASE-STOP",
             "kind": "stop_json",
-            "locator": "BASE_CHANGE_REQUIRED.stop.options[].action",
+            "locator": "storyloop status <project> --change <id> --json 输出的 BASE_CHANGE_REQUIRED 停点 JSON 中的 stop.options[].action",
             "observable": "停点、保存状态与下一步提示展示限定在当前仓库的字面 git -C 命令及路径",
-            "reason": "方案通过运行/状态停点对外展示；变更实际由 run_hints 与 stop_report 组装，测试通过公开停点对象检查。"
+            "reason": "公开 status 命令经 product_cli.dispatch 与 stop_report.stop_of 生成停点；用例实际直接调用这两个公开函数，并核对 run/status/log 的停点动作。"
           }
         ],
         "want": "从任意目录安全地使用停点给出的 Git 命令"

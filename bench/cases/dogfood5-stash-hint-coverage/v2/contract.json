@@ -1,4 +1,10 @@
 {
+  "approval": {
+    "approved_at": "2026-11-09",
+    "approved_by": "jinlin725168-ai",
+    "contract_sha256": "24d48ba1c77738aa3a0fd7737ee00925a9733ab9c06ba859fedc6cc47720f503",
+    "note": "人经监工确认的入口方案批准（含 stop_json locator 调整与 dogfood9 ST-2 改 CLI）"
+  },
   "change_id": "FIX-20261105-stash-hint-coverage",
   "product": {
     "assessment": {
@@ -663,9 +669,9 @@
           {
             "id": "VE-BASE-STOP",
             "kind": "stop_json",
-            "locator": "BASE_CHANGE_REQUIRED.stop.options[].action",
+            "locator": "storyloop status <project> --change <id> --json 输出的 BASE_CHANGE_REQUIRED 停点 JSON 中的 stop.options[].action",
             "observable": "关联底座停点的每个适用路径均提供同一仓库作用域的 git 提示",
-            "reason": "运行失败路由最终形成对外停点；该用例依赖完整失败条目到停点的链路。"
+            "reason": "公开 status 命令经 product_cli.dispatch 与 stop_report.stop_of 暴露失败路由；用例实际直接调用这两个公开函数，检查关联底座路径的停点提示。"
           }
         ],
         "want": "获得列全需保存功能与测试改动的遗留路径清单"

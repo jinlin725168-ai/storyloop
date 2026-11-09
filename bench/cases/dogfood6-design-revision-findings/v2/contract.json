@@ -1,4 +1,10 @@
 {
+  "approval": {
+    "approved_at": "2026-11-09",
+    "approved_by": "jinlin725168-ai",
+    "contract_sha256": "c4975748268866763a5ee49ba01201dc39d18c463af7d9fb7108d7a66a059c51",
+    "note": "人经监工确认的入口方案批准（含 stop_json locator 调整与 dogfood9 ST-2 改 CLI）"
+  },
   "change_id": "FIX-20261105-design-revision-findings",
   "product": {
     "assessment": {
@@ -556,9 +562,9 @@
           {
             "id": "VE-DESIGN-STOP",
             "kind": "stop_json",
-            "locator": "DESIGN_REVISION_REQUIRED.stop.review_findings",
+            "locator": "storyloop status <project> --change <id> --json 输出的 DESIGN_REVISION_REQUIRED 停点 JSON 中的 stop.review_findings",
             "observable": "停点 JSON 和文本包含有界且脱敏的阻断方案意见",
-            "reason": "方案审查失败经统一停点暴露，测试既检查结构化对象又检查渲染。"
+            "reason": "公开 status 命令经 product_cli.dispatch 与 stop_report.stop_of 暴露审查意见；用例实际直接调用 product_cli.dispatch，并构造 run 结果核对停点 JSON 与文本。"
           }
         ],
         "want": "在停点处直接看到每条安全、简短的阻塞意见"

@@ -1,4 +1,10 @@
 {
+  "approval": {
+    "approved_at": "2026-11-09",
+    "approved_by": "jinlin725168-ai",
+    "contract_sha256": "2f3f66b6217ecd3b3d9a897358c00aa40292f28f0e93f35d9be39bbe588f19b0",
+    "note": "人经监工确认的入口方案批准（含 stop_json locator 调整与 dogfood9 ST-2 改 CLI）"
+  },
   "change_id": "FIX-20261107-repair-next-path",
   "product": {
     "assessment": {

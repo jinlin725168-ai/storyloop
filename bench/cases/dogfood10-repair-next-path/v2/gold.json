@@ -84,7 +84,7 @@
     {
       "evidence_id": "derived-contract",
       "path": "contract.json",
-      "sha256": "0a5357d1fe9cd0c1474ca42058a4b1106c2ce5070bc2384f1c1a8ea12d17ff98"
+      "sha256": "1faf540d80eac4beb9a265ad0ced127aeb03631ed34a173d00d7b4d2994ae201"
     },
     {
       "evidence_id": "frozen-suite",

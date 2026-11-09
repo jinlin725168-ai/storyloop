@@ -1,4 +1,10 @@
 {
+  "approval": {
+    "approved_at": "2026-11-09",
+    "approved_by": "jinlin725168-ai",
+    "contract_sha256": "9cafe3db23ffae9f74e17057c3381df56a6cf8793c488ba5ff98a1658894b3df",
+    "note": "人经监工确认的入口方案批准（含 stop_json locator 调整与 dogfood9 ST-2 改 CLI）"
+  },
   "change_id": "FIX-20261107-scratch-glob",
   "product": {
     "assessment": {
@@ -706,10 +712,10 @@
         "verification_entries": [
           {
             "id": "VE-ONBOARDING-DRAFT",
-            "kind": "public_function",
-            "locator": "storyloop.onboarding.scaffold_project",
+            "kind": "cli",
+            "locator": "storyloop init <project> --scaffold（生成 acceptance/storyloop-settings.json 草案）",
             "observable": "Python 草案给出七项默认 scratch_paths；非 Python 草案没有 Python 构建默认项",
-            "reason": "该公开脚手架函数是 CLI 初始化的实际路径；验收读取生成的设置文件。"
+            "reason": "CLI 的 --scaffold 分支由 onboarding_cli.initialize 委托 scaffold_project；验收用例为确定性地覆盖 Python 与非 Python 草案，直接调用该函数并读取设置文件，断言语义未改。"
           }
         ],
         "want": "在生成的设置草案中看到常见打包产物声明"
