@@ -18,10 +18,11 @@ class SkillSelectionTests(unittest.TestCase):
         return path
 
     def test_packaged_selection_includes_review_guidance(self):
-        expected = {'survey': ['foundation-survey'], 'product': ['oracle-craft', 'spec-craft'],
-                    'acceptance': ['oracle-craft'], 'characterize': ['tdd'],
-                    'review': ['oracle-craft', 'review'], 'design': ['impact-analysis', 'oracle-craft'],
-                    'implement': ['review', 'systematic-debugging', 'tdd']}
+        expected = {'survey': ['foundation-survey'], 'product': ['foundation-use', 'oracle-craft', 'spec-craft'],
+                    'acceptance': ['foundation-use', 'oracle-craft'], 'characterize': ['foundation-use', 'tdd'],
+                    'review': ['foundation-use', 'oracle-craft', 'review'],
+                    'design': ['foundation-use', 'impact-analysis', 'oracle-craft'],
+                    'implement': ['foundation-use', 'review', 'systematic-debugging', 'tdd']}
         for role, names in expected.items():
             self.assertEqual(select_skills(self.root, role, []), names)
 
@@ -39,7 +40,7 @@ class SkillSelectionTests(unittest.TestCase):
     def test_legacy_project_copy_inherits_only_packaged_roles(self):
         self.skill('oracle-craft', '', 'legacy project body')
         self.skill('project-only', '', 'unassigned')
-        self.assertEqual(select_skills(self.root, 'review', []), ['oracle-craft', 'review'])
+        self.assertEqual(select_skills(self.root, 'review', []), ['foundation-use', 'oracle-craft', 'review'])
         self.assertIn('legacy project body', instruction_skill_snapshot(self.root, 'oracle-craft')[0])
 
     def test_count_and_size_limits_fail_closed(self):
