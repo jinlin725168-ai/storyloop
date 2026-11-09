@@ -98,7 +98,7 @@ class BenchCaseTests(unittest.TestCase):
             manifest = json.loads((source / "case.json").read_text())
             manifest["contract_sha256"] = hashlib.sha256(content).hexdigest()
             _bytes(source / "case.json", manifest)
-            with self.assertRaises(StoryLoopError):
+            with self.assertRaisesRegex(StoryLoopError, "Invalid approved contract"):
                 load_case(source, allow_unapproved_v2=True)
 
     def test_unapproved_v2_requires_explicit_calibration_mode(self):

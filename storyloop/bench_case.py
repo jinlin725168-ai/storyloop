@@ -92,11 +92,13 @@ def _manifest(value: dict, source: Path) -> None:
 
 def _contract(value: dict, version: int, allow_unapproved_v2: bool) -> bool:
     required = {"change_id", "product"}
-    require(isinstance(value, dict) and set(value) in (required, required | {"approval"}),
-            "Invalid Case contract")
+    require(isinstance(value, dict), "Invalid Case contract")
+    if version == 1:
+        require(set(value) == required | {"approval"}, "Invalid approved contract")
+    else:
+        require(set(value) in (required, required | {"approval"}), "Invalid Case contract")
     if "approval" not in value:
-        require(version == 2 and allow_unapproved_v2,
-                "Bench run requires an approved v2 contract")
+        require(allow_unapproved_v2, "Bench run requires an approved v2 contract")
         return False
     approval = value["approval"]
     require(isinstance(approval, dict) and all(approval.get(key) for key in
