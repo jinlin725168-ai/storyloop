@@ -23,7 +23,7 @@ from .processutil import SAFE_ENV, redact, run_process
 def calibrate_case(source: Path, repository: Path, output_root: Path,
                    *, python: Path | None = None) -> dict:
     """Check F2P/P2P against disposable snapshots and save an auditable record."""
-    case = load_case(source)
+    case = load_case(source, allow_unapproved_v2=True)
     manifest = case["manifest"]
     interpreter = _python_info(python, manifest["python"])
     repository = Path(repository).resolve()
@@ -38,7 +38,10 @@ def calibrate_case(source: Path, repository: Path, output_root: Path,
               "base_commit": manifest["base_commit"], "solution_commit": manifest["solution_commit"],
               "contract_sha256": manifest["contract_sha256"], "suite_sha256": manifest["suite_sha256"],
               "gold_sha256": manifest["gold_sha256"], "python": interpreter,
-              "status": "FAILED", "reasons": [], "checks": []}
+              "contract_approved": case["contract_approved"],
+              "approval_stale": case["approval_stale"],
+              "status": "FAILED", "reasons": ["approval_stale"] if case["approval_stale"] else [],
+              "checks": []}
     with tempfile.TemporaryDirectory(prefix="storyloop-bench-calibrate-") as folder:
         root = Path(folder)
         for side, commit in (("base", manifest["base_commit"]),

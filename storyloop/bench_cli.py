@@ -33,7 +33,7 @@ def add_bench_arguments(sub) -> None:
 
 def dispatch_bench(args) -> dict:
     if args.bench_command == "calibrate":
-        require(args.case_version == 1, "Only v1 Case data is available")
+        require(args.case_version in {1, 2}, "Only v1/v2 Case data is available")
         source = args.cases_root / args.case_id / f"v{args.case_version}"
         return calibrate_case(source, args.repository, args.output_root, python=args.python)
     if args.bench_command == "report":
