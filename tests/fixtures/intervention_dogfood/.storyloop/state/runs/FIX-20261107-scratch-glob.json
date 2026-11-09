@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "change_id": "FIX-20261107-scratch-glob",
+  "status": "PASSED",
+  "started_at": "2026-11-07T03:37:07+00:00",
+  "repairs": [
+    {
+      "automatic": false
+    }
+  ],
+  "overrules": [
+    {
+      "status": "ORACLE_DEFECT"
+    }
+  ],
+  "planning": {
+    "history": [
+      {
+        "attempt": 0
+      }
+    ],
+    "plan": {
+      "approval": {
+        "actor": "user"
+      }
+    }
+  }
+}

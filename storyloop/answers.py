@@ -51,7 +51,15 @@ def record_answers(project: Path, change_id: str, answers: list[str], now: Clock
     attempt = int(state.get("attempt", 0))
     entries.extend({"attempt": attempt, "question": question, "answer": answer, "answered_at": moment}
                    for question, answer in zip(pending, answers))
-    write_json(_path(project, change_id), {"version": 1, "change_id": change_id, "entries": entries},
+    from .intervention_events import append_event
+    prior = load_json(_path(project, change_id)) if _path(project, change_id).exists() else {}
+    payload = {"version": 1, "change_id": change_id, "entries": entries,
+               "intervention_events": prior.get("intervention_events", [])}
+    for _ in pending:
+        append_event(payload, "answer", source="answer", stop="NEEDS_INPUT", at=moment,
+                     repeated=False)
+        payload["intervention_events"][-1]["planned"] = False
+    write_json(_path(project, change_id), payload,
                max_bytes=2_000_000)
     return {"status": "ANSWERED", "change_id": change_id, "answered": len(pending),
             "pending": [], "next": f"storyloop run <project> --change {change_id}"}

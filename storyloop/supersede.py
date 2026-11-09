@@ -91,6 +91,10 @@ def _finish_link(project: Path, old: dict, run: dict, new_id: str) -> None:
     updated = set_change_status(project, {**old, "superseded_by": new_id}, "SUPERSEDED")
     write_change_preview(project, updated)
     updated_run = dict(run)
+    from .intervention_events import append_event
+    if not any(isinstance(item, dict) and item.get("kind") == "supersede"
+               for item in run.get("intervention_events", [])):
+        append_event(updated_run, "supersede", source="change --supersede", stop=run.get("status"))
     transition(project, updated_run, "SUPERSEDED", event="supersede", updates={"superseded_by": new_id})
     save_run(project, updated_run)
 

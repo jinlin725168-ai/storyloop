@@ -60,12 +60,23 @@ def _record_manual_acceptance_locked(
     require(candidate_matches,
             "Workspace differs from the verified candidate; use `storyloop reset` and run again before accepting")
     moment = (now or _utc_now)().astimezone(timezone.utc).isoformat(timespec="seconds")
-    records = [record for record in load_manual_acceptance(project, change_id)
+    previous = load_manual_acceptance(project, change_id)
+    fresh = list(dict.fromkeys(item for item in ids if not any(
+        record["criterion_id"] == item and record.get("candidate_sha256") == commit
+        for record in previous)))
+    records = [record for record in previous
                if not (record["criterion_id"] in ids and record.get("candidate_sha256") == commit)]
     records.extend({"criterion_id": item, "note": note, "accepted_at": moment,
                     "candidate_sha256": commit} for item in ids)
     acceptance_path = _path(project, change_id)
-    write_json(acceptance_path, {"version": 1, "change_id": change_id, "records": records},
+    from .intervention_events import append_event
+    prior = load_json(acceptance_path) if acceptance_path.exists() else {}
+    payload = {"version": 1, "change_id": change_id, "records": records,
+               "intervention_events": prior.get("intervention_events", [])}
+    for item in fresh:
+        append_event(payload, "manual_acceptance", source="accept", stop=state["status"],
+                     at=moment, criterion_id=item)
+    write_json(acceptance_path, payload,
                max_bytes=1_000_000)
     if change["product"].get("nature") == "base":
         state["manual_acceptance_sha256"] = hashlib.sha256(acceptance_path.read_bytes()).hexdigest()

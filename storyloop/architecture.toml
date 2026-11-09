@@ -194,6 +194,7 @@ rank = 7
 "metrics_cost" = { module = "outer_loop", zone = "mutable" }
 "metrics_render" = { module = "outer_loop", zone = "mutable" }
 "metrics_rules" = { module = "outer_loop", zone = "mutable" }
+"intervention_events" = { module = "evidence_kernel", zone = "mutable" }
 "ci_results" = { module = "outer_loop", zone = "mutable" }
 "change_report" = { module = "reporting", zone = "mutable" }
 "change_log" = { module = "reporting", zone = "mutable" }
