@@ -5,12 +5,43 @@ import tempfile
 import unittest
 
 from storyloop.bench_run import run_bench, compare_runs
-from tests.test_bench_case import case_fixture
+from tests.test_bench_case import case_fixture, stale_approval_fixture, v2_case_fixture
 from tests.test_bench_calibrate import calibration_fixture
 from storyloop.models import StoryLoopError
 
 
 class BenchRunTests(unittest.TestCase):
+    def test_modified_approved_v2_contract_is_rejected_before_adapter(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = stale_approval_fixture(v2_case_fixture(case_fixture(root), approved=True))
+            calls = []
+            with self.assertRaises(StoryLoopError):
+                run_bench([source], "a" * 40, "b" * 40, "test", "fixture",
+                          {"max_calls": 10}, lambda *_: calls.append(1), lambda *_: True, root)
+            self.assertEqual(calls, [])
+
+    def test_unapproved_v2_is_rejected_before_invoking_adapter(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = v2_case_fixture(case_fixture(root))
+            calls = []
+            with self.assertRaises(StoryLoopError):
+                run_bench([source], "a" * 40, "b" * 40, "test", "fixture",
+                          {"max_calls": 10}, lambda *_: calls.append(1), lambda *_: True, root)
+            self.assertEqual(calls, [])
+
+    def test_approved_v2_runs_with_test_adapter(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = v2_case_fixture(case_fixture(root), approved=True)
+            outcome = {"status": "PASSED", "events": [], "calls": 1, "agent_ms": 1,
+                       "wall_ms": 2, "known_cost_usd": 0.01, "cost_coverage": 1.0}
+            result = run_bench([source], "a" * 40, "b" * 40, "test", "fixture",
+                               {"max_calls": 10}, lambda *_: outcome, lambda *_: True, root)
+            self.assertEqual(result["case_version"], 2)
+            self.assertEqual(len(result["cases"][0]["attempts"]), 4)
+
     def test_interleaved_attempts_and_nonroutine_stop(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
