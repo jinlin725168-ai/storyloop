@@ -12,6 +12,7 @@ FAST = [
     "tests.test_baseline_api", "tests.test_baseline_behavior", "tests.test_baseline_cli",
     "tests.test_baseline_contract", "tests.test_candidate_allow", "tests.test_change_approval",
     "tests.test_bench_case", "tests.test_bench_calibrate", "tests.test_bench_run",
+    "tests.test_bench_cases_v2_draft",
     "tests.test_change_report", "tests.test_changes_behavior", "tests.test_changes_contract",
     "tests.test_characterization_claims", "tests.test_characterize_design_revision_stop_report",
     "tests.test_characterize_onboarding_scratch", "tests.test_characterize_scratch_docs",

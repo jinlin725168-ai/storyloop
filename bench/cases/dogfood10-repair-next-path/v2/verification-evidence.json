@@ -1,0 +1,46 @@
+{
+  "VE-REPAIR-RESULT": {
+    "chain": [
+      {
+        "line": 129,
+        "path": "storyloop/product_cli.py",
+        "quote": "return repair_smoke(project, change_id, args.reason)"
+      },
+      {
+        "line": 35,
+        "path": "storyloop/acceptance_repair.py",
+        "quote": "def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServices | None = None,"
+      },
+      {
+        "line": 109,
+        "path": "storyloop/acceptance_repair.py",
+        "quote": "\"next\": f\"storyloop run {shlex.quote(str(project))} --change {change_id}\"}"
+      },
+      {
+        "line": 13,
+        "path": "storyloop/cli_output.py",
+        "quote": "def display(result: dict, complete_json: bool) -> None:"
+      }
+    ],
+    "criterion_ids": [
+      "S1-C1",
+      "S1-C2",
+      "S1-C3",
+      "S1-C4",
+      "S1-C5"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-1",
+      "F2P-acceptance-2",
+      "F2P-reference",
+      "P2P-acceptance-3",
+      "P2P-acceptance-4"
+    ],
+    "manifest_test_ids": [
+      "repair-next-path",
+      "repair-next-cli",
+      "repair-next-regression",
+      "repair-next-stop"
+    ]
+  }
+}

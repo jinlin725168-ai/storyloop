@@ -1,0 +1,50 @@
+{
+  "allowed": {
+    "adapters": [
+      "codex",
+      "claude",
+      "test"
+    ],
+    "max_calls": 100,
+    "max_cost_usd": null,
+    "models": [
+      "configured"
+    ]
+  },
+  "base_commit": "4b93151924a25537533e2c0a0244fb107f833b9f",
+  "case_id": "dogfood5-stash-hint-coverage",
+  "case_version": 2,
+  "contract_sha256": "2addf553fb3cc703831cb2f34a8ff31f310e05cf7d5c606162d4e31d12368ee6",
+  "gold_sha256": "2ed063fe04e7389e77476a65f801c1f9f10eb3377829e6cbab43c7a4bdcd52d4",
+  "legacy_seam": false,
+  "python": {
+    "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
+    "version": "3.11"
+  },
+  "repository_id": "storyloop-dogfood3",
+  "schema_version": 1,
+  "solution_commit": "254ab9d920ea4f4a59c31b82b80ac797401531de",
+  "suite_files": [
+    {
+      "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/bench_linked_base_existing_green.py",
+      "sha256": "f9c87f9e730087060db18fe01fb22a41f3853fad4ba83178120fad8cce03b7e0"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/bench_linked_base_paths_red.py",
+      "sha256": "5ee161f2a4777bf742299bc0a586e9cd518fbee6947888681add8a3b6cc85aa0"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/manifest.json",
+      "sha256": "a1ef1c2acfbfbf658ec05b5368a2386497edba5c447d23a3802f58f1f7d40b14"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/test_core.py",
+      "sha256": "0eb7eeb245995ca10130c5397163e9cf6c1425bef1d71c6a2a831e1323f80e6d"
+    },
+    {
+      "path": "checks/tests/test_failure_routing.py",
+      "sha256": "1a9e21071d52afd0b427cedc5a3816dde543e58d5fe86c542fdb82860a83d385"
+    }
+  ],
+  "suite_sha256": "6e700ad5116c5873f843f4b52ec320a12ec149f243599d8cc6fbca7edfae4e76"
+}

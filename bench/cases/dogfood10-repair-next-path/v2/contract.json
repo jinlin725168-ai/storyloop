@@ -1,0 +1,534 @@
+{
+  "approval": {
+    "approved_at": "2026-11-09",
+    "approved_by": "jinlin725168-ai",
+    "contract_sha256": "2f3f66b6217ecd3b3d9a897358c00aa40292f28f0e93f35d9be39bbe588f19b0",
+    "note": "人经监工确认的入口方案批准（含 stop_json locator 调整与 dogfood9 ST-2 改 CLI）"
+  },
+  "change_id": "FIX-20261107-repair-next-path",
+  "product": {
+    "assessment": {
+      "criteria": [
+        {
+          "criterion_id": "S1-C1",
+          "evidence": {
+            "locations": [
+              "storyloop/acceptance_repair.py:42",
+              "storyloop/acceptance_repair.py:107",
+              "storyloop/acceptance_repair.py:108",
+              "tests/test_smoke_repair.py:185"
+            ],
+            "search_scope": [
+              "storyloop/acceptance_repair.py",
+              "tests/test_smoke_repair.py"
+            ]
+          },
+          "existence": "partial",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_smoke_repair"
+              ]
+            ],
+            "expected": "两种路径均得到可直接执行的命令，且不含字面量 <project>；当前源码在该断言上失败。",
+            "steps": [
+              "在现有修复流程测试中取得成功结果，分别使用普通绝对路径和含空格的绝对路径。",
+              "用 shlex.split 解析 next，并断言参数依次为 storyloop、run、项目绝对路径、--change 和实际变更 ID。"
+            ]
+          },
+          "story_id": "S1"
+        },
+        {
+          "criterion_id": "S1-C2",
+          "evidence": {
+            "locations": [
+              "storyloop/product_cli.py:128",
+              "storyloop/cli_output.py:13",
+              "storyloop/cli_output.py:28",
+              "storyloop/acceptance_repair.py:108"
+            ],
+            "search_scope": [
+              "storyloop/product_cli.py",
+              "storyloop/cli_output.py",
+              "storyloop/acceptance_repair.py",
+              "tests/test_smoke_repair.py"
+            ]
+          },
+          "existence": "partial",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_smoke_repair"
+              ]
+            ],
+            "expected": "文本和 JSON 两种输出提供相同的可执行下一步；当前源码的两种输出均保留占位符。",
+            "steps": [
+              "对同一个成功修复结果分别执行 CLI 文本输出与 JSON 输出。",
+              "读取两种输出中的 next，并断言其解析后的项目参数均为含空格的真实绝对路径。"
+            ]
+          },
+          "story_id": "S1"
+        },
+        {
+          "criterion_id": "S1-C3",
+          "evidence": {
+            "locations": [
+              "storyloop/acceptance_repair.py:107",
+              "tests/test_smoke_repair.py:185",
+              "tests/test_smoke_repair.py:187"
+            ],
+            "search_scope": [
+              "storyloop/acceptance_repair.py",
+              "tests/test_smoke_repair.py"
+            ]
+          },
+          "existence": "partial",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_smoke_repair"
+              ]
+            ],
+            "expected": "除 next 外，成功结果字段及其值保持原有契约。",
+            "steps": [
+              "运行现有成功修复用例。",
+              "断言结果的 status、change_id、commit 与修复提交及变更一致。"
+            ]
+          },
+          "story_id": "S1"
+        },
+        {
+          "criterion_id": "S1-C4",
+          "evidence": {
+            "locations": [
+              "storyloop/acceptance_repair.py:103",
+              "storyloop/acceptance_repair.py:106",
+              "tests/test_smoke_repair.py:192",
+              "tests/test_smoke_repair.py:195"
+            ],
+            "search_scope": [
+              "storyloop/acceptance_repair.py",
+              "tests/test_smoke_repair.py"
+            ]
+          },
+          "existence": "exists",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_smoke_repair"
+              ]
+            ],
+            "expected": "仅改变返回的 next 文案；已保存的修复状态保持既有结果。",
+            "steps": [
+              "运行现有成功修复用例，读取修复后的运行状态。",
+              "断言状态为 IMPLEMENTING、尝试次数为 0，且 RED 证据指纹已更新。"
+            ]
+          },
+          "story_id": "S1"
+        },
+        {
+          "criterion_id": "S1-C5",
+          "evidence": {
+            "locations": [
+              "storyloop/acceptance_repair.py:97",
+              "storyloop/acceptance_repair.py:100",
+              "storyloop/acceptance_repair.py:126",
+              "storyloop/acceptance_repair.py:137"
+            ],
+            "search_scope": [
+              "storyloop/acceptance_repair.py",
+              "tests/test_smoke_repair.py"
+            ]
+          },
+          "existence": "partial",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_smoke_repair"
+              ]
+            ],
+            "expected": "未成功修复时不宣称可继续运行；失败处理仍由现有停止流程负责。",
+            "steps": [
+              "让修复后的套件无法证明 RED。",
+              "断言返回的是现有停止状态，而非 ACCEPTANCE_REPAIRED。"
+            ]
+          },
+          "story_id": "S1"
+        }
+      ],
+      "risks": {
+        "crosscut": {
+          "evidence": {
+            "locations": [
+              "storyloop/acceptance_repair.py:108",
+              "storyloop/product_cli.py:129"
+            ],
+            "search_scope": [
+              "storyloop/acceptance_repair.py",
+              "storyloop/product_cli.py",
+              "storyloop/run_hints.py"
+            ]
+          },
+          "value": "no"
+        },
+        "dependency_swap": {
+          "evidence": {
+            "locations": [
+              "storyloop/acceptance_repair.py:10",
+              "storyloop/run_hints.py:6"
+            ],
+            "search_scope": [
+              "storyloop/acceptance_repair.py",
+              "storyloop/run_hints.py"
+            ]
+          },
+          "value": "no"
+        },
+        "external_contract": {
+          "evidence": {
+            "locations": [
+              "storyloop/acceptance_repair.py:107",
+              "storyloop/cli_output.py:13",
+              "storyloop/cli_output.py:28"
+            ],
+            "search_scope": [
+              "storyloop/acceptance_repair.py",
+              "storyloop/cli_output.py",
+              "storyloop/product_cli.py"
+            ]
+          },
+          "value": "yes"
+        },
+        "guard": {
+          "evidence": {
+            "locations": [
+              "storyloop/acceptance_repair.py:42",
+              "storyloop/acceptance_repair.py:108"
+            ],
+            "search_scope": [
+              "storyloop/acceptance_repair.py"
+            ]
+          },
+          "value": "no"
+        },
+        "hard_verify_high_cost": {
+          "evidence": {
+            "locations": [
+              "tests/test_smoke_repair.py:153",
+              "tests/test_smoke_repair.py:187"
+            ],
+            "search_scope": [
+              "tests/test_smoke_repair.py"
+            ]
+          },
+          "value": "no"
+        },
+        "human_choice": {
+          "evidence": {
+            "locations": [
+              "storyloop/acceptance_repair.py:34",
+              "storyloop/acceptance_repair.py:108"
+            ],
+            "search_scope": [
+              "storyloop/acceptance_repair.py"
+            ]
+          },
+          "value": "no"
+        },
+        "migration": {
+          "evidence": {
+            "locations": [
+              "storyloop/acceptance_repair.py:101",
+              "storyloop/acceptance_repair.py:108"
+            ],
+            "search_scope": [
+              "storyloop/acceptance_repair.py"
+            ]
+          },
+          "value": "no"
+        },
+        "new_interface": {
+          "evidence": {
+            "locations": [
+              "storyloop/product_cli.py:128",
+              "storyloop/acceptance_repair.py:107"
+            ],
+            "search_scope": [
+              "storyloop/product_cli.py",
+              "storyloop/acceptance_repair.py"
+            ]
+          },
+          "value": "no"
+        },
+        "persistent_state": {
+          "evidence": {
+            "locations": [
+              "storyloop/acceptance_repair.py:104",
+              "storyloop/acceptance_repair.py:106",
+              "storyloop/acceptance_repair.py:108"
+            ],
+            "search_scope": [
+              "storyloop/acceptance_repair.py"
+            ]
+          },
+          "value": "no"
+        },
+        "principle_deviation": {
+          "evidence": {
+            "locations": [
+              "storyloop/run_hints.py:42",
+              "storyloop/run_hints.py:46"
+            ],
+            "search_scope": [
+              "storyloop/acceptance_repair.py",
+              "storyloop/run_hints.py"
+            ]
+          },
+          "value": "no"
+        },
+        "sensitive": {
+          "evidence": {
+            "locations": [
+              "storyloop/acceptance_repair.py:107",
+              "storyloop/acceptance_repair.py:108"
+            ],
+            "search_scope": [
+              "storyloop/acceptance_repair.py",
+              "storyloop/run_hints.py"
+            ]
+          },
+          "value": "no"
+        }
+      },
+      "scope": {
+        "creates": [],
+        "interfaces": [
+          "acceptance-repair 与 smoke-repair 成功结果的 next 字段",
+          "CLI 文本与 JSON 输出中的 next 字段"
+        ],
+        "symbols": [
+          {
+            "path": "storyloop/acceptance_repair.py",
+            "symbol": "_prove_repaired_suite"
+          },
+          {
+            "path": "tests/test_smoke_repair.py",
+            "symbol": "SmokeRepairTests"
+          }
+        ],
+        "touched": [
+          "storyloop/acceptance_repair.py",
+          "tests/test_smoke_repair.py"
+        ]
+      },
+      "verifiable_goal": true
+    },
+    "capability": "acceptance-repair-next",
+    "clarifications": [],
+    "consumers": [
+      {
+        "consumer": "直接使用修复结果的调用方",
+        "id": "C1",
+        "in_scope": true,
+        "path": "storyloop/acceptance_repair.py:107",
+        "trigger": "acceptance-repair 成功",
+        "verification": "检查返回字典的 next、原有字段及保存的运行状态。"
+      },
+      {
+        "consumer": "CLI 文本输出用户",
+        "id": "C2",
+        "in_scope": true,
+        "path": "storyloop/cli_output.py:27",
+        "trigger": "acceptance-repair 成功且未使用 JSON 输出",
+        "verification": "从文本输出读取 next，使用 shlex.split 核对项目参数。"
+      },
+      {
+        "consumer": "CLI JSON 输出调用方",
+        "id": "C3",
+        "in_scope": true,
+        "path": "storyloop/cli_output.py:13",
+        "trigger": "acceptance-repair 成功且使用 JSON 输出",
+        "verification": "解析 JSON 的 next，使用 shlex.split 核对项目参数。"
+      },
+      {
+        "consumer": "status 与其他运行停点",
+        "id": "C4",
+        "in_scope": false,
+        "path": "storyloop/product_cli.py:120",
+        "trigger": "查看运行状态或其他停点的下一步",
+        "verification": "现有 next_step 路径格式化行为作为参照，本变更不修改该入口。"
+      }
+    ],
+    "coverage_exemptions": [
+      {
+        "reason": "本变更只改变成功返回的命令字符串，没有新增依赖；RED 重证失败仍走现有停止流程，并由 S1-C5 约束。",
+        "row_type": "degradation"
+      },
+      {
+        "reason": "目标输出仅在同步修复成功后构造，不涉及加载中或未知能力状态。",
+        "row_type": "unknown_state"
+      }
+    ],
+    "defect": {
+      "confirmed": [
+        "CLI dispatch 将解析后的项目路径传入产品命令处理：storyloop/cli.py:177。",
+        "成功结果由 storyloop/acceptance_repair.py:107-108 构造。",
+        "其他停点已有 shell 引用路径并构造 run 命令的方式：storyloop/run_hints.py:42-46。"
+      ],
+      "expected": "next 含真实项目绝对路径；含空格时经 shell 引用后仍是单个路径参数。",
+      "observed": "acceptance-repair 成功结果的 next 含字面量 <project>，不能直接复制执行。",
+      "reproduction": [
+        "在本地项目启动一个已有合同提交的变更，使其验收套件进入可修复状态。",
+        "成功执行 storyloop acceptance-repair，并检查返回结果的 next。",
+        "观察 next 为 storyloop run <project> --change <实际变更 ID>。"
+      ],
+      "root_cause": [
+        {
+          "location": "storyloop/acceptance_repair.py:42",
+          "statement": "修复入口已将项目路径规范化为绝对路径，但成功结果构造 next 时直接写入字面量 <project>，没有使用该路径。"
+        },
+        {
+          "location": "storyloop/acceptance_repair.py:108",
+          "statement": "成功结果的 next 在返回处硬编码占位符；CLI 输出直接呈现该值。"
+        }
+      ],
+      "sibling_entries": [
+        "smoke-repair 与 acceptance-repair 共用 storyloop/product_cli.py:128-129 的入口。"
+      ],
+      "unconfirmed": [
+        "尚未执行完整 acceptance-repair 流程来实测含空格路径的输出。"
+      ]
+    },
+    "errata": [],
+    "goal": "修复 acceptance-repair 成功结果中的 next：生成包含真实项目绝对路径的可复制 storyloop run 命令，路径含空格时符合 shell 引用规则。以下源码证据均对应 source_commit ad63fd8d3a08ac62c67ff34acf6e2e9315ae3f22。",
+    "lessons_used": [],
+    "nature": "fix",
+    "non_goals": [
+      "不改变验收套件修复、RED 重证、状态迁移或提交行为。",
+      "不统一修改其他命令的 next 文案。"
+    ],
+    "questions": [],
+    "stories": [
+      {
+        "acceptance": [
+          {
+            "consumers": [
+              "C1"
+            ],
+            "given": "一个已完成 RED 重证的变更，其项目路径分别为普通绝对路径和含空格的绝对路径",
+            "id": "S1-C1",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": true,
+            "row_type": "positive",
+            "then": "结果中的 next 可按 shell 规则解析为 storyloop run、真实项目绝对路径、--change 和该变更 ID",
+            "when": "用户成功执行 acceptance-repair"
+          },
+          {
+            "consumers": [
+              "C2",
+              "C3"
+            ],
+            "given": "含空格的项目路径已产生一次成功的 acceptance-repair 结果",
+            "id": "S1-C2",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": true,
+            "row_type": "form_parity",
+            "then": "两种输出的 next 均包含可解析为同一真实项目路径的命令",
+            "when": "CLI 分别呈现文本和 JSON 输出"
+          },
+          {
+            "consumers": [
+              "C1"
+            ],
+            "given": "一个可成功完成验收修复的变更",
+            "id": "S1-C3",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "regression",
+            "then": "成功结果的 status 为 ACCEPTANCE_REPAIRED，change_id 为该变更 ID，commit 为本次修复提交",
+            "when": "用户执行 acceptance-repair"
+          },
+          {
+            "consumers": [
+              "C1"
+            ],
+            "given": "一个可成功完成 RED 重证的验收修复",
+            "id": "S1-C4",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "state_preservation",
+            "then": "保存的运行状态为 IMPLEMENTING，尝试次数为 0，RED 证据指纹已更新",
+            "when": "用户执行 acceptance-repair"
+          },
+          {
+            "consumers": [
+              "C1"
+            ],
+            "given": "修复后的验收套件仍无法证明 RED",
+            "id": "S1-C5",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "non_goal",
+            "then": "结果保持现有停止状态，而不返回 ACCEPTANCE_REPAIRED",
+            "when": "用户执行 acceptance-repair"
+          }
+        ],
+        "as_a": "StoryLoop 用户",
+        "depends_on": [],
+        "id": "S1",
+        "independent_test": "使用本地临时项目完成一次 acceptance-repair，检查返回值及 CLI 两种输出中的 next，并核对运行状态。",
+        "out_of_scope": [
+          "修改其他停点的 next 文案",
+          "改变验收修复或 RED 重证流程"
+        ],
+        "priority": "P1",
+        "rules": [
+          "WHEN acceptance-repair 成功并证明 RED，THE SYSTEM SHALL 在 next 中提供使用真实项目绝对路径及实际变更 ID 的 storyloop run 命令。",
+          "WHEN 项目绝对路径含有 shell 特殊字符，THE SYSTEM SHALL 对 next 中的项目路径进行 shell 引用，使其解析为单个参数。",
+          "THE SYSTEM SHALL 在文本和 JSON 输出中保留同一成功结果的 next 值。",
+          "THE SYSTEM SHALL 保持成功结果中 status、change_id、commit 的含义及修复后的运行状态。",
+          "WHEN 修复后的套件未证明 RED，THE SYSTEM SHALL 保持现有停止结果，不宣称修复成功。"
+        ],
+        "so_that": "无需手动替换项目路径，含空格的路径也能正确执行",
+        "title": "验收修复成功后的可执行下一步",
+        "verification_entries": [
+          {
+            "id": "VE-REPAIR-RESULT",
+            "kind": "public_function",
+            "locator": "storyloop.acceptance_repair.repair_smoke",
+            "observable": "修复结果的 status、next 与文本/JSON 展示一致，且 next 包含真实项目绝对路径",
+            "reason": "CLI 委托此公开函数；验收须注入确定性服务以构造修复场景，故在此入口驱动并检查 CLI 展示。"
+          }
+        ],
+        "want": "在验收修复成功后直接复制 next 命令继续运行变更"
+      }
+    ],
+    "test_removals": [],
+    "version": 1
+  }
+}

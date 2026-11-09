@@ -1,0 +1,683 @@
+{
+  "approval": {
+    "approved_at": "2026-11-09",
+    "approved_by": "jinlin725168-ai",
+    "contract_sha256": "24d48ba1c77738aa3a0fd7737ee00925a9733ab9c06ba859fedc6cc47720f503",
+    "note": "人经监工确认的入口方案批准（含 stop_json locator 调整与 dogfood9 ST-2 改 CLI）"
+  },
+  "change_id": "FIX-20261105-stash-hint-coverage",
+  "product": {
+    "assessment": {
+      "criteria": [
+        {
+          "criterion_id": "AC-1",
+          "evidence": {
+            "locations": [
+              "openspec/specs/base-change-required-hints/spec.md:20",
+              "tests/test_failure_routing.py:117",
+              "tests/test_failure_routing.py:137"
+            ],
+            "search_scope": [
+              "openspec/specs/base-change-required-hints/spec.md",
+              "tests/test_failure_routing.py"
+            ]
+          },
+          "existence": "exists",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_failure_routing"
+              ]
+            ],
+            "expected": "只有列出的字面路径进入项目仓库的 stash；未列出的改动保持原样。",
+            "steps": [
+              "在临时 Git 仓库构造含特殊字符的列出路径及未列出的改动。",
+              "从仓库外执行提示中的 stash 命令，比较 stash 内容与工作区。"
+            ]
+          },
+          "story_id": "ST-1"
+        },
+        {
+          "criterion_id": "AC-2",
+          "evidence": {
+            "locations": [
+              "openspec/specs/base-change-required-hints/spec.md:25",
+              "storyloop/run_stops.py:34",
+              "storyloop/product_cli.py:122",
+              "storyloop/change_log.py:38",
+              "storyloop/stop_report.py:296",
+              "tests/test_stop_report.py:95"
+            ],
+            "search_scope": [
+              "openspec/specs/base-change-required-hints/spec.md",
+              "storyloop/run_stops.py",
+              "storyloop/product_cli.py",
+              "storyloop/change_log.py",
+              "storyloop/stop_report.py",
+              "tests/test_failure_routing.py",
+              "tests/test_stop_report.py"
+            ]
+          },
+          "existence": "partial",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_failure_routing",
+                "tests.test_stop_report"
+              ]
+            ],
+            "expected": "四个展示面使用相同的项目定位和字面路径命令，且均列出需保存的功能与测试路径；现有测试尚未覆盖扩展后的路径集合。",
+            "steps": [
+              "在临时仓库形成同时含功能路径、测试路径和已删除测试路径的关联底座停点。",
+              "读取同一停点的 run、status、log 与已保存停点报告，逐项比较 Git 命令及路径集合。"
+            ]
+          },
+          "story_id": "ST-1"
+        },
+        {
+          "criterion_id": "AC-3",
+          "evidence": {
+            "locations": [
+              "openspec/specs/base-change-required-hints/spec.md:30",
+              "tests/test_failure_routing.py:148"
+            ],
+            "search_scope": [
+              "openspec/specs/base-change-required-hints/spec.md",
+              "tests/test_failure_routing.py"
+            ]
+          },
+          "existence": "exists",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_failure_routing"
+              ]
+            ],
+            "expected": "分支切换命令定位到项目仓库，提示不包含 stash 命令。",
+            "steps": [
+              "构造已关联底座草案且无遗留路径的停点。",
+              "读取下一步提示并核对命令。"
+            ]
+          },
+          "story_id": "ST-1"
+        },
+        {
+          "criterion_id": "AC-4",
+          "evidence": {
+            "locations": [
+              "openspec/specs/base-change-required-hints/spec.md:35",
+              "tests/test_stop_report.py:73",
+              "tests/test_characterize_base_hint_flow.py:29"
+            ],
+            "search_scope": [
+              "openspec/specs/base-change-required-hints/spec.md",
+              "tests/test_stop_report.py",
+              "tests/test_characterize_base_hint_flow.py"
+            ]
+          },
+          "existence": "exists",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_stop_report",
+                "tests.test_characterize_base_hint_flow"
+              ]
+            ],
+            "expected": "批准命令仍指向关联底座，既有操作顺序保持正确。",
+            "steps": [
+              "构造有关联底座草案和遗留路径的停点。",
+              "解析底座批准命令，核对暂存至恢复功能分支的提示顺序。"
+            ]
+          },
+          "story_id": "ST-1"
+        },
+        {
+          "criterion_id": "AC-5",
+          "evidence": {
+            "locations": [
+              "openspec/specs/base-change-required-hints/spec.md:40",
+              "tests/test_stop_report.py:95",
+              "tests/test_characterize_base_hint_flow.py:24"
+            ],
+            "search_scope": [
+              "openspec/specs/base-change-required-hints/spec.md",
+              "tests/test_stop_report.py",
+              "tests/test_characterize_base_hint_flow.py",
+              "storyloop/product_cli.py",
+              "storyloop/change_log.py"
+            ]
+          },
+          "existence": "partial",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_stop_report",
+                "tests.test_characterize_base_hint_flow"
+              ]
+            ],
+            "expected": "读取展示面不改变运行状态、工作区或 stash 列表；现有测试仅覆盖部分展示路径。",
+            "steps": [
+              "记录展示前的持久化运行状态、Git 工作区及 stash 列表。",
+              "读取 status、log 和停点报告后逐项比较。"
+            ]
+          },
+          "story_id": "ST-1"
+        },
+        {
+          "criterion_id": "AC-6",
+          "evidence": {
+            "locations": [
+              "openspec/specs/base-change-required-hints/spec.md:45",
+              "tests/test_characterize_base_hint_flow.py:25",
+              "tests/test_characterize_base_hint_flow.py:44"
+            ],
+            "search_scope": [
+              "openspec/specs/base-change-required-hints/spec.md",
+              "tests/test_characterize_base_hint_flow.py"
+            ]
+          },
+          "existence": "exists",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_characterize_base_hint_flow"
+              ]
+            ],
+            "expected": "系统没有自行创建 stash；提示保留由用户决定取回或丢弃暂存内容的文字。",
+            "steps": [
+              "记录生成提示前的 stash 列表。",
+              "生成并展示提示后再次读取列表。"
+            ]
+          },
+          "story_id": "ST-1"
+        },
+        {
+          "criterion_id": "AC-7",
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop.py:271",
+              "storyloop/project_boundaries.py:113",
+              "storyloop/project_boundaries.py:144",
+              "storyloop/project_loop_failures.py:55",
+              "storyloop/base_follow.py:22",
+              "storyloop/base_follow.py:24",
+              "tests/test_failure_routing.py:337",
+              "tests/test_project_loop_resume.py:121"
+            ],
+            "search_scope": [
+              "storyloop/project_loop.py",
+              "storyloop/project_boundaries.py",
+              "storyloop/project_loop_failures.py",
+              "storyloop/base_collision.py",
+              "storyloop/base_follow.py",
+              "tests/test_failure_routing.py",
+              "tests/test_project_loop_resume.py"
+            ]
+          },
+          "existence": "absent",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_failure_routing",
+                "tests.test_project_loop_resume"
+              ]
+            ],
+            "expected": "legacy_paths 与 stash 命令覆盖三类遗留路径；暂存后工作区干净，后续底座合并不因这些遗留改动受阻。现有测试未验证该组合场景。",
+            "steps": [
+              "在临时 Git 仓库让前轮留下功能文件改动、test_roots 下已修改测试和已删除的已跟踪测试，再由本轮触发关联底座冲突。",
+              "取得停点的 legacy_paths 并执行提示中的 stash 命令。",
+              "核对三类路径均进入 stash、工作区通过既有干净检查；完成底座后在功能分支继续运行并检查合并结果。"
+            ]
+          },
+          "story_id": "ST-1"
+        }
+      ],
+      "risks": {
+        "crosscut": {
+          "evidence": {
+            "locations": [
+              "storyloop/run_stops.py:34",
+              "storyloop/product_cli.py:122",
+              "storyloop/change_log.py:38",
+              "storyloop/stop_report.py:296"
+            ],
+            "search_scope": [
+              "storyloop/run_stops.py",
+              "storyloop/product_cli.py",
+              "storyloop/change_log.py",
+              "storyloop/stop_report.py"
+            ]
+          },
+          "value": "yes"
+        },
+        "dependency_swap": {
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_failures.py:55",
+              "storyloop/project_boundaries.py:82"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_failures.py",
+              "storyloop/project_boundaries.py"
+            ]
+          },
+          "value": "no"
+        },
+        "external_contract": {
+          "evidence": {
+            "locations": [
+              "storyloop/run_stops.py:36",
+              "storyloop/product_cli.py:115",
+              "storyloop/change_log.py:25"
+            ],
+            "search_scope": [
+              "storyloop/run_stops.py",
+              "storyloop/product_cli.py",
+              "storyloop/change_log.py",
+              "storyloop/stop_report.py"
+            ]
+          },
+          "value": "yes"
+        },
+        "guard": {
+          "evidence": {
+            "locations": [
+              "storyloop/base_follow.py:21",
+              "storyloop/base_follow.py:24"
+            ],
+            "search_scope": [
+              "storyloop/base_follow.py",
+              "storyloop/project_loop.py"
+            ]
+          },
+          "value": "yes"
+        },
+        "hard_verify_high_cost": {
+          "evidence": {
+            "locations": [
+              "tests/test_failure_routing.py:337",
+              "tests/test_project_loop_resume.py:121"
+            ],
+            "search_scope": [
+              "tests/test_failure_routing.py",
+              "tests/test_stop_report.py",
+              "tests/test_project_loop_resume.py"
+            ]
+          },
+          "value": "no"
+        },
+        "human_choice": {
+          "evidence": {
+            "locations": [
+              "storyloop/stop_report.py:218",
+              "storyloop/stop_report.py:224"
+            ],
+            "search_scope": [
+              "storyloop/stop_report.py",
+              "storyloop/run_hints.py"
+            ]
+          },
+          "value": "no"
+        },
+        "migration": {
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_failures.py:53",
+              "storyloop/run_stops.py:31"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_failures.py",
+              "storyloop/run_stops.py",
+              "storyloop/run_hints.py",
+              "storyloop/stop_report.py"
+            ]
+          },
+          "value": "no"
+        },
+        "new_interface": {
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_failures.py:58",
+              "storyloop/run_hints.py:64",
+              "storyloop/stop_report.py:243"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_failures.py",
+              "storyloop/run_hints.py",
+              "storyloop/stop_report.py"
+            ]
+          },
+          "value": "no"
+        },
+        "persistent_state": {
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_failures.py:59",
+              "storyloop/run_stops.py:31",
+              "storyloop/run_stops.py:33"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_failures.py",
+              "storyloop/run_stops.py",
+              "storyloop/run_hints.py"
+            ]
+          },
+          "value": "yes"
+        },
+        "principle_deviation": {
+          "evidence": {
+            "locations": [
+              "storyloop/project_boundaries.py:92",
+              "storyloop/project_loop_failures.py:55",
+              "storyloop/base_follow.py:22"
+            ],
+            "search_scope": [
+              "storyloop/project_boundaries.py",
+              "storyloop/project_loop_failures.py",
+              "storyloop/base_follow.py"
+            ]
+          },
+          "value": "no"
+        },
+        "sensitive": {
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_failures.py:55",
+              "storyloop/stop_report.py:216"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_failures.py",
+              "storyloop/stop_report.py"
+            ]
+          },
+          "value": "no"
+        }
+      },
+      "scope": {
+        "creates": [],
+        "interfaces": [
+          "BASE_CHANGE_REQUIRED 运行状态中的 legacy_paths",
+          "storyloop run 返回值中的 next 和 stop",
+          "storyloop status 输出中的 next 和 stop",
+          "storyloop log 输出中的 next 和 stop",
+          "已保存停点报告中的操作提示"
+        ],
+        "symbols": [
+          {
+            "path": "storyloop/project_loop_failures.py",
+            "symbol": "record_boundary"
+          }
+        ],
+        "touched": [
+          "storyloop/project_loop_failures.py",
+          "tests/test_failure_routing.py",
+          "tests/test_stop_report.py",
+          "tests/test_project_loop_resume.py"
+        ]
+      },
+      "verifiable_goal": true
+    },
+    "capability": "base-change-required-hints",
+    "clarifications": [],
+    "consumers": [
+      {
+        "consumer": "storyloop run 结果",
+        "id": "C-run",
+        "in_scope": true,
+        "path": "storyloop/run_stops.py:22",
+        "trigger": "创建关联底座冲突停点",
+        "verification": "核对返回值的 legacy_paths、next 和 stop，并执行生成的 stash 命令。"
+      },
+      {
+        "consumer": "storyloop status",
+        "id": "C-status",
+        "in_scope": true,
+        "path": "storyloop/product_cli.py:110",
+        "trigger": "读取已保存的关联底座停点",
+        "verification": "核对 next 与 stop 均展示包含测试路径的提示。"
+      },
+      {
+        "consumer": "storyloop log",
+        "id": "C-log",
+        "in_scope": true,
+        "path": "storyloop/change_log.py:19",
+        "trigger": "读取已保存的变更日志",
+        "verification": "核对 next 与 stop 均展示包含测试路径的提示。"
+      },
+      {
+        "consumer": "已保存的停点报告",
+        "id": "C-stop",
+        "in_scope": true,
+        "path": "storyloop/stop_report.py:296",
+        "trigger": "重新展示关联底座冲突停点报告",
+        "verification": "核对报告操作提示包含测试路径，读取报告不改变状态。"
+      },
+      {
+        "consumer": "关联底座后的功能分支恢复",
+        "id": "C-resume",
+        "in_scope": true,
+        "path": "storyloop/base_follow.py:18",
+        "trigger": "合并已接受的底座",
+        "verification": "执行提示中的 stash 后，核对既有合并前干净工作区检查可通过。"
+      }
+    ],
+    "coverage_exemptions": [
+      {
+        "reason": "本变更修复确定性路径遗漏，不新增依赖失败时的降级行为；底座合并后的重证失败另行处理。",
+        "row_type": "degradation"
+      },
+      {
+        "reason": "遗留路径由同步的 Git 可见改动及已确定的边界分类生成，没有加载中或读取失败被误判为否定状态的产品行为。",
+        "row_type": "unknown_state"
+      }
+    ],
+    "defect": {
+      "confirmed": [
+        "源分支 dogfood/main 的 HEAD 为 4b93151924a25537533e2c0a0244fb107f833b9f。",
+        "实现调用前的 preexisting 来自 Git 可见改动路径集合。",
+        "Git 可见改动集合使用 Git diff 的路径结果，包含已删除的已跟踪文件。",
+        "边界审计将 test_roots 下允许的路径归类为 TEST，当前 legacy_paths 筛选只接受 FEATURE。",
+        "合并关联底座前要求功能分支工作区干净。"
+      ],
+      "expected": "legacy_paths 及 stash 提示覆盖前轮留下的功能和测试路径，包括已删除的已跟踪测试，使暂存后的功能分支满足现有合并前干净检查。",
+      "observed": "关联底座冲突停点的 legacy_paths 只收录前轮功能代码改动，遗漏 test_roots 下的既有测试改动；按 stash 提示操作后，功能分支仍可能因工作区不干净而无法合并底座。",
+      "origin_change": "FIX-20261104-stash-git-safe",
+      "reporter_hypothesis": "legacy_paths 的筛选只接受 FEATURE 分类，因此遗漏被归类为 TEST 的前轮路径。",
+      "reproduction": [
+        "在功能分支让前轮留下功能文件改动、test_roots 下的测试文件改动和已删除的已跟踪测试。",
+        "由后续实现调用触发关联底座的 BASE_CHANGE_REQUIRED 停点，检查 legacy_paths 是否遗漏测试路径。",
+        "执行提示中的 stash 命令，检查功能分支是否仍有测试改动并触发底座合并前的干净工作区错误。"
+      ],
+      "root_cause": [
+        {
+          "location": "storyloop/project_loop_failures.py:55",
+          "statement": "边界审计将 test_roots 下允许的路径归为 TEST，但遗留路径筛选只接受 FEATURE；已删除的已跟踪文件也进入 Git 可见改动集合，因此同样受到筛选遗漏。"
+        }
+      ],
+      "sibling_entries": [
+        "GitHub issue #69 第 2 项",
+        "GitHub issue #69 第 4 项（本变更范围外）",
+        "GitHub issue #80（本变更范围外）"
+      ],
+      "unconfirmed": [
+        "GitHub issue #69 原文及其完整复现环境未在本次只读仓库检查中独立核对。",
+        "本次只读检查未执行端到端复现；AC-7 的实际运行结果仍需由验收测试验证。"
+      ]
+    },
+    "errata": [],
+    "goal": "基于 dogfood/main 的提交 4b93151924a25537533e2c0a0244fb107f833b9f，修复关联底座冲突停点遗漏前轮测试改动的问题：使 legacy_paths 及对应 stash 提示覆盖前轮留下的功能改动和 test_roots 下的测试改动，包括已删除的已跟踪测试，从而满足底座合并前的干净工作区检查。",
+    "lessons_used": [],
+    "nature": "fix",
+    "non_goals": [
+      "自动执行 stash、切换分支或恢复暂存内容。",
+      "改变底座审批流程或合并前的干净工作区要求。",
+      "处理底座合并后 RED 重证失败的提示；GitHub issue #69 第 4 项及 #80 留待后续变更。"
+    ],
+    "questions": [],
+    "stories": [
+      {
+        "acceptance": [
+          {
+            "consumers": [
+              "C-run"
+            ],
+            "given": "项目仓库有列出的遗留文件，其中包含 [ab].py 和 :(exclude)other.py，另有未列出的已修改文件，当前目录在仓库外",
+            "id": "AC-1",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "regression",
+            "then": "只有列出的字面路径进入该项目仓库的 stash，未列出的文件保持原样",
+            "when": "执行停点提示中的 stash 命令"
+          },
+          {
+            "consumers": [
+              "C-run",
+              "C-status",
+              "C-log",
+              "C-stop"
+            ],
+            "given": "带前轮功能改动及 test_roots 测试改动的关联底座冲突已有运行结果及保存的停点报告",
+            "id": "AC-2",
+            "kind": "automated",
+            "oracle_class": "auto-heavy",
+            "reproduces_defect": true,
+            "row_type": "form_parity",
+            "then": "run、status、log 和停点报告展示相同的项目定位与字面路径 Git 命令，命令均列出需保存的功能及测试路径",
+            "when": "读取该变更的各展示面"
+          },
+          {
+            "consumers": [
+              "C-status"
+            ],
+            "given": "底座冲突已关联草案且没有遗留文件",
+            "id": "AC-3",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "regression",
+            "then": "提示中的分支切换命令均定位到项目仓库，且不包含 stash 命令",
+            "when": "读取下一步提示"
+          },
+          {
+            "consumers": [
+              "C-stop"
+            ],
+            "given": "底座冲突已关联草案和遗留文件",
+            "id": "AC-4",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "regression",
+            "then": "可解析的底座批准命令和暂存至恢复功能分支的操作顺序保持原样",
+            "when": "读取停点操作提示"
+          },
+          {
+            "consumers": [
+              "C-status",
+              "C-log",
+              "C-stop"
+            ],
+            "given": "底座冲突的运行状态和仓库状态已保存",
+            "id": "AC-5",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "state_preservation",
+            "then": "保存的运行状态、Git 工作区及 stash 列表保持不变",
+            "when": "读取 status、log 和停点报告"
+          },
+          {
+            "consumers": [
+              "C-run",
+              "C-stop"
+            ],
+            "given": "底座冲突发生前仓库没有新增 stash",
+            "id": "AC-6",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "non_goal",
+            "then": "系统不会自行创建 stash，取回或丢弃暂存内容仍留给用户决定",
+            "when": "生成并展示停点提示"
+          },
+          {
+            "consumers": [
+              "C-run",
+              "C-resume"
+            ],
+            "given": "关联底座冲突停点存在前轮留下的功能文件改动、test_roots 下已修改的测试文件和已删除的已跟踪测试文件",
+            "id": "AC-7",
+            "kind": "automated",
+            "oracle_class": "auto-heavy",
+            "reproduces_defect": true,
+            "row_type": "positive",
+            "then": "legacy_paths 所列的功能及测试改动均进入该项目的 stash，功能分支满足底座合并所需的干净工作区条件",
+            "when": "执行停点提示中的 stash 命令"
+          }
+        ],
+        "as_a": "处理底座冲突的开发者",
+        "depends_on": [],
+        "id": "ST-1",
+        "independent_test": "在临时 Git 仓库重现前轮功能改动、已修改测试及已删除测试同时存在的关联底座冲突；执行提示中的 stash 命令并核对工作区干净，再完成底座并验证功能分支的 storyloop run 可越过既有合并前检查。",
+        "out_of_scope": [
+          "自动执行 Git 操作。",
+          "改变底座合并前的干净工作区要求。",
+          "改变底座审批接口。",
+          "处理底座合并后 RED 重证失败的提示。"
+        ],
+        "priority": "P1",
+        "rules": [
+          "WHEN BASE_CHANGE_REQUIRED 停点列出遗留文件，THE SYSTEM SHALL 在 stash 提示中使用项目仓库绝对路径的 git -C、--literal-pathspecs 和逐个安全引用的文件路径。",
+          "WHEN BASE_CHANGE_REQUIRED 提示包含 git status 或 git switch，THE SYSTEM SHALL 为每条 Git 命令指定同一个项目仓库路径。",
+          "WHEN BASE_CHANGE_REQUIRED 停点没有遗留文件，THE SYSTEM SHALL 为提示中的 git switch 命令指定项目仓库路径。",
+          "WHEN run、status、log 或停点报告展示同一 BASE_CHANGE_REQUIRED 停点，THE SYSTEM SHALL 展示一致的 Git 操作提示，包括读取已保存的停点报告时。",
+          "THE SYSTEM SHALL 保留底座批准命令和既有操作顺序。",
+          "WHEN 关联底座冲突停点存在前轮留下的 test_roots 测试改动，THE SYSTEM SHALL 将这些测试路径纳入 legacy_paths 和对应的 stash 提示，包括已删除的已跟踪测试文件。"
+        ],
+        "so_that": "按提示暂存后能清理功能分支，并在底座完成后继续合并",
+        "title": "修复底座冲突停点的 Git 提示",
+        "verification_entries": [
+          {
+            "id": "VE-BASE-STOP",
+            "kind": "stop_json",
+            "locator": "storyloop status <project> --change <id> --json 输出的 BASE_CHANGE_REQUIRED 停点 JSON 中的 stop.options[].action",
+            "observable": "关联底座停点的每个适用路径均提供同一仓库作用域的 git 提示",
+            "reason": "公开 status 命令经 product_cli.dispatch 与 stop_report.stop_of 暴露失败路由；用例实际直接调用这两个公开函数，检查关联底座路径的停点提示。"
+          }
+        ],
+        "want": "获得列全需保存功能与测试改动的遗留路径清单"
+      }
+    ],
+    "test_removals": [],
+    "version": 1
+  }
+}

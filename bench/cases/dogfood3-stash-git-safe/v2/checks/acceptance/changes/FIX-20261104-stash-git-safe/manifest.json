@@ -1,0 +1,101 @@
+{
+  "tests": [
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261104-stash-git-safe/bench_ac1_literal_stash.py"
+      ],
+      "criteria": [
+        "AC-1"
+      ],
+      "entry_ids": [
+        "VE-BASE-STOP"
+      ],
+      "id": "ac1-literal-stash",
+      "tier": "fast",
+      "timeout_seconds": 60
+    },
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261104-stash-git-safe/bench_ac2_view_parity.py"
+      ],
+      "criteria": [
+        "AC-2"
+      ],
+      "entry_ids": [
+        "VE-BASE-STOP"
+      ],
+      "id": "ac2-view-parity",
+      "tier": "fast",
+      "timeout_seconds": 90
+    },
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261104-stash-git-safe/bench_ac3_no_legacy_paths.py"
+      ],
+      "criteria": [
+        "AC-3"
+      ],
+      "entry_ids": [
+        "VE-BASE-STOP"
+      ],
+      "id": "ac3-no-legacy-paths",
+      "tier": "fast",
+      "timeout_seconds": 60
+    },
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261104-stash-git-safe/bench_ac4_approval_order.py"
+      ],
+      "criteria": [
+        "AC-4"
+      ],
+      "entry_ids": [
+        "VE-BASE-STOP"
+      ],
+      "id": "ac4-approval-order",
+      "tier": "fast",
+      "timeout_seconds": 60
+    },
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261104-stash-git-safe/bench_ac5_read_preserves_state.py"
+      ],
+      "criteria": [
+        "AC-5"
+      ],
+      "entry_ids": [
+        "VE-BASE-STOP"
+      ],
+      "id": "ac5-read-preserves-state",
+      "tier": "fast",
+      "timeout_seconds": 60
+    },
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261104-stash-git-safe/bench_ac6_no_automatic_stash.py"
+      ],
+      "criteria": [
+        "AC-6"
+      ],
+      "entry_ids": [
+        "VE-BASE-STOP"
+      ],
+      "id": "ac6-no-automatic-stash",
+      "tier": "fast",
+      "timeout_seconds": 60
+    }
+  ],
+  "version": 1
+}
