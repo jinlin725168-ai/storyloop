@@ -224,6 +224,9 @@ SCHEMAS["review"]["properties"].update(coverage=_nullable(STRINGS), checklist=_n
 SCHEMAS["review"]["required"] = list(SCHEMAS["review"]["properties"])
 VERIFY = _obj({"results": {"type": "array", "items": _obj({"id": STRING,
                "confirmed": {"type": "boolean"}, "reason": STRING})}})
+KNOWLEDGE_PROPOSAL = _obj({"updates": {"type": "array", "items": _obj({
+    "path": STRING, "source": STRING, "claim": STRING,
+    "correction": STRING, "content": STRING})}})
 
 
 def _profiled_review(schema):
@@ -300,12 +303,12 @@ def schema_for(role: str, payload: dict) -> dict:
     if role == 'product':
         schema['properties']['nature']['enum'] = [
             *(name for name in change_types.CHANGE_TYPES if name != 'base'), None]
-    if role != 'survey' and payload.get('mode') != 'retrospective':
+    if role != 'survey' and payload.get('mode') not in {'retrospective', 'knowledge-propose'}:
         schema['properties'].update(
             lessons_used=_nullable({'type': 'array', 'items': _obj({
                 'id': STRING, 'how': {'type': 'string', 'x-maxLength': 200}})}),
         )
-    if payload.get('mode') != 'retrospective':
+    if payload.get('mode') not in {'retrospective', 'knowledge-propose'}:
         schema['properties'].update(errata=_nullable({'type': 'array', 'items': _obj({
                 'document': STRING, 'claim': STRING, 'correction': STRING, 'evidence': STRINGS})}))
         schema['required'] = list(schema['properties'])
@@ -314,6 +317,8 @@ def schema_for(role: str, payload: dict) -> dict:
 
 def _selected_schema(role: str, payload: dict) -> dict:
     """The engine-side schema of one call (acceptance changes shape in smoke-maintenance mode)."""
+    if role == "review" and payload.get("mode") == "knowledge-propose":
+        return KNOWLEDGE_PROPOSAL
     if role == "review" and payload.get("mode") == "retrospective":
         return RETROSPECTIVE
     if role == "review" and payload.get("mode") == "verify":
