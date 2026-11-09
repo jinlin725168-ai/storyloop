@@ -21,6 +21,10 @@ storyloop bench --json calibrate dogfood3-stash-git-safe --case-version 1 \
 记录不可比较。
 校准记录的 `contract_approved` 标明校准时合同是否已批准。批准记录会改变合同
 字节与 Case 哈希，因此批准后须对最终 Case 再次校准；旧 Case/Run 不变。
+v2 批准记录的 `contract_sha256` 绑定规范化 `product` JSON；批准后若产品合同
+被修改，Run 拒绝，校准仍执行 Gold 并记录 `approval_stale=true` 与 `FAILED`。
+`case.json.contract_sha256` 则哈希整个 `contract.json` 文件，两者都用 SHA-256，
+但批准记录不能包含对自身所在文件的哈希。
 
 Run 框架冻结 Case 哈希、两侧引擎 commit、适配器、模型、预算和评分合同；每侧两次，
 按 Base/Candidate 交错。测试适配器覆盖调度与模拟人规则。真实代理参测默认关闭，

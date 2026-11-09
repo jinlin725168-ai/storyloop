@@ -5,12 +5,22 @@ import tempfile
 import unittest
 
 from storyloop.bench_run import run_bench, compare_runs
-from tests.test_bench_case import case_fixture, v2_case_fixture
+from tests.test_bench_case import case_fixture, stale_approval_fixture, v2_case_fixture
 from tests.test_bench_calibrate import calibration_fixture
 from storyloop.models import StoryLoopError
 
 
 class BenchRunTests(unittest.TestCase):
+    def test_modified_approved_v2_contract_is_rejected_before_adapter(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = stale_approval_fixture(v2_case_fixture(case_fixture(root), approved=True))
+            calls = []
+            with self.assertRaises(StoryLoopError):
+                run_bench([source], "a" * 40, "b" * 40, "test", "fixture",
+                          {"max_calls": 10}, lambda *_: calls.append(1), lambda *_: True, root)
+            self.assertEqual(calls, [])
+
     def test_unapproved_v2_is_rejected_before_invoking_adapter(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

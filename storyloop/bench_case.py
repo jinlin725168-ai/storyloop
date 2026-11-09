@@ -29,7 +29,7 @@ def load_case(source: Path, *, allow_unapproved_v2: bool = False) -> dict:
     _hash(gold_bytes, manifest["gold_sha256"], "gold.json")
     contract = _json(contract_bytes, "contract.json")
     gold = _json(gold_bytes, "gold.json")
-    approved = _contract(contract, manifest["case_version"], allow_unapproved_v2)
+    approved, approval_stale = _contract(contract, manifest["case_version"], allow_unapproved_v2)
     if manifest["case_version"] == 2:
         _v2_contract_and_suite(source, contract)
     suite_hash = hashlib.sha256()
@@ -48,7 +48,7 @@ def load_case(source: Path, *, allow_unapproved_v2: bool = False) -> dict:
     _check_inventory(source, paths)
     case_hash = hashlib.sha256(manifest_bytes + contract_bytes + gold_bytes + suite_hash.digest()).hexdigest()
     return {"source": source, "manifest": manifest, "contract": contract,
-            "contract_approved": approved, "gold": gold,
+            "contract_approved": approved, "approval_stale": approval_stale, "gold": gold,
             "case_hash": case_hash, "gold_hash": manifest["gold_sha256"]}
 
 
@@ -90,7 +90,7 @@ def _manifest(value: dict, source: Path) -> None:
     require(cost is None or type(cost) in (int, float) and cost > 0, "Invalid max_cost_usd")
 
 
-def _contract(value: dict, version: int, allow_unapproved_v2: bool) -> bool:
+def _contract(value: dict, version: int, allow_unapproved_v2: bool) -> tuple[bool, bool]:
     required = {"change_id", "product"}
     require(isinstance(value, dict), "Invalid Case contract")
     if version == 1:
@@ -99,13 +99,26 @@ def _contract(value: dict, version: int, allow_unapproved_v2: bool) -> bool:
         require(set(value) in (required, required | {"approval"}), "Invalid Case contract")
     if "approval" not in value:
         require(allow_unapproved_v2, "Bench run requires an approved v2 contract")
-        return False
+        return False, False
     approval = value["approval"]
-    require(isinstance(approval, dict) and all(approval.get(key) for key in
-            ("contract_digest", "approved_at", "approved_by")), "Contract lacks approval evidence")
-    require(approval["contract_digest"] == contract_digest(value["product"]),
-            "Approved contract digest does not match product")
-    return True
+    expected = contract_digest(value["product"])
+    if _approval_matches(approval, expected, version):
+        return True, False
+    require(allow_unapproved_v2, "Approved contract hash does not match product or lacks approval evidence")
+    return False, True
+
+
+def _approval_matches(approval: object, expected: str, version: int) -> bool:
+    if not isinstance(approval, dict) or not all(
+        isinstance(approval.get(key), str) and approval[key].strip()
+        for key in ("approved_by", "approved_at")
+    ):
+        return False
+    required_hash = "contract_digest" if version == 1 else "contract_sha256"
+    if approval.get(required_hash) != expected:
+        return False
+    return all(approval[key] == expected for key in ("contract_digest", "contract_sha256")
+               if key in approval)
 
 
 def _v2_contract_and_suite(source: Path, contract: dict) -> None:

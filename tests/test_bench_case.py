@@ -63,6 +63,7 @@ def v2_case_fixture(source: Path, *, approved: bool = False) -> Path:
          "observable": "The value is 2", "reason": "Deterministic public seam"}]
     if approved:
         contract["approval"]["contract_digest"] = contract_digest(contract["product"])
+        contract["approval"]["contract_sha256"] = contract_digest(contract["product"])
     else:
         contract.pop("approval")
     contract_bytes = _bytes(source / "contract.json", contract)
@@ -88,7 +89,41 @@ def v2_case_fixture(source: Path, *, approved: bool = False) -> Path:
     return source
 
 
+def stale_approval_fixture(source: Path) -> Path:
+    """Change approved product bytes while keeping all outer Case hashes consistent."""
+    contract = json.loads((source / "contract.json").read_text())
+    contract["product"]["goal"] += " after approval"
+    contract["approval"]["contract_digest"] = contract_digest(contract["product"])
+    contract_bytes = _bytes(source / "contract.json", contract)
+    gold = json.loads((source / "gold.json").read_text())
+    for item in gold["evidence"]:
+        if item["path"] == "contract.json":
+            item["sha256"] = hashlib.sha256(contract_bytes).hexdigest()
+    gold_bytes = _bytes(source / "gold.json", gold)
+    manifest = json.loads((source / "case.json").read_text())
+    manifest["contract_sha256"] = hashlib.sha256(contract_bytes).hexdigest()
+    manifest["gold_sha256"] = hashlib.sha256(gold_bytes).hexdigest()
+    _bytes(source / "case.json", manifest)
+    return source
+
+
 class BenchCaseTests(unittest.TestCase):
+    def test_v1_optional_product_hash_is_checked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = case_fixture(Path(folder))
+            contract = json.loads((source / "contract.json").read_text())
+            contract["approval"]["contract_sha256"] = "0" * 64
+            contract_bytes = _bytes(source / "contract.json", contract)
+            gold = json.loads((source / "gold.json").read_text())
+            gold["evidence"][0]["sha256"] = hashlib.sha256(contract_bytes).hexdigest()
+            gold_bytes = _bytes(source / "gold.json", gold)
+            manifest = json.loads((source / "case.json").read_text())
+            manifest["contract_sha256"] = hashlib.sha256(contract_bytes).hexdigest()
+            manifest["gold_sha256"] = hashlib.sha256(gold_bytes).hexdigest()
+            _bytes(source / "case.json", manifest)
+            with self.assertRaises(StoryLoopError):
+                load_case(source)
+
     def test_unapproved_v1_remains_rejected_for_calibration_mode(self):
         with tempfile.TemporaryDirectory() as folder:
             source = case_fixture(Path(folder))
@@ -112,6 +147,22 @@ class BenchCaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             source = v2_case_fixture(case_fixture(Path(folder)), approved=True)
             self.assertTrue(load_case(source)["contract_approved"])
+
+    def test_v2_approval_requires_product_hash(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = v2_case_fixture(case_fixture(Path(folder)), approved=True)
+            contract = json.loads((source / "contract.json").read_text())
+            contract["approval"].pop("contract_sha256")
+            contract_bytes = _bytes(source / "contract.json", contract)
+            gold = json.loads((source / "gold.json").read_text())
+            gold["evidence"][0]["sha256"] = hashlib.sha256(contract_bytes).hexdigest()
+            gold_bytes = _bytes(source / "gold.json", gold)
+            manifest = json.loads((source / "case.json").read_text())
+            manifest["contract_sha256"] = hashlib.sha256(contract_bytes).hexdigest()
+            manifest["gold_sha256"] = hashlib.sha256(gold_bytes).hexdigest()
+            _bytes(source / "case.json", manifest)
+            with self.assertRaises(StoryLoopError):
+                load_case(source)
 
     def test_load_valid_v1_case(self):
         with tempfile.TemporaryDirectory() as folder:

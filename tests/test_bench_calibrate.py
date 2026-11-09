@@ -9,7 +9,7 @@ import unittest
 import sys
 
 from storyloop.bench_calibrate import calibrate_case
-from tests.test_bench_case import case_fixture, v2_case_fixture
+from tests.test_bench_case import case_fixture, stale_approval_fixture, v2_case_fixture
 
 
 def git(root: Path, *args: str) -> str:
@@ -50,6 +50,18 @@ def calibration_fixture(root: Path) -> tuple[Path, Path]:
 
 
 class BenchCalibrationTests(unittest.TestCase):
+    def test_stale_approved_v2_is_marked_in_calibration_record(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source, repository = calibration_fixture(root)
+            source = stale_approval_fixture(v2_case_fixture(source, approved=True))
+            result = calibrate_case(source, repository, root)
+            self.assertEqual(result["status"], "FAILED")
+            self.assertIs(result["approval_stale"], True)
+            self.assertIs(result["contract_approved"], False)
+            self.assertIn("approval_stale", result["reasons"])
+            self.assertIs(json.loads(Path(result["record_path"]).read_text())["approval_stale"], True)
+
     def test_unapproved_v2_calibrates_and_records_contract_status(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

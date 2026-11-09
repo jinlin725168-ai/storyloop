@@ -39,7 +39,9 @@ def calibrate_case(source: Path, repository: Path, output_root: Path,
               "contract_sha256": manifest["contract_sha256"], "suite_sha256": manifest["suite_sha256"],
               "gold_sha256": manifest["gold_sha256"], "python": interpreter,
               "contract_approved": case["contract_approved"],
-              "status": "FAILED", "reasons": [], "checks": []}
+              "approval_stale": case["approval_stale"],
+              "status": "FAILED", "reasons": ["approval_stale"] if case["approval_stale"] else [],
+              "checks": []}
     with tempfile.TemporaryDirectory(prefix="storyloop-bench-calibrate-") as folder:
         root = Path(folder)
         for side, commit in (("base", manifest["base_commit"]),
