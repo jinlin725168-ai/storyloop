@@ -89,6 +89,7 @@
 |  | `manual_acceptance` | 可变区 | 把人工条件的验收绑定到已验证的实现提交 | `load_manual_acceptance`、`pending_manual_criteria`、`record_manual_acceptance` |
 |  | `review_context` | 可变区 | 引擎内部调用上下文，适配器回答不能改变档位 | `strong_verification`、`verification_active` |
 |  | `review_disposition` | 可变区 | 审查分类、语义修复与可恢复的强验证 | `perform_review` |
+|  | `review_convergence` | 可变区 | 记录稳定意见 ID、同一判据的阻断轮次与完整规格收敛 | `advance`、`review_request`、`reset_binding` |
 | 交付 | `openspec_docs` | 可变区 | 生成增量规格、合并活规格并记录变更决策 | `capability_of`、`document_change`、`merge_into_main_spec`、`render_decisions`、`render_delta_spec`、`validate_with_cli` |
 |  | `project_loop_finish` | 可变区 | 幂等完成阶段：实现提交、报告、文档、合并与回执 | `complete_change`、`finalize_change`、`finish_merged`、`finish_receipting`、`finish_verified`、`passed_result` |
 | 分流 | `assessment` | 可变区 | 校验产品角色上报的分流证据结构，不执行命令 | `validate_assessment` |

@@ -19,7 +19,8 @@ from .guarded_calls import read_only_call
 from .project_loop_support import save_run
 from .run_transitions import transition
 from .run_stops import pause
-from .role_schemas import schema_errors, schema_for
+from .role_schemas import schema_errors, schema_for, validate_finding_ids
+from .review_convergence import advance, review_request
 from .routing_state import is_routed
 from .semantic_repair import answer_with_repair
 from .smoke import _validate_manifest, load_smoke_manifest, suite_relative
@@ -68,6 +69,11 @@ def _verification_record(change: dict, manifest: dict, option: dict) -> dict | N
             'questions': [], 'findings': findings}
 
 
+def _convergence_scope(change: dict, plan: dict) -> dict:
+    return {'contract': digest(change['product']),
+            'plan': digest({key: plan[key] for key in ('main_option', 'options', 'design') if key in plan})}
+
+
 def _verify_entries(project: Path, change: dict, plan: dict) -> dict | None:
     if not new_format(change['product']):
         return None
@@ -97,6 +103,7 @@ def validate_consistency(answer: object, project: Path, change: dict, state: dic
     """Reject contradictory verdicts and unsupported references; never downgrade bad evidence."""
     errors = schema_errors(answer, schema_for('review', {'mode': 'consistency'}))
     require(not errors, 'Invalid consistency response: ' + '; '.join(errors))
+    validate_finding_ids(answer['findings'])
     text(answer['summary'], 'consistency summary')
     for question in answer['questions']:
         text(question, 'consistency question')
@@ -105,11 +112,17 @@ def validate_consistency(answer: object, project: Path, change: dict, state: dic
         require(item['criterion_id'] in criteria, 'Consistency references unknown criterion')
         text(item['message'], 'consistency finding')
         _validate_location(item, project, change, state)
+    decisions = [item for item in answer['findings']
+                 if item.get('disposition') == 'DECISION_NEEDED']
     blocked = any(item['blocking'] for item in answer['findings'])
-    expected = 'blocked' if blocked else ('needs_input' if answer['questions'] else 'coherent')
-    require(answer['verdict'] == expected and not (blocked and answer['questions']),
+    expected = ('needs_input' if decisions else 'blocked' if blocked
+                else 'needs_input' if answer['questions'] else 'coherent')
+    require(answer['verdict'] == expected and not (blocked and answer['questions'] and not decisions),
             'Consistency verdict contradicts findings/questions')
-    return deepcopy(answer)
+    result = deepcopy(answer)
+    if decisions and not result['questions']:
+        result['questions'] = [item['required_change'] for item in decisions]
+    return result
 
 
 def _validate_location(item: dict, project: Path, change: dict, state: dict) -> None:
@@ -135,12 +148,16 @@ def invalidate_consistency(state: dict, *, replan: bool = False) -> None:
     planning.pop('consistency', None)
     planning.pop('dependency_evidence', None)
     if replan:
+        from .review_convergence import reset_binding
+        reset_binding(state, 'plan_binding_invalid')
         for key in ('plan', 'assessment', 'continue_heavy', 'pending_option', 'review_repaired_suite'):
             planning.pop(key, None)
 
 
 def _stale(project: Path, state: dict, error: StoryLoopError) -> dict:
     invalidate_consistency(state)
+    from .review_convergence import reset_binding
+    reset_binding(state, 'plan_binding_invalid')
     state['planning']['plan'].pop('approval', None)
     state['planning'].pop('continue_heavy', None)
     state['planning'].pop('pending_option', None)
@@ -186,7 +203,14 @@ def ensure_consistency(project: Path, change: dict, state: dict, services) -> di
     path = f"openspec/changes/{change['change_id']}/routing-plan.json"
     _write_artifact(project, path, plan)
     response = _review(project, change, state, services, path)
+    entries = ({criterion['id']: {entry['id'] for entry in story.get('verification_entries', [])}
+                for story in change['product']['stories'] for criterion in story['acceptance']}
+               if new_format(change['product']) else None)
+    convergence = advance(state, response, {**_convergence_scope(change, plan),
+                                           'review': digest(binding)}, approved_entries=entries)
     record = {**response, 'binding': binding, 'status': consistency_status(response['findings'])}
+    if convergence:
+        record['convergence'] = convergence
     state['planning']['consistency'] = record
     return _outcome(project, state, record)
 
@@ -207,6 +231,8 @@ def _review(project: Path, change: dict, state: dict, services, path: str) -> di
                'dependency_evidence': deepcopy(state['planning']['dependency_evidence']),
                'answers': load_answers(project, change['change_id']),
                'oracle_path': suite_relative(project, change['change_id'])}
+    plan = state['planning']['plan']
+    request['convergence'] = review_request(state, _convergence_scope(change, plan))
     if new_format(change['product']):
         manifest = load_smoke_manifest(project, change)
         request['verification'] = {
@@ -225,7 +251,8 @@ def _review(project: Path, change: dict, state: dict, services, path: str) -> di
 
 def _outcome(project: Path, state: dict, record: dict) -> dict | None:
     if record['verdict'] == 'needs_input':
-        return pause(project, state, 'NEEDS_INPUT', phase='planning', questions=record['questions'])
+        return pause(project, state, 'NEEDS_INPUT', phase='planning',
+                     questions=record['questions'], findings=deepcopy(record['findings']))
     findings = record['findings']
     status = consistency_status(findings)
     record['status'] = status
@@ -234,7 +261,10 @@ def _outcome(project: Path, state: dict, record: dict) -> dict | None:
         save_run(project, state)
         return None
     if status == 'DESIGN_REVISION_REQUIRED':
-        return pause(project, state, status, phase='planning', findings=deepcopy(findings))
+        details = {'findings': deepcopy(findings)}
+        if record.get('convergence'):
+            details['convergence'] = deepcopy(record['convergence'])
+        return pause(project, state, status, phase='planning', **details)
     from .project_loop_failures import _failure
     target = 'contract' if status == 'NEEDS_SPEC_FIX' else 'oracle'
     entry = {'attempt': state['attempt'], 'phase': 'planning', 'review': deepcopy(record)}
@@ -244,6 +274,8 @@ def _outcome(project: Path, state: dict, record: dict) -> dict | None:
     blamed = [item for item in findings if item['target'] == target and item['blocking']]
     details = {'routed': {'source': 'consistency', 'target': target, 'findings': deepcopy(blamed)},
                'error': blamed[0]['message']}
+    if record.get('convergence'):
+        details['convergence'] = deepcopy(record['convergence'])
     if target == 'oracle':
         details['acceptance'] = {'status': status, 'source': 'consistency', 'findings': deepcopy(blamed)}
     return pause(project, state, status, phase='planning', **details)

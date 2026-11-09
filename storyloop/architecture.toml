@@ -139,6 +139,7 @@ rank = 7
 "base_collision" = { module = "implementation", zone = "mutable" }
 "review_context" = { module = "verification", zone = "mutable" }
 "review_disposition" = { module = "verification", zone = "mutable" }
+"review_convergence" = { module = "verification", zone = "mutable" }
 "finding_disposition" = { module = "verification", zone = "mutable" }
 "consistency" = { module = "verification", zone = "mutable" }
 "consistency_locations" = { module = "verification", zone = "mutable" }

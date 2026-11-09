@@ -14,9 +14,42 @@ import copy
 
 from . import change_types
 from .capability_protocol import ROLES
+from .models import identifier, require, text
 from .state_format import ACTIONS, LANDING_KINDS, MAX_SUMMARY, RISK_FIELDS, STATUSES, STRENGTHS, TIERS
 
 MAX_ERRORS = 12
+REVIEW_LEVELS = {"MUST_FIX", "DECISION_NEEDED", "ADVISORY"}
+
+
+def validate_finding(item: dict) -> None:
+    """Validate a tracked finding while preserving old findings without a level."""
+    if item.get("disposition") is None:
+        return
+    require(isinstance(item["disposition"], str) and item["disposition"] in REVIEW_LEVELS,
+            "Invalid review disposition")
+    required = {"id", "criterion_id", "target", "disposition", "blocking",
+                "location", "evidence", "message", "required_change"}
+    require(required <= item.keys(), "Review finding lacks tracking fields")
+    identifier(item["id"], "review finding id")
+    for field in ("criterion_id", "target", "location", "evidence", "message", "required_change"):
+        text(item[field], f"review finding {field}")
+    require(item["target"] in {"contract", "oracle", "design", "implementation", "out_of_scope"},
+            "Invalid review finding target")
+    require(type(item["blocking"]) is bool and
+            item["blocking"] is (item["disposition"] != "ADVISORY"),
+            "Review disposition and blocking disagree")
+
+
+def validate_finding_ids(findings: list[dict]) -> None:
+    """Reject ambiguous IDs within one review before semantic repair ends."""
+    seen = set()
+    for item in findings:
+        if item.get("disposition") is None:
+            continue
+        finding_id = identifier(item["id"], "review finding id")
+        require(finding_id not in seen, "Duplicate review finding id")
+        seen.add(finding_id)
+
 
 STRING = {"type": "string"}
 STRINGS = {"type": "array", "items": STRING}
@@ -81,10 +114,20 @@ STORY = _obj({
             "cli", "public_function", "stop_json", "http", "other"]},
         "locator": STRING, "observable": STRING, "reason": STRING})}),
 })
+SPEC_FIELDS = {key: _nullable(STRING) for key in (
+    "inputs", "preconditions", "entry", "expected", "negative_boundary", "contract_plan")}
+TRACKING_FIELDS = {"id": _nullable(STRING),
+                   "disposition": _nullable({"type": "string", "enum": [
+                       "MUST_FIX", "DECISION_NEEDED", "ADVISORY"]}),
+                   "blocking": _nullable({"type": "boolean"}),
+                   "required_change": _nullable(STRING),
+                   "criterion_spec": _nullable(_obj(SPEC_FIELDS))}
 FINDING = _obj({"message": STRING, "perspective": _nullable(STRING),
                 "criterion_id": _nullable(STRING), "evidence": _nullable(STRING),
-                "target": _nullable({"type": "string", "enum": ["implementation", "oracle", "contract", "out_of_scope"]}),
-                "location": _nullable(STRING)}, open_=True)
+                "target": _nullable({"type": "string", "enum": [
+                    "implementation", "oracle", "contract", "design", "out_of_scope"]}),
+                "location": _nullable(STRING), **TRACKING_FIELDS}, open_=True)
+FINDING["x-review-finding"] = True
 FACTS = _nullable({"type": "array", "items": _obj({"statement": STRING, "location": STRING})})
 
 EVIDENCE = _obj({'locations': STRINGS, 'search_scope': STRINGS})
@@ -127,7 +170,10 @@ CONSISTENCY = _obj({
     'findings': {'type': 'array', 'items': _obj({
         'target': {'type': 'string', 'enum': ['contract', 'oracle', 'design']},
         'criterion_id': STRING, 'location': STRING, 'blocking': {'type': 'boolean'},
-        'message': STRING})}})
+        'message': STRING, 'evidence': _nullable(STRING), **{
+            key: value for key, value in TRACKING_FIELDS.items() if key != 'blocking'},
+    })}})
+CONSISTENCY['properties']['findings']['items']['x-review-finding'] = True
 
 SCHEMAS = {
     "product": _obj({
@@ -349,6 +395,12 @@ def _check(value: object, schema: dict, path: str, errors: list[str]) -> None:
         errors.append(f"{path}: must be one of {allowed}")
         return
     if isinstance(value, dict) and "properties" in schema:
+        if schema.get('x-review-finding') and value.get('disposition') is not None:
+            from .errors import StoryLoopError
+            try:
+                validate_finding(value)
+            except StoryLoopError as exc:
+                errors.append(f"{path}: {exc}")
         properties = schema["properties"]
         for key in schema.get("required", []):
             if key not in value and not _allows_null(properties[key]):

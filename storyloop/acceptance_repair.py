@@ -69,6 +69,9 @@ def _repair_once(project: Path, change_id: str, reason: str, services: LoopServi
     change_id = identifier(change_id, "change id")
     reason = text(reason, "repair reason")
     change, state = _repair_state(project, change_id)
+    from .review_convergence import repair_allowed
+    if not automatic:
+        require(repair_allowed(state), "完整判据规格后只允许一次定向修复；先完成整体重审")
     if services is None:
         from .default_loop_services import _default_services
         services = _default_services()
@@ -97,6 +100,9 @@ def _repair_once(project: Path, change_id: str, reason: str, services: LoopServi
     if automatic:
         entry["automatic"] = True
     state.setdefault("repairs", []).append(entry)
+    if not automatic:
+        from .review_convergence import record_repair
+        record_repair(state)
     from .intervention_events import append_event
     append_event(state, "acceptance_repair", source="engine" if automatic else "acceptance-repair",
                  stop=state.get("status"), at=moment, automatic=automatic)

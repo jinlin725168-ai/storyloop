@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .models import require
+from .role_schemas import validate_finding, validate_finding_ids
 from .routing_risks import validate_routing_risks
 
 
@@ -27,9 +28,22 @@ def validate_review(value: object) -> str:
             "Invalid review verdict")
     require(isinstance(value["summary"], str) and isinstance(value["findings"], list)
             and isinstance(value["questions"], list), "Invalid review details")
+    for item in value["findings"]:
+        require(isinstance(item, dict), "Invalid review finding")
+        validate_finding(item)
+    validate_finding_ids(value["findings"])
+    validate_routing_risks(value.get("routing_risks"))
+    classified = any(item.get("disposition") is not None for item in value["findings"])
+    if classified:
+        if any(item.get("disposition") == "DECISION_NEEDED" for item in value["findings"]):
+            return "needs_input"
+        if any(item.get("disposition") is None for item in value["findings"]):
+            return value["verdict"]
+        if any(item.get("disposition") == "MUST_FIX" for item in value["findings"]):
+            return "fail"
+        return "needs_input" if value["questions"] else "pass"
     if value["verdict"] == "pass" and "coverage" not in value and not any(
             "confidence" in item for item in value["findings"]):
         require(not value["findings"] and not value["questions"],
                 "Review cannot pass with findings or questions")
-    validate_routing_risks(value.get("routing_risks"))
     return value["verdict"]

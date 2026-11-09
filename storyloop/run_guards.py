@@ -16,6 +16,16 @@ from .smoke import RESULT_EVIDENCE, smoke_digests
 from .smoke_runner import candidate_digest, implementation_digest
 
 
+def review_passes(review: dict) -> bool:
+    """A pass may retain tracked advisories; legacy findings still block."""
+    required = ("id", "criterion_id", "target", "location", "evidence", "message", "required_change")
+    return (review.get("verdict") == "pass" and not review.get("questions")
+            and all(isinstance(item, dict) and item.get("disposition") == "ADVISORY"
+                    and item.get("blocking") is False
+                    and all(isinstance(item.get(key), str) and item[key].strip() for key in required)
+                    for item in review.get("findings") or []))
+
+
 def guard_updates(value: dict) -> None:
     """A caller or delivery effect cannot smuggle a second status assignment."""
     require(isinstance(value, dict) and "status" not in value,
@@ -174,8 +184,7 @@ def guard_g2(project: Path, change: dict, state: dict, context: dict) -> None:
     for name in ("unit", "integration", "checks"):
         require(not layer_commands(profile, name) or layers[name]["status"] == "PASSED",
                 f"Configured {name} layer cannot be skipped")
-    require(review.get("verdict") == "pass" and not review.get("findings") and not review.get("questions"),
-            "Independent review did not pass")
+    require(review_passes(review), "Independent review did not pass")
     identifier = change["change_id"]
     boundary = _without_engine_outputs(context.get("boundary") or {}, identifier)
     final = _without_engine_outputs(audit_project_changes(

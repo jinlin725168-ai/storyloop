@@ -31,7 +31,9 @@ def pause(project: Path, state: dict, status: str, **details) -> dict:
     state.update(persisted_details)
     state["stop"] = build_stop(project, state, status, details)
     save_run(project, state)
-    hint = (details.get("next") or next_step(status, state["change_id"], project, {**state, **details})
+    convergence = details.get("convergence") or {}
+    hint = (state["stop"]["resume"] if convergence.get("exhausted") else
+            details.get("next") or next_step(status, state["change_id"], project, {**state, **details})
             or state["stop"]["resume"])
     return {"status": status, "change_id": state["change_id"], **details,
             "stop": state["stop"], "next": hint}
