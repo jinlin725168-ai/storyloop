@@ -48,6 +48,28 @@ def _complete() -> list[dict]:
 
 
 class SurveyTests(unittest.TestCase):
+    def test_source_locations_are_checked_before_any_document_is_written(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / "repo"
+            root.mkdir()
+            _project(root)
+            valid = _complete()
+            valid[0]["content"] = "# fact\nsource: README.md:1\nsource: README.md:1#title\n"
+            install_foundation_documents(root, {"documents": valid})
+            original = (root / FOUNDATION_ROOT / valid[0]["path"]).read_text(encoding="utf-8")
+            outside = root.parent / "outside.md"
+            outside.write_text("outside", encoding="utf-8")
+            (root / "linked.md").symlink_to(outside)
+            for source in ("README.md", "README.md:0", "missing.md:1", "../outside.md:1",
+                           "linked.md:1"):
+                with self.subTest(source=source):
+                    documents = _complete()
+                    documents[0]["content"] = f"# bad\nsource: {source}\n"
+                    with self.assertRaises(StoryLoopError):
+                        install_foundation_documents(root, {"documents": documents})
+                    self.assertEqual((root / FOUNDATION_ROOT / valid[0]["path"]).read_text(encoding="utf-8"),
+                                     original)
+
     def test_survey_writes_the_knowledge_base_and_opens_a_base_proposal(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder) / "repo"
