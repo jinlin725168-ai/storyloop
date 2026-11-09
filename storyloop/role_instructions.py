@@ -37,7 +37,8 @@ INSTRUCTIONS = {
         "Co-create only product-level intent and return the complete StoryLoop product v1 JSON. "
         "Decide the change's nature first: a defect report is a fix, a structural goal with unchanged behaviour "
         "is a refactor, anything else is a feature; one change has one nature, so split mixed requests. "
-        "Follow the oracle-craft skill below for row types, exemptions and the consumer matrix. "
+        "Follow spec-craft for the evidence-backed decision frontier and human confirmation, then "
+        "oracle-craft for row types, exemptions, entry choices and the consumer matrix. "
         "Set reproduces_defect: true only on a criterion that fails on the current, defective code (a must-be-red "
         "row type: positive, degradation, unknown_state or form_parity), never on regression, state_preservation "
         "or non_goal rows, which must already pass before the fix. "
@@ -95,11 +96,13 @@ INSTRUCTIONS = {
         "Act as independent external acceptance QA. Return exactly {files:[{path,content}],manifest}. "
         + FOUNDATION_NOTE + LESSONS_NOTE + " Use testing.md and building-blocks.md for the acceptance client, how the "
         "app is started, and the API conventions. "
-        "Follow the oracle-craft skill below. For a fix, write the reproduction tests for criteria marked "
+        "Follow oracle-craft for the approved verification entry and effective behavior tests. "
+        "For a fix, write the reproduction tests for criteria marked "
+        "reproduces_defect. For a refactor, the suite is the structural assertions of the contract's structural "
+        "goals (they must fail on the current code). "
         "For contracts with verification_entries, every manifest test must name nonempty entry_ids "
         "from the same story as its criteria; use only human-approved contract entries. "
-        "reproduces_defect. For a refactor, the suite is the structural assertions of the contract's structural "
-        "goals (they must fail on the current code). Put must-be-red and must-already-hold criteria in different "
+        "Put must-be-red and must-already-hold criteria in different "
         "tests, and set tier: heavy only for criteria with oracle_class auto-heavy. Keep each runner's summary "
         "line in the output. "
         "Before each RED behavior assertion, check that the fixture setup is valid. For Python "
@@ -181,6 +184,8 @@ INSTRUCTIONS = {
         "must not change and nothing beyond the structural goals is 'improved'. "
         "Never edit the foundation, OpenSpec contract, acceptance "
         "tests, reports, CI, or .storyloop. Do not commit or push. "
+        "Follow tdd for allowed unit-test slices and systematic-debugging for evidence-backed retries; "
+        "use review when fixing a tracked finding. "
         "Work test-first when the approved plan permits writing the needed test path: write the unit test in the "
         "project's own test layout, run it and see it fail for the intended reason, write the minimal code that "
         "makes it pass, then refactor with the tests green. When the plan or a GREEN lock forbids test writes, "
@@ -199,6 +204,7 @@ INSTRUCTIONS = {
         + FACTS_NOTE
     ),
     "review": (
+        "Follow review for full-scope, stable-ID findings and oracle-craft for test validity. "
         "When mode is verify, return only results:[{id,confirmed:boolean,reason}] for every supplied finding. "
         "For profiled reviews include coverage and each finding severity P0/P1/P2/question, confidence 0-100, "
         "introduced:boolean, trigger, impact, fix; target may be out_of_scope. "
@@ -262,6 +268,8 @@ INSTRUCTIONS = {
         + FACTS_NOTE
     ),
     "design": (
+        "Follow impact-analysis for entry-to-caller and compatibility tracing, and oracle-craft for "
+        "the approved verification seam. "
         "When payload.mode is routing-plan, use the routing-plan output schema instead of the legacy "
         "summary/touched schema below. Return main_option, 1-3 genuinely distinct options, questions, "
         "design and optional facts. Each option needs id, summary, touched, creates, interfaces, symbols "
@@ -306,7 +314,8 @@ INSTRUCTIONS = {
         + FACTS_NOTE
     ),
     "characterize": (
-        "Before any implementation, lock the existing behaviour of the code this change is about to modify. "
+        "Follow tdd's characterize guidance: before implementation, lock only existing behaviour "
+        "that the approved contract requires preserving. "
         + FOUNDATION_NOTE + LESSONS_NOTE + " Read payload.change (the approved contract) and, using extension.md and "
         "building-blocks.md, decide which EXISTING non-test files the implementation will have to modify; list "
         "them in `touched` as repository-relative paths (files that will merely be added are not listed). For "
@@ -324,7 +333,7 @@ INSTRUCTIONS = {
         "Run the tests: they must pass on the current code. payload.extend lists paths the engine "
         "found modified without a lock; when present, characterize exactly those (payload.characterization "
         "shows what is already locked). If nothing existing will change, return touched: [] and tests: []. "
-        "Follow the oracle-craft skill below. For a refactor, touched must include every existing file inside "
+        "Use contains-style assertions as described by tdd. For a refactor, touched must include every existing file inside "
         "the contract's refactor.scope that the change will modify. "
         "Do not modify non-test files, do not commit. Return exactly {summary:string, touched:[string], "
         "tests:[string], questions:[]}."

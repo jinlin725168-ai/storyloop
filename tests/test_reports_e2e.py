@@ -102,7 +102,8 @@ class ReportsEndToEndTests(unittest.TestCase):
         roles = {entry["role"] for entry in entries}
         expected = {role: [instruction_skill_snapshot(root, name)[1]
                            for name in select_skills(root, role, [])] for role in roles}
-        self.assertEqual([skill["name"] for skill in expected["implement"]], ["review"])
+        self.assertEqual([skill["name"] for skill in expected["implement"]],
+                         ["review", "systematic-debugging", "tdd"])
         self.assertTrue(expected["acceptance"])
         self.assertTrue(expected["review"])
         for snapshot in expected["acceptance"] + expected["review"]:

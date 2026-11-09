@@ -96,11 +96,12 @@ class OracleCraftTests(unittest.TestCase):
         self.assertIn("oracle-craft", packaged_skills())
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            for role in ("product", "acceptance", "characterize", "review"):
+            for role in ("product", "acceptance", "design", "review"):
                 self.assertIn("oracle-craft", select_skills(root, role, []))
             text = instructions_for(root, "acceptance")
             self.assertIn("unknown_state", text)          # from references/acceptance-matrix.md
             self.assertIn("contains", instructions_for(root, "characterize"))
+            self.assertNotIn("oracle-craft", select_skills(root, "characterize", []))
             self.assertNotIn("oracle-craft", instructions_for(root, "implement"))
 
     def test_the_product_role_is_told_what_a_reproduction_is(self):
@@ -139,9 +140,9 @@ class OracleCraftTests(unittest.TestCase):
         self.assertIn("root_cause", implement)
         self.assertIn('failure_evidence.source is "review"', acceptance)
 
-    def test_oracle_craft_is_version_1_1_2(self):
+    def test_oracle_craft_is_version_1_1_3(self):
         from storyloop.skills import packaged_skills
-        self.assertEqual(packaged_skills()["oracle-craft"]["version"], "1.1.2")
+        self.assertEqual(packaged_skills()["oracle-craft"]["version"], "1.1.3")
 
     def test_oracle_skill_does_not_require_exit_two_for_unittest_errors(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -152,6 +153,47 @@ class OracleCraftTests(unittest.TestCase):
                 self.assertIn('`errors`', instruction)
                 self.assertNotIn('2：环境错误', instruction)
 
+
+class SkillFusionTests(unittest.TestCase):
+    def test_each_packaged_skill_has_exact_roles_and_valid_frontmatter(self):
+        from storyloop.skills import SKILLS_ROOT, _frontmatter
+        expected = {
+            "spec-craft": ["product"],
+            "oracle-craft": ["product", "acceptance", "design", "review"],
+            "tdd": ["implement", "characterize"],
+            "review": ["review", "implement"],
+            "impact-analysis": ["design"],
+            "systematic-debugging": ["implement"],
+        }
+        for name, roles in expected.items():
+            with self.subTest(skill=name):
+                path = SKILLS_ROOT / name / "SKILL.md"
+                text = path.read_text(encoding="utf-8")
+                meta = _frontmatter(text)
+                self.assertEqual(meta["name"], name)
+                self.assertTrue(meta["version"] and meta["description"])
+                self.assertEqual(meta["roles"], "[" + ", ".join(roles) + "]")
+                self.assertLessEqual(len(text.splitlines()), 120)
+                self.assertTrue(text.rstrip().endswith("思路参考 HelixHarness 对应文件。"))
+                if name == "spec-craft":
+                    self.assertIn("按角色给定 schema 返回产品合同 JSON", text)
+
+    def test_role_instructions_point_to_each_selected_skill(self):
+        expected = {
+            "product": ["spec-craft", "oracle-craft"],
+            "acceptance": ["oracle-craft"],
+            "design": ["impact-analysis", "oracle-craft"],
+            "characterize": ["tdd"],
+            "implement": ["tdd", "review", "systematic-debugging"],
+            "review": ["review", "oracle-craft"],
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for role, names in expected.items():
+                with self.subTest(role=role):
+                    instructions = instructions_for(root, role)
+                    for name in names:
+                        self.assertIn(name, instructions)
 
 if __name__ == "__main__":
     unittest.main()
