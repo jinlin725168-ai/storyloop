@@ -1,0 +1,56 @@
+{
+  "VE-BASE-STOP": {
+    "chain": [
+      {
+        "line": 27,
+        "path": "storyloop/run_hints.py",
+        "quote": "def next_step(status: str | None, change_id: str | None, project: Path | str = \"<project>\","
+      },
+      {
+        "line": 66,
+        "path": "storyloop/run_hints.py",
+        "quote": "return base_legacy_action(project_path, change_id, details)"
+      },
+      {
+        "line": 208,
+        "path": "storyloop/stop_report.py",
+        "quote": "def base_legacy_action(project: Path | str, change_id: str, details: dict) -> str:"
+      },
+      {
+        "line": 244,
+        "path": "storyloop/stop_report.py",
+        "quote": "options[0][\"action\"] = base_legacy_action(project, change_id, context)"
+      },
+      {
+        "line": 296,
+        "path": "storyloop/stop_report.py",
+        "quote": "if run[\"status\"] == \"BASE_CHANGE_REQUIRED\" and run.get(\"legacy_paths\"):"
+      }
+    ],
+    "criterion_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "AC-4",
+      "AC-5",
+      "AC-6"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-1",
+      "F2P-acceptance-2",
+      "F2P-acceptance-3",
+      "F2P-reference",
+      "P2P-acceptance-4",
+      "P2P-acceptance-5",
+      "P2P-acceptance-6"
+    ],
+    "manifest_test_ids": [
+      "ac1-literal-stash",
+      "ac2-view-parity",
+      "ac3-no-legacy-paths",
+      "ac4-approval-order",
+      "ac5-read-preserves-state",
+      "ac6-no-automatic-stash"
+    ]
+  }
+}

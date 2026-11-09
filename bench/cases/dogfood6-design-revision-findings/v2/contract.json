@@ -1,0 +1,570 @@
+{
+  "change_id": "FIX-20261105-design-revision-findings",
+  "product": {
+    "assessment": {
+      "criteria": [
+        {
+          "criterion_id": "AC-1",
+          "evidence": {
+            "locations": [
+              "storyloop/consistency.py:162",
+              "storyloop/stop_report.py:264",
+              "storyloop/stop_report.py:314"
+            ],
+            "search_scope": [
+              "storyloop/consistency.py",
+              "storyloop/stop_report.py",
+              "tests/test_consistency.py"
+            ]
+          },
+          "existence": "absent",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_design_revision_findings"
+              ]
+            ],
+            "expected": "两条意见分别呈现目标、阻塞严重度、脱敏后的内容和位置；修复前该断言失败。",
+            "steps": [
+              "以两条 blocking=true 的方案意见触发 DESIGN_REVISION_REQUIRED。",
+              "检查 run 返回的停点报告和终端文本。"
+            ]
+          },
+          "story_id": "S1"
+        },
+        {
+          "criterion_id": "AC-2",
+          "evidence": {
+            "locations": [
+              "storyloop/product_cli.py:117",
+              "storyloop/change_log.py:34",
+              "storyloop/change_log.py:85",
+              "storyloop/cli_output.py:31"
+            ],
+            "search_scope": [
+              "storyloop/product_cli.py",
+              "storyloop/change_log.py",
+              "storyloop/cli_output.py",
+              "storyloop/stop_report.py"
+            ]
+          },
+          "existence": "absent",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_design_revision_findings"
+              ]
+            ],
+            "expected": "status 与 log 均逐条呈现与 run 相同的阻塞意见摘要；修复前该断言失败。",
+            "steps": [
+              "读取同一停点的 status 和 log 结果。",
+              "分别检查 JSON 停点及终端文本。"
+            ]
+          },
+          "story_id": "S1"
+        },
+        {
+          "criterion_id": "AC-3",
+          "evidence": {
+            "locations": [
+              "storyloop/consistency.py:125",
+              "storyloop/run_stops.py:31",
+              "storyloop/stop_report.py:290",
+              "tests/test_consistency.py:238"
+            ],
+            "search_scope": [
+              "storyloop/consistency.py",
+              "storyloop/run_stops.py",
+              "storyloop/stop_report.py",
+              "tests/test_consistency.py"
+            ]
+          },
+          "existence": "partial",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_design_revision_findings"
+              ]
+            ],
+            "expected": "展示只包含阻塞意见，原始 findings 及运行状态逐字段保持不变。",
+            "steps": [
+              "准备含阻塞与非阻塞意见的已保存运行状态。",
+              "读取 status 和 log 后比对持久化状态。"
+            ]
+          },
+          "story_id": "S1"
+        },
+        {
+          "criterion_id": "AC-4",
+          "evidence": {
+            "locations": [
+              "storyloop/stop_report.py:264",
+              "storyloop/stop_report.py:314",
+              "tests/test_stop_report.py:51",
+              "tests/test_stop_report.py:248"
+            ],
+            "search_scope": [
+              "storyloop/stop_report.py",
+              "tests/test_stop_report.py"
+            ]
+          },
+          "existence": "partial",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_stop_report",
+                "tests.test_design_revision_findings"
+              ]
+            ],
+            "expected": "这两类停点不出现新增意见摘要，原有恢复命令与展示顺序保持一致。",
+            "steps": [
+              "构造 DESIGN_APPROVAL_REQUIRED 和 NO_PROGRESS 停点。",
+              "比较现有停点字段和渲染文本。"
+            ]
+          },
+          "story_id": "S1"
+        },
+        {
+          "criterion_id": "AC-5",
+          "evidence": {
+            "locations": [
+              "storyloop/role_schemas.py:120",
+              "storyloop/processutil.py:23",
+              "storyloop/processutil.py:40",
+              "storyloop/stop_report.py:264",
+              "storyloop/change_log.py:29"
+            ],
+            "search_scope": [
+              "storyloop/role_schemas.py",
+              "storyloop/processutil.py",
+              "storyloop/stop_report.py",
+              "storyloop/change_log.py",
+              "storyloop/cli_output.py"
+            ]
+          },
+          "existence": "absent",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_design_revision_findings"
+              ]
+            ],
+            "expected": "每条新增摘要均经过现有 redact() 脱敏且不超过 300 字符，不含凭证原值或原始调用记录；修复前因缺少摘要而失败。",
+            "steps": [
+              "构造包含凭证形式文本、带用户信息的 URL、长内容及长位置的阻塞方案意见。",
+              "读取结构化停点摘要及 run、status、log 的停点文本，逐条核对脱敏值、300 字符上限和摘要字段。"
+            ]
+          },
+          "story_id": "S1"
+        }
+      ],
+      "risks": {
+        "crosscut": {
+          "evidence": {
+            "locations": [
+              "storyloop/cli_output.py:31",
+              "storyloop/change_log.py:85",
+              "storyloop/product_cli.py:117"
+            ],
+            "search_scope": [
+              "storyloop/cli_output.py",
+              "storyloop/change_log.py",
+              "storyloop/product_cli.py",
+              "storyloop/stop_report.py"
+            ]
+          },
+          "value": "yes"
+        },
+        "dependency_swap": {
+          "evidence": {
+            "locations": [
+              "storyloop/stop_report.py:5",
+              "storyloop/stop_report.py:258"
+            ],
+            "search_scope": [
+              "storyloop/stop_report.py"
+            ]
+          },
+          "value": "no"
+        },
+        "external_contract": {
+          "evidence": {
+            "locations": [
+              "storyloop/cli_output.py:13",
+              "storyloop/stop_report.py:264"
+            ],
+            "search_scope": [
+              "storyloop/cli_output.py",
+              "storyloop/stop_report.py",
+              "storyloop/change_log.py"
+            ]
+          },
+          "value": "yes"
+        },
+        "guard": {
+          "evidence": {
+            "locations": [
+              "storyloop/stop_report.py:258",
+              "storyloop/processutil.py:23"
+            ],
+            "search_scope": [
+              "storyloop/stop_report.py",
+              "storyloop/processutil.py"
+            ]
+          },
+          "value": "no"
+        },
+        "hard_verify_high_cost": {
+          "evidence": {
+            "locations": [
+              "tests/test_consistency.py:22",
+              "tests/test_stop_report.py:22"
+            ],
+            "search_scope": [
+              "tests/test_consistency.py",
+              "tests/test_stop_report.py",
+              "storyloop/stop_report.py"
+            ]
+          },
+          "value": "no"
+        },
+        "human_choice": {
+          "evidence": {
+            "locations": [
+              "storyloop/routing_report.py:27",
+              "storyloop/routing_report.py:28"
+            ],
+            "search_scope": [
+              "storyloop/routing_report.py",
+              "storyloop/routing_cli.py"
+            ]
+          },
+          "value": "no"
+        },
+        "migration": {
+          "evidence": {
+            "locations": [
+              "storyloop/run_stops.py:30",
+              "storyloop/stop_report.py:290"
+            ],
+            "search_scope": [
+              "storyloop/run_stops.py",
+              "storyloop/stop_report.py",
+              "storyloop/run_state.py"
+            ]
+          },
+          "value": "no"
+        },
+        "new_interface": {
+          "evidence": {
+            "locations": [
+              "storyloop/stop_report.py:264",
+              "storyloop/cli_output.py:15"
+            ],
+            "search_scope": [
+              "storyloop/stop_report.py",
+              "storyloop/cli_output.py"
+            ]
+          },
+          "value": "yes"
+        },
+        "persistent_state": {
+          "evidence": {
+            "locations": [
+              "storyloop/run_stops.py:30",
+              "storyloop/run_stops.py:33"
+            ],
+            "search_scope": [
+              "storyloop/run_stops.py",
+              "storyloop/run_state.py",
+              "storyloop/stop_report.py"
+            ]
+          },
+          "value": "yes"
+        },
+        "principle_deviation": {
+          "evidence": {
+            "locations": [
+              "storyloop/stop_report.py:258",
+              "storyloop/change_log.py:34"
+            ],
+            "search_scope": [
+              "storyloop/stop_report.py",
+              "storyloop/change_log.py"
+            ]
+          },
+          "value": "no"
+        },
+        "sensitive": {
+          "evidence": {
+            "locations": [
+              "storyloop/role_schemas.py:117",
+              "storyloop/role_schemas.py:120",
+              "storyloop/processutil.py:23",
+              "storyloop/stop_report.py:264"
+            ],
+            "search_scope": [
+              "storyloop/role_schemas.py",
+              "storyloop/processutil.py",
+              "storyloop/stop_report.py",
+              "storyloop/consistency.py"
+            ]
+          },
+          "value": "yes"
+        }
+      },
+      "scope": {
+        "creates": [
+          "tests/test_design_revision_findings.py"
+        ],
+        "interfaces": [
+          "storyloop run 的停点终端输出及 JSON 结果",
+          "storyloop status 的停点终端输出及 JSON 结果",
+          "storyloop log 的停点终端输出及 JSON 结果",
+          "停点报告的结构化内容"
+        ],
+        "symbols": [
+          {
+            "path": "storyloop/stop_report.py",
+            "symbol": "build_stop"
+          },
+          {
+            "path": "storyloop/stop_report.py",
+            "symbol": "stop_of"
+          },
+          {
+            "path": "storyloop/stop_report.py",
+            "symbol": "render_stop"
+          }
+        ],
+        "touched": [
+          "storyloop/stop_report.py"
+        ]
+      },
+      "verifiable_goal": true
+    },
+    "capability": "design-revision-findings",
+    "clarifications": [],
+    "consumers": [
+      {
+        "consumer": "storyloop run",
+        "id": "run",
+        "in_scope": true,
+        "path": "storyloop/run_stops.py:36",
+        "trigger": "运行停在 DESIGN_REVISION_REQUIRED",
+        "verification": "核对返回的 stop、终端输出及意见摘要脱敏和长度。"
+      },
+      {
+        "consumer": "storyloop status",
+        "id": "status",
+        "in_scope": true,
+        "path": "storyloop/product_cli.py:117",
+        "trigger": "读取已保存停点",
+        "verification": "核对 JSON、终端输出及意见摘要脱敏和长度。"
+      },
+      {
+        "consumer": "storyloop log",
+        "id": "log",
+        "in_scope": true,
+        "path": "storyloop/change_log.py:34",
+        "trigger": "读取同一变更的日志",
+        "verification": "核对 JSON、终端输出及意见摘要脱敏和长度。"
+      },
+      {
+        "consumer": "结构化停点报告",
+        "id": "stop_report",
+        "in_scope": true,
+        "path": "storyloop/stop_report.py:258",
+        "trigger": "构建或读取 DESIGN_REVISION_REQUIRED 停点",
+        "verification": "逐条核对阻塞意见字段、脱敏及长度，并验证其他状态不变。"
+      }
+    ],
+    "coverage_exemptions": [
+      {
+        "reason": "有效一致性意见的字段与位置已由审查入口验证；本次只修复展示，未引入外部依赖。",
+        "row_type": "degradation"
+      },
+      {
+        "reason": "停点从已保存的确定状态读取；当前范围没有异步加载或未知支持状态。",
+        "row_type": "unknown_state"
+      },
+      {
+        "reason": "其他停点不展示方案意见已由 AC-4 的既有行为回归判据覆盖。",
+        "row_type": "non_goal"
+      }
+    ],
+    "defect": {
+      "confirmed": [
+        "上述根因位置均对应 source_commit 72f2b51b21df3eb84e3b43f2146fd07912f1dfb4。",
+        "一致性意见 schema 有 blocking 字段，但没有严重度等级字段。",
+        "storyloop/processutil.py:23 已提供 redact()，可用于新增意见摘要的展示前脱敏。"
+      ],
+      "expected": "这些展示面直接给出每条经过脱敏且长度受限的阻塞意见摘要，供用户填写方案修订理由。",
+      "observed": "方案审查意见已保存，但 DESIGN_REVISION_REQUIRED 的 run、status、log 和停点报告未逐条展示意见。",
+      "reporter_hypothesis": "审查意见保存在运行状态中，但停点展示链路遗漏了它们。",
+      "reproduction": [
+        "以包含 blocking=true、target=design 意见的有效一致性审查结果运行变更。",
+        "确认运行停在 DESIGN_REVISION_REQUIRED。",
+        "查看 run、status、log 和停点报告；当前只能看到通用停点提示与 --replan 理由占位符。"
+      ],
+      "root_cause": [
+        {
+          "location": "storyloop/consistency.py:163",
+          "statement": "一致性审查把 findings 传入停点，停点也会保存详情；问题不在审查意见生成或持久化。"
+        },
+        {
+          "location": "storyloop/stop_report.py:264",
+          "statement": "build_stop 未将方案意见加入结构化停点报告，render_stop 因而没有可展示的意见列表。"
+        }
+      ],
+      "sibling_entries": [
+        "storyloop/cli_output.py:31",
+        "storyloop/change_log.py:85",
+        "storyloop/product_cli.py:117"
+      ],
+      "unconfirmed": [
+        "尚未在真实项目运行中重现；判断依据为只读源码追踪及现有测试。"
+      ]
+    },
+    "errata": [],
+    "goal": "在 DESIGN_REVISION_REQUIRED 停点的 storyloop run、status、log 和停点报告中，逐条展示经过脱敏、长度受限的阻塞方案意见摘要，让用户据此填写 --replan 理由。以下源码位置均对应提交 72f2b51b21df3eb84e3b43f2146fd07912f1dfb4。",
+    "lessons_used": [],
+    "nature": "fix",
+    "non_goals": [
+      "不改变一致性审查的判定、意见内容或 --replan 流程。",
+      "不改变其他停点的展示。",
+      "不新增 P0/P1 等级；现有一致性意见仅提供 blocking 布尔值。"
+    ],
+    "questions": [],
+    "stories": [
+      {
+        "acceptance": [
+          {
+            "consumers": [
+              "run",
+              "stop_report"
+            ],
+            "given": "一致性审查包含两条阻塞方案意见",
+            "id": "AC-1",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": true,
+            "row_type": "positive",
+            "then": "停点报告与 run 文本分别列出两条意见的目标、阻塞严重度、脱敏后的内容和位置",
+            "when": "运行停在 DESIGN_REVISION_REQUIRED"
+          },
+          {
+            "consumers": [
+              "status",
+              "log"
+            ],
+            "given": "同一 DESIGN_REVISION_REQUIRED 停点已经保存",
+            "id": "AC-2",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": true,
+            "row_type": "form_parity",
+            "then": "两个入口的结构化停点与文本均列出相同的阻塞意见摘要",
+            "when": "分别读取 status 和 log"
+          },
+          {
+            "consumers": [
+              "status",
+              "log",
+              "stop_report"
+            ],
+            "given": "已保存的审查结果同时包含阻塞与非阻塞意见",
+            "id": "AC-3",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "state_preservation",
+            "then": "展示仅包含阻塞意见且保存的审查结果逐字段不变",
+            "when": "读取停点视图"
+          },
+          {
+            "consumers": [
+              "stop_report"
+            ],
+            "given": "停点状态是 DESIGN_APPROVAL_REQUIRED 或 NO_PROGRESS",
+            "id": "AC-4",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "regression",
+            "then": "展示内容与既有停点契约一致且不包含方案修订意见摘要",
+            "when": "渲染停点报告"
+          },
+          {
+            "consumers": [
+              "run",
+              "status",
+              "log",
+              "stop_report"
+            ],
+            "given": "阻塞方案意见包含凭证形式文本、带用户信息的 URL 和超长内容",
+            "id": "AC-5",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": true,
+            "row_type": "positive",
+            "then": "每条摘要经 redact() 脱敏且不超过 300 字符，并且不含凭证原值或原始调用记录",
+            "when": "查看停点意见摘要"
+          }
+        ],
+        "as_a": "需要修订方案的用户",
+        "depends_on": [],
+        "id": "S1",
+        "independent_test": "用本地一致性审查夹具制造含多条意见的 DESIGN_REVISION_REQUIRED 停点，分别核对 run、status、log 与结构化停点报告，包括脱敏和摘要长度。",
+        "out_of_scope": [
+          "增加审查严重度等级",
+          "改写已保存的审查意见",
+          "改变其他停点的路由或恢复命令"
+        ],
+        "priority": "P1",
+        "rules": [
+          "WHEN 一致性审查产生 DESIGN_REVISION_REQUIRED 停点，THE SYSTEM SHALL 在停点报告中逐条列出 blocking=true 的意见。",
+          "THE SYSTEM SHALL 为每条列出的意见展示 target、以“阻塞”表示的严重度、经过 redact() 脱敏的 message 和 location。",
+          "THE SYSTEM SHALL 将每条新增展示摘要限制在 300 字符以内。",
+          "THE SYSTEM SHALL 从新增意见摘要中排除原始代理调用记录。",
+          "WHEN 用户查看该停点的 run、status 或 log 输出，THE SYSTEM SHALL 展示同一份阻塞意见摘要。",
+          "WHEN 用户查看其他状态的停点，THE SYSTEM SHALL 保持其既有展示内容。"
+        ],
+        "so_that": "我能依据意见写出具体的 --replan 理由",
+        "title": "展示方案修订阻塞意见",
+        "verification_entries": [
+          {
+            "id": "VE-DESIGN-STOP",
+            "kind": "stop_json",
+            "locator": "DESIGN_REVISION_REQUIRED.stop.review_findings",
+            "observable": "停点 JSON 和文本包含有界且脱敏的阻断方案意见",
+            "reason": "方案审查失败经统一停点暴露，测试既检查结构化对象又检查渲染。"
+          }
+        ],
+        "want": "在停点处直接看到每条安全、简短的阻塞意见"
+      }
+    ],
+    "test_removals": [],
+    "version": 1
+  }
+}

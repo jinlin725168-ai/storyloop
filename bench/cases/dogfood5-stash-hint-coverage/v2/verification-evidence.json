@@ -1,0 +1,49 @@
+{
+  "VE-BASE-STOP": {
+    "chain": [
+      {
+        "line": 327,
+        "path": "storyloop/project_loop.py",
+        "quote": "return record_failure(project, state, {\"attempt\": state[\"attempt\"], **layers},"
+      },
+      {
+        "line": 24,
+        "path": "storyloop/project_loop_failures.py",
+        "quote": "def _failure(state: dict, entry: dict, attribution: str) -> dict:"
+      },
+      {
+        "line": 56,
+        "path": "storyloop/project_loop_failures.py",
+        "quote": "if item[\"category\"] in {\"FEATURE\", \"TEST\"}"
+      },
+      {
+        "line": 284,
+        "path": "storyloop/stop_report.py",
+        "quote": "def stop_of(project: Path | str, run: dict | None) -> dict | None:"
+      },
+      {
+        "line": 117,
+        "path": "storyloop/product_cli.py",
+        "quote": "\"stop\": stop_of(project, run) if run else draft_stop(project, change),"
+      }
+    ],
+    "criterion_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "AC-4",
+      "AC-5",
+      "AC-6",
+      "AC-7"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-1",
+      "F2P-reference",
+      "P2P-acceptance-2"
+    ],
+    "manifest_test_ids": [
+      "linked-base-paths-red",
+      "linked-base-existing-green"
+    ]
+  }
+}

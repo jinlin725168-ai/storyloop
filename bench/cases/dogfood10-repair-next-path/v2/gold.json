@@ -1,0 +1,169 @@
+{
+  "checks": [
+    {
+      "argv": [
+        "{python}",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "checks/acceptance/changes/FIX-20261107-repair-next-path",
+        "-p",
+        "test_repair_next.py",
+        "-k",
+        "test_next_uses_real_path"
+      ],
+      "check_id": "F2P-acceptance-1",
+      "kind": "F2P",
+      "timeout_seconds": 400
+    },
+    {
+      "argv": [
+        "{python}",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "checks/acceptance/changes/FIX-20261107-repair-next-path",
+        "-p",
+        "test_repair_next.py",
+        "-k",
+        "test_text_and_json_next_match"
+      ],
+      "check_id": "F2P-acceptance-2",
+      "kind": "F2P",
+      "timeout_seconds": 240
+    },
+    {
+      "argv": [
+        "{python}",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "checks/acceptance/changes/FIX-20261107-repair-next-path",
+        "-p",
+        "test_repair_next.py",
+        "-k",
+        "test_success_fields_and_saved_state"
+      ],
+      "check_id": "P2P-acceptance-3",
+      "kind": "P2P",
+      "timeout_seconds": 240
+    },
+    {
+      "argv": [
+        "{python}",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "checks/acceptance/changes/FIX-20261107-repair-next-path",
+        "-p",
+        "test_repair_next.py",
+        "-k",
+        "test_unproven_repair_keeps_stop"
+      ],
+      "check_id": "P2P-acceptance-4",
+      "kind": "P2P",
+      "timeout_seconds": 240
+    },
+    {
+      "argv": [
+        "{python}",
+        "-m",
+        "unittest",
+        "tests.test_smoke_repair.SmokeRepairTests.test_repair_replaces_suite_reproves_red_at_contract_commit_and_run_passes"
+      ],
+      "check_id": "F2P-reference",
+      "kind": "F2P",
+      "timeout_seconds": 400
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "derived-contract",
+      "path": "contract.json",
+      "sha256": "0a5357d1fe9cd0c1474ca42058a4b1106c2ce5070bc2384f1c1a8ea12d17ff98"
+    },
+    {
+      "evidence_id": "frozen-suite",
+      "path": "checks/acceptance/changes/FIX-20261107-repair-next-path/manifest.json",
+      "sha256": "36ab7114f9e39414a3e5a94d18a1765fe97c9010e41a4590cd763cd9f18421b5"
+    },
+    {
+      "evidence_id": "reference-test",
+      "path": "checks/tests/test_smoke_repair.py",
+      "sha256": "639586980494ecef87945f2da6e54ff31f24615c1fd447088a19855b683b512d"
+    },
+    {
+      "evidence_id": "verification-entry-chain",
+      "path": "verification-evidence.json",
+      "sha256": "9ff3c8a5ba39a1fcacb2174d752c6dcad2c6539ce41a6154c08e4295906d01a2"
+    }
+  ],
+  "requirements": [
+    {
+      "check_ids": [
+        "F2P-acceptance-1",
+        "F2P-reference"
+      ],
+      "evidence_ids": [
+        "derived-contract",
+        "frozen-suite",
+        "reference-test",
+        "verification-entry-chain"
+      ],
+      "requirement_id": "S1-C1"
+    },
+    {
+      "check_ids": [
+        "F2P-acceptance-2"
+      ],
+      "evidence_ids": [
+        "derived-contract",
+        "frozen-suite",
+        "reference-test",
+        "verification-entry-chain"
+      ],
+      "requirement_id": "S1-C2"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-3"
+      ],
+      "evidence_ids": [
+        "derived-contract",
+        "frozen-suite",
+        "reference-test",
+        "verification-entry-chain"
+      ],
+      "requirement_id": "S1-C3"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-3"
+      ],
+      "evidence_ids": [
+        "derived-contract",
+        "frozen-suite",
+        "reference-test",
+        "verification-entry-chain"
+      ],
+      "requirement_id": "S1-C4"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-4"
+      ],
+      "evidence_ids": [
+        "derived-contract",
+        "frozen-suite",
+        "reference-test",
+        "verification-entry-chain"
+      ],
+      "requirement_id": "S1-C5"
+    }
+  ],
+  "schema_version": 1
+}

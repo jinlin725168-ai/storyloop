@@ -1,0 +1,88 @@
+{
+  "VE-ONBOARDING-DRAFT": {
+    "chain": [
+      {
+        "line": 13,
+        "path": "storyloop/onboarding.py",
+        "quote": "def scaffold_project(project: Path, stacks: list[str] | None = None) -> dict:"
+      },
+      {
+        "line": 33,
+        "path": "storyloop/onboarding_templates.py",
+        "quote": "\"scratch_paths\": ([\"__pycache__\", \".pytest_cache\", \".ruff_cache\", \".mypy_cache\","
+      },
+      {
+        "line": 34,
+        "path": "storyloop/onboarding_templates.py",
+        "quote": "\"*.egg-info\", \"build\", \"dist\"]"
+      }
+    ],
+    "criterion_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "AC-4",
+      "AC-5",
+      "AC-6",
+      "AC-7",
+      "AC-8"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-1",
+      "F2P-reference",
+      "P2P-acceptance-2"
+    ],
+    "manifest_test_ids": [
+      "scratch-glob-red",
+      "scratch-glob-existing"
+    ]
+  },
+  "VE-SCRATCH-GUARD": {
+    "chain": [
+      {
+        "line": 22,
+        "path": "storyloop/project_loop_guards.py",
+        "quote": "def write_safely(project: Path, change_id: str, operation: Callable[[], dict],"
+      },
+      {
+        "line": 52,
+        "path": "storyloop/project_loop_guards.py",
+        "quote": "changes = _without_scratch(changes, scratch_paths(project), after.skipped_scratch)"
+      },
+      {
+        "line": 63,
+        "path": "storyloop/project_loop_guards.py",
+        "quote": "def read_only_call("
+      },
+      {
+        "line": 100,
+        "path": "storyloop/project_loop_guards.py",
+        "quote": "changes = _without_scratch(changes, scratch or [], after.skipped_scratch)"
+      },
+      {
+        "line": 120,
+        "path": "storyloop/boundaries.py",
+        "quote": "matches = any((\"/\" not in item and _scratch_name_matches(name, item))"
+      }
+    ],
+    "criterion_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "AC-4",
+      "AC-5",
+      "AC-6",
+      "AC-7",
+      "AC-8"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-1",
+      "F2P-reference",
+      "P2P-acceptance-2"
+    ],
+    "manifest_test_ids": [
+      "scratch-glob-red",
+      "scratch-glob-existing"
+    ]
+  }
+}

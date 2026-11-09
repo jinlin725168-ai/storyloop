@@ -1,0 +1,50 @@
+{
+  "allowed": {
+    "adapters": [
+      "codex",
+      "claude",
+      "test"
+    ],
+    "max_calls": 100,
+    "max_cost_usd": null,
+    "models": [
+      "configured"
+    ]
+  },
+  "base_commit": "72f2b51b21df3eb84e3b43f2146fd07912f1dfb4",
+  "case_id": "dogfood6-design-revision-findings",
+  "case_version": 2,
+  "contract_sha256": "cf2253b740dabb8c2f95221f41a56927d6d66a7621df441b7f729d1f34ea532c",
+  "gold_sha256": "14dbad4d84a3692905d3a3693218cd67cdf187cd7df26958c268a12be2eb0dc8",
+  "legacy_seam": false,
+  "python": {
+    "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
+    "version": "3.11"
+  },
+  "repository_id": "storyloop-dogfood6",
+  "schema_version": 1,
+  "solution_commit": "691fb42da3e29454ee0d824b8c7855effb3f8831",
+  "suite_files": [
+    {
+      "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/bench_design_revision_existing.py",
+      "sha256": "f3634858f0463c197b5d3d05e5460526577f2b109bf1908e39a68ef6cf9ee12a"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/bench_design_revision_red.py",
+      "sha256": "10012752c83e6d9027cf1d6f80094900c6c5f3392cac9463d3bcebdcac134b8e"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/manifest.json",
+      "sha256": "57ea276dbc733e116f3a7d59ece3493cd7dfd2ae67e4e2de4794b23f3dab20db"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/test_findings.py",
+      "sha256": "52fab6c4ad01bd669af129aca12985f6e3f83ff0221b9bffff9b04a93906ae04"
+    },
+    {
+      "path": "checks/tests/test_design_revision_findings.py",
+      "sha256": "e624c0aa686d6f618e158da907678cf5d4934be2b7da0d7358588a74b36ae7ea"
+    }
+  ],
+  "suite_sha256": "006c9c1684ffc2689d53d74e815525f38a8e446b07f5a9ebbd00390815165e8a"
+}

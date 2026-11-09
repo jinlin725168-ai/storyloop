@@ -1,0 +1,42 @@
+{
+  "tests": [
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261105-stash-hint-coverage/bench_linked_base_paths_red.py"
+      ],
+      "criteria": [
+        "AC-2",
+        "AC-7"
+      ],
+      "entry_ids": [
+        "VE-BASE-STOP"
+      ],
+      "id": "linked-base-paths-red",
+      "tier": "heavy",
+      "timeout_seconds": 240
+    },
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261105-stash-hint-coverage/bench_linked_base_existing_green.py"
+      ],
+      "criteria": [
+        "AC-1",
+        "AC-3",
+        "AC-4",
+        "AC-5",
+        "AC-6"
+      ],
+      "entry_ids": [
+        "VE-BASE-STOP"
+      ],
+      "id": "linked-base-existing-green",
+      "tier": "fast",
+      "timeout_seconds": 120
+    }
+  ],
+  "version": 1
+}

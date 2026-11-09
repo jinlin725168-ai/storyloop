@@ -1,0 +1,173 @@
+{
+  "checks": [
+    {
+      "argv": [
+        "{python}",
+        "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "NewBehavior.test_ac1_stash_is_repo_bound_and_literal"
+      ],
+      "check_id": "F2P-acceptance-1",
+      "kind": "F2P",
+      "timeout_seconds": 60
+    },
+    {
+      "argv": [
+        "{python}",
+        "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "NewBehavior.test_ac2_every_view_repairs_saved_and_current_commands"
+      ],
+      "check_id": "F2P-acceptance-2",
+      "kind": "F2P",
+      "timeout_seconds": 90
+    },
+    {
+      "argv": [
+        "{python}",
+        "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "NewBehavior.test_ac3_without_legacy_files_switches_stay_repo_bound"
+      ],
+      "check_id": "F2P-acceptance-3",
+      "kind": "F2P",
+      "timeout_seconds": 60
+    },
+    {
+      "argv": [
+        "{python}",
+        "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "ExistingBehavior.test_ac4_approval_and_action_order"
+      ],
+      "check_id": "P2P-acceptance-4",
+      "kind": "P2P",
+      "timeout_seconds": 60
+    },
+    {
+      "argv": [
+        "{python}",
+        "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "ExistingBehavior.test_ac5_read_views_preserve_saved_and_git_state"
+      ],
+      "check_id": "P2P-acceptance-5",
+      "kind": "P2P",
+      "timeout_seconds": 60
+    },
+    {
+      "argv": [
+        "{python}",
+        "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "ExistingBehavior.test_ac6_hint_generation_does_not_stash"
+      ],
+      "check_id": "P2P-acceptance-6",
+      "kind": "P2P",
+      "timeout_seconds": 60
+    },
+    {
+      "argv": [
+        "{python}",
+        "-m",
+        "unittest",
+        "tests.test_failure_routing.ReviewRoutingTests.test_base_stash_from_outside_repository_uses_literal_listed_paths"
+      ],
+      "check_id": "F2P-reference",
+      "kind": "F2P",
+      "timeout_seconds": 400
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "derived-contract",
+      "path": "contract.json",
+      "sha256": "f36e4dd0bfe78a95ccc4370d06dba1c4644a291e614a9b6b6e7cdc28ea2092c8"
+    },
+    {
+      "evidence_id": "frozen-suite",
+      "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/manifest.json",
+      "sha256": "f9aee5729f761624e45c680d4e69d2892482f0c7041b4353bd7aa8b031cc91b8"
+    },
+    {
+      "evidence_id": "reference-test",
+      "path": "checks/tests/test_failure_routing.py",
+      "sha256": "578520460f2ca139c83818b6352c05eaad9e489677c81fbe8dc477921dcc12c9"
+    },
+    {
+      "evidence_id": "verification-entry-chain",
+      "path": "verification-evidence.json",
+      "sha256": "87d30a412f94c73195b739f16b3c457c91d9a4282b3c9272c49a5dedde1c58d5"
+    }
+  ],
+  "requirements": [
+    {
+      "check_ids": [
+        "F2P-acceptance-1",
+        "F2P-reference"
+      ],
+      "evidence_ids": [
+        "derived-contract",
+        "frozen-suite",
+        "reference-test",
+        "verification-entry-chain"
+      ],
+      "requirement_id": "AC-1"
+    },
+    {
+      "check_ids": [
+        "F2P-acceptance-2"
+      ],
+      "evidence_ids": [
+        "derived-contract",
+        "frozen-suite",
+        "reference-test",
+        "verification-entry-chain"
+      ],
+      "requirement_id": "AC-2"
+    },
+    {
+      "check_ids": [
+        "F2P-acceptance-3"
+      ],
+      "evidence_ids": [
+        "derived-contract",
+        "frozen-suite",
+        "reference-test",
+        "verification-entry-chain"
+      ],
+      "requirement_id": "AC-3"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-4"
+      ],
+      "evidence_ids": [
+        "derived-contract",
+        "frozen-suite",
+        "reference-test",
+        "verification-entry-chain"
+      ],
+      "requirement_id": "AC-4"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-5"
+      ],
+      "evidence_ids": [
+        "derived-contract",
+        "frozen-suite",
+        "reference-test",
+        "verification-entry-chain"
+      ],
+      "requirement_id": "AC-5"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-6"
+      ],
+      "evidence_ids": [
+        "derived-contract",
+        "frozen-suite",
+        "reference-test",
+        "verification-entry-chain"
+      ],
+      "requirement_id": "AC-6"
+    }
+  ],
+  "schema_version": 1
+}
