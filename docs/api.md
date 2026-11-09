@@ -55,7 +55,7 @@ base 变更只走人工实现通道：批准后运行 `storyloop run --change BA
 
 团队定制放在 `storyloop-custom/spec-craft.toml` 并进入 Git；个人定制放在 `storyloop-custom/spec-craft.user.toml`。`storyloop init` 会把 `storyloop-custom/*.user.toml` 写进 `.git/info/exclude`；未初始化仓库先运行视图命令时，也会在写视图前设置忽略规则，保持工作区干净。已经被 Git 跟踪的个人文件会在 `warnings` 中提示，需由人移出版本库。两层都使用 UTF-8 TOML（可带 BOM），`version = 1`。可用顶层键只有 `version`、每步骤提问上限 `question_limit`（整数 3–10）、字符串数组 `preferences`、仓库内已存在的非符号链接文件相对路径 `glossary`、`[[coverage]]`（`code`、`name`、`check`）和 `[[sections]]`（`code`、`document`、`title`、`guidance`）；`document` 只能是 `requirement` 或 `spec`。未知键、无效路径或格式会报错并指出文件。
 
-合并顺序为团队文件、个人文件：`question_limit` 与 `glossary` 是标量，后者覆盖前者；`preferences` 追加；`coverage`、`sections` 按 `code` 合并，同码替换、异码追加。`question_limit` 默认 5；步骤 1 评估、2 需求、3 规格、4 澄清、5 交接向人提问时各自计数，不跨步骤累加。定制只能追加覆盖地图分类与模板节、调整允许的提问配置，不能删除或改写内置内容、输出格式、引擎约束或“只能由人判断的事”。`spec-craft` 仍只用于对话入口，不下发给任何引擎角色。
+合并顺序为团队文件、个人文件：`question_limit` 与 `glossary` 是标量，后者覆盖前者；`preferences` 追加；`coverage`、`sections` 按 `code` 合并，同码替换、异码追加。`question_limit` 默认 5；步骤 1 评估、2 需求、3 规格、4 澄清、5 交接向人提问时各自计数，不跨步骤累加。定制只能追加覆盖地图分类与模板节、调整允许的提问配置，不能删除或改写内置内容、输出格式、引擎约束或“只能由人判断的事”。`spec-craft` 也下发给 product 角色，角色按既有 schema 返回合同 JSON，不进入独立对话交接流程。
 
 ### 外环指标 JSON
 

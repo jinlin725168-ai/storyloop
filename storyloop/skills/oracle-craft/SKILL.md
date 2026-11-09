@@ -1,8 +1,8 @@
 ---
 name: oracle-craft
-version: 1.1.2
-roles: [product, acceptance, characterize, review]
-description: 如何写 StoryLoop 的判据：验收矩阵的行类型、特征化测试、结构断言、执行器退出码。product、acceptance、characterize、review 角色使用。
+version: 1.1.3
+roles: [product, acceptance, design, review]
+description: 如何写 StoryLoop 的判据与公共验证入口：行类型、测试有效性、结构断言、执行器退出码。product、acceptance、design、review 角色使用。
 ---
 
 # 判据写法
@@ -13,7 +13,7 @@ description: 如何写 StoryLoop 的判据：验收矩阵的行类型、特征�
 
 - product：给每条验收条件标 `row_type` 与 `oracle_class`，覆盖七个行类型或写明豁免理由；写消费端矩阵；fix 先追调用链再写根因（每条带 `path:line`），把报告者的猜测单列；`reproduces_defect: true` 只标在"在有缺陷的现有代码上必须失败"的条件上（行类型只能是 positive、degradation、unknown_state、form_parity），回归、状态保持、非目标这三类在修复前本来就成立，不能标；refactor 写可断言的结构目标。
 - acceptance：按 `references/acceptance-matrix.md` 写用例；refactor 按 `references/structural-assertions.md` 写结构断言；为每个测试标 `tier`。
-- characterize：按 `references/characterization.md` 锁定现有行为。
+- design：核对方案的 `entry_paths` 是否沿已确认入口到达拟改动文件。
 - review：检查弱断言（只断言存在、非空）、被删除的测试、用 mock 顶替的集成判据。
 
 ## 如何选验证入口
@@ -25,6 +25,14 @@ description: 如何写 StoryLoop 的判据：验收矩阵的行类型、特征�
 - 私有函数、mock 返回值和文件存在性都不能单独充当业务验收入口。
 
 入口缺失或有争议时回到合同澄清，不在验收或实现阶段自造入口。
+
+## 入口上的有效测试
+
+只在合同中已由人确认的入口上设计验收：product 写清行为和可观察结果；acceptance 的每个 manifest test 用 `entry_ids` 关联所属故事入口；design 用 `entry_paths` 说明从该入口到改动文件的路径；review 核对实际调用链。入口 ID、AC 归属和路径关系仍由引擎校验，技能不能放松它。
+
+- 好：经 `storyloop status <project> --change <id> --json` 读取 `stop.options[].action`，用合同给出的字面预期断言某个停点的下一步。
+- 坏：只断言文件存在、私有路由函数被调用一次，或根据生产代码同一算法重算 expected；这些不能证明外部行为。
+- 尽量经真实公共接口观察；只在外部服务、时钟等系统边界替换依赖，不 mock StoryLoop 自己的守卫、路由或候选行为。测试前提失败须作为夹具问题报告，不能伪装成 RED。
 
 同一 AC 连续被判强度不足时，完整判据规格须一次写明 `inputs`、`preconditions`、已批准 `entry`、`expected`、`negative_boundary` 与 `contract_plan` 对应关系；不得在修复理由中新增合同要求。
 
@@ -53,3 +61,5 @@ description: 如何写 StoryLoop 的判据：验收矩阵的行类型、特征�
 - `contract`：按合同做不出来。例如两条验收条件互相矛盾，或者某条条件与必须保持的既有行为冲突。`location` 指向与合同矛盾的代码事实，`criterion_id` 写出冲突的条件。
 
 `oracle` 和 `contract` 必须给出合同里存在的 `criterion_id` 和存在的文件 `location`，否则引擎按实现问题处理。不要因为实现难做就标 `contract`；不要因为测试严格就标 `oracle`。
+
+思路参考 HelixHarness 对应文件。

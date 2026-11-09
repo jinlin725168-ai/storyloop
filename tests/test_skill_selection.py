@@ -18,9 +18,10 @@ class SkillSelectionTests(unittest.TestCase):
         return path
 
     def test_packaged_selection_includes_review_guidance(self):
-        expected = {'survey': ['foundation-survey'], 'product': ['oracle-craft'],
-                    'acceptance': ['oracle-craft'], 'characterize': ['oracle-craft'],
-                    'review': ['oracle-craft', 'review'], 'design': [], 'implement': ['review']}
+        expected = {'survey': ['foundation-survey'], 'product': ['oracle-craft', 'spec-craft'],
+                    'acceptance': ['oracle-craft'], 'characterize': ['tdd'],
+                    'review': ['oracle-craft', 'review'], 'design': ['impact-analysis', 'oracle-craft'],
+                    'implement': ['review', 'systematic-debugging', 'tdd']}
         for role, names in expected.items():
             self.assertEqual(select_skills(self.root, role, []), names)
 
