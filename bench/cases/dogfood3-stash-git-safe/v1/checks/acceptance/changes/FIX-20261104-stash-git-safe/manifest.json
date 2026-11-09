@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "tests": [
+    {
+      "id": "ac1-literal-stash",
+      "criteria": [
+        "AC-1"
+      ],
+      "command": [
+        "{python}",
+        "acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "NewBehavior.test_ac1_stash_is_repo_bound_and_literal"
+      ],
+      "timeout_seconds": 60,
+      "tier": "fast"
+    },
+    {
+      "id": "ac2-view-parity",
+      "criteria": [
+        "AC-2"
+      ],
+      "command": [
+        "{python}",
+        "acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "NewBehavior.test_ac2_every_view_repairs_saved_and_current_commands"
+      ],
+      "timeout_seconds": 90,
+      "tier": "fast"
+    },
+    {
+      "id": "ac3-no-legacy-paths",
+      "criteria": [
+        "AC-3"
+      ],
+      "command": [
+        "{python}",
+        "acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "NewBehavior.test_ac3_without_legacy_files_switches_stay_repo_bound"
+      ],
+      "timeout_seconds": 60,
+      "tier": "fast"
+    },
+    {
+      "id": "ac4-approval-order",
+      "criteria": [
+        "AC-4"
+      ],
+      "command": [
+        "{python}",
+        "acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "ExistingBehavior.test_ac4_approval_and_action_order"
+      ],
+      "timeout_seconds": 60,
+      "tier": "fast"
+    },
+    {
+      "id": "ac5-read-preserves-state",
+      "criteria": [
+        "AC-5"
+      ],
+      "command": [
+        "{python}",
+        "acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "ExistingBehavior.test_ac5_read_views_preserve_saved_and_git_state"
+      ],
+      "timeout_seconds": 60,
+      "tier": "fast"
+    },
+    {
+      "id": "ac6-no-automatic-stash",
+      "criteria": [
+        "AC-6"
+      ],
+      "command": [
+        "{python}",
+        "acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "ExistingBehavior.test_ac6_hint_generation_does_not_stash"
+      ],
+      "timeout_seconds": 60,
+      "tier": "fast"
+    }
+  ]
+}

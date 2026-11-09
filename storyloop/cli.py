@@ -24,6 +24,7 @@ from .routing_cli import dispatch_routing, BLOCKED
 from .ci_command import run_ci_command
 from .memory_cli import add_memory_arguments, dispatch_memory
 from .cli_output import display
+from .bench_cli import add_bench_arguments, dispatch_bench
 
 
 def parser() -> argparse.ArgumentParser:
@@ -70,6 +71,7 @@ def parser() -> argparse.ArgumentParser:
     check = adapter_sub.add_parser("check", help="握手并校验角色档次映射")
     check.add_argument("project", type=Path)
     check.add_argument("--json", action="store_true", help="输出完整 JSON")
+    add_bench_arguments(sub)
     return root
 
 
@@ -175,6 +177,8 @@ def _since_date(value: str) -> date:
 
 
 def dispatch(args) -> dict:
+    if args.command == "bench":
+        return dispatch_bench(args)
     project = args.project.resolve()
     if args.command == "adapters":
         from .adapter_capabilities import check
@@ -322,6 +326,8 @@ def _is_product_project(project: Path) -> bool:
 
 def _error_stop(args, exc: StoryLoopError) -> dict | None:
     """Best-effort stop context; a damaged run must not mask the original error."""
+    if args.command == "bench":
+        return None
     if exc.code == "BASE_AGENT_REMOVED":
         return None
     change_id = getattr(args, "change_id", None)
@@ -376,7 +382,8 @@ def main(argv: list[str] | None = None) -> int:
         stop = _error_stop(args, exc)
         if stop is not None:
             error["stop"] = stop
-        hint = stop["resume"] if stop else next_step(exc.code, change_id, args.project.resolve(), exc.details)
+        hint = stop["resume"] if stop else (None if args.command == "bench" else
+                                            next_step(exc.code, change_id, args.project.resolve(), exc.details))
         if hint:
             error["next"] = hint
         print(json.dumps(_redact_value(error), ensure_ascii=False), file=sys.stderr)

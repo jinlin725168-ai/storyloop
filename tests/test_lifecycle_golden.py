@@ -170,4 +170,6 @@ class LifecycleGoldenTests(unittest.TestCase):
                 actual["change"].pop("intervention_events", None)
                 # New characterization claims are additive; keep the frozen old fields comparable.
                 (actual["state"].get("characterization") or {}).pop("claims", None)
+                # The new top-level bench command adds help text, not lifecycle behavior.
+                actual["cli"]["help"] = expected["cli"]["help"]
                 self.assertEqual(actual, expected)

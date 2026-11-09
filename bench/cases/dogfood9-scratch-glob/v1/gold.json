@@ -1,0 +1,148 @@
+{
+  "checks": [
+    {
+      "argv": [
+        "{python}",
+        "-B",
+        "-m",
+        "unittest",
+        "acceptance.changes.FIX-20261107-scratch-glob.test_scratch_glob.RedBehavior"
+      ],
+      "check_id": "F2P-acceptance-1",
+      "kind": "F2P",
+      "timeout_seconds": 90
+    },
+    {
+      "argv": [
+        "{python}",
+        "-B",
+        "-m",
+        "unittest",
+        "acceptance.changes.FIX-20261107-scratch-glob.test_scratch_glob.ExistingBehavior"
+      ],
+      "check_id": "P2P-acceptance-2",
+      "kind": "P2P",
+      "timeout_seconds": 90
+    },
+    {
+      "argv": [
+        "{python}",
+        "-m",
+        "unittest",
+        "tests.test_workspace_scratch.WorkspaceScratchTests.test_only_star_is_a_name_wildcard_and_relative_paths_keep_prefix_semantics"
+      ],
+      "check_id": "F2P-reference",
+      "kind": "F2P",
+      "timeout_seconds": 400
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "approved-contract",
+      "path": "contract.json",
+      "sha256": "912edc85531f01ce21fc75056d83f6f86ef67467af6d03349e1d1eef9db99a09"
+    },
+    {
+      "evidence_id": "frozen-suite",
+      "path": "checks/acceptance/changes/FIX-20261107-scratch-glob/manifest.json",
+      "sha256": "1930a50a15d32284d63a69a81a5508fe522f7810f45ac2f27d042f30cd127b09"
+    },
+    {
+      "evidence_id": "reference-test",
+      "path": "checks/tests/test_workspace_scratch.py",
+      "sha256": "8f60db5abbdc1f330a9b853cda86c6564a1d2f5bb2e645f22463a19659c9895a"
+    }
+  ],
+  "requirements": [
+    {
+      "check_ids": [
+        "F2P-acceptance-1",
+        "F2P-reference"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "AC-1"
+    },
+    {
+      "check_ids": [
+        "F2P-acceptance-1"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "AC-2"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-2"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "AC-3"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-2"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "AC-4"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-2"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "AC-5"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-2"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "AC-6"
+    },
+    {
+      "check_ids": [
+        "F2P-acceptance-1"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "AC-7"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-2"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "AC-8"
+    }
+  ],
+  "schema_version": 1
+}

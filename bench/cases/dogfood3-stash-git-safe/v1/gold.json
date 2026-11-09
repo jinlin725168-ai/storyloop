@@ -1,0 +1,162 @@
+{
+  "checks": [
+    {
+      "argv": [
+        "{python}",
+        "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "NewBehavior.test_ac1_stash_is_repo_bound_and_literal"
+      ],
+      "check_id": "F2P-acceptance-1",
+      "kind": "F2P",
+      "timeout_seconds": 60
+    },
+    {
+      "argv": [
+        "{python}",
+        "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "NewBehavior.test_ac2_every_view_repairs_saved_and_current_commands"
+      ],
+      "check_id": "F2P-acceptance-2",
+      "kind": "F2P",
+      "timeout_seconds": 90
+    },
+    {
+      "argv": [
+        "{python}",
+        "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "NewBehavior.test_ac3_without_legacy_files_switches_stay_repo_bound"
+      ],
+      "check_id": "F2P-acceptance-3",
+      "kind": "F2P",
+      "timeout_seconds": 60
+    },
+    {
+      "argv": [
+        "{python}",
+        "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "ExistingBehavior.test_ac4_approval_and_action_order"
+      ],
+      "check_id": "P2P-acceptance-4",
+      "kind": "P2P",
+      "timeout_seconds": 60
+    },
+    {
+      "argv": [
+        "{python}",
+        "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "ExistingBehavior.test_ac5_read_views_preserve_saved_and_git_state"
+      ],
+      "check_id": "P2P-acceptance-5",
+      "kind": "P2P",
+      "timeout_seconds": 60
+    },
+    {
+      "argv": [
+        "{python}",
+        "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+        "ExistingBehavior.test_ac6_hint_generation_does_not_stash"
+      ],
+      "check_id": "P2P-acceptance-6",
+      "kind": "P2P",
+      "timeout_seconds": 60
+    },
+    {
+      "argv": [
+        "{python}",
+        "-m",
+        "unittest",
+        "tests.test_failure_routing.ReviewRoutingTests.test_base_stash_from_outside_repository_uses_literal_listed_paths"
+      ],
+      "check_id": "F2P-reference",
+      "kind": "F2P",
+      "timeout_seconds": 400
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "approved-contract",
+      "path": "contract.json",
+      "sha256": "c74e6907582015ac23a265f91c1dfc07904795c86d0a9184acdfd099a68f5f24"
+    },
+    {
+      "evidence_id": "frozen-suite",
+      "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/manifest.json",
+      "sha256": "439a131e5208f2b06887951f2d5195316d49dce63edf81f6f3c9e76f05b01f64"
+    },
+    {
+      "evidence_id": "reference-test",
+      "path": "checks/tests/test_failure_routing.py",
+      "sha256": "578520460f2ca139c83818b6352c05eaad9e489677c81fbe8dc477921dcc12c9"
+    }
+  ],
+  "requirements": [
+    {
+      "check_ids": [
+        "F2P-acceptance-1",
+        "F2P-reference"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "AC-1"
+    },
+    {
+      "check_ids": [
+        "F2P-acceptance-2"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "AC-2"
+    },
+    {
+      "check_ids": [
+        "F2P-acceptance-3"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "AC-3"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-4"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "AC-4"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-5"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "AC-5"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-6"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "AC-6"
+    }
+  ],
+  "schema_version": 1
+}

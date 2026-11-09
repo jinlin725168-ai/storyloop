@@ -131,6 +131,10 @@
 |  | `cost_resume` | 可变区 | 跨成本停点保留候选证据，不消耗质量尝试 | `candidate`、`checkpoint`、`restore`、`stop` |
 |  | `metrics` | 可变区 | 只读编排跨变更指标，并按显式请求持久化 | `build_metrics`、`save_metrics` |
 |  | `metrics_collect` | 可变区 | 有界、只读地规范化持久化变更证据 | `collect` |
+|  | `bench_case` | 可变区 | 校验冻结 Case、合同、套件与 Gold 哈希和路径 | `load_case` |
+|  | `bench_calibrate` | 可变区 | 在隔离 Base/Solution 副本校准确定性 Gold | `calibrate_case` |
+|  | `bench_run` | 可变区 | 冻结配置、交错调度和证据比较 | `run_bench`、`compare_runs` |
+|  | `bench_cli` | 可变区 | bench 校准、报告与真实运行成本门禁 | `dispatch_bench` |
 |  | `metrics_compute` | 可变区 | 计算跨变更指标，包含一个显式只读 Git 指标 | `attempts`、`contract_ratio`、`escapes`、`first_pass`、`forced_heavy`、`interventions`、`lessons`、`local_green_ci_red`、`overrule_rate`、`rework`、`stuck`、`upgrades` |
 |  | `metrics_compute_support` | 可变区 | 指标计算共用的构造器与解析器 | `metric` |
 |  | `metrics_cost` | 可变区 | 从报告汇总聚合 M11，必要时回退读取原始账本 | `cost` |

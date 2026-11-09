@@ -1,0 +1,731 @@
+{
+  "approval": {
+    "approved_at": "2026-11-07T03:37:04.526180Z",
+    "approved_by": "user",
+    "contract_digest": "9108705cf9bd5f141a6ac74c108acbd08cf8048d6c4c1020afd983af56ba258c",
+    "intake_digest": "fffcacad5a3cc8cd498ba3c2b96a593755c3a08f5a1a2d2c26508503eff78a29",
+    "revision": 3,
+    "tier": "heavy",
+    "versions": {
+      "baseline_version": "1.0.0",
+      "engine_version": "0.1.0",
+      "map_version": null,
+      "skills": [
+        {
+          "name": "foundation-survey",
+          "path": "storyloop/skills/foundation-survey/SKILL.md",
+          "sha256": "cc9ec58cd408c5db0bd5bc86e1ac1153d06370821ba2dc1057b7b69419a87114",
+          "version": "1.1.0"
+        },
+        {
+          "name": "oracle-craft",
+          "path": "storyloop/skills/oracle-craft/SKILL.md",
+          "sha256": "9b6169fe7b9120030ac8b8cc944f8b59ff2b033f224a676288fdda4c27d6fdea",
+          "version": "1.1.1"
+        }
+      ],
+      "version": 1
+    }
+  },
+  "change_id": "FIX-20261107-scratch-glob",
+  "product": {
+    "assessment": {
+      "criteria": [
+        {
+          "criterion_id": "AC-1",
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_guards.py:139",
+              "storyloop/boundaries.py:116",
+              "tests/test_workspace_scratch.py:82"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_guards.py",
+              "storyloop/boundaries.py",
+              "tests/test_workspace_scratch.py"
+            ]
+          },
+          "existence": "absent",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-B",
+                "-m",
+                "unittest",
+                "tests.test_workspace_scratch"
+              ]
+            ],
+            "expected": "两个位置的已声明产物均不导致 WORKSPACE_TAINTED；当前精确比较实现应使此判据失败。",
+            "steps": [
+              "在临时 Git 项目配置 scratch_paths 为 [\"*.egg-info\"]，忽略 egg-info 目录。",
+              "让实现调用在项目根及嵌套目录分别生成名称不同的 egg-info 产物，并检查运行状态。"
+            ]
+          },
+          "story_id": "ST-1"
+        },
+        {
+          "criterion_id": "AC-2",
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_guards.py:52",
+              "storyloop/project_loop_guards.py:78",
+              "storyloop/project_loop_guards.py:139"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_guards.py",
+              "tests/test_workspace_scratch.py"
+            ]
+          },
+          "existence": "absent",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-B",
+                "-m",
+                "unittest",
+                "tests.test_workspace_scratch"
+              ]
+            ],
+            "expected": "两类代理调用都容忍已声明产物；当前实现至少在路径段匹配处失败。",
+            "steps": [
+              "在临时项目配置 scratch_paths 为 [\"*.egg-info\"]。",
+              "分别让写入代理和只读代理生成匹配的忽略目录，并检查各自调用结果。"
+            ]
+          },
+          "story_id": "ST-1"
+        },
+        {
+          "criterion_id": "AC-3",
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_guards.py:139",
+              "tests/test_workspace_scratch.py:82"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_guards.py",
+              "tests/test_workspace_scratch.py"
+            ]
+          },
+          "existence": "exists",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-B",
+                "-m",
+                "unittest",
+                "tests.test_workspace_scratch"
+              ]
+            ],
+            "expected": "任意层级的 target 产物仍被容忍，现有测试继续通过。",
+            "steps": [
+              "配置精确名字 target，运行现有就地构建测试。"
+            ]
+          },
+          "story_id": "ST-1"
+        },
+        {
+          "criterion_id": "AC-4",
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_guards.py:164",
+              "tests/test_workspace_scratch.py:89"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_guards.py",
+              "tests/test_workspace_scratch.py"
+            ]
+          },
+          "existence": "exists",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-B",
+                "-m",
+                "unittest",
+                "tests.test_workspace_scratch"
+              ]
+            ],
+            "expected": "调用继续以 WORKSPACE_TAINTED 拒绝未声明产物。",
+            "steps": [
+              "不声明新产物，运行现有未声明忽略文件测试。"
+            ]
+          },
+          "story_id": "ST-1"
+        },
+        {
+          "criterion_id": "AC-5",
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_guards.py:136",
+              "tests/test_readiness.py:180",
+              "storyloop/readiness.py:140"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_guards.py",
+              "storyloop/boundaries.py",
+              "storyloop/readiness.py",
+              "tests/test_readiness.py"
+            ]
+          },
+          "existence": "exists",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-B",
+                "-m",
+                "unittest",
+                "tests.test_readiness"
+              ]
+            ],
+            "expected": "控制面改动继续触发 WORKSPACE_TAINTED。",
+            "steps": [
+              "声明可匹配控制目录内路径的 scratch 名字，让受保护的 .storyloop/ 状态发生变化。",
+              "检查只读保护的结果。"
+            ]
+          },
+          "story_id": "ST-1"
+        },
+        {
+          "criterion_id": "AC-6",
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_guards.py:117",
+              "docs/api.md:187"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_guards.py",
+              "docs/api.md",
+              "tests/test_workspace_scratch.py"
+            ]
+          },
+          "existence": "exists",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-B",
+                "-m",
+                "unittest",
+                "tests.test_workspace_scratch"
+              ]
+            ],
+            "expected": "调用前后的持久配置完全相等。",
+            "steps": [
+              "记录临时项目现有 profile.scratch_paths 的完整 JSON 值。",
+              "执行匹配的代理调用后重新读取该值。"
+            ]
+          },
+          "story_id": "ST-1"
+        },
+        {
+          "criterion_id": "AC-7",
+          "evidence": {
+            "locations": [
+              "storyloop/onboarding_templates.py:33",
+              "tests/test_onboarding.py:12",
+              "storyloop/onboarding.py:27"
+            ],
+            "search_scope": [
+              "storyloop/onboarding_templates.py",
+              "storyloop/onboarding.py",
+              "tests/test_onboarding.py"
+            ]
+          },
+          "existence": "absent",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-B",
+                "-m",
+                "unittest",
+                "tests.test_onboarding"
+              ]
+            ],
+            "expected": "scratch_paths 包含原有四个缓存项及 *.egg-info、build、dist；当前模板缺少后三项。",
+            "steps": [
+              "生成 Python 栈接入草案并解析 acceptance/storyloop-settings.json。"
+            ]
+          },
+          "story_id": "ST-2"
+        },
+        {
+          "criterion_id": "AC-8",
+          "evidence": {
+            "locations": [
+              "storyloop/onboarding_templates.py:33"
+            ],
+            "search_scope": [
+              "storyloop/onboarding_templates.py",
+              "tests/test_onboarding.py"
+            ]
+          },
+          "existence": "exists",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-B",
+                "-m",
+                "unittest",
+                "tests.test_onboarding"
+              ]
+            ],
+            "expected": "非 Python 草案不因本次修复而自动加入 Python 构建产物项。",
+            "steps": [
+              "生成不含 Python 栈的接入草案并解析 settings。"
+            ]
+          },
+          "story_id": "ST-2"
+        }
+      ],
+      "risks": {
+        "crosscut": {
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_guards.py:52",
+              "storyloop/boundaries.py:74",
+              "storyloop/onboarding_templates.py:33"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_guards.py",
+              "storyloop/boundaries.py",
+              "storyloop/onboarding_templates.py"
+            ]
+          },
+          "value": "yes"
+        },
+        "dependency_swap": {
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_guards.py:128",
+              "storyloop/boundaries.py:110"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_guards.py",
+              "storyloop/boundaries.py",
+              "storyloop/onboarding_templates.py"
+            ]
+          },
+          "value": "no"
+        },
+        "external_contract": {
+          "evidence": {
+            "locations": [
+              "docs/api.md:182",
+              "storyloop/onboarding_templates.py:28"
+            ],
+            "search_scope": [
+              "docs/api.md",
+              "storyloop/onboarding_templates.py"
+            ]
+          },
+          "value": "yes"
+        },
+        "guard": {
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_guards.py:133",
+              "storyloop/project_loop_guards.py:136",
+              "storyloop/boundaries.py:112"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_guards.py",
+              "storyloop/boundaries.py"
+            ]
+          },
+          "value": "yes"
+        },
+        "hard_verify_high_cost": {
+          "evidence": {
+            "locations": [
+              "tests/test_workspace_scratch.py:63",
+              "tests/test_onboarding.py:11"
+            ],
+            "search_scope": [
+              "tests/test_workspace_scratch.py",
+              "tests/test_onboarding.py"
+            ]
+          },
+          "value": "no"
+        },
+        "human_choice": {
+          "evidence": {
+            "locations": [
+              "docs/api.md:182",
+              "storyloop/onboarding_templates.py:33"
+            ],
+            "search_scope": [
+              "docs/api.md",
+              "storyloop/onboarding_templates.py"
+            ]
+          },
+          "value": "no"
+        },
+        "migration": {
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_guards.py:115",
+              "docs/api.md:187"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_guards.py",
+              "docs/api.md"
+            ]
+          },
+          "value": "no"
+        },
+        "new_interface": {
+          "evidence": {
+            "locations": [
+              "storyloop/project_profile.py:65",
+              "storyloop/onboarding_templates.py:21"
+            ],
+            "search_scope": [
+              "storyloop/project_profile.py",
+              "storyloop/onboarding_templates.py"
+            ]
+          },
+          "value": "no"
+        },
+        "persistent_state": {
+          "evidence": {
+            "locations": [
+              "docs/api.md:187",
+              "storyloop/project_loop_guards.py:117"
+            ],
+            "search_scope": [
+              "docs/api.md",
+              "storyloop/project_loop_guards.py"
+            ]
+          },
+          "value": "yes"
+        },
+        "principle_deviation": {
+          "evidence": {
+            "locations": [
+              "storyloop/project_loop_guards.py:136",
+              "storyloop/boundaries.py:112"
+            ],
+            "search_scope": [
+              "storyloop/project_loop_guards.py",
+              "storyloop/boundaries.py"
+            ]
+          },
+          "value": "no"
+        },
+        "sensitive": {
+          "evidence": {
+            "locations": [
+              "storyloop/boundaries.py:110",
+              "storyloop/boundaries.py:132",
+              "storyloop/project_loop_guards.py:133"
+            ],
+            "search_scope": [
+              "storyloop/boundaries.py",
+              "storyloop/project_loop_guards.py"
+            ]
+          },
+          "value": "yes"
+        }
+      },
+      "scope": {
+        "creates": [],
+        "interfaces": [
+          "profile.scratch_paths 的名字项匹配语义",
+          "storyloop init --scaffold --stack python 生成的 acceptance/storyloop-settings.json 草案"
+        ],
+        "symbols": [
+          {
+            "path": "storyloop/project_loop_guards.py",
+            "symbol": "_is_scratch"
+          },
+          {
+            "path": "storyloop/project_loop_guards.py",
+            "symbol": "_without_scratch"
+          },
+          {
+            "path": "storyloop/boundaries.py",
+            "symbol": "_scan_once"
+          },
+          {
+            "path": "storyloop/boundaries.py",
+            "symbol": "_scratch_skip"
+          },
+          {
+            "path": "storyloop/onboarding_templates.py",
+            "symbol": "render"
+          }
+        ],
+        "touched": [
+          "storyloop/project_loop_guards.py",
+          "storyloop/boundaries.py",
+          "storyloop/onboarding_templates.py",
+          "tests/test_workspace_scratch.py",
+          "tests/test_onboarding.py",
+          "docs/api.md"
+        ]
+      },
+      "verifiable_goal": true
+    },
+    "capability": "workspace-scratch",
+    "clarifications": [],
+    "consumers": [
+      {
+        "consumer": "实现代理调用后的工作区审计",
+        "id": "C1",
+        "in_scope": true,
+        "path": "storyloop/project_loop_guards.py:22",
+        "trigger": "实现代理返回后",
+        "verification": "临时项目中分别验证已声明通配产物和未声明忽略产物。"
+      },
+      {
+        "consumer": "只读代理调用后的工作区审计",
+        "id": "C2",
+        "in_scope": true,
+        "path": "storyloop/project_loop_guards.py:63",
+        "trigger": "只读代理返回后",
+        "verification": "验证已声明通配产物可容忍、.storyloop/ 改动仍被拒绝。"
+      },
+      {
+        "consumer": "完整工作区快照扫描",
+        "id": "C3",
+        "in_scope": true,
+        "path": "storyloop/boundaries.py:74",
+        "trigger": "代理调用前后捕获快照",
+        "verification": "验证匹配的目录在任意层级被跳过，控制目录仍被检查。"
+      },
+      {
+        "consumer": "接入草案生成",
+        "id": "C4",
+        "in_scope": true,
+        "path": "storyloop/onboarding.py:27",
+        "trigger": "storyloop init --scaffold 选择 Python 栈",
+        "verification": "解析生成的 settings JSON 并断言默认项的具体值。"
+      }
+    ],
+    "coverage_exemptions": [
+      {
+        "reason": "本变更的输入是本地同步读取的配置与文件系统快照，没有加载中或未知能力状态。",
+        "row_type": "unknown_state"
+      },
+      {
+        "reason": "本变更只放宽已声明 scratch 名字的匹配，不新增依赖失败路径；未声明产物仍判为 WORKSPACE_TAINTED 已由 AC-4 的回归条件覆盖。",
+        "row_type": "degradation"
+      }
+    ],
+    "defect": {
+      "confirmed": [
+        "仓库运行记录载明一次 storyloop_engine.egg-info 产物导致的 WORKSPACE_TAINTED 与人工 reset；记录位于 openspec/changes/FIX-20261105-design-revision-findings/decisions.md:25。",
+        "源码证据对应提交 57132666b7e989df1e9d869d1fa88bbb394f9d5a。",
+        "现有边界测试已覆盖精确名字可用与未声明产物仍污染。"
+      ],
+      "expected": "已声明的简单名字通配在任意层级匹配构建产物，Python 草案默认包含常见打包产物；未声明路径及控制面仍受保护。",
+      "observed": "实现代理生成被 Git 忽略的 storyloop_engine.egg-info 后，运行进入 WORKSPACE_TAINTED；现有精确名字配置无法覆盖变化的包名，Python 接入草案也未默认声明该类产物。",
+      "reporter_hypothesis": "scratch_paths 只按精确名字或相对路径匹配，且 Python 模板默认值遗漏构建产物。",
+      "reproduction": [
+        "在临时项目中配置 scratch_paths 为 [\"*.egg-info\"]，并将 egg-info 目录设为 Git 忽略。",
+        "让实现代理在项目根生成 storyloop_engine.egg-info/。",
+        "观察代理调用后的 WORKSPACE_TAINTED；另行渲染 Python 草案可观察到缺少 *.egg-info、build、dist。"
+      ],
+      "root_cause": [
+        {
+          "location": "storyloop/project_loop_guards.py:139",
+          "statement": "调用后过滤用路径段与配置项的精确相等比较，无法识别 *.egg-info。"
+        },
+        {
+          "location": "storyloop/boundaries.py:116",
+          "statement": "完整快照扫描只按精确目录名或相对路径跳过 scratch，通配目录仍会被扫描。"
+        },
+        {
+          "location": "storyloop/onboarding_templates.py:33",
+          "statement": "Python 草案的 scratch_paths 默认列表只有四个缓存目录。"
+        }
+      ],
+      "sibling_entries": [],
+      "unconfirmed": [
+        "未在本次只读检查中重新执行完整 dogfood6 代理运行。"
+      ]
+    },
+    "errata": [],
+    "goal": "修复构建产物误触发 WORKSPACE_TAINTED：让 profile.scratch_paths 中不含斜杠的名字项支持 * 匹配任意层级的单个路径段，并让 Python 接入草案默认声明 *.egg-info、build、dist。以下源码证据均对应 source_commit 57132666b7e989df1e9d869d1fa88bbb394f9d5a。",
+    "lessons_used": [],
+    "nature": "fix",
+    "non_goals": [
+      "不放行未声明的忽略文件或 .storyloop/ 下的改动。",
+      "不改变含斜杠的相对路径项的现有前缀语义。",
+      "不自动改写已有项目的 scratch_paths 配置。"
+    ],
+    "questions": [],
+    "stories": [
+      {
+        "acceptance": [
+          {
+            "consumers": [
+              "C1",
+              "C3"
+            ],
+            "given": "项目声明 *.egg-info 为 scratch，项目根和嵌套目录均可生成被 Git 忽略的 egg-info 目录",
+            "id": "AC-1",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": true,
+            "row_type": "positive",
+            "then": "两处产物均不使运行进入 WORKSPACE_TAINTED",
+            "when": "实现代理生成这两个目录"
+          },
+          {
+            "consumers": [
+              "C2",
+              "C3"
+            ],
+            "given": "项目声明 *.egg-info 为 scratch",
+            "id": "AC-2",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": true,
+            "row_type": "form_parity",
+            "then": "只读调用不因该产物报告 WORKSPACE_TAINTED",
+            "when": "只读代理生成匹配的忽略目录"
+          },
+          {
+            "consumers": [
+              "C1",
+              "C3"
+            ],
+            "given": "项目已将精确名字 target 声明为 scratch",
+            "id": "AC-3",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "regression",
+            "then": "运行继续容忍该产物",
+            "when": "实现代理在 target 目录内生成忽略产物"
+          },
+          {
+            "consumers": [
+              "C1"
+            ],
+            "given": "项目没有声明新生成的忽略产物",
+            "id": "AC-4",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "regression",
+            "then": "运行报告 WORKSPACE_TAINTED",
+            "when": "实现代理生成该产物"
+          },
+          {
+            "consumers": [
+              "C2",
+              "C3"
+            ],
+            "given": "scratch 配置可匹配 .storyloop/ 内的路径名",
+            "id": "AC-5",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "non_goal",
+            "then": "调用报告 WORKSPACE_TAINTED",
+            "when": "代理修改 .storyloop/ 下的受保护状态"
+          },
+          {
+            "consumers": [
+              "C1",
+              "C2"
+            ],
+            "given": "项目已有持久化的 scratch_paths 配置",
+            "id": "AC-6",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "state_preservation",
+            "then": "持久化的 scratch_paths 值与调用前完全相等",
+            "when": "代理调用使用该配置完成 scratch 匹配"
+          }
+        ],
+        "as_a": "使用 StoryLoop 的项目开发者",
+        "depends_on": [],
+        "id": "ST-1",
+        "independent_test": "用临时 Git 项目分别测试根目录和嵌套目录的忽略产物、写入与只读代理调用，并运行现有边界测试。",
+        "out_of_scope": [
+          "递归 **、? 或字符类通配语法",
+          "自动清理构建产物"
+        ],
+        "priority": "P1",
+        "rules": [
+          "WHEN scratch_paths 的名字项含 * 时，THE SYSTEM SHALL 让 * 仅匹配单个路径段内的任意字符。",
+          "WHEN 任意层级的路径段匹配已声明名字项时，THE SYSTEM SHALL 将该段及其下的产物视为 scratch。",
+          "WHEN 代理生成未声明的忽略产物时，THE SYSTEM SHALL 继续报告 WORKSPACE_TAINTED。",
+          "WHEN 代理修改 .storyloop/ 下的路径时，THE SYSTEM SHALL 继续执行控制面保护。",
+          "THE SYSTEM SHALL 保持精确名字项和含斜杠相对路径项的现有匹配语义。"
+        ],
+        "so_that": "合法的就地构建不会误停在 WORKSPACE_TAINTED",
+        "title": "修复 scratch 名字项的构建产物匹配",
+        "want": "用一个名字项声明同类构建产物"
+      },
+      {
+        "acceptance": [
+          {
+            "consumers": [
+              "C4"
+            ],
+            "given": "新项目选择 Python 接入栈",
+            "id": "AC-7",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": true,
+            "row_type": "positive",
+            "then": "settings 的 scratch_paths 同时包含原有四个缓存项及 *.egg-info、build、dist",
+            "when": "StoryLoop 生成接入草案"
+          },
+          {
+            "consumers": [
+              "C4"
+            ],
+            "given": "新项目未选择 Python 接入栈",
+            "id": "AC-8",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": false,
+            "row_type": "regression",
+            "then": "settings 不自动包含 *.egg-info、build、dist",
+            "when": "StoryLoop 生成接入草案"
+          }
+        ],
+        "as_a": "接入 Python 项目的开发者",
+        "depends_on": [],
+        "id": "ST-2",
+        "independent_test": "分别渲染 Python 与非 Python 接入草案，解析 settings JSON 并断言 scratch_paths 的具体值。",
+        "out_of_scope": [
+          "自动修改已有 acceptance/storyloop-settings.json",
+          "自动批准或初始化未完成的接入草案"
+        ],
+        "priority": "P1",
+        "rules": [
+          "WHEN 生成包含 Python 栈的接入草案时，THE SYSTEM SHALL 在 scratch_paths 中列出 *.egg-info、build、dist。",
+          "WHEN 生成包含 Python 栈的接入草案时，THE SYSTEM SHALL 保留现有四个缓存目录默认值。",
+          "WHEN 生成不含 Python 栈的接入草案时，THE SYSTEM SHALL 不自动加入这些 Python 构建产物项。"
+        ],
+        "so_that": "完成接入后运行构建时不会因遗漏默认产物而误停",
+        "title": "补全 Python 接入草案的构建产物默认值",
+        "want": "在生成的设置草案中看到常见打包产物声明"
+      }
+    ],
+    "test_removals": [],
+    "version": 1
+  }
+}

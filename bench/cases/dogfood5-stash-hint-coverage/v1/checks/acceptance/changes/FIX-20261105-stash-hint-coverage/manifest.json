@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "tests": [
+    {
+      "id": "linked-base-paths-red",
+      "criteria": [
+        "AC-2",
+        "AC-7"
+      ],
+      "command": [
+        "{python}",
+        "acceptance/changes/FIX-20261105-stash-hint-coverage/test_core.py",
+        "DefectReproduction"
+      ],
+      "timeout_seconds": 240,
+      "tier": "heavy"
+    },
+    {
+      "id": "linked-base-existing-green",
+      "criteria": [
+        "AC-1",
+        "AC-3",
+        "AC-4",
+        "AC-5",
+        "AC-6"
+      ],
+      "command": [
+        "{python}",
+        "acceptance/changes/FIX-20261105-stash-hint-coverage/test_core.py",
+        "ExistingBehavior"
+      ],
+      "timeout_seconds": 120,
+      "tier": "fast"
+    }
+  ]
+}

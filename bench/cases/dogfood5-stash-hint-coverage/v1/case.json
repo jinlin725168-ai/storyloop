@@ -1,0 +1,38 @@
+{
+  "allowed": {
+    "adapters": [
+      "codex",
+      "claude",
+      "test"
+    ],
+    "max_calls": 100,
+    "max_cost_usd": null,
+    "models": [
+      "configured"
+    ]
+  },
+  "base_commit": "4b93151924a25537533e2c0a0244fb107f833b9f",
+  "case_id": "dogfood5-stash-hint-coverage",
+  "case_version": 1,
+  "contract_sha256": "fc611fcc2cabf53c5c0d180fcb967e0ad43a22002fd53584b33c548b2c49008b",
+  "gold_sha256": "c0d251ab6a39f42aaf101f2e671dcfbe9858e866c94dd4a67874cfcfeb565a16",
+  "legacy_seam": true,
+  "repository_id": "storyloop-dogfood3",
+  "schema_version": 1,
+  "solution_commit": "254ab9d920ea4f4a59c31b82b80ac797401531de",
+  "suite_files": [
+    {
+      "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/manifest.json",
+      "sha256": "6f68d0d6a696d35c50a67b108f934402b8ce313c3b0093b9519543adf70eda51"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/test_core.py",
+      "sha256": "0eb7eeb245995ca10130c5397163e9cf6c1425bef1d71c6a2a831e1323f80e6d"
+    },
+    {
+      "path": "checks/tests/test_failure_routing.py",
+      "sha256": "1a9e21071d52afd0b427cedc5a3816dde543e58d5fe86c542fdb82860a83d385"
+    }
+  ],
+  "suite_sha256": "5a30faf1b3974b1508c6815881b07daeaca50508cb540937846e192a83b7ac3c"
+}

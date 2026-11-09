@@ -190,6 +190,10 @@ rank = 7
 "call_context" = { module = "outer_loop", zone = "mutable" }
 "metrics" = { module = "outer_loop", zone = "mutable" }
 "metrics_collect" = { module = "outer_loop", zone = "mutable" }
+"bench_case" = { module = "outer_loop", zone = "mutable" }
+"bench_calibrate" = { module = "outer_loop", zone = "mutable" }
+"bench_run" = { module = "outer_loop", zone = "mutable" }
+"bench_cli" = { module = "outer_loop", zone = "mutable" }
 "metrics_compute" = { module = "outer_loop", zone = "mutable" }
 "metrics_compute_support" = { module = "outer_loop", zone = "mutable" }
 "metrics_cost" = { module = "outer_loop", zone = "mutable" }
