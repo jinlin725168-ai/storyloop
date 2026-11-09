@@ -5,11 +5,12 @@ LESSONS_NOTE = 'payload.lessons (when present) holds repository lessons a human 
 FOUNDATION_NOTE = (
     "payload.foundation (when present) lists the protected knowledge base under openspec/foundation/ "
     "(modules, architecture, extension mechanism, API surface, capabilities, building blocks, testing). "
-    "Read the documents relevant to your role before anything else and treat them as the authority on "
-    "what the base already provides and how it is extended. "
+    "Read the documents relevant to your role before anything else and use them as the map of "
+    "what the base provides and how it is extended, subject to current-code verification. "
     " When openspec/foundation/errata.md is present it overrides the documents it corrects. "
     "If you find a foundation statement that contradicts the code, report it in errata "
-    "with the exact quoted claim and path:line evidence."
+    "with the exact quoted claim and path:line evidence. Follow foundation-use to verify each "
+    "fact against current code before relying on it."
 )
 
 FACTS_NOTE = (

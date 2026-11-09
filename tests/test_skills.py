@@ -18,11 +18,25 @@ from tests.test_baseline_behavior import git, repository
 
 
 class PackagedSkillTests(unittest.TestCase):
+    def test_domain_sections_and_foundation_use_are_packaged(self):
+        from storyloop.skills import SKILLS_ROOT
+        survey = (SKILLS_ROOT / "foundation-survey/SKILL.md").read_text(encoding="utf-8")
+        template = (SKILLS_ROOT / "foundation-survey/references/doc-templates.md").read_text(encoding="utf-8")
+        guidance = (SKILLS_ROOT / "foundation-use/SKILL.md").read_text(encoding="utf-8")
+        for domain in ("tech", "db", "api", "领域模型", "服务边界", "前端"):
+            self.assertIn(domain, survey)
+        for heading in ("已核实事实", "必须遵守的约束", "source:", "3～5 条"):
+            self.assertIn(heading, template)
+        self.assertIn("roles: [product, acceptance, design, characterize, implement, review]", guidance)
+        with tempfile.TemporaryDirectory() as folder:
+            for role in ("product", "acceptance", "design", "characterize", "implement", "review"):
+                self.assertIn("Follow foundation-use", instructions_for(Path(folder), role))
+
     def test_foundation_survey_skill_is_packaged_with_its_references(self):
         skills = packaged_skills()
         self.assertIn("foundation-survey", skills)
         skill = skills["foundation-survey"]
-        self.assertEqual(skill["version"], "1.1.0")
+        self.assertEqual(skill["version"], "1.2.0")
         self.assertTrue(skill["description"])
         names = {Path(p).name for p in skill["files"]}
         self.assertEqual(names, {"SKILL.md", "doc-templates.md", "survey-checklist.md", "source-and-sampling.md"})
@@ -41,8 +55,8 @@ class PackagedSkillTests(unittest.TestCase):
             second = install_skills(root)
             self.assertEqual(second["written"], [])
             status = skill_status(root)
-            self.assertEqual(status["foundation-survey"]["packaged"], "1.1.0")
-            self.assertEqual(status["foundation-survey"]["installed"], {t: "1.1.0" for t in SKILL_TARGETS})
+            self.assertEqual(status["foundation-survey"]["packaged"], "1.2.0")
+            self.assertEqual(status["foundation-survey"]["installed"], {t: "1.2.0" for t in SKILL_TARGETS})
 
     def test_install_on_an_initialized_project_opens_a_base_proposal(self):
         with tempfile.TemporaryDirectory() as folder:

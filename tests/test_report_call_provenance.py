@@ -85,14 +85,17 @@ class ReportCallProvenanceTests(unittest.TestCase):
 
             invoke_project_agent(root, "review", {"change": {"change_id": "FEAT-1"}})
             first = load_json(root / ".storyloop/state/telemetry/FEAT-1.json")["entries"][0]
-            skill = root / first["skills"][0]["path"]
+            oracle = next(item for item in first["skills"] if item["name"] == "oracle-craft")
+            skill = root / oracle["path"]
             skill.write_text(skill.read_text(encoding="utf-8") + "\nchanged\n", encoding="utf-8")
             invoke_project_agent(root, "review", {"change": {"change_id": "FEAT-1"}})
             entries = load_json(root / ".storyloop/state/telemetry/FEAT-1.json")["entries"]
 
-            self.assertEqual([entry["skills"][0]["name"] for entry in entries],
+            oracle_entries = [next(item for item in entry["skills"] if item["name"] == "oracle-craft")
+                              for entry in entries]
+            self.assertEqual([item["name"] for item in oracle_entries],
                              ["oracle-craft", "oracle-craft"])
-            self.assertNotEqual(entries[0]["skills"][0]["sha256"], entries[1]["skills"][0]["sha256"])
+            self.assertNotEqual(oracle_entries[0]["sha256"], oracle_entries[1]["sha256"])
             self.assertEqual(entries[0]["vendor"], "acme")
             self.assertEqual(entries[0]["tier_applied"], "strong")
 
