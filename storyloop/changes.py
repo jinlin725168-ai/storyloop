@@ -22,6 +22,7 @@ Clock = Callable[[], datetime]
 def create_change(
     project: Path, idea: str, product: dict, now: Clock | None = None,
     supersedes: dict | None = None, slug: str | None = None,
+    *, require_verification_entries: bool = False,
 ) -> dict:
     """Create a local ignored draft from one short product idea."""
     project = Path(project).resolve()
@@ -49,6 +50,8 @@ def create_change(
         "history": [],
         "approval": None,
     }
+    if require_verification_entries:
+        state["verification_entries_required"] = True
     if supersedes is not None:
         state["supersedes"] = _supersedes(supersedes)
     from .intake import project_intake
@@ -70,12 +73,15 @@ def load_change(project: Path, change_id: str) -> dict:
     }
     from .models import require
     optional = {"supersedes", "superseded_by", "routing_version", "intake",
-                "base_proposal_sha256", "blocked_by", "intervention_events"}
+                "base_proposal_sha256", "blocked_by", "intervention_events",
+                "verification_entries_required"}
     require(required <= set(value) <= required | optional and value["version"] == 1,
             "Invalid change state")
     require(value["change_id"] == change_id, "Change state identity mismatch")
     if "intervention_events" in value:
         require(isinstance(value["intervention_events"], list), "Invalid intervention events")
+    if "verification_entries_required" in value:
+        require(value["verification_entries_required"] is True, "Invalid verification entry requirement")
     if "base_proposal_sha256" in value:
         require(nature_of(value["product"]) == "base"
                 and isinstance(value["base_proposal_sha256"], str)
@@ -239,7 +245,8 @@ def write_change_preview(project: Path, state: dict) -> None:
     main_spec = main_path.read_text(encoding="utf-8") if main_path.is_file() else None
     _write_text(root / "specs" / capability / "spec.md",
                 render_delta_spec(product, state["change_id"], main_spec))
-    _write_text(root / "checklist.md", render_checklist(evaluate_checklist(product, project)))
+    _write_text(root / "checklist.md", render_checklist(evaluate_checklist(
+        product, project, require_entries=state.get("verification_entries_required") is True)))
 
 
 def _question_line(item: dict) -> str:

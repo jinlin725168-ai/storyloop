@@ -202,6 +202,7 @@
         "storyloop/testing/smoke_harness/service_bootstrap.py",
         "storyloop/testing/smoke_harness/sources.py",
         "storyloop/testing/smoke_harness/v1.py",
+        "storyloop/verification_entries.py",
         "storyloop/windows_job.py",
         "storyloop_cli.py"
       ],

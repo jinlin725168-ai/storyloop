@@ -29,7 +29,11 @@ class ProductCliTests(unittest.TestCase):
             ready = inspect_readiness(root)
             approve_readiness(root, ready["digest"], "Local tests")
             args = parser().parse_args(["change", str(root), "--idea", "增加预订"])
-            with patch("storyloop.cli.invoke_project_agent", return_value=product()):
+            approved_product = product()
+            approved_product["stories"][0]["verification_entries"] = [{
+                "id": "VE-BOOK", "kind": "http", "locator": "POST /bookings",
+                "observable": "booking response", "reason": "public endpoint"}]
+            with patch("storyloop.cli.invoke_project_agent", return_value=approved_product):
                 created = dispatch(args)
             self.assertEqual(created["status"], "DRAFT")
             self.assertEqual(load_change(root, created["change_id"])["product"]["goal"], product()["goal"])

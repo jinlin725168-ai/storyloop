@@ -12,6 +12,7 @@ from .project_boundaries import _category, _inside
 from .role_schemas import schema_errors, schema_for
 from .routing_evidence import measure_scope
 from .smoke import smoke_digests
+from .verification_entries import new_format, validate_entry_paths
 
 SCOPE_KEYS = ('touched', 'creates', 'interfaces', 'symbols')
 
@@ -35,6 +36,10 @@ def validate_plan(answer: object, project: Path, change: dict, state: dict) -> d
     ids = [item['id'] for item in options]
     require(len(ids) == len(set(ids)), 'Duplicate option id')
     require(answer['main_option'] in ids, 'Main option is absent')
+    if new_format(change['product']):
+        from . import smoke
+        selected = next(option for option in options if option['id'] == answer['main_option'])
+        validate_entry_paths(selected, change['product'], smoke.load_smoke_manifest(project, change))
     binding = {'product_digest': digest(change['product']),
                'source_commit': state['contract_commit'],
                'scope_digest': digest([{ 'id': o['id'], **option_scope(o)} for o in options]),

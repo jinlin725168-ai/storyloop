@@ -16,6 +16,7 @@ from .change_types import definition_for
 from .routing_state import advance_tier
 from .semantic_repair import answer_with_repair
 from .planning_choice import selected_option
+from .verification_entries import new_format
 
 
 def required_locks(tier: str, nature: str, touched: list[str]) -> list[str]:
@@ -33,7 +34,7 @@ def ensure_routing_plan(project: Path, change: dict, state: dict, services,
     state['phase'] = 'planning'
     response = None
     if (state['routing']['effective_tier'] == 'light' and planning.get('origin') != 'L3'
-            and not load_principles(project)['principles']):
+            and not load_principles(project)['principles'] and not new_format(change['product'])):
         response = _compact_plan(change)
         plan = validate_plan(response, project, change, state)
         assessed = assess_plan(project, change, state, plan)

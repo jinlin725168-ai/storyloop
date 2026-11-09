@@ -72,6 +72,7 @@ rank = 7
 [modules]
 "models" = { module = "foundation", zone = "base", split = "D" }
 "product_contract" = { module = "contract", zone = "mutable" }
+"verification_entries" = { module = "implementation", zone = "mutable" }
 "change_types" = { module = "change_types", zone = "base" }
 "errors" = { module = "foundation", zone = "base" }
 "path_security" = { module = "foundation", zone = "base" }

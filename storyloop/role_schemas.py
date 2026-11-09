@@ -50,6 +50,7 @@ ROW_TYPE = {"type": "string", "enum": ["positive", "degradation", "unknown_state
                                        "regression", "state_preservation", "non_goal"]}
 ACCEPTANCE_TEST = _obj({"id": STRING, "criteria": STRINGS, "command": STRINGS,
                         "timeout_seconds": {"type": "integer"},
+                        "entry_ids": _nullable(STRINGS),
                         "tier": _nullable({"type": "string", "enum": ["fast", "heavy"]})})
 CRITERION = _obj({"id": STRING, "given": STRING, "when": STRING, "then": STRING,
                   "kind": {"type": "string", "enum": ["automated", "manual"]},
@@ -75,6 +76,10 @@ STORY = _obj({
     "as_a": STRING, "want": STRING, "so_that": STRING, "rules": STRINGS,
     "out_of_scope": STRINGS, "depends_on": STRINGS,
     "acceptance": {"type": "array", "items": CRITERION},
+    "verification_entries": _nullable({"type": "array", "items": _obj({
+        "id": STRING, "kind": {"type": "string", "enum": [
+            "cli", "public_function", "stop_json", "http", "other"]},
+        "locator": STRING, "observable": STRING, "reason": STRING})}),
 })
 FINDING = _obj({"message": STRING, "perspective": _nullable(STRING),
                 "criterion_id": _nullable(STRING), "evidence": _nullable(STRING),
@@ -104,6 +109,8 @@ PLAN_OPTION = _obj({
     'risks': ASSESSMENT['properties']['risks'], 'forbidden_paths': STRINGS,
     'constraints': {'type': 'array', 'items': _obj(
         {'criterion_id': STRING, 'path': STRING, 'rule': STRING})},
+    'entry_paths': _nullable({'type': 'array', 'items': _obj({
+        'entry_id': STRING, 'criterion_ids': STRINGS, 'path': STRING, 'via': STRING})}),
     'regression': STRINGS, 'migration': _obj({'steps': STRINGS, 'reason': STRING}),
     'dependencies': {'type': 'array', 'items': _obj({
         'ecosystem': STRING, 'name': STRING, 'version': STRING,

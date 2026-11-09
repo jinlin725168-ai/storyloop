@@ -16,6 +16,16 @@ description: 如何写 StoryLoop 的判据：验收矩阵的行类型、特征�
 - characterize：按 `references/characterization.md` 锁定现有行为。
 - review：检查弱断言（只断言存在、非空）、被删除的测试、用 mock 顶替的集成判据。
 
+## 如何选验证入口
+
+每个新格式故事在合同中声明 `verification_entries`，由人确认。优先选仓库现有最高层公共入口，并写明调用定位 `locator`、可观察结果 `observable` 和选择理由 `reason`；`locator` 是描述，不作为命令执行。验收 manifest 的 `entry_ids` 只引用同故事的入口，方案 `entry_paths` 解释入口如何经过拟修改文件。
+
+- StoryLoop：用公开 CLI `storyloop run <project>`，观察 JSON 的 `status`、`next`，不要直接调用内部路由函数。
+- RuoYi：用公开 HTTP `POST /api/system/user`，观察响应状态与业务字段，避免只测 service 私有方法。
+- 私有函数、mock 返回值和文件存在性都不能单独充当业务验收入口。
+
+入口缺失或有争议时回到合同澄清，不在验收或实现阶段自造入口。
+
 ## 执行器退出码
 
 - 0：全部通过

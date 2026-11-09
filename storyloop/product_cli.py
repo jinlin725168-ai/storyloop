@@ -47,7 +47,8 @@ def change(project: Path, args, product_answer, revise_with_agent,
         from .requirement_checklist import blocking_items, evaluate_checklist
         from .next_steps import draft_next
         pending = state["product"]["questions"] or blocking_items(
-            evaluate_checklist(state["product"], project))
+            evaluate_checklist(state["product"], project,
+                               require_entries=state.get("verification_entries_required") is True))
         return draft_result(project, state, draft_next(project, state) if pending else created["next"])
     require(not args.reason, "--reason is only valid with --supersede")
     if args.idea:
@@ -61,7 +62,8 @@ def change(project: Path, args, product_answer, revise_with_agent,
         prefix = definition_for(nature_of(product)).id_prefix
         slug = choose_slug(args, product.get("slug"), interactive and sys.stdin.isatty(),
                            prefix=prefix)
-        created = create_change(project, args.idea, product, slug=slug)
+        created = create_change(project, args.idea, product, slug=slug,
+                                require_verification_entries=True)
         adopt_pending(project, created["change_id"])
         state = clarify_interactively(project, created["change_id"], revise_with_agent, interactive)
         return draft_result(project, state)
@@ -152,7 +154,9 @@ def dispatch(project: Path, args, run_with_answers, draft_result, load_run_state
 
 def draft_result(project: Path, state: dict, next_action=None) -> dict:
     stop = draft_stop(project, state)
-    pending = state["product"].get("questions") or blocking_items(evaluate_checklist(state["product"], project))
+    pending = state["product"].get("questions") or blocking_items(evaluate_checklist(
+        state["product"], project,
+        require_entries=state.get("verification_entries_required") is True))
     hint = draft_next(project, state) if pending else (stop["resume"] if stop else next_action)
     return {**state, "stop": stop,
             "next": supersede_revision_next(project, state) or hint or draft_next(project, state)}

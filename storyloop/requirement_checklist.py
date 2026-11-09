@@ -21,11 +21,13 @@ VAGUE_WORDS = ("appropriate", "fast", "quickly", "user-friendly", "etc", "tbd", 
 EARS_MARKERS = ("SHALL", "MUST", "应", "必须", "须")
 
 
-def evaluate_checklist(product: dict, project: Path | None = None) -> list[dict]:
+def evaluate_checklist(product: dict, project: Path | None = None,
+                       *, require_entries: bool = False) -> list[dict]:
     """Return checklist items: {id, dimension, level: ok|warning|error, text}."""
     items: list[dict] = []
     add = _adder(items)
     stories = product.get("stories") or []
+    new_format = require_entries or any("verification_entries" in story for story in stories)
     add("Completeness", "error" if not stories else "ok", "At least one user story is defined")
     add("Completeness", "warning" if not product.get("non_goals") else "ok", "Non-goals state what is out of scope")
     add("Clarity", "error" if product.get("questions") else "ok", "No open product questions remain")
@@ -34,6 +36,9 @@ def evaluate_checklist(product: dict, project: Path | None = None) -> list[dict]
         "No [NEEDS CLARIFICATION] markers remain" + (f" (found: {', '.join(marked[:3])})" if marked else ""))
     for story in stories:
         sid = story.get("id", "?")
+        if new_format:
+            add("Completeness", "ok" if story.get("verification_entries") else "error",
+                f"{sid} has verification_entries confirmed in the contract")
         add("Completeness", "error" if not story.get("acceptance") else "ok",
             f"{sid} has acceptance criteria")
         add("Coverage", "warning" if len(story.get("acceptance") or []) < 2 else "ok",

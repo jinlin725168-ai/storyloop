@@ -1,7 +1,8 @@
 """Restricted plan JSON references; this module never reads arbitrary files."""
 import re
 
-FIELDS = {'summary', 'constraints', 'regression', 'migration', 'dependencies', 'principle_checks'}
+FIELDS = {'summary', 'constraints', 'regression', 'migration', 'dependencies',
+          'principle_checks', 'entry_paths'}
 
 
 def validate_plan_location(plan: dict, location: str) -> bool:
