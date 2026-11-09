@@ -81,6 +81,7 @@
         "storyloop/harness_command.py",
         "storyloop/initialization_transaction.py",
         "storyloop/intake.py",
+        "storyloop/intervention_events.py",
         "storyloop/lesson_landing.py",
         "storyloop/lesson_retrieval.py",
         "storyloop/lesson_store.py",

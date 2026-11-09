@@ -58,6 +58,8 @@ class SupersedeTests(unittest.TestCase):
             self.assertEqual((old["status"], old["superseded_by"]),
                              ("SUPERSEDED", new["change_id"]))
             self.assertEqual(load_run_state(root, old_id)["status"], "SUPERSEDED")
+            self.assertEqual([event['kind'] for event in
+                              load_run_state(root, old_id)['intervention_events'][-1:]], ['supersede'])
 
     def test_reviser_failure_does_not_void_old_run(self):
         with tempfile.TemporaryDirectory() as folder:

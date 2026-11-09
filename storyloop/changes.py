@@ -70,10 +70,12 @@ def load_change(project: Path, change_id: str) -> dict:
     }
     from .models import require
     optional = {"supersedes", "superseded_by", "routing_version", "intake",
-                "base_proposal_sha256", "blocked_by"}
+                "base_proposal_sha256", "blocked_by", "intervention_events"}
     require(required <= set(value) <= required | optional and value["version"] == 1,
             "Invalid change state")
     require(value["change_id"] == change_id, "Change state identity mismatch")
+    if "intervention_events" in value:
+        require(isinstance(value["intervention_events"], list), "Invalid intervention events")
     if "base_proposal_sha256" in value:
         require(nature_of(value["product"]) == "base"
                 and isinstance(value["base_proposal_sha256"], str)

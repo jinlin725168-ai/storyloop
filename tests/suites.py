@@ -19,7 +19,7 @@ FAST = [
     "tests.test_design_revision_findings",
     "tests.test_failure_attribution", "tests.test_final_role_boundaries", "tests.test_forbidden_path_legacy",
     "tests.test_foundation_survey", "tests.test_foundation_quality", "tests.test_git_command", "tests.test_git_identity", "tests.test_init_git_control", "tests.test_monorepo_detection",
-    "tests.test_metrics_rules", "tests.test_metrics_compute",
+    "tests.test_metrics_rules", "tests.test_metrics_compute", "tests.test_intervention_events",
     "tests.test_product_spec", "tests.test_project_agents", "tests.test_project_git_lifecycle",
     "tests.test_project_profile", "tests.test_project_profile_behavior", "tests.test_report_call_provenance",
     "tests.test_report_evidence", "tests.test_report_final_fixes", "tests.test_report_git_process", "tests.test_report_focus",

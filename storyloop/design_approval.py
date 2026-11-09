@@ -253,6 +253,22 @@ def _approve_design_locked(project: Path, change_id: str, plan_id: str, *,
     if old:
         _clear_checks(project, state)
     state['planning'].pop('pending_option', None)
+    from .intervention_events import CORRECTIONS, append_event
+    events = state.get("intervention_events", [])
+    previous = next((index for index in range(len(events) - 1, -1, -1)
+                     if isinstance(events[index], dict) and events[index].get("kind") == "design_approval"), None)
+    follows = None
+    if previous is not None:
+        for event in reversed(events[previous + 1:]):
+            if not isinstance(event, dict):
+                continue
+            kind = event.get("kind")
+            if kind in CORRECTIONS or kind == "acceptance_repair" and event.get("automatic") is not True:
+                follows = kind
+                break
+    repeated = (bool(old) or previous is not None) and follows is None
+    append_event(state, "design_approval", source="design-approve",
+                 stop=state.get("status"), repeated=repeated, follows=follows)
     save_run(project, state)
     return deepcopy(plan['approval'])
 
@@ -322,7 +338,10 @@ def _replan_locked(project: Path, change_id: str, reason: str) -> dict:
         state.pop(key, None)
     state.pop('questions', None)
     state.pop('stop', None)
+    source_status = state['status']
     transition(project, state, 'DESIGN_REVISION_REQUIRED', event='design_replan', updates={'phase': 'planning'})
+    from .intervention_events import append_event
+    append_event(state, "replan", source="run --replan", stop=source_status)
     save_run(project, state)
     return deepcopy(state)
 
