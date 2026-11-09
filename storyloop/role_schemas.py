@@ -40,6 +40,17 @@ def validate_finding(item: dict) -> None:
             "Review disposition and blocking disagree")
 
 
+def validate_finding_ids(findings: list[dict]) -> None:
+    """Reject ambiguous IDs within one review before semantic repair ends."""
+    seen = set()
+    for item in findings:
+        if item.get("disposition") is None:
+            continue
+        finding_id = identifier(item["id"], "review finding id")
+        require(finding_id not in seen, "Duplicate review finding id")
+        seen.add(finding_id)
+
+
 STRING = {"type": "string"}
 STRINGS = {"type": "array", "items": STRING}
 

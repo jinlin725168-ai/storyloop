@@ -19,7 +19,7 @@ from .guarded_calls import read_only_call
 from .project_loop_support import save_run
 from .run_transitions import transition
 from .run_stops import pause
-from .role_schemas import schema_errors, schema_for
+from .role_schemas import schema_errors, schema_for, validate_finding_ids
 from .review_convergence import advance, review_request
 from .routing_state import is_routed
 from .semantic_repair import answer_with_repair
@@ -103,6 +103,7 @@ def validate_consistency(answer: object, project: Path, change: dict, state: dic
     """Reject contradictory verdicts and unsupported references; never downgrade bad evidence."""
     errors = schema_errors(answer, schema_for('review', {'mode': 'consistency'}))
     require(not errors, 'Invalid consistency response: ' + '; '.join(errors))
+    validate_finding_ids(answer['findings'])
     text(answer['summary'], 'consistency summary')
     for question in answer['questions']:
         text(question, 'consistency question')

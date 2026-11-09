@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .models import require
-from .role_schemas import validate_finding
+from .role_schemas import validate_finding, validate_finding_ids
 from .routing_risks import validate_routing_risks
 
 
@@ -31,6 +31,7 @@ def validate_review(value: object) -> str:
     for item in value["findings"]:
         require(isinstance(item, dict), "Invalid review finding")
         validate_finding(item)
+    validate_finding_ids(value["findings"])
     validate_routing_risks(value.get("routing_risks"))
     classified = any(item.get("disposition") is not None for item in value["findings"])
     if classified:

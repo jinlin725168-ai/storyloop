@@ -13,6 +13,7 @@ from .review_context import strong_verification
 from .role_profiles import enabled, role_settings
 from .role_schemas import schema_errors, schema_for
 from .review_convergence import remember_ids
+from .semantic_repair import answer_with_repair
 from .smoke_runner import implementation_digest
 
 
@@ -35,6 +36,7 @@ def _answer(project, state, services, context, pending, decisions):
         save_run(project, state)
     try:
         _check_decisions(project, state, pending, decisions)
+        validate_review(pending['review'])
     except StoryLoopError as error:
         if pending.get('repaired'):
             raise
@@ -50,7 +52,7 @@ def _answer(project, state, services, context, pending, decisions):
         pending['repaired'] = True
         save_run(project, state)
         _check_decisions(project, state, pending, decisions)
-    validate_review(pending['review'])
+        validate_review(pending['review'])
     return pending['review']
 
 
@@ -99,7 +101,9 @@ def perform_review(project, state, services, context, config):
     """Persist first review before verification so cost resume does not repeat it."""
     active = enabled(config)
     if not active:
-        answer = _call(project, state['change_id'], services, context)
+        answer = answer_with_repair(
+            lambda request: _call(project, state['change_id'], services, request),
+            context, validate_review)
         verdict = validate_review(answer)
         remember_ids(state, answer['findings'])
         if not any('confidence' in item for item in answer.get('findings', [])):

@@ -51,28 +51,36 @@ def _identity(state: dict, findings: list[dict]) -> None:
     structured = [item for item in findings if item.get("disposition") is not None]
     if not structured:
         return
-    ids = state.setdefault("finding_ids", {"by_root": {}, "by_id": {}})
-    in_review = set()
+    ids = state.setdefault("finding_ids", {"by_root": {}, "by_id": {},
+                                          "drift": [], "aliases": []})
+    ids.setdefault("drift", [])
+    ids.setdefault("aliases", [])
+    for field in ("by_root", "by_id"):
+        for key, value in ids[field].items():
+            if isinstance(value, str):
+                ids[field][key] = [value]
     for item in structured:
         finding_id = identifier(item["id"], "review finding id")
-        require(finding_id not in in_review, "Duplicate review finding id")
-        in_review.add(finding_id)
         location = str(item.get("location", ""))
         file, separator, line = location.rpartition(":")
         location = file if separator and line.isdigit() else location
         root = "\0".join((str(item.get("criterion_id", "")),
                           str(item.get("target", "")), location,
                           " ".join(str(item.get("required_change", "")).split())))
-        require(ids["by_root"].get(root, finding_id) == finding_id,
-                "Same review finding root changed id")
-        require(ids["by_id"].get(finding_id, root) == root,
-                "Review finding id reused for another root")
-        ids["by_root"][root] = finding_id
-        ids["by_id"][finding_id] = root
+        roots = ids["by_id"].setdefault(finding_id, [])
+        aliases = ids["by_root"].setdefault(root, [])
+        if root not in roots:
+            if roots:
+                ids["drift"].append({"id": finding_id, "from": roots[-1], "to": root})
+            roots.append(root)
+        if finding_id not in aliases:
+            if aliases:
+                ids["aliases"].append({"id": aliases[0], "alias_id": finding_id, "root": root})
+            aliases.append(finding_id)
 
 
 def remember_ids(state: dict, findings: list[dict]) -> None:
-    """Keep root-to-ID mapping across consistency and final review calls."""
+    """Keep ID history and nonblocking root drift across review calls."""
     _identity(state, findings)
 
 

@@ -60,7 +60,7 @@ class ReviewLevelTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "needs_input")
         self.assertTrue(result["questions"])
 
-    def test_final_review_reuses_stable_id_for_same_root(self):
+    def test_final_review_records_alias_without_blocking(self):
         from storyloop.review_disposition import perform_review
 
         state = {"change_id": "FIX-demo"}
@@ -68,8 +68,24 @@ class ReviewLevelTests(unittest.TestCase):
             perform_review(Path("/tmp"), state, object(), {}, {})
         with patch("storyloop.review_disposition._call",
                    return_value=review(finding(finding_id="ORACLE-AC-4-02"))):
-            with self.assertRaises(StoryLoopError):
-                perform_review(Path("/tmp"), state, object(), {}, {})
+            perform_review(Path("/tmp"), state, object(), {}, {})
+        self.assertEqual(state["finding_ids"]["aliases"][0]["alias_id"], "ORACLE-AC-4-02")
+
+    def test_final_review_repairs_duplicate_id_before_recording(self):
+        from storyloop.review_disposition import perform_review
+
+        other = deepcopy(finding())
+        other["location"] = "acceptance/changes/FIX-demo/tests/test_edge.py:8"
+        seen = []
+        def answer(project, change_id, services, context):
+            seen.append(context)
+            return review(finding(), other) if len(seen) == 1 else review(finding())
+        state = {"change_id": "FIX-demo"}
+        with patch("storyloop.review_disposition._call", side_effect=answer):
+            result = perform_review(Path("/tmp"), state, object(), {}, {})
+        self.assertEqual(len(seen), 2)
+        self.assertIn("validation_errors", seen[1])
+        self.assertEqual(len(result["findings"]), 1)
 
     def test_profiled_classification_does_not_escalate_advisory_by_confidence(self):
         from storyloop.finding_disposition import dispose
@@ -191,6 +207,33 @@ class ConvergenceTests(unittest.TestCase):
         self.assertEqual(seen[0]["convergence"]["AC-4"]["required_spec_fields"],
                          ["inputs", "preconditions", "entry", "expected",
                           "negative_boundary", "contract_plan"])
+
+    def test_consistency_duplicate_id_gets_semantic_repair_prompt(self):
+        from types import SimpleNamespace
+        from storyloop.consistency import _review
+
+        change = {"change_id": "FIX-demo", "product": {"stories": [{
+            "acceptance": [{"id": "AC-4"}]}]}}
+        state = {"planning": {"plan": {"id": "plan", "main_option": "main",
+                                       "options": [{"id": "main"}]},
+                              "dependency_evidence": []}}
+        other = deepcopy(finding())
+        other["location"] = "acceptance/changes/FIX-demo/tests/test_edge.py:8"
+        seen = []
+        def answer(project, context):
+            seen.append(context)
+            payload = review(finding(), other) if len(seen) == 1 else review(finding())
+            return {**payload, "verdict": "blocked"}
+        services = SimpleNamespace(review=answer)
+        with patch("storyloop.consistency.load_principles", return_value={}), \
+             patch("storyloop.consistency.load_answers", return_value=[]), \
+             patch("storyloop.consistency.suite_relative", return_value="acceptance/changes/FIX-demo"), \
+             patch("storyloop.consistency._validate_location"), \
+             patch("storyloop.consistency.read_only_call", side_effect=lambda p, c, call: call()):
+            result = _review(Path("/tmp"), change, state, services, "plan.json")
+        self.assertEqual(len(seen), 2)
+        self.assertIn("Duplicate review finding id", seen[1]["validation_errors"][0])
+        self.assertEqual(len(result["findings"]), 1)
 
     def test_exhausted_stop_shows_evidence_and_recovery_commands(self):
         from storyloop.stop_report import build_stop, render_stop
@@ -360,7 +403,7 @@ class ConvergenceTests(unittest.TestCase):
         self.assertEqual(state["review_convergence"]["resets"][-1]["reason"],
                          "plan_binding_invalid")
 
-    def test_same_root_keeps_id_and_new_root_cannot_reuse_it(self):
+    def test_identity_text_drift_and_alias_do_not_break_continuous_count(self):
         from storyloop.review_convergence import advance
 
         state = {}
@@ -369,13 +412,36 @@ class ConvergenceTests(unittest.TestCase):
         moved_line = finding()
         moved_line["location"] = "acceptance/changes/FIX-demo/tests/test_ac4.py:19"
         advance(state, review(moved_line), {**binding, "review": "suite-2"})
-        changed_id = finding(finding_id="ORACLE-AC-4-02")
-        with self.assertRaises(StoryLoopError):
-            advance(state, review(changed_id), {**binding, "review": "suite-3"})
-        other_root = deepcopy(finding())
-        other_root["location"] = "acceptance/changes/FIX-demo/tests/test_other.py:9"
-        with self.assertRaises(StoryLoopError):
-            advance(state, review(other_root), {**binding, "review": "suite-3"})
+        rewritten = deepcopy(finding())
+        rewritten["location"] = "acceptance/changes/FIX-demo/tests/test_other.py:9"
+        rewritten["required_change"] = "Assert status and error body through public CLI"
+        advance(state, review(rewritten), {**binding, "review": "suite-3"})
+        self.assertEqual(state["review_convergence"]["criteria"]["AC-4"]["round"], 3)
+        self.assertEqual(len(state["finding_ids"]["drift"]), 1)
+        self.assertEqual(len(state["finding_ids"]["by_id"]["ORACLE-AC-4-01"]), 2)
+        alias = deepcopy(rewritten)
+        alias["id"] = "ORACLE-AC-4-02"
+        advance(state, review(alias), {**binding, "review": "suite-4"})
+        self.assertEqual(state["finding_ids"]["aliases"][0]["alias_id"], "ORACLE-AC-4-02")
+        self.assertEqual(state["review_convergence"]["criteria"]["AC-4"]["finding_ids"],
+                         ["ORACLE-AC-4-01"])
+
+    def test_existing_identity_map_keeps_history_when_resumed(self):
+        from storyloop.review_convergence import advance
+
+        state = {}
+        binding = {"contract": "c1", "plan": "p1", "review": "suite-1"}
+        advance(state, review(finding()), binding)
+        ids = state["finding_ids"]
+        ids["by_root"] = {root: values[0] for root, values in ids["by_root"].items()}
+        ids["by_id"] = {key: values[0] for key, values in ids["by_id"].items()}
+        ids.pop("drift")
+        ids.pop("aliases")
+        rewritten = finding()
+        rewritten["required_change"] = "Assert status through public CLI"
+        advance(state, review(rewritten), {**binding, "review": "suite-2"})
+        self.assertEqual(len(state["finding_ids"]["by_id"]["ORACLE-AC-4-01"]), 2)
+        self.assertEqual(len(state["finding_ids"]["drift"]), 1)
 
     def test_multiple_findings_on_one_ac_count_one_round_and_keep_ids(self):
         from storyloop.review_convergence import advance
