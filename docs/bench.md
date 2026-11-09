@@ -9,14 +9,15 @@ v2 仅预留版本目录；verification_entries 合同待 ①b 后制备。
 
 ```bash
 storyloop bench --json calibrate dogfood3-stash-git-safe --case-version 1 \
-  --repository ~/work/storyloop-dogfood3
+  --repository ~/work/storyloop-dogfood3 --python /path/to/python3.11
 ```
 
 校准记录写入 `.storyloop/bench/calibrations/`。F2P 必须 Base 失败且 Solution
-通过；P2P 两侧都必须通过。缺失检查、超时、执行错误或自举 helper 导入遮蔽均记
-`FAILED`，不会调整检查语义来通过校准。历史 Case 中的测试进程直接导入
-`storyloop.testing.*` 时，必须先把验收套件改造成 `{storyloop_harness}` 受保护
-executor，再升版 Case；旧 Case 和已有记录保持原样。
+通过；P2P 两侧都必须通过。Gold 在各自历史树中原样执行，可导入该树自己的
+`storyloop.testing.*`。#104 的导入遮蔽预检只适用于参测引擎的 RED/验收路径。
+`case.json` 声明检查用 Python 版本和依赖要求；`--python` 指定解释器，省略时
+使用当前 StoryLoop 进程的解释器。校准记录包含实际路径和版本，不同解释器的
+记录不可比较。
 
 Run 框架冻结 Case 哈希、两侧引擎 commit、适配器、模型、预算和评分合同；每侧两次，
 按 Base/Candidate 交错。测试适配器覆盖调度与模拟人规则。真实代理参测默认关闭，

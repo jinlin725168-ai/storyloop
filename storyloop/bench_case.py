@@ -52,7 +52,7 @@ def load_case(source: Path) -> dict:
 def _manifest(value: dict, source: Path) -> None:
     fields = {"schema_version", "case_id", "case_version", "repository_id", "base_commit",
               "solution_commit", "contract_sha256", "suite_sha256", "gold_sha256",
-              "suite_files", "allowed", "legacy_seam"}
+              "suite_files", "allowed", "legacy_seam", "python"}
     require(set(value) == fields, "case.json fields are missing or unknown")
     require(value["schema_version"] == 1 and value["case_version"] == 1,
             "Only frozen v1 Cases are supported")
@@ -67,6 +67,13 @@ def _manifest(value: dict, source: Path) -> None:
                 for key in ("contract_sha256", "suite_sha256", "gold_sha256")), "Invalid Case hash")
     require(isinstance(value["suite_files"], list) and value["suite_files"], "Suite files are required")
     require(value["legacy_seam"] is True, "v1 Case must mark legacy_seam")
+    python = value["python"]
+    require(isinstance(python, dict) and set(python) == {"version", "dependencies"},
+            "Invalid Gold Python requirement")
+    require(isinstance(python["version"], str) and re.fullmatch(r"[0-9]+\.[0-9]+", python["version"]),
+            "Invalid Gold Python version")
+    require(isinstance(python["dependencies"], str) and python["dependencies"].strip(),
+            "Gold Python dependencies must be documented")
     allowed = value["allowed"]
     require(isinstance(allowed, dict) and set(allowed) == {"adapters", "models", "max_calls", "max_cost_usd"},
             "Invalid allowed execution policy")
@@ -131,7 +138,7 @@ def _gold(value: dict, source: Path, contract: dict) -> None:
 
 def _command(argv: object, source: Path) -> None:
     require(isinstance(argv, list) and len(argv) >= 2 and argv[0] in {"{python}", "{storyloop_harness}"},
-            "Gold commands must use a trusted Python launcher")
+            "Gold commands must use a declared Python launcher")
     require(all(isinstance(arg, str) and arg and "\0" not in arg for arg in argv), "Invalid Gold argv")
     require("-c" not in argv, "Inline Gold code is not frozen")
     if argv[0] == "{python}":

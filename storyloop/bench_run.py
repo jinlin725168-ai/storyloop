@@ -19,7 +19,8 @@ SCORE_CONTRACT = {"version": 1, "pass_requires": ["PASSED", "gold_passed"],
 
 def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_commit: str,
               adapter_name: str, model: str, budget: dict, invoke, check_gold,
-              output_root: Path, *, i_accept_cost: bool = False) -> dict:
+              output_root: Path, *, i_accept_cost: bool = False,
+              gold_python: Path | None = None) -> dict:
     """Run one frozen comparison; invoke/check_gold are explicit runtime adapters."""
     if adapter_name != "test" and not i_accept_cost:
         raise StoryLoopError("Real bench runs require --i-accept-cost; estimated total 13–22 hours")
@@ -29,6 +30,16 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
     require(isinstance(budget, dict) and type(budget.get("max_calls")) is int
             and budget["max_calls"] > 0, "Invalid bench budget")
     cases = [load_case(path) for path in sources]
+    if check_gold is None:
+        from .bench_calibrate import _python_info, judge_gold
+        interpreter = _python_info(gold_python, cases[0]["manifest"]["python"])
+
+        def check_gold(case, outcome):
+            require(isinstance(outcome.get("tree"), str), "Bench attempt lacks a candidate tree")
+            return judge_gold(case["source"], Path(outcome["tree"]),
+                              python=Path(interpreter["path"]))["passed"]
+    else:
+        interpreter = None
     for case in cases:
         allowed = case["manifest"]["allowed"]
         require(adapter_name in allowed["adapters"] and
@@ -40,7 +51,8 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
     result = {"run_id": uuid.uuid4().hex, "created_at": datetime.now(timezone.utc).isoformat(),
               "case_version": versions.pop(), "base_engine_commit": base_engine_commit,
               "candidate_engine_commit": candidate_engine_commit, "adapter": adapter_name,
-              "model": model, "budget": budget, "scoring_contract": SCORE_CONTRACT, "cases": []}
+              "model": model, "budget": budget, "gold_python": interpreter,
+              "scoring_contract": SCORE_CONTRACT, "cases": []}
     for case in cases:
         row = {"case_id": case["manifest"]["case_id"], "case_version": case["manifest"]["case_version"],
                "case_hash": case["case_hash"], "contract_sha256": case["manifest"]["contract_sha256"],
@@ -134,7 +146,7 @@ def _comparison(attempts: list[dict]) -> dict:
 
 def compare_runs(base: dict, candidate: dict) -> dict:
     """Reject comparisons across versions, frozen inputs, or execution settings."""
-    fields = ("case_version", "adapter", "model", "budget", "scoring_contract")
+    fields = ("case_version", "adapter", "model", "budget", "gold_python", "scoring_contract")
     reasons = [field for field in fields if base.get(field) != candidate.get(field)]
     old = [(row.get("case_id"), row.get("case_hash")) for row in base.get("cases", [])]
     new = [(row.get("case_id"), row.get("case_hash")) for row in candidate.get("cases", [])]

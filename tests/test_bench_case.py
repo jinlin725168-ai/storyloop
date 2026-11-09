@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import sys
 
 from storyloop.bench_case import load_case
 from storyloop.models import StoryLoopError
@@ -46,6 +47,8 @@ def case_fixture(root: Path) -> Path:
         "suite_sha256": hashlib.sha256(b"checks/test_example.py\0" + check).hexdigest(),
         "allowed": {"adapters": ["test"], "models": ["fixture"],
                     "max_calls": 10, "max_cost_usd": None},
+        "python": {"version": f"{sys.version_info.major}.{sys.version_info.minor}",
+                   "dependencies": "Python standard library; source tree modules"},
         "legacy_seam": True,
     })
     return source
@@ -59,7 +62,7 @@ class BenchCaseTests(unittest.TestCase):
             self.assertEqual(len(case["gold"]["checks"]), 2)
 
     def test_missing_field_bad_hash_and_escape_are_rejected(self):
-        for mutation in ("missing", "hash", "escape"):
+        for mutation in ("missing", "hash", "escape", "python"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as folder:
                 source = case_fixture(Path(folder))
                 manifest = json.loads((source / "case.json").read_text())
@@ -68,7 +71,10 @@ class BenchCaseTests(unittest.TestCase):
                 elif mutation == "hash":
                     manifest["contract_sha256"] = "0" * 64
                 else:
-                    manifest["suite_files"][0]["path"] = "../outside.py"
+                    if mutation == "escape":
+                        manifest["suite_files"][0]["path"] = "../outside.py"
+                    else:
+                        manifest["python"]["version"] = "3.x"
                 _bytes(source / "case.json", manifest)
                 with self.assertRaises(StoryLoopError):
                     load_case(source)

@@ -6,6 +6,7 @@ import unittest
 
 from storyloop.bench_run import run_bench, compare_runs
 from tests.test_bench_case import case_fixture
+from tests.test_bench_calibrate import calibration_fixture
 from storyloop.models import StoryLoopError
 
 
@@ -59,6 +60,22 @@ class BenchRunTests(unittest.TestCase):
             with self.assertRaises(StoryLoopError):
                 run_bench([source], "a" * 40, "b" * 40, "codex", "configured",
                           {"max_calls": 10}, lambda *_: {}, lambda *_: True, Path(folder))
+
+    def test_default_hidden_gold_judges_candidate_tree(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source, repository = calibration_fixture(root)
+
+            def adapter(*_):
+                return {"status": "PASSED", "events": [], "calls": 1, "agent_ms": 1,
+                        "wall_ms": 2, "known_cost_usd": 0.01, "cost_coverage": 1.0,
+                        "tree": str(repository)}
+
+            result = run_bench([source], "a" * 40, "b" * 40, "test", "fixture",
+                               {"max_calls": 10}, adapter, None, root)
+            self.assertEqual(result["cases"][0]["attempts"][0]["verdict"], "PASSED")
+            changed = {**result, "gold_python": {**result["gold_python"], "path": "/other/python"}}
+            self.assertIn("gold_python", compare_runs(result, changed)["reasons"])
 
     def test_cli_defaults_to_refusing_real_run(self):
         import subprocess

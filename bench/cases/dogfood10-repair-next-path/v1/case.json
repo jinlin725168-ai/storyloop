@@ -17,6 +17,10 @@
   "contract_sha256": "5a296dac9c18f789f53ad6eb4f544f5203caddb5ba809efce39e84ce0eef81fb",
   "gold_sha256": "634f50d6e55a546374e7824194636fad7edf2e26b6edb60b6324e41531995dec",
   "legacy_seam": true,
+  "python": {
+    "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
+    "version": "3.11"
+  },
   "repository_id": "storyloop-dogfood6",
   "schema_version": 1,
   "solution_commit": "5e53c751876fe9459f8f5b0ad2db1bf4e132406a",
