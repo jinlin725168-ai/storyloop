@@ -130,6 +130,8 @@ class KnowledgeDeltaTests(unittest.TestCase):
         result = self.propose()
         self.assertEqual(result["status"], "NO_KNOWLEDGE_DELTA")
         self.assertEqual(result["errata_links"], ["errata/" + draft])
+        set_draft_status(self.root, "errata/" + draft, "rejected", "not a correction")
+        self.assertEqual(self.propose()["status"], "KNOWLEDGE_PROPOSED")
 
     def test_cli_has_both_commands_and_empty_paths_mean_reject(self):
         from storyloop.cli import parser

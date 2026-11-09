@@ -90,6 +90,8 @@ def _existing_errata(project: Path, source: str, claim: str, correction: str) ->
         if not directory.is_dir():
             continue
         draft = load_draft(project, f"errata/{directory.name}")
+        if draft.get("status") == "rejected":
+            continue
         payload = draft.get("payload") or {}
         if payload.get("claim") == claim and payload.get("correction") == correction \
                 and source in (payload.get("evidence") or []):
