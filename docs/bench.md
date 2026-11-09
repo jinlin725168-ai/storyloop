@@ -32,9 +32,9 @@ Run 冻结 Case 哈希、引擎 commit、适配器、模型、预算和评分合
 另检出指定引擎 commit，用已准备依赖的
 隔离 venv `--engine-python` 解释器加载该引擎源码。`--repository ID=PATH` 可重复指定 Case
 来源；来源仓库不会写入。合同由冻结 JSON 直接创建并以 `bench-frozen-contract`
-批准，不调用 product 重写。默认 `--suite-mode generated`：引擎正常调用 acceptance
+批准，不调用 product 重写。默认 `--suite-source generated`：引擎正常调用 acceptance
 角色从 v2 合同的验证入口生成验收套件、证 RED，并走夹具自动修复流程；Case 冻结
-套件只用于 PASSED 后的隐藏 Gold。可显式选 `--suite-mode frozen`，在临时树预装
+套件只用于 PASSED 后的隐藏 Gold。可显式选 `--suite-source frozen`，在临时树预装
 Case 套件，仅隔离评测设计/实现/审查链路。Run 记录包含模式，两种模式不可互比。
 
 真实参测需要 `--i-accept-cost`，随后输入 `yes` 或给 `--yes` 再次确认。开始前会

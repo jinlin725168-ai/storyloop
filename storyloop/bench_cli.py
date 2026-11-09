@@ -30,7 +30,7 @@ def add_bench_arguments(sub) -> None:
     run.add_argument("--adapter", choices=("codex", "claude"), required=True)
     run.add_argument("--model", required=True)
     run.add_argument("--scope", choices=("paired", "base-only"), default="paired")
-    run.add_argument("--suite-mode", choices=("generated", "frozen"), default="generated",
+    run.add_argument("--suite-source", choices=("generated", "frozen"), default="generated",
                      help="默认由 acceptance 生成套件；frozen 只隔离评测实现链路")
     run.add_argument("--base-engine-commit", required=True)
     run.add_argument("--candidate-engine-commit")
@@ -98,9 +98,9 @@ def _run(args) -> dict:
                                     engine_python=args.engine_python,
                                     gold_python=args.gold_python,
                                     agent_command=args.agent_command,
-                                    suite_mode=args.suite_mode)
+                                    suite_source=args.suite_source)
 
     return run_bench(sources, args.base_engine_commit, args.candidate_engine_commit or "",
                      args.adapter, args.model, budget, invoke, None, args.output_root,
                      i_accept_cost=True, gold_python=args.gold_python, scope=args.scope,
-                     confirmed=True, suite_mode=args.suite_mode)
+                     confirmed=True, suite_source=args.suite_source)

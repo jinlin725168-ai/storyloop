@@ -11,11 +11,21 @@ from storyloop.bench_case import load_case
 from storyloop.bench_real_exec import STAGE_CASE_IDS, run_isolated_attempt, stage_gate
 from storyloop.bench_worker import _execute_change, _run_until_stop
 from storyloop.bench_run import compare_runs, run_bench
+from storyloop.cli import parser
 from storyloop.models import StoryLoopError
 from tests.test_bench_calibrate import calibration_fixture
 
 
 class RealBenchTests(unittest.TestCase):
+    def test_cli_uses_suite_source_name(self):
+        command = [
+            "bench", "run", "example", "--adapter", "codex", "--model", "fixture",
+            "--base-engine-commit", "a" * 40, "--engine-repository", "/tmp/engine",
+            "--engine-python", sys.executable, "--repository", "fixture=/tmp/source"]
+        self.assertEqual(parser().parse_args(command).suite_source, "generated")
+        args = parser().parse_args([*command, "--suite-source", "frozen"])
+        self.assertEqual(args.suite_source, "frozen")
+
     def test_isolated_base_only_passes_gold_without_touching_source(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -45,7 +55,7 @@ class RealBenchTests(unittest.TestCase):
                                {"max_calls": 10}, invoke, None, root, scope="base-only")
             self.assertEqual(len(seen), 2)
             self.assertEqual([a["verdict"] for a in result["cases"][0]["attempts"]], ["PASSED"] * 2)
-            self.assertEqual(result["suite_mode"], "generated")
+            self.assertEqual(result["suite_source"], "generated")
             self.assertTrue(all(a["gold_passed"] and a["gold_checks"]
                                 for a in result["cases"][0]["attempts"]))
             self.assertEqual(subprocess.check_output(["git", "status", "--porcelain"], cwd=repository), before)
@@ -103,23 +113,23 @@ class RealBenchTests(unittest.TestCase):
                   "attempts": [{"verdict": "PASSED", "nonroutine_count": 0},
                  {"verdict": "PASSED", "nonroutine_count": 1}]} for name in sorted(STAGE_CASE_IDS)]
         self.assertTrue(stage_gate({"case_version": 2, "scope": "base-only",
-                                    "suite_mode": "generated", "cases": cases})["passed"])
+                                    "suite_source": "generated", "cases": cases})["passed"])
         with self.assertRaises(StoryLoopError):
             stage_gate({"case_version": 2, "scope": "base-only",
-                        "suite_mode": "frozen", "cases": cases})
+                        "suite_source": "frozen", "cases": cases})
         cases[3]["attempts"][1]["verdict"] = "NOT_COMPARABLE"
         self.assertTrue(stage_gate({"case_version": 2, "scope": "base-only",
-                                    "suite_mode": "generated", "cases": cases})["passed"])
+                                    "suite_source": "generated", "cases": cases})["passed"])
         cases[2]["attempts"][1]["nonroutine_count"] = 2
         self.assertFalse(stage_gate({"case_version": 2, "scope": "base-only",
-                                     "suite_mode": "generated", "cases": cases})["passed"])
+                                     "suite_source": "generated", "cases": cases})["passed"])
         cases[2]["attempts"][1]["nonroutine_count"] = 0
         cases[2]["comparison"] = {"status": "NOT_COMPARABLE"}
         self.assertFalse(stage_gate({"case_version": 2, "scope": "base-only",
-                                     "suite_mode": "generated", "cases": cases})["passed"])
+                                     "suite_source": "generated", "cases": cases})["passed"])
         with self.assertRaises(StoryLoopError):
             stage_gate({"case_version": 1, "scope": "base-only",
-                        "suite_mode": "generated", "cases": cases})
+                        "suite_source": "generated", "cases": cases})
 
     def test_generated_uses_normal_acceptance_and_frozen_preserves_install(self):
         contract = {"change_id": "FEAT-20261109-sample", "product": {}}
@@ -147,7 +157,7 @@ class RealBenchTests(unittest.TestCase):
         self.assertEqual(frozen["status"], "PASSED")
         self.assertEqual(actions, ["approve", "install", "acceptance_role"])
 
-    def test_suite_mode_is_frozen_in_run_and_comparison(self):
+    def test_suite_source_is_frozen_in_run_and_comparison(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             source, _ = calibration_fixture(root)
@@ -158,10 +168,10 @@ class RealBenchTests(unittest.TestCase):
                                   root, scope="base-only")
             frozen = run_bench([source], "a" * 40, "", "test", "fixture",
                                {"max_calls": 10}, lambda *_: outcome, lambda *_: True,
-                               root, scope="base-only", suite_mode="frozen")
-            self.assertEqual(generated["suite_mode"], "generated")
-            self.assertEqual(frozen["suite_mode"], "frozen")
-            self.assertIn("suite_mode", compare_runs(generated, frozen)["reasons"])
+                               root, scope="base-only", suite_source="frozen")
+            self.assertEqual(generated["suite_source"], "generated")
+            self.assertEqual(frozen["suite_source"], "frozen")
+            self.assertIn("suite_source", compare_runs(generated, frozen)["reasons"])
 
     def test_simulated_human_approves_design_and_stops_on_correction(self):
         statuses = iter([{"status": "DESIGN_APPROVAL_REQUIRED"}, {"status": "PASSED"}])

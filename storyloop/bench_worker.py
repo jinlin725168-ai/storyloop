@@ -46,7 +46,7 @@ def main(request_path: str, response_path: str) -> None:
         else:
             outcome.update(_execute_change(
                 project, contract, request["case_source"], request["case_version"],
-                request.get("suite_mode", "generated"), create_change=create_change,
+                request.get("suite_source", "generated"), create_change=create_change,
                 approve_change=approve_change, load_change=load_change,
                 install_smoke_suite=install_smoke_suite, run_change=run_change,
                 approve_design=approve_design, load_run_state=load_run_state))
@@ -77,11 +77,11 @@ def _adapter_settings(request: dict) -> dict:
 
 
 def _execute_change(project: Path, contract: dict, source: str, version: int,
-                    suite_mode: str, *, create_change, approve_change, load_change,
+                    suite_source: str, *, create_change, approve_change, load_change,
                     install_smoke_suite, run_change, approve_design, load_run_state) -> dict:
     """Follow approve's execution path; only the explicit isolation mode installs a suite."""
-    if suite_mode not in {"generated", "frozen"}:
-        raise ValueError("Unknown bench suite mode")
+    if suite_source not in {"generated", "frozen"}:
+        raise ValueError("Unknown bench suite source")
     change_id = contract["change_id"]
     stamp = datetime.strptime(change_id.split("-")[1], "%Y%m%d").replace(tzinfo=timezone.utc)
     slug = "-".join(change_id.split("-")[2:])
@@ -91,7 +91,7 @@ def _execute_change(project: Path, contract: dict, source: str, version: int,
     if created["change_id"] != change_id:
         raise ValueError("Frozen change ID does not match the product contract")
     approve_change(project, change_id, approved_by="bench-frozen-contract")
-    if suite_mode == "frozen":
+    if suite_source == "frozen":
         _install_suite(project, source, change_id, load_change, install_smoke_suite)
     return _run_until_stop(project, change_id, run_change, approve_design, load_run_state)
 

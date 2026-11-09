@@ -30,10 +30,10 @@ def run_isolated_attempt(case: dict, repository: Path, engine_commit: str,
                          engine_python: Path | None = None,
                          gold_python: Path | None = None,
                          agent_command: list[str] | None = None,
-                         suite_mode: str = "generated") -> dict:
+                         suite_source: str = "generated") -> dict:
     """Clone sources per attempt; execute and judge before both trees are discarded."""
     require(COMMIT.fullmatch(engine_commit) is not None, "Invalid engine commit")
-    require(suite_mode in {"generated", "frozen"}, "Invalid bench suite mode")
+    require(suite_source in {"generated", "frozen"}, "Invalid bench suite source")
     source = Path(repository).resolve()
     require(source.is_dir() and (source / ".git").exists(), "Source repository is unavailable")
     started = time.monotonic()
@@ -47,12 +47,12 @@ def run_isolated_attempt(case: dict, repository: Path, engine_commit: str,
             engine_tree = root / "engine"
             _checkout(Path(engine_repository).resolve(), engine_commit, engine_tree)
             outcome = _worker(tree, engine_tree, case, adapter, model, budget,
-                              Path(engine_python or sys.executable), agent_command, suite_mode)
+                              Path(engine_python or sys.executable), agent_command, suite_source)
         else:
             outcome = engine(tree, case, human, budget)
         require(isinstance(outcome, dict), "Bench engine returned no outcome")
         outcome["engine_commit"] = engine_commit
-        outcome["suite_mode"] = suite_mode
+        outcome["suite_source"] = suite_source
         outcome["wall_ms"] = round((time.monotonic() - started) * 1000)
         if outcome.get("status") == "PASSED":
             _safe_gold_tree(tree)
@@ -107,7 +107,7 @@ def _checkout_source(repository: Path, commit: str, destination: Path) -> None:
 
 def _worker(tree: Path, engine_tree: Path, case: dict, adapter: str, model: str,
             budget: dict, python: Path, agent_command: list[str] | None,
-            suite_mode: str) -> dict:
+            suite_source: str) -> dict:
     require(python.is_file(), "Engine Python interpreter is unavailable")
     venv = subprocess.run([str(python), "-I", "-B", "-c",
                            "import sys; print(sys.prefix != sys.base_prefix)"],
@@ -119,7 +119,7 @@ def _worker(tree: Path, engine_tree: Path, case: dict, adapter: str, model: str,
               "adapter": adapter, "model": model,
               "budget": budget, "agent_command": agent_command,
               "case_version": case["manifest"]["case_version"],
-              "suite_mode": suite_mode}
+              "suite_source": suite_source}
     request = tree.parent / "request.json"
     response = tree.parent / "response.json"
     request.write_text(json.dumps(config, ensure_ascii=False))
@@ -143,7 +143,7 @@ def _worker(tree: Path, engine_tree: Path, case: dict, adapter: str, model: str,
 def stage_gate(run: dict) -> dict:
     """Absolute v2 base-only gate: four of five complete Cases pass twice."""
     require(run.get("case_version") == 2 and run.get("scope") == "base-only"
-            and run.get("suite_mode") == "generated",
+            and run.get("suite_source") == "generated",
             "Stage gate requires a generated-suite v2 base-only Run")
     cases = run.get("cases")
     require(isinstance(cases, list) and len(cases) == 5

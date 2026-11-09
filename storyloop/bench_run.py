@@ -21,7 +21,7 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
               adapter_name: str, model: str, budget: dict, invoke, check_gold,
               output_root: Path, *, i_accept_cost: bool = False,
               gold_python: Path | None = None, scope: str = "paired",
-              confirmed: bool = False, suite_mode: str = "generated") -> dict:
+              confirmed: bool = False, suite_source: str = "generated") -> dict:
     """Run one frozen comparison; invoke/check_gold are explicit runtime adapters."""
     if adapter_name != "test" and not i_accept_cost:
         raise StoryLoopError("Real bench runs require --i-accept-cost; estimated total 13–22 hours")
@@ -29,7 +29,7 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
         raise StoryLoopError("Real bench runs require a second confirmation")
     require(adapter_name in {"test", "codex", "claude"}, "Unsupported bench adapter")
     require(scope in {"paired", "base-only"}, "Invalid bench execution scope")
-    require(suite_mode in {"generated", "frozen"}, "Invalid bench suite mode")
+    require(suite_source in {"generated", "frozen"}, "Invalid bench suite source")
     require(len(base_engine_commit) == 40 and
             (scope == "base-only" or len(candidate_engine_commit) == 40),
             "Engine commits must be frozen full hashes")
@@ -59,14 +59,14 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
     versions = {case["manifest"]["case_version"] for case in cases}
     require(len(versions) == 1, "v1 and v2 Cases cannot be mixed")
     result = {"run_id": uuid.uuid4().hex, "created_at": datetime.now(timezone.utc).isoformat(),
-              "case_version": versions.pop(), "scope": scope, "suite_mode": suite_mode,
+              "case_version": versions.pop(), "scope": scope, "suite_source": suite_source,
               "base_engine_commit": base_engine_commit,
               "candidate_engine_commit": candidate_engine_commit, "adapter": adapter_name,
               "model": model, "budget": budget, "gold_python": interpreter,
               "scoring_contract": SCORE_CONTRACT, "cases": []}
     for case in cases:
         row = {"case_id": case["manifest"]["case_id"], "case_version": case["manifest"]["case_version"],
-               "suite_mode": suite_mode,
+               "suite_source": suite_source,
                "case_hash": case["case_hash"], "contract_sha256": case["manifest"]["contract_sha256"],
                "suite_sha256": case["manifest"]["suite_sha256"],
                "gold_sha256": case["gold_hash"], "attempts": []}
@@ -79,7 +79,7 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
             comparison = {"status": "BASE_ONLY", "reasons": []}
         row["comparison"] = comparison
         result["cases"].append(row)
-    if result["case_version"] == 2 and scope == "base-only" and suite_mode == "generated":
+    if result["case_version"] == 2 and scope == "base-only" and suite_source == "generated":
         from .bench_real_exec import STAGE_CASE_IDS, stage_gate
         if {row["case_id"] for row in result["cases"]} == STAGE_CASE_IDS:
             result["stage_gate"] = stage_gate(result)
@@ -179,7 +179,7 @@ def _comparison(attempts: list[dict]) -> dict:
 
 def compare_runs(base: dict, candidate: dict) -> dict:
     """Reject comparisons across versions, frozen inputs, or execution settings."""
-    fields = ("case_version", "scope", "suite_mode", "adapter", "model", "budget", "gold_python",
+    fields = ("case_version", "scope", "suite_source", "adapter", "model", "budget", "gold_python",
               "scoring_contract")
     reasons = [field for field in fields if base.get(field) != candidate.get(field)]
     old = [(row.get("case_id"), row.get("case_hash")) for row in base.get("cases", [])]
