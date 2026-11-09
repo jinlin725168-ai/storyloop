@@ -334,7 +334,13 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
 
 
 def _verify_attempt(project, change, state, services, config, boundary):
-    layers, boundary = _run_checks_safely(project, change, config, boundary)
+    try:
+        layers, boundary = _run_checks_safely(project, change, config, boundary)
+    except StoryLoopError as exc:
+        if exc.details.get("reason") != "HARNESS_SHADOWED":
+            raise
+        return pause(project, state, "ORACLE_DEFECT", error=str(exc),
+                     acceptance={"status": "HARNESS_SHADOWED", **exc.details})
     layers = check_layers(layers, state.get("oracle"))
     if boundary["violations"]:
         return record_boundary(project, state, boundary)

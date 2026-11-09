@@ -27,6 +27,7 @@
 - 系统冒烟只校验 CLI 版本与帮助可用；业务断言写在变更自己的验收用例中。
 
 - 被测业务就是 StoryLoop 自身：验收用例不得在测试进程内 import `storyloop` 或 `tests`；须通过候选镜像中的子进程加载被测代码，避免误用已安装的引擎包。
+- 自举验收若需要 `storyloop.testing` helper，manifest 命令须以 `{storyloop_harness}` 开头，由当前引擎安装包的隔离 launcher 执行。候选侧的测试命令或脚本不得导入 `storyloop.testing.*`；RED/验收前的预检会以 `HARNESS_SHADOWED` 夹具错误停下，并给出脚本位置。业务 CLI/代码仍在候选子进程中运行。
 - 构造变更与运行状态夹具时，优先用公开 CLI（`storyloop init`、`storyloop change` 等）或公开函数生成，不要手写状态 JSON。确需手写变更文件时，`product` 的 `version`、`goal`、`non_goals`、`questions`、`stories` 必须完整；下面是可由 `load_change` 读取的最小示例，实际验收应按合同填写故事与判据：
 
 ```json storyloop-change-fixture

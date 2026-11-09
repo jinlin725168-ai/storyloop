@@ -188,6 +188,11 @@ def _evidence(state: dict, details: dict) -> list[str]:
     violations = details.get("violations") or state.get("violations") or []
     evidence += [item.get("path", "") for item in violations if isinstance(item, dict)]
     acceptance = details.get("acceptance") or state.get("acceptance") or {}
+    if acceptance.get("reason") == "HARNESS_SHADOWED":
+        evidence += [f"HARNESS_SHADOWED: {str(path)[:300]}"
+                     for path in (acceptance.get("files") or [])[:10]]
+        evidence.append("引擎 helper: " + str(acceptance.get("engine_helper") or "未知")[:300])
+        evidence.append("候选 helper: " + str(acceptance.get("candidate_helper") or "未知")[:300])
     for key in ("criteria_failing", "criteria_green"):
         evidence += [f"条件 {criterion}" for criterion in acceptance.get(key) or []]
     for result in acceptance.get("results") or []:
