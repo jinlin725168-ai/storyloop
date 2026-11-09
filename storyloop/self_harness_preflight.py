@@ -10,7 +10,8 @@ from .models import StoryLoopError
 from .smoke import suite_root
 
 
-def preflight_self_harness(project: Path, change_id: str, manifest: dict) -> None:
+def preflight_self_harness(project: Path, change_id: str, manifest: dict,
+                           *, expect_red: bool = False) -> None:
     """Stop before RED or acceptance executes a helper from the candidate package."""
     candidate_helper = project / "storyloop/testing"
     if not candidate_helper.is_dir():
@@ -36,14 +37,18 @@ def preflight_self_harness(project: Path, change_id: str, manifest: dict) -> Non
                 offenders.append(path.relative_to(project).as_posix())
     if offenders:
         engine = Path(__file__).parent / "testing/smoke_harness"
+        files = sorted(set(offenders))
+        repair = ("将违规用例改为由 manifest 的 {storyloop_harness} 入口运行；"
+                  "precondition 等 helper 仅在受保护 executor 中使用，业务代码仍由候选子进程执行")
+        details = {"reason": "HARNESS_SHADOWED", "files": files, "repair": repair,
+                   "failure_evidence": {"violating_files": files, "repair": repair},
+                   "candidate_helper": str(candidate_helper),
+                   "engine_helper": str(engine.resolve()), "engine_version": __version__}
+        if expect_red:
+            details["fixture_repairable"] = True
         raise StoryLoopError(
-            "自举验收夹具导入了候选镜像的 storyloop.testing；改用 manifest 的 "
-            "{storyloop_harness} 入口或引擎提供的 helper，业务代码仍由候选子进程执行",
-            code="ORACLE_DEFECT", details={"reason": "HARNESS_SHADOWED",
-                                            "files": sorted(set(offenders)),
-                                            "candidate_helper": str(candidate_helper),
-                                            "engine_helper": str(engine.resolve()),
-                                            "engine_version": __version__})
+            "自举验收夹具导入了候选镜像的 storyloop.testing；" + repair,
+            code="ORACLE_DEFECT", details=details)
 
 
 def _command_scripts(project: Path, suite: Path, command: list[str]) -> list[Path]:

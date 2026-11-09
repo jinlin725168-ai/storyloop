@@ -26,7 +26,7 @@ description: 如何写 StoryLoop 的判据：验收矩阵的行类型、特征�
 
 ## 运行环境与判定时点
 
-- StoryLoop 自举 Case：helper 由 manifest 的 `{storyloop_harness}` 入口从当前引擎安装包加载；候选测试进程只运行被测业务，不直接导入 `storyloop.testing.*`。若预检报告 `HARNESS_SHADOWED`，先把 helper 调用移到受保护 executor，再重证 RED，不把旧 helper 缺少的前提标记当成行为失败。
+- StoryLoop 自举 Case：`precondition` 等 helper 只在 manifest 的 `{storyloop_harness}` 受保护 executor 中从当前引擎安装包加载；候选侧普通测试进程不导入 `storyloop.testing.*`，被测业务在候选子进程运行。若 RED 预检报告 `HARNESS_SHADOWED`，按违规文件与修复指引自动重写套件并重证 RED，不把旧 helper 缺少的前提标记当成行为失败。
 - 候选副本里没有 .git：验收用例不能调用 git（git diff、git log 等），要比对的内容在用例里自带（例如记录文件摘要）。
 - 前提不满足时必须失败并明确报错：读不到文件、命令不可用、环境缺依赖时，绝不降级成"只检查一部分然后通过"，也不得伪装成行为断言失败。降级通过的判据是空心判据，审查会判它不合格。
 - 判据在合同提交时的代码上判定：RED 证明（包括 acceptance-repair 之后的重证）用的是合同提交时的代码加当前套件。"必须保持"的条件（regression、state_preservation、non_goal）只能引用那时已经存在的文件，不能引用本次变更才新建的文件（例如本次的特征化测试）。

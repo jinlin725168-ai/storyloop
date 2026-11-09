@@ -37,7 +37,7 @@ def run_smoke(
     project = Path(project).resolve()
     change_id = change["change_id"]
     manifest = load_smoke_manifest(project, change)
-    preflight_self_harness(project, change_id, manifest)
+    preflight_self_harness(project, change_id, manifest, expect_red=expect_red)
     started = _timestamp()
     results = _run_tiered(project, manifest["tests"], project_patterns(project), run_all=expect_red)
     errors = [item for item in results if item["status"] == "ERROR"]

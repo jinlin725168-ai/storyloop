@@ -11,7 +11,7 @@ from storyloop.project_loop import load_run_state, run_change
 from storyloop.stop_report import build_stop
 from tests.routing_support import legacy_create_change
 from tests.support import product
-from tests.test_baseline_behavior import repository
+from tests.test_baseline_behavior import git, repository
 from tests.test_smoke_repair import services, self_writing_payload
 from tests.test_project_loop import smoke_payload
 
@@ -83,6 +83,34 @@ class AcceptanceFixtureRetryTests(unittest.TestCase):
             result = run_change(root, change_id, services(change_id, generate))
             self.assertEqual(result["status"], "PASSED", result)
             self.assertIn("missing fixture", str(calls[1]["repair"]["failure_evidence"]))
+            self.assertTrue(load_run_state(root, change_id)["repairs"][0]["automatic"])
+
+    def test_shadowed_self_helper_is_repaired_once_before_red(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            old_helper = root / "storyloop/testing/smoke_harness/v1.py"
+            old_helper.parent.mkdir(parents=True)
+            old_helper.write_text("def precondition(ok, message):\n    if not ok: raise RuntimeError(message)\n",
+                                  encoding="utf-8")
+            git(root, "add", "storyloop/testing/smoke_harness/v1.py")
+            git(root, "commit", "-q", "-m", "old candidate helper")
+            bootstrap_project(root, {"test_commands": []})
+            change_id = legacy_create_change(root, "orders", product())["change_id"]
+            approve_change(root, change_id)
+            calls = []
+
+            def generate(project, request):
+                calls.append(request)
+                return precondition_error(change_id) if len(calls) == 1 else smoke_payload(change_id)
+
+            result = run_change(root, change_id, services(change_id, generate))
+            self.assertEqual(result["status"], "PASSED", result)
+            self.assertEqual(len(calls), 2)
+            evidence = calls[1]["repair"]["failure_evidence"]
+            self.assertEqual(evidence["reason"], "HARNESS_SHADOWED")
+            self.assertIn("flow.py", evidence["files"][0])
+            self.assertIn("{storyloop_harness}", evidence["repair"])
             self.assertTrue(load_run_state(root, change_id)["repairs"][0]["automatic"])
 
     def test_approve_stops_after_configured_retry_limit_with_each_failure(self):

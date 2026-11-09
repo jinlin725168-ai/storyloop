@@ -165,8 +165,13 @@ class SmokeSuiteTests(unittest.TestCase):
             run_smoke_isolated(self.root, load_change(self.root, self.change_id), expect_red=True)
         self.assertEqual(caught.exception.code, "ORACLE_DEFECT")
         self.assertEqual(caught.exception.details["reason"], "HARNESS_SHADOWED")
+        self.assertTrue(caught.exception.details["fixture_repairable"])
+        self.assertIn("test_smoke.py", str(caught.exception.details["failure_evidence"]))
         self.assertIn("{storyloop_harness}", str(caught.exception))
         self.assertIn("test_smoke.py", str(caught.exception.details))
+        with self.assertRaises(StoryLoopError) as acceptance_error:
+            run_smoke_isolated(self.root, load_change(self.root, self.change_id), expect_red=False)
+        self.assertNotIn("fixture_repairable", acceptance_error.exception.details)
 
     def test_ordinary_project_still_runs_its_smoke_suite(self):
         script = ("import unittest\n"
