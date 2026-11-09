@@ -54,7 +54,65 @@ def case_fixture(root: Path) -> Path:
     return source
 
 
+def v2_case_fixture(source: Path, *, approved: bool = False) -> Path:
+    """Derive a v2 fixture with an entry-linked suite from an existing v1 fixture."""
+    source = source.rename(source.with_name("v2"))
+    contract = json.loads((source / "contract.json").read_text())
+    contract["product"]["stories"][0]["verification_entries"] = [
+        {"id": "VE-1", "kind": "public_function", "locator": "feature.value",
+         "observable": "The value is 2", "reason": "Deterministic public seam"}]
+    if approved:
+        contract["approval"]["contract_digest"] = contract_digest(contract["product"])
+    else:
+        contract.pop("approval")
+    contract_bytes = _bytes(source / "contract.json", contract)
+    suite_path = "checks/acceptance/changes/FEAT-example/manifest.json"
+    suite_bytes = _bytes(source / suite_path, {"version": 1, "tests": [
+        {"id": "example", "criteria": ["AC-1"], "entry_ids": ["VE-1"],
+         "command": ["{python}", "checks/test_example.py"], "timeout_seconds": 10}]})
+    gold = json.loads((source / "gold.json").read_text())
+    gold["evidence"][0]["sha256"] = hashlib.sha256(contract_bytes).hexdigest()
+    gold_bytes = _bytes(source / "gold.json", gold)
+    manifest = json.loads((source / "case.json").read_text())
+    manifest["case_version"], manifest["legacy_seam"] = 2, False
+    manifest["contract_sha256"] = hashlib.sha256(contract_bytes).hexdigest()
+    manifest["gold_sha256"] = hashlib.sha256(gold_bytes).hexdigest()
+    manifest["suite_files"].append({"path": suite_path,
+                                    "sha256": hashlib.sha256(suite_bytes).hexdigest()})
+    manifest["suite_files"].sort(key=lambda item: item["path"])
+    suite_hash = hashlib.sha256()
+    for item in manifest["suite_files"]:
+        suite_hash.update(item["path"].encode() + b"\0" + (source / item["path"]).read_bytes())
+    manifest["suite_sha256"] = suite_hash.hexdigest()
+    _bytes(source / "case.json", manifest)
+    return source
+
+
 class BenchCaseTests(unittest.TestCase):
+    def test_unapproved_v1_remains_rejected_for_calibration_mode(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = case_fixture(Path(folder))
+            contract = json.loads((source / "contract.json").read_text())
+            contract.pop("approval")
+            content = _bytes(source / "contract.json", contract)
+            manifest = json.loads((source / "case.json").read_text())
+            manifest["contract_sha256"] = hashlib.sha256(content).hexdigest()
+            _bytes(source / "case.json", manifest)
+            with self.assertRaises(StoryLoopError):
+                load_case(source, allow_unapproved_v2=True)
+
+    def test_unapproved_v2_requires_explicit_calibration_mode(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = v2_case_fixture(case_fixture(Path(folder)))
+            with self.assertRaises(StoryLoopError):
+                load_case(source)
+            self.assertFalse(load_case(source, allow_unapproved_v2=True)["contract_approved"])
+
+    def test_approved_v2_loads_for_run(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = v2_case_fixture(case_fixture(Path(folder)), approved=True)
+            self.assertTrue(load_case(source)["contract_approved"])
+
     def test_load_valid_v1_case(self):
         with tempfile.TemporaryDirectory() as folder:
             case = load_case(case_fixture(Path(folder)))

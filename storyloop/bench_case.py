@@ -1,4 +1,4 @@
-"""Validate immutable v1 bench Case sources before calibration or execution."""
+"""Validate immutable bench Case sources before calibration or execution."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 
-from .models import StoryLoopError, require
+from .models import StoryLoopError, identifier, require
 from .changes import contract_digest
 
 SHA = re.compile(r"[0-9a-f]{64}\Z")
@@ -15,7 +15,7 @@ COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 ID = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 
 
-def load_case(source: Path) -> dict:
+def load_case(source: Path, *, allow_unapproved_v2: bool = False) -> dict:
     """Read one frozen Case and check every declared byte and reference."""
     source = Path(source)
     require(source.is_dir() and not source.is_symlink(), "Case directory is unavailable or linked")
@@ -29,7 +29,9 @@ def load_case(source: Path) -> dict:
     _hash(gold_bytes, manifest["gold_sha256"], "gold.json")
     contract = _json(contract_bytes, "contract.json")
     gold = _json(gold_bytes, "gold.json")
-    _contract(contract)
+    approved = _contract(contract, manifest["case_version"], allow_unapproved_v2)
+    if manifest["case_version"] == 2:
+        _v2_contract_and_suite(source, contract)
     suite_hash = hashlib.sha256()
     paths = []
     for item in manifest["suite_files"]:
@@ -45,7 +47,8 @@ def load_case(source: Path) -> dict:
     _gold(gold, source, contract)
     _check_inventory(source, paths)
     case_hash = hashlib.sha256(manifest_bytes + contract_bytes + gold_bytes + suite_hash.digest()).hexdigest()
-    return {"source": source, "manifest": manifest, "contract": contract, "gold": gold,
+    return {"source": source, "manifest": manifest, "contract": contract,
+            "contract_approved": approved, "gold": gold,
             "case_hash": case_hash, "gold_hash": manifest["gold_sha256"]}
 
 
@@ -54,10 +57,12 @@ def _manifest(value: dict, source: Path) -> None:
               "solution_commit", "contract_sha256", "suite_sha256", "gold_sha256",
               "suite_files", "allowed", "legacy_seam", "python"}
     require(set(value) == fields, "case.json fields are missing or unknown")
-    require(value["schema_version"] == 1 and value["case_version"] == 1,
-            "Only frozen v1 Cases are supported")
+    require(value["schema_version"] == 1 and value["case_version"] in {1, 2},
+            "Only v1/v2 Cases are supported")
+    version = value["case_version"]
     require(isinstance(value["case_id"], str) and ID.fullmatch(value["case_id"])
-            and source.parent.name == value["case_id"] and source.name == "v1", "Invalid Case identity")
+            and source.parent.name == value["case_id"] and source.name == f"v{version}",
+            "Invalid Case identity")
     require(isinstance(value["repository_id"], str) and ID.fullmatch(value["repository_id"]),
             "Invalid repository_id")
     require(all(isinstance(value[key], str) and COMMIT.fullmatch(value[key])
@@ -66,7 +71,7 @@ def _manifest(value: dict, source: Path) -> None:
     require(all(isinstance(value[key], str) and SHA.fullmatch(value[key])
                 for key in ("contract_sha256", "suite_sha256", "gold_sha256")), "Invalid Case hash")
     require(isinstance(value["suite_files"], list) and value["suite_files"], "Suite files are required")
-    require(value["legacy_seam"] is True, "v1 Case must mark legacy_seam")
+    require(value["legacy_seam"] is (version == 1), "Case legacy_seam does not match version")
     python = value["python"]
     require(isinstance(python, dict) and set(python) == {"version", "dependencies"},
             "Invalid Gold Python requirement")
@@ -85,13 +90,33 @@ def _manifest(value: dict, source: Path) -> None:
     require(cost is None or type(cost) in (int, float) and cost > 0, "Invalid max_cost_usd")
 
 
-def _contract(value: dict) -> None:
-    require(set(value) == {"change_id", "product", "approval"}, "Invalid approved contract")
+def _contract(value: dict, version: int, allow_unapproved_v2: bool) -> bool:
+    required = {"change_id", "product"}
+    require(isinstance(value, dict) and set(value) in (required, required | {"approval"}),
+            "Invalid Case contract")
+    if "approval" not in value:
+        require(version == 2 and allow_unapproved_v2,
+                "Bench run requires an approved v2 contract")
+        return False
     approval = value["approval"]
     require(isinstance(approval, dict) and all(approval.get(key) for key in
             ("contract_digest", "approved_at", "approved_by")), "Contract lacks approval evidence")
     require(approval["contract_digest"] == contract_digest(value["product"]),
             "Approved contract digest does not match product")
+    return True
+
+
+def _v2_contract_and_suite(source: Path, contract: dict) -> None:
+    from .product_contract import validate_product
+    from .smoke import _validate_manifest
+
+    product = validate_product(contract["product"])
+    require(all(story.get("verification_entries") for story in product["stories"]),
+            "v2 Case requires story verification_entries")
+    change_id = identifier(contract["change_id"], "change id")
+    path = f"checks/acceptance/changes/{change_id}/manifest.json"
+    manifest = _json(_file(source, path), path)
+    _validate_manifest(manifest, {"product": product})
 
 
 def _gold(value: dict, source: Path, contract: dict) -> None:
