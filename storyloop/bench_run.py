@@ -20,21 +20,30 @@ SCORE_CONTRACT = {"version": 1, "pass_requires": ["PASSED", "gold_passed"],
 def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_commit: str,
               adapter_name: str, model: str, budget: dict, invoke, check_gold,
               output_root: Path, *, i_accept_cost: bool = False,
-              gold_python: Path | None = None) -> dict:
+              gold_python: Path | None = None, scope: str = "paired",
+              confirmed: bool = False) -> dict:
     """Run one frozen comparison; invoke/check_gold are explicit runtime adapters."""
     if adapter_name != "test" and not i_accept_cost:
         raise StoryLoopError("Real bench runs require --i-accept-cost; estimated total 13–22 hours")
+    if adapter_name != "test" and not confirmed:
+        raise StoryLoopError("Real bench runs require a second confirmation")
     require(adapter_name in {"test", "codex", "claude"}, "Unsupported bench adapter")
-    require(len(base_engine_commit) == len(candidate_engine_commit) == 40,
-            "Both engine commits must be frozen full hashes")
+    require(scope in {"paired", "base-only"}, "Invalid bench execution scope")
+    require(len(base_engine_commit) == 40 and
+            (scope == "base-only" or len(candidate_engine_commit) == 40),
+            "Engine commits must be frozen full hashes")
     require(isinstance(budget, dict) and type(budget.get("max_calls")) is int
             and budget["max_calls"] > 0, "Invalid bench budget")
     cases = [load_case(path) for path in sources]
+    require(len({case["manifest"]["case_id"] for case in cases}) == len(cases),
+            "Run Case IDs must be unique")
     if check_gold is None:
         from .bench_calibrate import _python_info, judge_gold
         interpreter = _python_info(gold_python, cases[0]["manifest"]["python"])
 
         def check_gold(case, outcome):
+            if isinstance(outcome.get("gold_passed"), bool):
+                return outcome["gold_passed"]
             require(isinstance(outcome.get("tree"), str), "Bench attempt lacks a candidate tree")
             return judge_gold(case["source"], Path(outcome["tree"]),
                               python=Path(interpreter["path"]))["passed"]
@@ -49,7 +58,7 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
     versions = {case["manifest"]["case_version"] for case in cases}
     require(len(versions) == 1, "v1 and v2 Cases cannot be mixed")
     result = {"run_id": uuid.uuid4().hex, "created_at": datetime.now(timezone.utc).isoformat(),
-              "case_version": versions.pop(), "base_engine_commit": base_engine_commit,
+              "case_version": versions.pop(), "scope": scope, "base_engine_commit": base_engine_commit,
               "candidate_engine_commit": candidate_engine_commit, "adapter": adapter_name,
               "model": model, "budget": budget, "gold_python": interpreter,
               "scoring_contract": SCORE_CONTRACT, "cases": []}
@@ -59,11 +68,18 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
                "suite_sha256": case["manifest"]["suite_sha256"],
                "gold_sha256": case["gold_hash"], "attempts": []}
         for attempt in (1, 2):
-            for side in ("base", "candidate"):
+            for side in (("base",) if scope == "base-only" else ("base", "candidate")):
                 outcome = invoke(side, case, attempt, simulate_human)
                 row["attempts"].append(_attempt(outcome, side, attempt, case, check_gold))
-        row["comparison"] = _comparison(row["attempts"])
+        comparison = _comparison(row["attempts"])
+        if scope == "base-only" and comparison["status"] == "COMPARABLE":
+            comparison = {"status": "BASE_ONLY", "reasons": []}
+        row["comparison"] = comparison
         result["cases"].append(row)
+    if result["case_version"] == 2 and scope == "base-only":
+        from .bench_real_exec import STAGE_CASE_IDS, stage_gate
+        if {row["case_id"] for row in result["cases"]} == STAGE_CASE_IDS:
+            result["stage_gate"] = stage_gate(result)
     records = Path(output_root) / ".storyloop/bench/runs"
     records.mkdir(parents=True, exist_ok=True)
     target = records / f"{result['run_id']}.json"
@@ -76,20 +92,34 @@ def _attempt(outcome: dict, side: str, number: int, case: dict, check_gold) -> d
     require(isinstance(outcome, dict), "Bench adapter returned no outcome")
     events = outcome.get("events")
     routine, nonroutine, unknown = _events(events)
+    stop = outcome.get("nonroutine_stop")
+    if isinstance(stop, str) and not nonroutine:
+        nonroutine[stop] += 1
     status = outcome.get("status")
-    if nonroutine:
+    if status == "NEEDS_HUMAN" or nonroutine:
         verdict = "NEEDS_HUMAN"
         gold = None
     elif status == "PASSED":
         gold = check_gold(case, outcome)
         verdict = "PASSED" if gold is True else "FAILED" if gold is False else "NOT_COMPARABLE"
+    elif status in {"TIMEOUT", "BUDGET_EXHAUSTED", "COST_LIMIT_REACHED"}:
+        gold = None
+        verdict = "NOT_COMPARABLE"
     else:
         gold = None
         verdict = "NOT_COMPARABLE" if status is None else "FAILED"
     return {"side": side, "attempt": number, "status": status, "verdict": verdict,
-            "gold_passed": gold, "routine_types": dict(routine),
+            "gold_passed": gold, "gold_checks": outcome.get("gold_checks"),
+            "engine_commit": outcome.get("engine_commit"),
+            "engine_version": outcome.get("engine_version"),
+            "engine_python": outcome.get("engine_python"),
+            "termination_reason": outcome.get("termination_reason") or outcome.get("reason")
+            or (status if status in {"BUDGET_EXHAUSTED", "COST_LIMIT_REACHED", "TIMEOUT"} else None),
+            "routine_types": dict(routine),
             "nonroutine_types": dict(nonroutine), "nonroutine_count": sum(nonroutine.values()),
             "unknown_events": unknown, "calls": outcome.get("calls"),
+            "input_tokens": outcome.get("input_tokens"),
+            "output_tokens": outcome.get("output_tokens"),
             "agent_ms": outcome.get("agent_ms"), "wall_ms": outcome.get("wall_ms"),
             "known_cost_usd": outcome.get("known_cost_usd"),
             "cost_coverage": outcome.get("cost_coverage")}
@@ -146,7 +176,8 @@ def _comparison(attempts: list[dict]) -> dict:
 
 def compare_runs(base: dict, candidate: dict) -> dict:
     """Reject comparisons across versions, frozen inputs, or execution settings."""
-    fields = ("case_version", "adapter", "model", "budget", "gold_python", "scoring_contract")
+    fields = ("case_version", "scope", "adapter", "model", "budget", "gold_python",
+              "scoring_contract")
     reasons = [field for field in fields if base.get(field) != candidate.get(field)]
     old = [(row.get("case_id"), row.get("case_hash")) for row in base.get("cases", [])]
     new = [(row.get("case_id"), row.get("case_hash")) for row in candidate.get("cases", [])]

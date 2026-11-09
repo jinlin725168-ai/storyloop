@@ -138,6 +138,7 @@
 |  | `bench_calibrate` | 可变区 | 在隔离 Base/Solution 副本校准确定性 Gold | `calibrate_case` |
 |  | `bench_run` | 可变区 | 冻结配置、交错调度和证据比较 | `run_bench`、`compare_runs` |
 |  | `bench_cli` | 可变区 | bench 校准、报告与真实运行成本门禁 | `dispatch_bench` |
+|  | `bench_real_exec` | 可变区 | 每次尝试隔离克隆来源与引擎、执行隐藏 Gold | `run_isolated_attempt`、`stage_gate` |
 |  | `metrics_compute` | 可变区 | 计算跨变更指标，包含一个显式只读 Git 指标 | `attempts`、`contract_ratio`、`escapes`、`first_pass`、`forced_heavy`、`interventions`、`lessons`、`local_green_ci_red`、`overrule_rate`、`rework`、`stuck`、`upgrades` |
 |  | `metrics_compute_support` | 可变区 | 指标计算共用的构造器与解析器 | `metric` |
 |  | `metrics_cost` | 可变区 | 从报告汇总聚合 M11，必要时回退读取原始账本 | `cost` |
@@ -171,6 +172,7 @@
 |  | `routing_execution` | 可变区 | 按序执行分流中的方案、批准、一致性及锁迁移 | `candidate_l3`、`prepare_execution` |
 |  | `run_recovery` | 可变区 | 显式人工恢复卡住的产品运行，并保留审计轨迹 | `reset_run` |
 | 命令面 | `__main__` | 可变区 | 以 python -m storyloop 启动命令面（入口模块无 docstring） | — |
+|  | `bench_worker` | 可变区 | 子进程用指定引擎完成冻结合同的真实流程 | `main` |
 |  | `ci_command` | 可变区 | 执行 CI 并可选记录结果的命令适配器 | `run_ci`、`run_ci_command` |
 |  | `cli` | 可变区 | 提供公共命令行接口与如实反映结果的机器退出码 | `main`、`run_with_answers` |
 |  | `product_cli` | 可变区 | 编排产品变更创建、修订与命令处理 | `change`、`dispatch` |

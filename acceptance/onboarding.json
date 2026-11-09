@@ -97,6 +97,8 @@
         "storyloop/bench_calibrate.py",
         "storyloop/bench_run.py",
         "storyloop/bench_cli.py",
+        "storyloop/bench_real_exec.py",
+        "storyloop/bench_worker.py",
         "storyloop/metrics_compute.py",
         "storyloop/metrics_compute_support.py",
         "storyloop/metrics_cost.py",

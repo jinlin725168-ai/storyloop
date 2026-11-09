@@ -26,9 +26,23 @@ v2 批准记录的 `contract_sha256` 绑定规范化 `product` JSON；批准后�
 `case.json.contract_sha256` 则哈希整个 `contract.json` 文件，两者都用 SHA-256，
 但批准记录不能包含对自身所在文件的哈希。
 
-Run 框架冻结 Case 哈希、两侧引擎 commit、适配器、模型、预算和评分合同；每侧两次，
-按 Base/Candidate 交错。测试适配器覆盖调度与模拟人规则。真实代理参测默认关闭，
-`storyloop bench run` 会提示预计累计 13～22 小时并要求 `--i-accept-cost`；
-当前 CLI 仍不接入真实代理。Run 记录位于 `.storyloop/bench/runs/`，可用
+Run 冻结 Case 哈希、引擎 commit、适配器、模型、预算和评分合同。`--scope base-only`
+只执行 Base 引擎两次；`--scope paired` 每侧两次、按 Base/Candidate 交错。每次尝试
+在临时目录只拉取 Base commit 的浅层独立仓库（候选树无法读取 Solution 历史），
+另检出指定引擎 commit，用已准备依赖的
+隔离 venv `--engine-python` 解释器加载该引擎源码。`--repository ID=PATH` 可重复指定 Case
+来源；来源仓库不会写入。合同由冻结 JSON 直接创建、批准，验收套件从 Case 安装，
+不再调用 product 和 acceptance 角色重写。Gold 在结果树副本中原样执行。
+
+真实参测需要 `--i-accept-cost`，随后输入 `yes` 或给 `--yes` 再次确认。开始前会
+显示次数、适配器、模型和预计累计耗时：5 Case 的 base-only 为 10 次、约
+6.5～11 小时；paired 为 20 次、约 13～22 小时。Claude 须另给包含 `{model}`
+占位的 `--agent-command`，且该命令需符合 StoryLoop command 适配器 JSON 协议。
+合同要求人工验收而 Case 无冻结自动处理规则时，该次尝试记不可比较。设计批准
+由模拟人自动处理；需要纠正或非计划回答时记 `NEEDS_HUMAN` 并结束。超时及预算
+终止记录原因。v2 的 base-only 阶段门槛要求 5 Case 中至少 4 个各有两次
+`PASSED`，且每次非例行停点数不超过 1；不可比较不算通过。
+
+Run 记录位于 `.storyloop/bench/runs/`，可用
 `storyloop bench --json report <run-id>` 读取。缺成本等证据或版本、配置不一致时
 标 `NOT_COMPARABLE`，业务失败不能由平均分抵消。
