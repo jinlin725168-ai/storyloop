@@ -227,6 +227,8 @@ def apply_overrule(project: Path, state: dict, reason: str) -> dict | None:
 
 
 def _record_overrule(state: dict, reason: str, keys: set[str]) -> None:
+    from .intervention_events import append_event
+    append_event(state, "overrule", source="run --overrule", stop=state["status"])
     state.setdefault("overrules", []).append({
         "at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "status": state["status"],
         "attempt": state["attempt"], "reason": reason, "findings": sorted(keys)})

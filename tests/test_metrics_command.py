@@ -71,7 +71,7 @@ class MetricsCommandTests(unittest.TestCase):
         self.assertIn("无数据", render_metrics(result))
         self.assertEqual(set(result["metrics"]), {
             "M1", "M1b", "M2", "M3", "M4", "M5", "M6",
-            "M7", "M8", "M9", "M10", "M11", "M12",
+            "M7", "M8", "M9", "M10", "M11", "M12", "L1",
         })
 
     def test_invalid_project_errors_are_in_chinese(self):

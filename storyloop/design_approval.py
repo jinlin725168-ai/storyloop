@@ -253,6 +253,11 @@ def _approve_design_locked(project: Path, change_id: str, plan_id: str, *,
     if old:
         _clear_checks(project, state)
     state['planning'].pop('pending_option', None)
+    from .intervention_events import append_event
+    repeated = bool(old) or any(isinstance(item, dict) and item.get("kind") == "design_approval"
+                                for item in state.get("intervention_events", []))
+    append_event(state, "design_approval", source="design-approve",
+                 stop=state.get("status"), repeated=repeated)
     save_run(project, state)
     return deepcopy(plan['approval'])
 
@@ -322,7 +327,10 @@ def _replan_locked(project: Path, change_id: str, reason: str) -> dict:
         state.pop(key, None)
     state.pop('questions', None)
     state.pop('stop', None)
+    source_status = state['status']
     transition(project, state, 'DESIGN_REVISION_REQUIRED', event='design_replan', updates={'phase': 'planning'})
+    from .intervention_events import append_event
+    append_event(state, "replan", source="run --replan", stop=source_status)
     save_run(project, state)
     return deepcopy(state)
 

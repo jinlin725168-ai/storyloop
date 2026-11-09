@@ -65,6 +65,8 @@ def _reset_locked(project: Path, change_id: str, reason: str, now: Clock | None)
     transition(project, state, resume_status, event="reset",
                effect=lambda: _reset_fields(state, resume_status))
     state.setdefault("resets", []).append(record)
+    from .intervention_events import append_event
+    append_event(state, "reset", source="reset", stop=record["from_status"], at=moment)
     save_run(project, state)
     return {"status": resume_status, "change_id": change_id, "reset": record,
             "next": f"storyloop run <project> --change {change_id}"}
@@ -88,6 +90,8 @@ def _reset_base(project: Path, change: dict, state: dict, reason: str,
               "reason": reason}
     target = restart_base_attempt(project, state)
     state.setdefault("resets", []).append(record)
+    from .intervention_events import append_event
+    append_event(state, "reset", source="reset", stop=record["from_status"], at=record["at"])
     save_run(project, state)
     return {"status": target, "change_id": state["change_id"], "reset": record,
             "next": f"storyloop run <project> --change {state['change_id']}"}

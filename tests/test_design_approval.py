@@ -82,6 +82,7 @@ class DesignApprovalTests(unittest.TestCase):
                 approvals.replan(self.root, self.identifier, 'Reconsider candidate and plan')
         self.assertEqual(load_run_state(self.root, self.identifier), state)
         replanned = approvals.replan(self.root, self.identifier, 'Reconsider candidate and plan')
+        self.assertEqual(replanned['intervention_events'][-1]['kind'], 'replan')
         self.assertEqual(replanned['attempt'], state['attempt'])
         for key in ('cost_candidate', 'pending_review', 'review_disposition'):
             self.assertNotIn(key, replanned)
@@ -99,6 +100,7 @@ class DesignApprovalTests(unittest.TestCase):
         self.start()
         first = self.approve()
         self.assertEqual(first, self.approve())
+        self.assertEqual(len(load_run_state(self.root, self.identifier)['intervention_events']), 1)
         self.assertEqual(first['actor'], 'user')
         self.assertEqual(first['option_id'], 'main')
         self.assertEqual(self.calls, [])

@@ -97,6 +97,9 @@ def _repair_once(project: Path, change_id: str, reason: str, services: LoopServi
     if automatic:
         entry["automatic"] = True
     state.setdefault("repairs", []).append(entry)
+    from .intervention_events import append_event
+    append_event(state, "acceptance_repair", source="engine" if automatic else "acceptance-repair",
+                 stop=state.get("status"), at=moment, automatic=automatic)
     try:
         return _prove_repaired_suite(project, change, state, commit, reuse)
     except Exception:

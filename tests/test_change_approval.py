@@ -30,9 +30,12 @@ class ChangeApprovalTests(unittest.TestCase):
 
             clean = create_change(root, "another", product(), now=lambda: NOW)
             approved = approve_change(root, clean["change_id"], now=lambda: NOW)
+            approve_change(root, clean["change_id"], now=lambda: NOW)
             destination = materialize_approved_change(root, clean["change_id"])
 
             self.assertEqual(approved["status"], "APPROVED")
+            self.assertEqual(len(load_change(root, clean["change_id"])["intervention_events"]), 1)
+            self.assertEqual(approved["intervention_events"][0]["kind"], "contract_approval")
             self.assertEqual(len(approved["approval"]["contract_digest"]), 64)
             self.assertTrue((destination / "proposal.md").is_file())
             self.assertTrue((destination / "approval.json").is_file())
