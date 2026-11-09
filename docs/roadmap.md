@@ -1,6 +1,6 @@
 # 路线图
 
-更新：2026-11-05（以 `origin/main` `72f2b51` 为准）。历史计划在 `docs/plans/`，当前演进计划在 `docs/superpowers/`。
+更新：2026-11-08（以 `origin/main` `c5783aa` 为准）。历史计划在 `docs/plans/`，当前演进计划在 `docs/superpowers/`。
 
 ## 已完成
 
@@ -42,6 +42,8 @@
 - **自举障碍修复（PR [#75](https://github.com/jinlin725168-ai/storyloop/pull/75)、[#81](https://github.com/jinlin725168-ai/storyloop/pull/81)、[#84](https://github.com/jinlin725168-ai/storyloop/pull/84)、[#85](https://github.com/jinlin725168-ai/storyloop/pull/85)）**：特征化隔离新测试并处理冲突锁定；同一测试文件可声明多条行为；RED 前提错误不再算行为失败，停点展示有界失败摘要；设计规划会列出固定旧行为的测试和快照文件（legacy 的 `touched` 仍只含非测试文件）。
 - **自举产出并回（PR [#78](https://github.com/jinlin725168-ai/storyloop/pull/78)、[#83](https://github.com/jinlin725168-ai/storyloop/pull/83)、[#79](https://github.com/jinlin725168-ai/storyloop/pull/79)）**：底座暂存提示及已有测试改动提示已并回，CLI 冒烟非零退出正确归为行为失败；命令无法启动等仍归环境错误。
 - **StoryLoop 自身 dogfood 1～6**：六次尝试中四次到 `PASSED`；dogfood6 全 Codex（实现与审查）54 分钟到 `PASSED`，验收修复 1 次、实现一轮、审查一次通过。实现与审查同厂商，独立性较弱；2026-11-05 人决定长期使用 Codex，避免占用 Claude 额度（见 [#65](https://github.com/jinlin725168-ai/storyloop/issues/65)）。数据来自共享工作区未入库的 `storyloop-dogfood-findings.md` 和 `storyloop-dogfood3-findings.md` 第 34 条；dogfood6 代码并回另见 [PR #87](https://github.com/jinlin725168-ai/storyloop/pull/87)，不计入本页 main 基线。
+- **自举纠偏 PR [#89](https://github.com/jinlin725168-ai/storyloop/pull/89)、[#93](https://github.com/jinlin725168-ai/storyloop/pull/93)、[#94](https://github.com/jinlin725168-ai/storyloop/pull/94)、[#95](https://github.com/jinlin725168-ai/storyloop/pull/95)、[#96](https://github.com/jinlin725168-ai/storyloop/pull/96)、[#97](https://github.com/jinlin725168-ai/storyloop/pull/97)、[#98](https://github.com/jinlin725168-ai/storyloop/pull/98)、[#99](https://github.com/jinlin725168-ai/storyloop/pull/99)、[#100](https://github.com/jinlin725168-ai/storyloop/pull/100)**：补全 heavy RED 与命令式前提错误证据；验收修复后沿用有效方案、自动修复夹具并重证 RED；修正 intake 下一步、临时目录规则、方案证据与审查噪声、验收修复路径和 readiness 失败摘要。
+- **dogfood7～11**：7/8 在验收夹具与方案审查中反复返工，止损改由直接实现；9 到 `PASSED`，但有 3 次非例行介入；10 在 39 分钟内以**零非例行介入**到 `PASSED`；11 对同一 AC 连续逐层追问，约 5 次非例行介入后止损改由直接实现。共性根因是验证入口未进合同：验收用例选的入口与方案修改路径不一致。证据见共享工作区 `storyloop-dogfood3-findings.md:89-146`。
 
 ## 已知问题
 
@@ -51,39 +53,28 @@
 
 ## 下一步
 
-2026-11-05 人决定按以下四阶段推进，先压低自举中的非例行人工介入，再用数据检验能力，随后扩到真实项目和多故事变更，最后推进需求与测试充分性。审查角色长期使用 Codex：接受与实现同厂商、独立性较弱的取舍，不占 Claude 额度（[#65](https://github.com/jinlin725168-ai/storyloop/issues/65)）。base 仍只走人工通道（[决策 0018](decisions/0018-base-human-only.md)）。
+2026-11-08 人批准按 **①a → ①b → ①c → 门 → ② → ③** 推进，先建立最小评测底座，再修验证入口与审查收敛，最后融合技能和知识维护。依据是共享工作区 `storyloop/research_notes/HelixHarness调研.md`（[上游源码](https://github.com/didi/helixharness)）与[验证入口及评测底座设计 PR #101](https://github.com/jinlin725168-ai/storyloop/pull/101/files)。审查角色继续使用 Codex（[#65](https://github.com/jinlin725168-ai/storyloop/issues/65)）；base 人工通道不变（[决策 0018](decisions/0018-base-human-only.md)）。
 
-1. **压低人工**：验收修复若不改变已批准方案涉及的文件与接口，就沿用该方案，仍执行方案一致性审查；Python 接入模板默认将 `.ruff_cache`、`*.egg-info/` 等声明为临时路径；修正 `approve` 在 intake `NEEDS_INPUT` 时错误的下一步提示；报告只入库摘要（[#64](https://github.com/jinlin725168-ai/storyloop/issues/64)）。**门**：连续两次自举的非例行人工介入均不超过 1 次。
-2. **能力指标（子项目 3）**：`storyloop metrics` 从遥测自动统计调用、耗时、验收修复和人工介入，并按轮对比。**门**：能复现 dogfood 数据表。
-3. **扩面**：在真实项目做 2～3 个故事的功能变更；RuoYi 用真实模型跑一次撞底座（E3 此前只用测试适配器）。**门**：真实项目多故事功能变更到 `PASSED`。
-4. **需求与充分性**：推进 spec-craft 第 3～5 批、链路骨架 ②、子项目 4 测试充分性；架构收敛 F 的文档补充可随时插入。
+1. **①a 最小评测底座**：L1 在现有 M1～M10 上自动分类例行/非例行人工介入，并记录耗时与成本覆盖率；L2 建 `storyloop bench`，冻结 dogfood3/5/6/9/10 五个 Case 的 Base、合同、参考 Solution、验收与隐藏检查，固定适配器/模型/预算，只换引擎版本。模拟人自动通过例行批准，遇非例行停点记“需要人”并结束；每 Case 每侧跑 2 次，缺证据标不可比较。**此时只设计和后续实现，暂时不跑五个真实 Case。**
+2. **①b 验证入口与审查收敛**：每个故事声明公共验证入口；验收 manifest 测试引用入口；方案说明入口到改动路径；一致性审查核对三方。同一 AC 连续两轮被判判据强度不足时，下一轮必须给完整判据规格，仍不收敛就停给人一次；意见用稳定 ID 和 MUST_FIX/DECISION_NEEDED/ADVISORY 三级。
+3. **①c 技能融合与知识维护**：`spec-craft` 加需求决策树，`oracle-craft` 加 seam 选择，新增 TDD、review、影响分析、系统化排错技能，`foundation-survey` 加分领域证据扫描。PASSED 后增量提议 foundation 精确 diff，人一条命令批准路径，引擎防漂移并提交；角色用 foundation 前核实当前代码，事实与规范分节并给全局约束摘要。保留经验/失败记忆及复发统计、活规格和 BASE 保护；按需加载索引延至②。
+4. **门**：冻结集 5 Case 中至少 4 个 `PASSED`，且每个通过的 Case 两次尝试均不超过 1 次非例行停点；不可比较不算通过。完成 ①a～①c 后才校准并运行该门。
+5. **② 扩面**：RuoYi 多故事功能变更、真实模型撞底座，并补 L3 真实项目观察。
+6. **③ 需求与充分性**：spec-craft 剩余批次按决策树技能重新核对范围，再推进链路骨架 ② 和测试充分性。[#64](https://github.com/jinlin725168-ai/storyloop/issues/64) 报告瘦身仍不做。
 
 ```mermaid
 flowchart LR
-    D["架构收敛 D ✅"] --> T1["骨架 ① ✅"]
-    T1 --> E1["架构收敛 E1 ✅"]
-    E1 --> E3["架构收敛 E3 ✅"]
-    E1 -.-> E2a["E2a 已取消（代码已移除）"]
-    E2a -.-> E2b["E2b 已取消"]
-    E3 --> P1["① 压低人工：连续 2 次自举 ≤1 次介入"]
-    T1 --> P1
-    P1 --> P2["② 能力指标：复现 dogfood 数据表"]
-    P2 --> P3["③ 扩面：真实项目多故事 PASSED"]
-    P3 --> P4["④ 需求与充分性"]
-    E3 --> P3
-    E3 -.-> F["架构收敛 F：文档可随时插入"]
-    P2 --> M["子项目 3：metrics 遥测对比"]
-    P3 --> R["2～3 故事；RuoYi 真实模型撞底座"]
-    P4 --> T2["骨架 ②"]
-    S1["spec-craft 第 1、2 批 ✅"] --> S3["spec-craft 第 3 批"]
-    T2 --> S3
-    S3 --> S4["第 4 批"]
-    S3 --> S5["第 5 批"]
-    P4 --> A4["子项目 4：测试充分性"]
-    S3 --> A4
+    E3["架构收敛 E3 ✅"] --> A["①a L1 分类 + L2 冻结 bench"]
+    A --> B["①b 公共验证入口 + 审查收敛"]
+    B --> C["①c 技能融合 + 知识增量"]
+    C --> G{"5 Case ≥4 PASSED<br/>每个 ≤1 非例行停点"}
+    G --> X["② RuoYi 多故事 + 真实模型 + L3"]
+    X --> Y["③ 需求决策树复核 + 骨架② + 充分性"]
+    S["spec-craft 第 1、2 批 ✅"] --> C
+    E3 --> X
 ```
 
-阶段 4 的 spec-craft 仍须验证正式负责人判断与引擎交接；老仓库迁移、上游同步自动化、多变更并行和 Windows 真实产品闭环按实际需求启动。
+阶段③的 spec-craft 仍须验证正式负责人判断与引擎交接；老仓库迁移、上游同步自动化、多变更并行和 Windows 真实产品闭环按实际需求启动。
 
 ## 明确不做
 
