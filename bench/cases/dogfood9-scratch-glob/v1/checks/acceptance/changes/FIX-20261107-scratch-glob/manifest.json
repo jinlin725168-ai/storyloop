@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "tests": [
+    {
+      "id": "scratch-glob-red",
+      "criteria": [
+        "AC-1",
+        "AC-2",
+        "AC-7"
+      ],
+      "command": [
+        "{python}",
+        "-B",
+        "-m",
+        "unittest",
+        "acceptance.changes.FIX-20261107-scratch-glob.test_scratch_glob.RedBehavior"
+      ],
+      "timeout_seconds": 90,
+      "tier": "fast"
+    },
+    {
+      "id": "scratch-glob-existing",
+      "criteria": [
+        "AC-3",
+        "AC-4",
+        "AC-5",
+        "AC-6",
+        "AC-8"
+      ],
+      "command": [
+        "{python}",
+        "-B",
+        "-m",
+        "unittest",
+        "acceptance.changes.FIX-20261107-scratch-glob.test_scratch_glob.ExistingBehavior"
+      ],
+      "timeout_seconds": 90,
+      "tier": "fast"
+    }
+  ]
+}
