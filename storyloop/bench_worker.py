@@ -44,17 +44,12 @@ def main(request_path: str, response_path: str) -> None:
         if ready["status"] != "READY":
             outcome.update(status="NOT_COMPARABLE", reason=f"readiness:{ready['status']}")
         else:
-            stamp = datetime.strptime(change_id.split("-")[1], "%Y%m%d").replace(tzinfo=timezone.utc)
-            slug = "-".join(change_id.split("-")[2:])
-            created = create_change(project, "Frozen bench Case", contract["product"],
-                                    now=lambda: stamp, slug=slug,
-                                    require_verification_entries=request["case_version"] == 2)
-            if created["change_id"] != change_id:
-                raise StoryLoopError("Frozen change ID does not match the product contract")
-            approve_change(project, change_id, approved_by="bench-frozen-contract")
-            _install_suite(project, request["case_source"], change_id, load_change, install_smoke_suite)
-            outcome.update(_run_until_stop(project, change_id, run_change, approve_design,
-                                           load_run_state))
+            outcome.update(_execute_change(
+                project, contract, request["case_source"], request["case_version"],
+                request.get("suite_mode", "generated"), create_change=create_change,
+                approve_change=approve_change, load_change=load_change,
+                install_smoke_suite=install_smoke_suite, run_change=run_change,
+                approve_design=approve_design, load_run_state=load_run_state))
     except (StoryLoopError, OSError, ValueError, KeyError) as exc:
         outcome.update(status="NOT_COMPARABLE", reason=f"engine:{type(exc).__name__}: {exc}")
     try:
@@ -79,6 +74,26 @@ def _adapter_settings(request: dict) -> dict:
         profile = {"kind": "command", "agent_command": [
             request["model"] if item == "{model}" else item for item in command]}
     return {"adapters": {"bench": profile}, "roles": {"default_adapter": "bench"}}
+
+
+def _execute_change(project: Path, contract: dict, source: str, version: int,
+                    suite_mode: str, *, create_change, approve_change, load_change,
+                    install_smoke_suite, run_change, approve_design, load_run_state) -> dict:
+    """Follow approve's execution path; only the explicit isolation mode installs a suite."""
+    if suite_mode not in {"generated", "frozen"}:
+        raise ValueError("Unknown bench suite mode")
+    change_id = contract["change_id"]
+    stamp = datetime.strptime(change_id.split("-")[1], "%Y%m%d").replace(tzinfo=timezone.utc)
+    slug = "-".join(change_id.split("-")[2:])
+    created = create_change(project, "Frozen bench Case", contract["product"],
+                            now=lambda: stamp, slug=slug,
+                            require_verification_entries=version == 2)
+    if created["change_id"] != change_id:
+        raise ValueError("Frozen change ID does not match the product contract")
+    approve_change(project, change_id, approved_by="bench-frozen-contract")
+    if suite_mode == "frozen":
+        _install_suite(project, source, change_id, load_change, install_smoke_suite)
+    return _run_until_stop(project, change_id, run_change, approve_design, load_run_state)
 
 
 def _install_suite(project: Path, source: str, change_id: str, load_change, install) -> None:
