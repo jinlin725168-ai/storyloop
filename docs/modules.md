@@ -122,6 +122,7 @@
 | 记忆 | `drafts` | 可变区 | 统一、安全寻址的经验与勘误草案 | `create_draft`、`list_drafts`、`load_draft`、`reject_draft`、`set_draft_status` |
 |  | `errata` | 可变区 | 校验底座更正，生成草案并通过 BASE 审批落地 | `capture_errata`、`defer_errata`、`land_errata`、`release_errata` |
 |  | `lesson_landing` | 可变区 | 以限定路径的 Git 事务审批人工记忆草案 | `approve_draft`、`land_transaction` |
+|  | `knowledge_delta` | 可变区 | PASSED 后提议知识差异、精确路径授权与底座版本更新 | `propose_knowledge`、`authorize_knowledge` |
 |  | `lesson_retrieval` | 可变区 | 选择冻结经验，区分代理声明使用与未知使用情况 | `change_id`、`claimed_lessons`、`lessons_payload`、`provided_ids` |
 |  | `lesson_store` | 可变区 | 从不可变 Git 提交读取并评估经验 | `confirm_lesson`、`effective_status`、`lesson_source_commit`、`lessons_digest`、`list_lessons`、`load_lessons_at`、`require_idle_source`、`retire_lesson`、`stale_ids` |
 |  | `lessons` | 可变区 | 解析、渲染与校验仓库经验条目 | `next_lesson_id`、`parse_lesson`、`render_lesson`、`scope_matches`、`validate_lessons` |

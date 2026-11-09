@@ -14,6 +14,8 @@
 | `skills` | — | `SKILLS_INSTALLED` |
 | `skills` | `--view spec-craft` | `SKILL_VIEW` |
 | `survey` | `[--reason TEXT] [--from FILE]` | `SURVEYED` |
+| `knowledge-propose` | `--change ID`（仅 PASSED） | `KNOWLEDGE_PROPOSED` 或 `NO_KNOWLEDGE_DELTA` |
+| `authorize-knowledge` | `--proposal ID --paths [PATH …]`；空 `--paths` 表示拒绝 | `KNOWLEDGE_APPLIED` 或 `KNOWLEDGE_REJECTED` |
 | `change` | `--idea TEXT [--slug NAME]`、`--change ID --message TEXT` 或 `--supersede ID --message TEXT [--reason TEXT]`；`[--no-interactive]` | 变更状态（`DRAFT`） |
 | `approve` | `--change ID [--no-interactive]` 或 `--draft KIND/ID`（二者互斥） | 运行状态（见第二节）或 `APPLIED` |
 | `run` | `--change ID [--implementer human] [--overrule TEXT] [--no-interactive]` | 运行状态；base 仅由人实现，`--implementer human` 可省略 |
@@ -237,6 +239,8 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 | `survey` | `{baseline_version, foundation_root, required_documents, module_roots, integration_paths, reason}` | `{documents:[{path,content}]}`：1–40 份 `.md`、每份 ≤512 KB、八份必需文档齐全、不含配置里的密钥值或带口令的 URL |
 
 survey 的说明由 `foundation-survey` 技能包生成：引擎把 SKILL.md 与 references 原文附在角色说明后（优先用项目 `.claude/skills/` 或 `.codex/skills/` 里的副本）。
+
+`knowledge-propose` 在 PASSED 报告、验收证据和实现提交可验证且工作区干净时调用只读 review 模式，只为已有 foundation 文件保存来源、原哈希及精确 unified diff，不改正文；无稳定知识返回 `NO_KNOWLEDGE_DELTA`。人查看 JSON diff 后以 `authorize-knowledge` 批准提案中的精确路径；省略路径（只传 `--paths`）即拒绝，不影响 PASSED 变更。授权重验 HEAD、工作区/index、源与目标哈希、BASE 后才原子写入、只提交批准路径并更新底座版本。重放同一授权返回原提交；其他漂移阻断并保留现场。
 
 普通角色返回可选 `lessons_used: [{id, how}]` 与 `errata: [{document, claim, correction, evidence:[path:line]}]`。`how` 最长 200 字符；未提供却声称使用的 ID 会进入诊断和报告，但不拒绝回答。勘误须指向现有 foundation 文档中的原文并给出可验证位置，不合格条目会被丢弃。两个字段进入严格 wire schema；内部业务校验器把它们当通用元数据处理，不要求各角色重复定义业务字段。
 

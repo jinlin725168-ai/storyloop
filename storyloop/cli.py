@@ -56,6 +56,8 @@ def parser() -> argparse.ArgumentParser:
         "skills": "把引擎自带的技能（foundation-survey 等）安装或刷新到项目的 .claude/skills 与 .codex/skills；已初始化的项目会自动开 BASE 提案",
         "survey": "底座摸底：生成 openspec/foundation/ 候选与 BASE 草案；批准后走人工 base 通道",
         "lessons": "列出、确认或退休仓库经验", "lessons-propose": "复盘已结束的变更并提议经验草案",
+        "knowledge-propose": "PASSED 后提议经代码证实的底座知识精确 diff",
+        "authorize-knowledge": "人批准知识提案中的精确 foundation 路径；空路径表示拒绝",
         "drafts": "列出或驳回待批草案",
         "metrics": "跨变更汇总指标与调整建议（只读）",
     }
@@ -225,7 +227,8 @@ def dispatch(args) -> dict:
     if args.command == "survey":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return survey_foundation(project, args.reason, from_file=args.from_file)
-    if args.command in {"lessons", "drafts", "lessons-propose"}:
+    if args.command in {"lessons", "drafts", "lessons-propose", "knowledge-propose",
+                        "authorize-knowledge"}:
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return dispatch_memory(project, args)
     if args.command == "ci":

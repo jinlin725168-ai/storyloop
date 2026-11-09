@@ -20,6 +20,16 @@ FACTS_NOTE = (
     "a contract revision will need; facts without a safe real source line are dropped."
 )
 
+KNOWLEDGE_PROPOSAL_NOTE = (
+    "Read only. For mode knowledge-propose, return exactly {updates:[{path,source,claim,correction,content}]}. "
+    "Use only the approved contract, plan, acceptance evidence, implementation commit and current code. "
+    "Propose at most five cross-request stable facts or code-proven drift corrections for existing "
+    "openspec/foundation files. Each source is a current repo-relative path:line; claim is exact old "
+    "text or empty for a new fact, correction is the new fact, content is the full proposed file. "
+    "Do not write files, copy credentials, propose lessons or alter live specifications. "
+    "If nothing qualifies return updates: []. The human decides whether to authorize the exact diff."
+)
+
 INSTRUCTIONS = {
     "product": (
         "For routing_version=1 supply assessment: verifiable_goal, complete scope "

@@ -181,6 +181,7 @@ rank = 7
 "lesson_store" = { module = "memory", zone = "mutable" }
 "lesson_retrieval" = { module = "memory", zone = "mutable" }
 "lesson_landing" = { module = "memory", zone = "mutable" }
+"knowledge_delta" = { module = "memory", zone = "mutable" }
 "drafts" = { module = "memory", zone = "mutable" }
 "errata" = { module = "memory", zone = "mutable" }
 "retrospective" = { module = "memory", zone = "mutable" }

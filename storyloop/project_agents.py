@@ -77,12 +77,13 @@ def _invoke_once(project, role, payload, config, settings, degraded):
     check_before_call(project, ledger, config)
     adapter_name = settings["adapter"]
     adapter_config = {**config, **resolve_adapters(config)[adapter_name]}
-    foundation = foundation_payload(project) if role != "survey" else None
+    foundation = foundation_payload(project) if role != "survey" and payload.get('mode') != 'knowledge-propose' else None
     if foundation and "foundation" not in payload:
         payload = {**payload, "foundation": foundation}
     from .lesson_retrieval import lessons_payload
     lessons_skipped = None
-    if role != 'survey' and payload.get('mode') != 'retrospective' and 'lessons' not in payload:
+    if role != 'survey' and payload.get('mode') not in {'retrospective', 'knowledge-propose'} \
+            and 'lessons' not in payload:
         lessons, lessons_skipped = lessons_payload(project, role, payload)
         if lessons is not None:
             payload = {**payload, 'lessons': lessons}
@@ -99,6 +100,9 @@ def _invoke_once(project, role, payload, config, settings, degraded):
     if role == 'review' and payload.get('mode') == 'retrospective':
         from .role_instructions import RETROSPECTIVE_NOTE
         instructions = RETROSPECTIVE_NOTE
+    if role == 'review' and payload.get('mode') == 'knowledge-propose':
+        from .role_instructions import KNOWLEDGE_PROPOSAL_NOTE
+        instructions = KNOWLEDGE_PROPOSAL_NOTE
     from .call_context import capability_for
     capability = capability_for(project, adapter_name)
     profile = build_profile(project, config, role, payload,
