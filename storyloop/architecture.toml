@@ -197,6 +197,8 @@ rank = 7
 "bench_calibrate" = { module = "outer_loop", zone = "mutable" }
 "bench_run" = { module = "outer_loop", zone = "mutable" }
 "bench_cli" = { module = "outer_loop", zone = "mutable" }
+"bench_real_exec" = { module = "outer_loop", zone = "mutable" }
+"bench_worker" = { module = "command", zone = "mutable" }
 "metrics_compute" = { module = "outer_loop", zone = "mutable" }
 "metrics_compute_support" = { module = "outer_loop", zone = "mutable" }
 "metrics_cost" = { module = "outer_loop", zone = "mutable" }

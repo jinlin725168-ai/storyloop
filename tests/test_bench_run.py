@@ -84,6 +84,8 @@ class BenchRunTests(unittest.TestCase):
             self.assertIn("model", compare_runs(result, other)["reasons"])
             other = {**result, "case_version": 2}
             self.assertIn("case_version", compare_runs(result, other)["reasons"])
+            other = {**result, "scope": "base-only"}
+            self.assertIn("scope", compare_runs(result, other)["reasons"])
 
     def test_real_adapter_requires_explicit_cost_confirmation(self):
         with tempfile.TemporaryDirectory() as folder:
