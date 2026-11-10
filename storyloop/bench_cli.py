@@ -64,9 +64,11 @@ def dispatch_bench(args) -> dict:
 def _run(args) -> dict:
     from .bench_case import load_case
     from .bench_real_exec import run_isolated_attempt
-    from .bench_run import run_bench
+    from .bench_run import estimate_duration, run_bench
 
-    require(args.i_accept_cost, "真实评测默认关闭；预计 paired 累计 13～22 小时，需 --i-accept-cost")
+    estimate = estimate_duration(len(args.case_id), args.scope)
+    count = len(args.case_id) * 2 * (1 if args.scope == "base-only" else 2)
+    require(args.i_accept_cost, f"真实评测默认关闭；预计 {count} 次，{estimate}；需 --i-accept-cost")
     require(args.scope == "base-only" or args.candidate_engine_commit,
             "paired 需要 --candidate-engine-commit")
     require(args.adapter != "claude" or args.agent_command and "{model}" in args.agent_command,
@@ -81,9 +83,7 @@ def _run(args) -> dict:
     cases = [load_case(source) for source in sources]
     require(all(case["manifest"]["repository_id"] in repositories for case in cases),
             "每个 Case 必须指定来源 repository_id 的只读仓库")
-    count = len(cases) * 2 * (1 if args.scope == "base-only" else 2)
-    estimate = "约 6.5～11 小时" if args.scope == "base-only" else "约 13～22 小时"
-    print(f"真实 bench：{count} 次；预计累计 {estimate}；适配器 {args.adapter}；模型 {args.model}",
+    print(f"真实 bench：{count} 次；预计累计{estimate}；适配器 {args.adapter}；模型 {args.model}",
           file=sys.stderr)
     if not args.yes:
         require(sys.stdin.isatty(), "需再次确认：交互输入 yes 或传入 --yes")
@@ -98,7 +98,8 @@ def _run(args) -> dict:
                                     engine_python=args.engine_python,
                                     gold_python=args.gold_python,
                                     agent_command=args.agent_command,
-                                    suite_source=args.suite_source)
+                                    suite_source=args.suite_source,
+                                    evidence_root=args.output_root)
 
     return run_bench(sources, args.base_engine_commit, args.candidate_engine_commit or "",
                      args.adapter, args.model, budget, invoke, None, args.output_root,

@@ -12,9 +12,16 @@ from .bench_case import load_case
 from .intervention_events import CORRECTIONS, KINDS
 from .models import StoryLoopError, require
 
-SCORE_CONTRACT = {"version": 1, "pass_requires": ["PASSED", "gold_passed"],
+SCORE_CONTRACT = {"version": 2, "pass_requires": ["PASSED", "gold_passed"],
                   "attempts_per_side": 2, "nonroutine_policy": "stop",
-                  "missing_evidence": "NOT_COMPARABLE"}
+                  "missing_evidence": "NOT_COMPARABLE",
+                  "cost_policy": "report_separately"}
+
+
+def estimate_duration(case_count: int, scope: str) -> str:
+    """Return cumulative 40–65 minute per attempt estimate."""
+    attempts = case_count * 2 * (1 if scope == "base-only" else 2)
+    return f"约 {attempts * 40 / 60:.1f}～{attempts * 65 / 60:.1f} 小时"
 
 
 def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_commit: str,
@@ -24,7 +31,9 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
               confirmed: bool = False, suite_source: str = "generated") -> dict:
     """Run one frozen comparison; invoke/check_gold are explicit runtime adapters."""
     if adapter_name != "test" and not i_accept_cost:
-        raise StoryLoopError("Real bench runs require --i-accept-cost; estimated total 13–22 hours")
+        attempts = len(sources) * 2 * (1 if scope == "base-only" else 2)
+        raise StoryLoopError(f"Real bench runs require --i-accept-cost; "
+                             f"estimated {attempts} 次，{estimate_duration(len(sources), scope)}")
     if adapter_name != "test" and not confirmed:
         raise StoryLoopError("Real bench runs require a second confirmation")
     require(adapter_name in {"test", "codex", "claude"}, "Unsupported bench adapter")
@@ -76,7 +85,7 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
                 row["attempts"].append(_attempt(outcome, side, attempt, case, check_gold))
         comparison = _comparison(row["attempts"])
         if scope == "base-only" and comparison["status"] == "COMPARABLE":
-            comparison = {"status": "BASE_ONLY", "reasons": []}
+            comparison = {**comparison, "status": "BASE_ONLY"}
         row["comparison"] = comparison
         result["cases"].append(row)
     if result["case_version"] == 2 and scope == "base-only" and suite_source == "generated":
@@ -105,7 +114,7 @@ def _attempt(outcome: dict, side: str, number: int, case: dict, check_gold) -> d
     elif status == "PASSED":
         gold = check_gold(case, outcome)
         verdict = "PASSED" if gold is True else "FAILED" if gold is False else "NOT_COMPARABLE"
-    elif status in {"TIMEOUT", "BUDGET_EXHAUSTED", "COST_LIMIT_REACHED"}:
+    elif status in {"NOT_COMPARABLE", "TIMEOUT", "BUDGET_EXHAUSTED", "COST_LIMIT_REACHED"}:
         gold = None
         verdict = "NOT_COMPARABLE"
     else:
@@ -116,6 +125,9 @@ def _attempt(outcome: dict, side: str, number: int, case: dict, check_gold) -> d
             "engine_commit": outcome.get("engine_commit"),
             "engine_version": outcome.get("engine_version"),
             "engine_python": outcome.get("engine_python"),
+            "attempt_python": outcome.get("attempt_python"),
+            "readiness": outcome.get("readiness"),
+            "readiness_evidence_path": outcome.get("readiness_evidence_path"),
             "termination_reason": outcome.get("termination_reason") or outcome.get("reason")
             or (status if status in {"BUDGET_EXHAUSTED", "COST_LIMIT_REACHED", "TIMEOUT"} else None),
             "routine_types": dict(routine),
@@ -125,7 +137,15 @@ def _attempt(outcome: dict, side: str, number: int, case: dict, check_gold) -> d
             "output_tokens": outcome.get("output_tokens"),
             "agent_ms": outcome.get("agent_ms"), "wall_ms": outcome.get("wall_ms"),
             "known_cost_usd": outcome.get("known_cost_usd"),
-            "cost_coverage": outcome.get("cost_coverage")}
+            "cost_coverage": outcome.get("cost_coverage"),
+            "cost_accounting": _cost_accounting(outcome)}
+
+
+def _cost_accounting(outcome: dict) -> str:
+    coverage = outcome.get("cost_coverage")
+    if coverage is None or outcome.get("known_cost_usd") is None:
+        return "PARTIAL" if isinstance(coverage, (int, float)) and coverage > 0 else "UNAVAILABLE"
+    return "COMPLETE" if coverage >= 1 else "PARTIAL"
 
 
 def simulate_human(event: dict) -> str:
@@ -162,17 +182,16 @@ def _events(events: object) -> tuple[Counter, Counter, int]:
 
 def _comparison(attempts: list[dict]) -> dict:
     reasons = []
-    for field in ("calls", "agent_ms", "wall_ms", "known_cost_usd", "cost_coverage"):
+    for field in ("calls", "agent_ms", "wall_ms"):
         if any(item[field] is None for item in attempts):
-            reasons.append("cost" if field in {"known_cost_usd", "cost_coverage"} else field)
-    if any(isinstance(item["cost_coverage"], (int, float)) and item["cost_coverage"] < 1
-           for item in attempts):
-        reasons.append("cost")
+            reasons.append(field)
     if any(item["unknown_events"] or item["verdict"] == "NOT_COMPARABLE" for item in attempts):
         reasons.append("incomplete evidence")
+    cost = "COMPARABLE" if all(item["cost_accounting"] == "COMPLETE" for item in attempts) else "NOT_COMPARABLE"
     if reasons:
-        return {"status": "NOT_COMPARABLE", "reasons": sorted(set(reasons))}
+        return {"status": "NOT_COMPARABLE", "reasons": sorted(set(reasons)), "cost_dimension": cost}
     return {"status": "COMPARABLE", "reasons": [],
+            "cost_dimension": cost,
             "base": [item["verdict"] for item in attempts if item["side"] == "base"],
             "candidate": [item["verdict"] for item in attempts if item["side"] == "candidate"]}
 

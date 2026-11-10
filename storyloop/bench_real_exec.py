@@ -6,11 +6,13 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import stat
 import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from typing import Callable
 
 from .bench_calibrate import judge_gold
@@ -30,7 +32,8 @@ def run_isolated_attempt(case: dict, repository: Path, engine_commit: str,
                          engine_python: Path | None = None,
                          gold_python: Path | None = None,
                          agent_command: list[str] | None = None,
-                         suite_source: str = "generated") -> dict:
+                         suite_source: str = "generated",
+                         evidence_root: Path | None = None) -> dict:
     """Clone sources per attempt; execute and judge before both trees are discarded."""
     require(COMMIT.fullmatch(engine_commit) is not None, "Invalid engine commit")
     require(suite_source in {"generated", "frozen"}, "Invalid bench suite source")
@@ -54,6 +57,8 @@ def run_isolated_attempt(case: dict, repository: Path, engine_commit: str,
         outcome["engine_commit"] = engine_commit
         outcome["suite_source"] = suite_source
         outcome["wall_ms"] = round((time.monotonic() - started) * 1000)
+        if evidence_root is not None and outcome.get("readiness_evidence_source"):
+            _preserve_readiness(tree, outcome, Path(evidence_root))
         if outcome.get("status") == "PASSED":
             _safe_gold_tree(tree)
             gold = judge_gold(case["source"], tree, python=gold_python)
@@ -114,10 +119,12 @@ def _worker(tree: Path, engine_tree: Path, case: dict, adapter: str, model: str,
                           capture_output=True, text=True, timeout=10, check=False)
     require(venv.returncode == 0 and venv.stdout.strip() == "True",
             "Engine Python must come from an isolated virtual environment")
+    attempt_python, engine_sites = _attempt_python(python, tree)
     config = {"project": str(tree), "engine_tree": str(engine_tree),
               "contract": case["contract"], "case_source": str(case["source"]),
               "adapter": adapter, "model": model,
               "budget": budget, "agent_command": agent_command,
+              "engine_sites": engine_sites,
               "case_version": case["manifest"]["case_version"],
               "suite_source": suite_source}
     request = tree.parent / "request.json"
@@ -126,8 +133,11 @@ def _worker(tree: Path, engine_tree: Path, case: dict, adapter: str, model: str,
     script = Path(__file__).with_name("bench_worker.py")
     limit = budget.get("max_wall_seconds", 14_400)
     require(type(limit) is int and limit > 0, "Invalid wall time budget")
-    completed = run_process([str(python), "-I", "-B", str(script), str(request), str(response)],
-                            tree, limit)
+    environment = {**os.environ, "PATH": str(attempt_python.parent) + os.pathsep
+                   + os.environ.get("PATH", "")}
+    completed = run_process([str(attempt_python), "-I", "-S", "-B", str(script),
+                             str(request), str(response)], tree, limit,
+                            source_environment=environment)
     require(completed["contained"], "Bench worker process tree was not contained")
     if completed["timed_out"]:
         return {"status": "TIMEOUT", "termination_reason": "max_wall_seconds", "events": [],
@@ -136,8 +146,60 @@ def _worker(tree: Path, engine_tree: Path, case: dict, adapter: str, model: str,
         raise StoryLoopError(f"Bench engine worker failed (exit {completed['returncode']})")
     outcome = json.loads(response.read_text())
     require(isinstance(outcome, dict), "Invalid bench worker response")
-    outcome["engine_python"] = str(python.resolve())
+    outcome["engine_python"] = str(python.absolute())
+    outcome["attempt_python"] = str(attempt_python.absolute())
     return outcome
+
+
+def _attempt_python(engine_python: Path, tree: Path) -> tuple[Path, list[str]]:
+    """Give project checks their own importable source with engine venv tools."""
+    root = tree.parent / "venv"
+    subprocess.run([str(engine_python), "-m", "venv", "--without-pip", str(root)],
+                   check=True, capture_output=True, text=True)
+    candidate = root / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    query = "import json,sysconfig; print(json.dumps([sysconfig.get_path('purelib'), sysconfig.get_path('platlib')]))"
+    engine_paths = json.loads(subprocess.check_output([str(engine_python), "-I", "-B", "-c", query], text=True))
+    attempt_paths = json.loads(subprocess.check_output([str(candidate), "-I", "-B", "-c", query], text=True))
+    for site in set(attempt_paths):
+        Path(site).joinpath("storyloop-bench-attempt.pth").write_text(
+            "\n".join([*dict.fromkeys(engine_paths),
+                       f"import sys; sys.path.insert(0, {str(tree)!r})"]) + "\n")
+    for tool in engine_python.parent.iterdir():
+        if not tool.is_file() or tool.name.lower().startswith(("python", "activate", "pip")):
+            continue
+        target = candidate.parent / tool.name
+        if target.exists():
+            continue
+        if os.name == "nt":
+            shutil.copy2(tool, target)
+        else:
+            target.symlink_to(tool)
+    return candidate, list(dict.fromkeys(engine_paths))
+
+
+def _preserve_readiness(tree: Path, outcome: dict, root: Path) -> None:
+    source = Path(outcome.pop("readiness_evidence_source"))
+    require(not source.is_absolute() and source.parts[:3] == (".storyloop", "evidence", "readiness")
+            and ".." not in source.parts, "Invalid readiness evidence path")
+    original = tree / source
+    require(original.resolve().is_relative_to(tree.resolve())
+            and not any(path.is_symlink() for path in (original, *original.parents) if path != tree.parent)
+            and original.is_file() and original.stat().st_size <= 2_000_000,
+            "Readiness evidence is unavailable")
+    from .processutil import redact
+    def clean(value):
+        if isinstance(value, str):
+            return redact(value)
+        if isinstance(value, list):
+            return [clean(item) for item in value]
+        if isinstance(value, dict):
+            return {key: clean(item) for key, item in value.items()}
+        return value
+    relative = Path(".storyloop/bench/evidence") / uuid.uuid4().hex / "readiness.json"
+    target = root / relative
+    target.parent.mkdir(parents=True, exist_ok=False)
+    target.write_text(json.dumps(clean(json.loads(original.read_text())), ensure_ascii=False))
+    outcome["readiness_evidence_path"] = relative.as_posix()
 
 
 def stage_gate(run: dict) -> dict:

@@ -11,6 +11,7 @@ import sys
 def main(request_path: str, response_path: str) -> None:
     request = json.loads(Path(request_path).read_text())
     sys.path.insert(0, request["engine_tree"])
+    sys.path.extend(request.get("engine_sites", []))
     from storyloop import __version__
     from storyloop.approvals import approve_change
     from storyloop.changes import create_change, load_change
@@ -42,7 +43,7 @@ def main(request_path: str, response_path: str) -> None:
         write_json(project / ".storyloop/config.json", config, max_bytes=512_000)
         ready = inspect_readiness(project)
         if ready["status"] != "READY":
-            outcome.update(status="NOT_COMPARABLE", reason=f"readiness:{ready['status']}")
+            outcome.update(_readiness_failure(project, ready))
         else:
             outcome.update(_execute_change(
                 project, contract, request["case_source"], request["case_version"],
@@ -74,6 +75,31 @@ def _adapter_settings(request: dict) -> dict:
         profile = {"kind": "command", "agent_command": [
             request["model"] if item == "{model}" else item for item in command]}
     return {"adapters": {"bench": profile}, "roles": {"default_adapter": "bench"}}
+
+
+def _readiness_failure(project: Path, ready: dict) -> dict:
+    from storyloop.processutil import redact
+    layers = {}
+    for name, layer in ready.get("layers", {}).items():
+        failed = []
+        for result in layer.get("results", []):
+            if result.get("status") == "PASS":
+                continue
+            tail = result.get("output_tail") or {}
+            failed.append({"id": result.get("id"), "returncode": result.get("returncode"),
+                           "timed_out": result.get("timed_out"),
+                           "output_tail": {key: redact(str(tail.get(key, "")))[-2000:]
+                                           for key in ("stdout", "stderr")}})
+        layers[name] = {"status": layer.get("status"), "failed_results": failed}
+    summary = {"status": ready["status"], "blockers": ready.get("blockers", []),
+               "layers": layers}
+    paths = {layer.get("evidence_path") for layer in ready.get("layers", {}).values()
+             if layer.get("evidence_path")}
+    result = {"status": "NOT_COMPARABLE", "reason": f"readiness:{ready['status']}",
+              "readiness": summary}
+    if len(paths) == 1:
+        result["readiness_evidence_source"] = paths.pop()
+    return result
 
 
 def _execute_change(project: Path, contract: dict, source: str, version: int,
