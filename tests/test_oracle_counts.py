@@ -13,6 +13,35 @@ from storyloop.smoke_runner import run_commands
 
 
 class ParserTests(unittest.TestCase):
+    def test_unittest_subtest_summaries_count_methods(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "case.py").write_text(
+                "import unittest\nclass Case(unittest.TestCase):\n"
+                "    def test_paths(self):\n"
+                "        for path in ('one', 'two'):\n"
+                "            with self.subTest(path=path): self.fail(path)\n",
+                encoding="utf-8")
+            result = run_commands(root, [[sys.executable, "-m", "unittest", "case"]], 20)
+            counts = result["results"][0]["counts"]
+            self.assertEqual((counts["executed"], counts["failed"], counts.get("errors", 0)),
+                             (1, 1, 0))
+
+    def test_unittest_subtest_error_dominates_failure(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "case.py").write_text(
+                "import unittest\nclass Case(unittest.TestCase):\n"
+                "    def test_paths(self):\n"
+                "        for path in ('error', 'fail'):\n"
+                "            with self.subTest(path=path):\n"
+                "                if path == 'error': raise RuntimeError(path)\n"
+                "                self.fail(path)\n", encoding="utf-8")
+            result = run_commands(root, [[sys.executable, "-m", "unittest", "case"]], 20)
+            counts = result["results"][0]["counts"]
+            self.assertEqual((counts["executed"], counts["failed"], counts.get("errors", 0)),
+                             (1, 0, 1))
+
     def test_unittest_errors_are_not_behavior_failures(self):
         output = "Ran 1 test in 0.01s\n\nFAILED (errors=1)\n"
         counts = count_tests(["python", "case.py"], output)

@@ -50,6 +50,60 @@ def invoke(root, *cases):
 
 
 class HarnessTests(unittest.TestCase):
+    def test_failing_subtests_count_once_per_method_with_separate_diagnostics(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            (root / "cases/subtests.py").write_text(
+                "import unittest\nclass Case(unittest.TestCase):\n"
+                "    def test_paths(self):\n"
+                "        for path in ('one', 'two'):\n"
+                "            with self.subTest(path=path):\n"
+                "                self.fail(path)\n", encoding="utf-8")
+            result = invoke(root, "cases/subtests.py")
+            self.assertEqual(result["status"], "FAIL", result)
+            self.assertEqual((result["counts"]["executed"], result["counts"]["failed"],
+                              result["counts"]["errors"]), (1, 1, 0))
+            diagnostics = [item for item in result["counts"]["diagnostics"]
+                           if isinstance(item, dict)]
+            self.assertEqual(len(diagnostics), 2)
+            self.assertTrue(any("path='one'" in item["case_id"] for item in diagnostics))
+            self.assertTrue(any("path='two'" in item["case_id"] for item in diagnostics))
+
+    def test_error_dominates_failure_in_same_subtest_method(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            (root / "cases/subtests.py").write_text(
+                "import unittest\nclass Case(unittest.TestCase):\n"
+                "    def test_paths(self):\n"
+                "        for path in ('error', 'fail'):\n"
+                "            with self.subTest(path=path):\n"
+                "                if path == 'error': raise RuntimeError(path)\n"
+                "                self.fail(path)\n", encoding="utf-8")
+            result = invoke(root, "cases/subtests.py")
+            self.assertEqual(result["status"], "ERROR", result)
+            self.assertEqual((result["counts"]["executed"], result["counts"]["failed"],
+                              result["counts"]["errors"]), (1, 0, 1))
+            diagnostics = [item for item in result["counts"]["diagnostics"]
+                           if isinstance(item, dict)]
+            self.assertEqual({item["kind"] for item in diagnostics}, {"error", "fail"})
+
+    def test_passing_subtests_keep_one_executed_method(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            (root / "cases/subtests.py").write_text(
+                "import unittest\nclass Case(unittest.TestCase):\n"
+                "    def test_paths(self):\n"
+                "        for value in (1, 2):\n"
+                "            with self.subTest(value=value): self.assertGreater(value, 0)\n",
+                encoding="utf-8")
+            result = invoke(root, "cases/subtests.py")
+            self.assertEqual(result["status"], "PASS", result)
+            self.assertEqual((result["counts"]["executed"], result["counts"]["failed"],
+                              result["counts"]["errors"]), (1, 0, 0))
+
     def test_failure_diagnostic_is_redacted(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
