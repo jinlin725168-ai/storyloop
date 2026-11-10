@@ -106,12 +106,12 @@ def _judge_red(results: list[dict], manifest: dict, change: dict) -> None:
         raise StoryLoopError("Smoke RED proof has no judged tests", code="ORACLE_DEFECT",
                              details={"results": tails})
     fixture_errors = [item for item in judged if item["status"] == "ERROR" and set(
-        (item.get("counts") or {}).get("diagnostics", [])) == {"precondition"}]
+        _diagnostic_stages(item)) == {"precondition"}]
     all_test_errors = all(
         item["status"] == "ERROR" and ((item.get("counts") or {}).get("executed") or 0) > 0
         and (item.get("counts") or {}).get("errors") == (item.get("counts") or {}).get("executed")
         and (item.get("counts") or {}).get("failed") == 0
-        and not set((item.get("counts") or {}).get("diagnostics", [])) - {"precondition"}
+        and not set(_diagnostic_stages(item)) - {"precondition"}
         and not item.get("timed_out") and item.get("returncode") in (1, 2)
         for item in judged)
     broken = [item for item in judged if item["status"] == "ERROR" or (
@@ -146,7 +146,13 @@ def _judge_red(results: list[dict], manifest: dict, change: dict) -> None:
 def _tail(result: dict) -> dict:
     """A bounded copy of one test result for a stop record (full output stays in the evidence)."""
     return {"id": result.get("id"), "status": result.get("status"),
+            "diagnostics": (result.get("counts") or {}).get("diagnostics", [])[:20],
             "stdout": str(result.get("stdout", ""))[-1500:], "stderr": str(result.get("stderr", ""))[-1500:]}
+
+
+def _diagnostic_stages(result: dict) -> list[str]:
+    return [item for item in (result.get("counts") or {}).get("diagnostics", [])
+            if isinstance(item, str)]
 
 
 def run_smoke_isolated(project: Path, change: dict, expect_red: bool = False,
