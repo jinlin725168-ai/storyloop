@@ -12,8 +12,9 @@ from .bench_case import load_case
 from .intervention_events import CORRECTIONS, KINDS
 from .models import StoryLoopError, require
 
-SCORE_CONTRACT = {"version": 2, "pass_requires": ["PASSED", "gold_passed"],
-                  "attempts_per_side": 2, "nonroutine_policy": "stop",
+SCORE_CONTRACT = {"version": 3, "pass_requires": ["PASSED", "gold_passed"],
+                  "attempts_per_side": 2, "nonroutine_policy": "bounded_recovery",
+                  "nonroutine_budget": 1,
                   "missing_evidence": "NOT_COMPARABLE",
                   "cost_policy": "report_separately"}
 
@@ -108,7 +109,7 @@ def _attempt(outcome: dict, side: str, number: int, case: dict, check_gold) -> d
     if isinstance(stop, str) and not nonroutine:
         nonroutine[stop] += 1
     status = outcome.get("status")
-    if status == "NEEDS_HUMAN" or nonroutine:
+    if status == "NEEDS_HUMAN" or sum(nonroutine.values()) > SCORE_CONTRACT["nonroutine_budget"]:
         verdict = "NEEDS_HUMAN"
         gold = None
     elif status == "PASSED":
@@ -128,6 +129,8 @@ def _attempt(outcome: dict, side: str, number: int, case: dict, check_gold) -> d
             "attempt_python": outcome.get("attempt_python"),
             "readiness": outcome.get("readiness"),
             "readiness_evidence_path": outcome.get("readiness_evidence_path"),
+            "stops": outcome.get("stops"),
+            "stop_evidence_path": outcome.get("stop_evidence_path"),
             "termination_reason": outcome.get("termination_reason") or outcome.get("reason")
             or (status if status in {"BUDGET_EXHAUSTED", "COST_LIMIT_REACHED", "TIMEOUT"} else None),
             "routine_types": dict(routine),

@@ -64,7 +64,7 @@ class BenchRunTests(unittest.TestCase):
             self.assertEqual(calls, [("base", 1), ("candidate", 1),
                                      ("base", 2), ("candidate", 2)])
             attempts = result["cases"][0]["attempts"]
-            self.assertEqual(attempts[1]["verdict"], "NEEDS_HUMAN")
+            self.assertEqual(attempts[1]["verdict"], "PASSED")
             self.assertEqual(attempts[1]["nonroutine_types"], {"replan": 1})
             self.assertEqual(attempts[0]["verdict"], "PASSED")
 
@@ -77,7 +77,7 @@ class BenchRunTests(unittest.TestCase):
                                   "known_cost_usd": None, "cost_coverage": None}
             result = run_bench([source], "a" * 40, "b" * 40, "test", "fixture",
                                {"max_calls": 10}, adapter, lambda *_: True, root)
-            self.assertEqual(result["scoring_contract"]["version"], 2)
+            self.assertEqual(result["scoring_contract"]["version"], 3)
             self.assertEqual(result["cases"][0]["comparison"]["status"], "COMPARABLE")
             self.assertEqual(result["cases"][0]["comparison"]["cost_dimension"], "NOT_COMPARABLE")
             self.assertEqual(result["cases"][0]["attempts"][0]["cost_accounting"], "UNAVAILABLE")

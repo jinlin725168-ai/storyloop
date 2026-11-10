@@ -51,7 +51,8 @@ TRANSITIONS = {
     "consistency_overrule": frozenset((source, "IMPLEMENTING") for source in {"ORACLE_DEFECT", "NEEDS_SPEC_FIX"}),
     "design_reapprove": frozenset({("CHARACTERIZATION_FAILED", "DESIGN_APPROVAL_REQUIRED")}),
     "design_replan": frozenset((source, "DESIGN_REVISION_REQUIRED") for source in {
-        "DESIGN_APPROVAL_REQUIRED", "DESIGN_REVISION_REQUIRED", "SPLIT_RECOMMENDED", "NEEDS_INPUT"}),
+        "DESIGN_APPROVAL_REQUIRED", "DESIGN_REVISION_REQUIRED", "SPLIT_RECOMMENDED", "NEEDS_INPUT",
+        "NO_PROGRESS"}),
     "l3_replan": frozenset({("IMPLEMENTING", "DESIGN_REVISION_REQUIRED")}),
     "supersede": frozenset((source, "SUPERSEDED") for source in SUPERSEDABLE | {"SUPERSEDED"}),
     "supersede_result": frozenset((source, "SUPERSEDED") for source in SUPERSEDABLE | {"SUPERSEDED"}),

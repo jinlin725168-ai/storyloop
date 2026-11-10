@@ -12,6 +12,7 @@ FAST = [
     "tests.test_baseline_api", "tests.test_baseline_behavior", "tests.test_baseline_cli",
     "tests.test_baseline_contract", "tests.test_candidate_allow", "tests.test_change_approval",
     "tests.test_bench_case", "tests.test_bench_calibrate", "tests.test_bench_run",
+    "tests.test_bench_real_exec",
     "tests.test_bench_cases_v2_draft",
     "tests.test_change_report", "tests.test_changes_behavior", "tests.test_changes_contract",
     "tests.test_characterization_claims", "tests.test_characterize_design_revision_stop_report",
@@ -86,6 +87,7 @@ COMMAND_LINE = ["tests.test_cli", "tests.test_product_cli"]
 
 # Cross-platform regressions: 8.3 short paths, core.autocrlf checkouts, UTF-8 pipes (all under 1 s).
 PLATFORM = [
+    "tests.test_bench_correction",
     "tests.test_characterization_baseline", "tests.test_claude_adapter_encoding",
     "tests.test_evidence_root_spelling", "tests.test_line_endings",
     "tests.test_memory_fixture_portability",
@@ -96,6 +98,7 @@ RUNNER = ["tests.test_suites"]
 
 # Keep I8 in core without running the entire slow completion-resilience module.
 INVARIANTS = [
+    "tests.test_design_approval.DesignApprovalTests.test_no_progress_can_replan_through_public_recovery_entry",
     "tests.test_completion_resilience.CompletionResilienceTests."
     "test_completion_resumes_after_a_crash_following_the_implementation_commit",
 ]
