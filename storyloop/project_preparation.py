@@ -1,6 +1,7 @@
 """Contract materialization and immutable pre-implementation evidence."""
 from __future__ import annotations
 from pathlib import Path
+import shlex
 from typing import TYPE_CHECKING
 from .approvals import materialize_approved_change
 from .baseline import _git
@@ -19,7 +20,7 @@ from .smoke import (RED_EVIDENCE, install_smoke_suite, load_smoke_manifest, prot
                     RESULT_EVIDENCE, validate_suite, without_manifest_echo,
                     suite_root as acceptance_suite_root)
 from .smoke_runner import run_commands_at_commit, run_smoke_isolated
-from .storage import write_bytes_atomic
+from .storage import load_json, write_bytes_atomic
 if TYPE_CHECKING:
     from .run_services import LoopServices
 
@@ -58,6 +59,12 @@ def _prepare_acceptance(
     try:
         red = _ensure_red_evidence(project, change, state["contract_commit"])
     except StoryLoopError as exc:
+        if exc.code == "BLOCKED" and exc.details.get("results"):
+            command = shlex.join(["storyloop", "run", str(project), "--change", change_id])
+            return pause(project, state, "NEEDS_INPUT", error=str(exc),
+                         acceptance={"status": "ERROR", "reason": "RED_ENVIRONMENT_ERROR",
+                                     **exc.details},
+                         next=f"修复 RED 执行环境后重试：{command}")
         if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
             raise
         stopped = pause(project, state, exc.code, error=str(exc),
@@ -115,7 +122,7 @@ def _ensure_red_evidence(project: Path, change: dict, contract_commit: str,
     stop may already hold implementation edits that would make the new behaviour look present."""
     change_id = change["change_id"]
     path = project / ".storyloop/evidence" / change_id / RED_EVIDENCE
-    if path.exists() and not refresh:
+    if path.exists() and not refresh and load_json(path).get("status") == "RED":
         return read_red_evidence(project, change_id)
     return read_only_call(
         project, change_id,
