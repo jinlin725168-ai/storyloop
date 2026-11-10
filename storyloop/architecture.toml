@@ -132,6 +132,7 @@ rank = 7
 "project_loop_gates" = { module = "implementation", zone = "mutable" }
 "planning" = { module = "implementation", zone = "mutable" }
 "planning_validation" = { module = "implementation", zone = "mutable" }
+"regression_updates" = { module = "implementation", zone = "mutable" }
 "characterization_baseline" = { module = "implementation", zone = "mutable" }
 "facts" = { module = "implementation", zone = "mutable" }
 "failure_attribution" = { module = "implementation", zone = "mutable" }

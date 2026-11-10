@@ -41,6 +41,7 @@ END_TO_END = [
     "tests.test_verification_entries",
     "tests.test_product_e2e", "tests.test_nature_e2e", "tests.test_change_types",
     "tests.test_reports_e2e", "tests.test_roles_e2e",
+    "tests.test_regression_updates",
     "tests.test_project_loop", "tests.test_lifecycle_golden", "tests.test_lifecycle_recovery_entries",
 ]
 

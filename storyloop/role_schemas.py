@@ -124,6 +124,7 @@ TRACKING_FIELDS = {"id": _nullable(STRING),
                    "criterion_spec": _nullable(_obj(SPEC_FIELDS))}
 FINDING = _obj({"message": STRING, "perspective": _nullable(STRING),
                 "criterion_id": _nullable(STRING), "evidence": _nullable(STRING),
+                "regression_conflict": _nullable({'type': 'boolean'}),
                 "target": _nullable({"type": "string", "enum": [
                     "implementation", "oracle", "contract", "design", "out_of_scope"]}),
                 "location": _nullable(STRING), **TRACKING_FIELDS}, open_=True)
@@ -154,6 +155,8 @@ PLAN_OPTION = _obj({
         {'criterion_id': STRING, 'path': STRING, 'rule': STRING})},
     'entry_paths': _nullable({'type': 'array', 'items': _obj({
         'entry_id': STRING, 'criterion_ids': STRINGS, 'path': STRING, 'via': STRING})}),
+    'regression_updates': _nullable({'type': 'array', 'items': _obj({
+        'path': STRING, 'criterion_ids': STRINGS, 'reason': STRING})}),
     'regression': STRINGS, 'migration': _obj({'steps': STRINGS, 'reason': STRING}),
     'dependencies': {'type': 'array', 'items': _obj({
         'ecosystem': STRING, 'name': STRING, 'version': STRING,

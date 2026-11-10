@@ -185,6 +185,10 @@ def _evidence(state: dict, details: dict) -> list[str]:
     if state.get("status") == "DESIGN_APPROVAL_REQUIRED":
         evidence.extend(_plan_summary(state))
     evidence += list(details.get("criteria_summary") or [])
+    conflict = details.get("regression_conflict") or state.get("regression_conflict") or {}
+    if conflict:
+        evidence.append(f"{conflict.get('path')}: {conflict.get('failure_summary')}")
+        evidence.append(str(conflict.get("review_evidence") or "")[:1500])
     violations = details.get("violations") or state.get("violations") or []
     evidence += [item.get("path", "") for item in violations if isinstance(item, dict)]
     acceptance = details.get("acceptance") or state.get("acceptance") or {}
