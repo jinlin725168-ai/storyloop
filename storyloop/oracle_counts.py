@@ -34,10 +34,18 @@ def _unittest(text: str) -> dict | None:
     errors = re.search(r"errors=(\d+)", extra)
     skipped = re.search(r"skipped=(\d+)", extra)
     skip = int(skipped.group(1)) if skipped else 0
+    failure_count = int(failures.group(1)) if failures else 0
+    error_count = int(errors.group(1)) if errors else 0
+    # Complete unittest failure headings identify methods even when subTests multiply entries.
+    headings = re.findall(r"^(FAIL|ERROR): .+? \(([^()\n]+)\)(?: \(.+\))?$", text, re.M)
+    if len(headings) == failure_count + error_count and headings:
+        errored = {method for kind, method in headings if kind == "ERROR"}
+        failed = {method for kind, method in headings if kind == "FAIL"} - errored
+        failure_count, error_count = len(failed), len(errored)
     result = {"executed": int(ran.group(1)) - skip,
-              "failed": int(failures.group(1)) if failures else 0, "skipped": skip}
-    if errors and int(errors.group(1)):
-        result["errors"] = int(errors.group(1))
+              "failed": failure_count, "skipped": skip}
+    if error_count:
+        result["errors"] = error_count
     return result
 
 

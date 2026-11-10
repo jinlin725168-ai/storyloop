@@ -44,6 +44,15 @@ class _CaseResult(unittest.TestResult):
         super().addFailure(test, error)
         self.case_diagnostics.append(_case_diagnostic(self.project, test.id(), "fail", error))
 
+    def addSubTest(self, test, subtest, error):
+        super().addSubTest(test, subtest, error)
+        if error is None:
+            return
+        kind = "fail" if issubclass(error[0], test.failureException) else "error"
+        self.case_diagnostics.append(_case_diagnostic(self.project, subtest.id(), kind, error))
+        if isinstance(error[1], FixturePreconditionError):
+            self.precondition_messages.append(f"{subtest.id()}: {error[1]}")
+
 
 def _case_diagnostic(project: Path, case_id: str, kind: str, error: tuple) -> dict:
     frames = []
@@ -57,6 +66,12 @@ def _case_diagnostic(project: Path, case_id: str, kind: str, error: tuple) -> di
     return {"case_id": redact(case_id)[:300], "kind": kind,
             "message": redact(message)[:2000],
             "traceback_tail": redact("\n".join(frames))[-4000:]}
+
+
+def _method_id(test) -> str:
+    """unittest stores each failed subTest separately, but testsRun counts methods."""
+    parent = getattr(test, "test_case", None)
+    return (parent if isinstance(parent, unittest.TestCase) else test).id()
 
 def python_cases(project: Path, cases: list[str], timeout: float = 60, *, cwd: Path | None = None) -> Result:
     """Measure protected tests directly; business code must run in separate subprocesses.
@@ -98,8 +113,11 @@ def _one_case(project: Path, relative: str) -> Result:
             summary = "\n".join(result.precondition_messages[-3:])[-1500:]
             print(redact(summary), file=sys.__stderr__)
         skipped = len(result.skipped) + len(result.expectedFailures)
-        counts = Result(executed=result.testsRun - skipped, failed=len(result.failures),
-                        errors=len(result.errors) + len(result.unexpectedSuccesses), skipped=skipped,
+        errored = {_method_id(test) for test, _ in result.errors}
+        errored.update(_method_id(test) for test in result.unexpectedSuccesses)
+        failed = {_method_id(test) for test, _ in result.failures} - errored
+        counts = Result(executed=result.testsRun - skipped, failed=len(failed),
+                        errors=len(errored), skipped=skipped,
                         diagnostics=(("precondition",) if result.precondition_messages
                                      and len(result.precondition_messages) == len(result.errors)
                                      and not result.unexpectedSuccesses else ())
