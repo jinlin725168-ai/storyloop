@@ -44,9 +44,16 @@ Case 套件，仅隔离评测设计/实现/审查链路。Run 记录包含模式
 估算。例如单 Case base-only 为 2 次、约 1.3～2.2 小时。Claude 须另给包含 `{model}`
 占位的 `--agent-command`，且该命令需符合 StoryLoop command 适配器 JSON 协议。
 合同要求人工验收而 Case 无冻结自动处理规则时，该次尝试记不可比较。设计批准
-由模拟人自动处理；需要纠正或非计划回答时记 `NEEDS_HUMAN` 并结束。超时及预算
+由模拟人自动处理；非计划回答停在 `NEEDS_HUMAN`。超时及预算
 终止记录原因。阶段门槛只接受 generated 模式；v2 的 base-only 要求 5 Case 中至少 4 个各有两次
 `PASSED`，且每次非例行停点数不超过 1；不可比较不算通过。
+
+模拟人每次 attempt 最多执行一次非例行纠正：`ORACLE_DEFECT`、`EXISTING_GREEN`
+走 acceptance-repair，`DESIGN_REVISION_REQUIRED`、`NO_PROGRESS` 走 replan，
+`WORKSPACE_TAINTED` 走 reset；随后继续运行，例行方案批准仍自动处理。第二次纠正停点、
+无法合法代答的 `NEEDS_INPUT` 及其他需人工判断的停点直接 `NEEDS_HUMAN`。
+纠正理由固定为 `bench simulated human: apply engine stop evidence`，不读取隐藏 Gold，
+比真实人工给出的具体理由更保守。Run 记录保留每次停点的脱敏摘要和独立证据目录。
 
 Run 记录位于 `.storyloop/bench/runs/`，可用
 `storyloop bench --json report <run-id>` 读取。美元成本缺失时 `cost_accounting`

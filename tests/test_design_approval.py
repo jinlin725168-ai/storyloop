@@ -90,6 +90,15 @@ class DesignApprovalTests(unittest.TestCase):
             self.assertNotIn(key, load_run_state(self.root, self.identifier))
         self.assertEqual(replanned['planning']['history'][-1]['plan'], self.plan)
 
+    def test_no_progress_can_replan_through_public_recovery_entry(self):
+        self.start()
+        state = load_run_state(self.root, self.identifier)
+        state['status'] = 'NO_PROGRESS'
+        save_run(self.root, state)
+        replanned = approvals.replan(self.root, self.identifier, 'Review failed attempt')
+        self.assertEqual(replanned['status'], 'DESIGN_REVISION_REQUIRED')
+        self.assertEqual(replanned['intervention_events'][-1]['stop'], 'NO_PROGRESS')
+
     def test_run_and_resume_do_not_approve_or_spend_attempt(self):
         self.start()
         self.assertEqual(run_change(self.root, self.identifier, self.services)['status'],

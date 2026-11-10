@@ -22,6 +22,7 @@ from .storage import load_json, locked
 from .path_security import safe_target
 
 PLANNING_STOPS = {'DESIGN_APPROVAL_REQUIRED', 'DESIGN_REVISION_REQUIRED', 'SPLIT_RECOMMENDED'}
+REPLAN_STOPS = PLANNING_STOPS | {'NO_PROGRESS'}
 
 
 def approval_matches(approval: dict | None, binding: dict) -> bool:
@@ -321,7 +322,7 @@ def _replan_locked(project: Path, change_id: str, reason: str) -> dict:
     _validate_context(project, change, state)
     planning_input = state['status'] == 'NEEDS_INPUT' and (
         state.get('phase') == 'planning' or state.get('stop', {}).get('phase') == 'planning')
-    require(state['status'] in PLANNING_STOPS or planning_input, 'Replan requires a planning stop')
+    require(state['status'] in REPLAN_STOPS or planning_input, 'Replan requires a planning stop')
     _clear_checks(project, state)
     planning = state['planning']
     planning.setdefault('history', []).append({'reason': reason, 'plan': planning.get('plan'),

@@ -17,7 +17,7 @@ from typing import Callable
 
 from .bench_calibrate import judge_gold
 from .models import StoryLoopError, require
-from .processutil import run_process
+from .processutil import redact, run_process
 
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 STAGE_CASE_IDS = frozenset({"dogfood3-stash-git-safe", "dogfood5-stash-hint-coverage",
@@ -59,6 +59,9 @@ def run_isolated_attempt(case: dict, repository: Path, engine_commit: str,
         outcome["wall_ms"] = round((time.monotonic() - started) * 1000)
         if evidence_root is not None and outcome.get("readiness_evidence_source"):
             _preserve_readiness(tree, outcome, Path(evidence_root))
+        if evidence_root is not None and outcome.get("stop_evidence_sources"):
+            _preserve_stop_evidence(root, outcome, Path(evidence_root))
+        outcome.pop("stop_evidence_sources", None)
         if outcome.get("status") == "PASSED":
             _safe_gold_tree(tree)
             gold = judge_gold(case["source"], tree, python=gold_python)
@@ -181,25 +184,50 @@ def _preserve_readiness(tree: Path, outcome: dict, root: Path) -> None:
     source = Path(outcome.pop("readiness_evidence_source"))
     require(not source.is_absolute() and source.parts[:3] == (".storyloop", "evidence", "readiness")
             and ".." not in source.parts, "Invalid readiness evidence path")
-    original = tree / source
-    require(original.resolve().is_relative_to(tree.resolve())
-            and not any(path.is_symlink() for path in (original, *original.parents) if path != tree.parent)
-            and original.is_file() and original.stat().st_size <= 2_000_000,
-            "Readiness evidence is unavailable")
-    from .processutil import redact
-    def clean(value):
-        if isinstance(value, str):
-            return redact(value)
-        if isinstance(value, list):
-            return [clean(item) for item in value]
-        if isinstance(value, dict):
-            return {key: clean(item) for key, item in value.items()}
-        return value
     relative = Path(".storyloop/bench/evidence") / uuid.uuid4().hex / "readiness.json"
-    target = root / relative
-    target.parent.mkdir(parents=True, exist_ok=False)
-    target.write_text(json.dumps(clean(json.loads(original.read_text())), ensure_ascii=False))
+    _copy_json_evidence(tree, source, root, relative)
     outcome["readiness_evidence_path"] = relative.as_posix()
+
+
+def _preserve_stop_evidence(attempt_root: Path, outcome: dict, output_root: Path) -> None:
+    bundle = Path(".storyloop/bench/evidence") / uuid.uuid4().hex
+    for value in outcome.pop("stop_evidence_sources"):
+        source = Path(value)
+        require(source.parts and source.parts[0] == "stop-evidence",
+                "Invalid stop evidence path")
+        _copy_json_evidence(attempt_root, source, output_root,
+                            bundle / Path(*source.parts[1:]))
+    outcome["stop_evidence_path"] = bundle.as_posix()
+
+
+def _copy_json_evidence(source_root: Path, source: Path, target_root: Path, target: Path) -> None:
+    for relative in (source, target):
+        require(not relative.is_absolute() and ".." not in relative.parts,
+                "Invalid bench evidence path")
+    original = source_root / source
+    require(original.resolve().is_relative_to(source_root.resolve())
+            and not any(part.is_symlink() for part in (original, *original.parents)
+                        if part != source_root.parent)
+            and original.is_file() and original.stat().st_size <= 2_000_000,
+            "Bench evidence is unavailable")
+    destination = target_root / target
+    require(destination.resolve().is_relative_to(target_root.resolve()),
+            "Bench evidence target is outside output root")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(_redact_json(json.loads(original.read_text())), ensure_ascii=False))
+
+
+def _redact_json(value):
+    if isinstance(value, str):
+        return redact(value)
+    if isinstance(value, list):
+        return [_redact_json(item) for item in value]
+    if isinstance(value, dict):
+        return {key: ("[REDACTED]" if any(word in str(key).lower()
+                                            for word in ("password", "token", "secret", "credential",
+                                                         "api_key", "authorization"))
+                      else _redact_json(item)) for key, item in value.items()}
+    return value
 
 
 def stage_gate(run: dict) -> dict:
