@@ -54,6 +54,10 @@ Case 套件，仅隔离评测设计/实现/审查链路。Run 记录包含模式
 无法合法代答的 `NEEDS_INPUT` 及其他需人工判断的停点直接 `NEEDS_HUMAN`。
 纠正理由固定为 `bench simulated human: apply engine stop evidence`，不读取隐藏 Gold，
 比真实人工给出的具体理由更保守。Run 记录保留每次停点的脱敏摘要和独立证据目录。
+引擎调用抛错时，bench 优先采用持久化 run state 的停机状态；只有状态不可读取时才
+回退到异常码或返回值，避免将 `ORACLE_DEFECT` 误记为通用 `BLOCKED`。
+受保护 harness v1 的失败用例会在既有 `diagnostics` 列表中附带用例 ID、异常类型和
+消息及脱敏的项目内相对路径回溯摘要；RED 停点和验收修复请求会传递这份诊断。
 
 Run 记录位于 `.storyloop/bench/runs/`，可用
 `storyloop bench --json report <run-id>` 读取。美元成本缺失时 `cost_accounting`

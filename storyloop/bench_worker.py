@@ -150,10 +150,11 @@ def _run_until_stop(project, change_id, run_change, approve_design, load_run_sta
             status = result.get("status")
         except StoryLoopError as exc:
             result, status = {"error": str(exc)}, exc.code
+        state = _safe_run_state(project, change_id, load_run_state)
+        status = state.get("status") or status
         if status == "PASSED":
             return _finish_stop(project, change_id, load_run_state, "PASSED", stops,
                                 simulated, evidence)
-        state = _safe_run_state(project, change_id, load_run_state)
         stops.append({"status": status, "detail": _stop_detail(state, result)})
         if stop_capture_root is not None:
             evidence.extend(_capture_stop_files(project, change_id, stop_capture_root, len(stops)))

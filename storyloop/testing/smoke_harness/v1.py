@@ -4,6 +4,7 @@ validate_cases(project: Path, cases: list[str], roots: list[str] | None = None) 
 python_cases(project: Path, cases: list[str], timeout: float = 60, *, cwd: Path | None = None) -> Result
 precondition(condition: bool, message: str) -> None marks an invalid fixture; it does not prove RED.
 Result(executed=0, failed=0, errors=0, skipped=0, diagnostics=()): immutable counts; .code is strict 0/1/2.
+diagnostics retains v1 stage strings; failed Python cases add bounded case_id/kind/message/traceback_tail records.
 Context(project: Path, cases: list[str], executor: dict): protected invocation inputs.
   .start_service(argv: list[str], cwd: Path) -> Service registers automatic tree cleanup.
 run_hooks(context: Context, **hooks: Callable) -> Result runs phases and finally cleanup.

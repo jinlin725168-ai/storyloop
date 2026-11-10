@@ -4,12 +4,25 @@ import json
 import re
 
 from ...models import require
+from ...processutil import redact
 
 PREFIX = "STORYLOOP_HARNESS_V1="
 COUNTS = ("executed", "failed", "errors", "skipped")
 STAGES = {"launch", "input", "source_sync", "dependency_cache", "build", "start", "ready",
           "run_case", "runner", "import", "timeout", "cleanup", "service_exit", "service_cleanup",
           "precondition"}
+CASE_DIAGNOSTIC_KEYS = {"case_id", "kind", "message", "traceback_tail"}
+
+
+def _valid_diagnostic(item: object) -> bool:
+    if isinstance(item, str):
+        return item in STAGES or bool(re.fullmatch(
+            r"scratch_cleanup(?::storyloop-[0-9a-f]+-[A-Za-z0-9_-]+)?", item))
+    return (isinstance(item, dict) and set(item) == CASE_DIAGNOSTIC_KEYS
+            and item.get("kind") in ("error", "fail")
+            and all(isinstance(item[key], str) for key in CASE_DIAGNOSTIC_KEYS)
+            and 0 < len(item["case_id"]) <= 300 and 0 < len(item["message"]) <= 2000
+            and len(item["traceback_tail"]) <= 4000)
 
 
 @dataclass(frozen=True)
@@ -19,16 +32,15 @@ class Result:
     failed: int = 0
     errors: int = 0
     skipped: int = 0
-    diagnostics: tuple[str, ...] = ()
+    diagnostics: tuple[str | dict, ...] = ()
 
     def __post_init__(self):
         require(all(type(getattr(self, key)) is int and getattr(self, key) >= 0 for key in COUNTS),
                 "Invalid harness counts")
         require(self.failed <= self.executed, "Failures exceed executed tests")
-        require(isinstance(self.diagnostics, tuple) and len(self.diagnostics) <= 20 and all(
-            isinstance(item, str) and (item in STAGES or re.fullmatch(
-                r"scratch_cleanup(?::storyloop-[0-9a-f]+-[A-Za-z0-9_-]+)?", item))
-            for item in self.diagnostics), "Invalid diagnostic stage")
+        require(isinstance(self.diagnostics, tuple) and len(self.diagnostics) <= 20
+                and all(_valid_diagnostic(item) for item in self.diagnostics),
+                "Invalid harness diagnostic")
 
     @property
     def code(self) -> int:
@@ -37,13 +49,18 @@ class Result:
 
     def __add__(self, other):
         require(isinstance(other, Result), "Unrecognized runner result")
+        diagnostics = list(self.diagnostics)
+        diagnostics.extend(item for item in other.diagnostics if item not in diagnostics)
         return Result(**{key: getattr(self, key) + getattr(other, key) for key in COUNTS},
-                      diagnostics=tuple(dict.fromkeys((*self.diagnostics, *other.diagnostics)))[:20])
+                      diagnostics=tuple(diagnostics[:20]))
 
     def document(self) -> dict:
-        """Stable machine evidence; diagnostics never contain project exception text."""
+        """Stable machine evidence with bounded, sanitized case failure details."""
+        diagnostics = [({key: redact(value) if isinstance(value, str) else value
+                         for key, value in item.items()} if isinstance(item, dict) else item)
+                       for item in self.diagnostics]
         return {**{key: getattr(self, key) for key in COUNTS}, "code": self.code,
-                "diagnostics": list(self.diagnostics)}
+                "diagnostics": diagnostics}
 
 
 def decode(value: object) -> Result:

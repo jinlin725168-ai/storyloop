@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sys
 import time
+import traceback
 import unittest
 
 from ...models import StoryLoopError, require
@@ -27,14 +28,35 @@ def precondition(condition: bool, message: str) -> None:
 
 
 class _CaseResult(unittest.TestResult):
-    def __init__(self):
+    def __init__(self, project: Path):
         super().__init__()
+        self.project = project
         self.precondition_messages = []
+        self.case_diagnostics = []
 
     def addError(self, test, error):
         super().addError(test, error)
+        self.case_diagnostics.append(_case_diagnostic(self.project, test.id(), "error", error))
         if isinstance(error[1], FixturePreconditionError):
             self.precondition_messages.append(f"{test.id()}: {error[1]}")
+
+    def addFailure(self, test, error):
+        super().addFailure(test, error)
+        self.case_diagnostics.append(_case_diagnostic(self.project, test.id(), "fail", error))
+
+
+def _case_diagnostic(project: Path, case_id: str, kind: str, error: tuple) -> dict:
+    frames = []
+    for frame in traceback.extract_tb(error[2]):
+        try:
+            relative = Path(frame.filename).resolve().relative_to(project)
+        except ValueError:
+            continue
+        frames.append(f"{relative.as_posix()}:{frame.lineno} in {frame.name}")
+    message = f"{error[0].__name__}: {error[1]}"
+    return {"case_id": redact(case_id)[:300], "kind": kind,
+            "message": redact(message)[:2000],
+            "traceback_tail": redact("\n".join(frames))[-4000:]}
 
 def python_cases(project: Path, cases: list[str], timeout: float = 60, *, cwd: Path | None = None) -> Result:
     """Measure protected tests directly; business code must run in separate subprocesses.
@@ -70,7 +92,7 @@ def _one_case(project: Path, relative: str) -> Result:
                 contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
             exec(compile(source, str(project / relative), "exec"), module.__dict__)
             suite = unittest.defaultTestLoader.loadTestsFromModule(module)
-            result = _CaseResult()
+            result = _CaseResult(project)
             suite.run(result)
         if result.precondition_messages:
             summary = "\n".join(result.precondition_messages[-3:])[-1500:]
@@ -80,7 +102,9 @@ def _one_case(project: Path, relative: str) -> Result:
                         errors=len(result.errors) + len(result.unexpectedSuccesses), skipped=skipped,
                         diagnostics=(("precondition",) if result.precondition_messages
                                      and len(result.precondition_messages) == len(result.errors)
-                                     and not result.unexpectedSuccesses else ()))
+                                     and not result.unexpectedSuccesses else ())
+                        + tuple(result.case_diagnostics[:19]))
         return counts if counts.executed else counts + Result(errors=1)
     except BaseException:
-        return Result(errors=1, diagnostics=("runner",))
+        return Result(errors=1, diagnostics=("runner", _case_diagnostic(
+            project, relative, "error", sys.exc_info())))

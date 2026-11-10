@@ -8,6 +8,13 @@ from tests.test_smoke_harness import fixture, invoke
 
 
 class HarnessProtocolTests(unittest.TestCase):
+    def test_custom_result_redacts_case_diagnostic_at_serialization(self):
+        from storyloop.testing.smoke_harness.results import Result
+        diagnostic = {"case_id": "Case.test", "kind": "error",
+                      "message": "ImportError: token=private", "traceback_tail": "cases/a.py:2"}
+        document = Result(executed=1, errors=1, diagnostics=(diagnostic,)).document()
+        self.assertNotIn("private", str(document))
+
     def test_pending_hook_cannot_return_forged_pass_from_direct_entry(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
