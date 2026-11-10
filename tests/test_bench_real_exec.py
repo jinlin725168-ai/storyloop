@@ -1,6 +1,8 @@
 """Bench execution uses disposable Git clones and test callbacks only."""
 
 from pathlib import Path
+import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -8,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from storyloop.bench_case import load_case
-from storyloop.bench_real_exec import STAGE_CASE_IDS, run_isolated_attempt, stage_gate
+from storyloop.bench_real_exec import STAGE_CASE_IDS, _worker, run_isolated_attempt, stage_gate
 from storyloop.bench_worker import _execute_change, _run_until_stop
 from storyloop.bench_run import compare_runs, run_bench
 from storyloop.cli import parser
@@ -17,6 +19,87 @@ from tests.test_bench_calibrate import calibration_fixture
 
 
 class RealBenchTests(unittest.TestCase):
+    def test_worker_imports_engine_but_child_python_imports_candidate(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            engine_venv = root / "engine-venv"
+            subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(engine_venv)],
+                           check=True, capture_output=True)
+            engine_python = engine_venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+            engine = root / "engine"
+            candidate = root / "candidate"
+            for tree, value in ((engine, "engine"), (candidate, "candidate")):
+                package = tree / "storyloop"
+                package.mkdir(parents=True)
+                (package / "__init__.py").write_text(f"ORIGIN = {value!r}\n")
+            (candidate / "sitecustomize.py").write_text(
+                "from pathlib import Path\nPath(__file__).with_name('startup-hook').write_text('ran')\n")
+            script = root / "bench_worker.py"
+            imported = candidate / "tests/import_case.py"
+            imported.parent.mkdir()
+            imported.write_text("import storyloop; print(storyloop.ORIGIN)\n")
+            script.write_text("""import json, subprocess, sys
+from pathlib import Path
+request = json.loads(Path(sys.argv[1]).read_text())
+sys.path.insert(0, request['engine_tree'])
+sys.path.extend(request['engine_sites'])
+from storyloop import ORIGIN
+startup_hook = (Path(request['project']) / 'startup-hook').exists()
+child = subprocess.run([sys.executable, '-I', str(Path(request['project']) / 'tests/import_case.py')],
+                       capture_output=True, text=True)
+Path(sys.argv[2]).write_text(json.dumps({'status': 'PASSED', 'engine_import': ORIGIN,
+    'child_import': child.stdout.strip(), 'child_error': child.stderr,
+    'startup_hook': startup_hook}))
+""")
+            with patch("storyloop.bench_real_exec.__file__", str(root / "bench_real_exec.py")):
+                outcome = _worker(candidate, engine, {"contract": {}, "source": root,
+                    "manifest": {"case_version": 2}}, "codex", "fixture",
+                    {"max_wall_seconds": 30}, engine_python, None, "generated")
+            self.assertEqual(outcome["engine_import"], "engine")
+            self.assertFalse(outcome["startup_hook"])
+            self.assertEqual(outcome["child_import"], "candidate", outcome["child_error"])
+            self.assertEqual(outcome["engine_python"], str(engine_python.absolute()))
+            self.assertNotEqual(outcome["attempt_python"], outcome["engine_python"])
+
+    def test_readiness_failure_is_bounded_and_redacted(self):
+        from storyloop.bench_worker import _readiness_failure
+        with tempfile.TemporaryDirectory() as folder:
+            project = Path(folder)
+            evidence = project / ".storyloop/evidence/readiness/abc.json"
+            evidence.parent.mkdir(parents=True)
+            evidence.write_text('{"secret":"token=hidden"}')
+            ready = {"status": "PROJECT_NOT_READY", "blockers": ["unit"],
+                     "layers": {"unit": {"status": "FAILED", "evidence_path": ".storyloop/evidence/readiness/abc.json",
+                         "results": [{"id": "unit-001", "status": "FAIL", "returncode": 1,
+                                      "timed_out": False, "output_tail": {"stdout": "x" * 3000,
+                                                                     "stderr": "token=hidden"}}]}}}
+            result = _readiness_failure(project, ready)
+            failed = result["readiness"]["layers"]["unit"]["failed_results"][0]
+            self.assertEqual(len(failed["output_tail"]["stdout"]), 2000)
+            self.assertNotIn("hidden", json.dumps(result))
+            self.assertEqual(result["readiness_evidence_source"], ".storyloop/evidence/readiness/abc.json")
+
+    def test_readiness_evidence_is_preserved_outside_attempt_tree(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source, repository = calibration_fixture(root)
+            case = load_case(source)
+
+            def readiness(tree, *_):
+                evidence = tree / ".storyloop/evidence/readiness/abc.json"
+                evidence.parent.mkdir(parents=True)
+                evidence.write_text('{"output_tail":{"stderr":"token=private"}}')
+                return {"status": "NOT_COMPARABLE", "events": [],
+                        "readiness_evidence_source": ".storyloop/evidence/readiness/abc.json",
+                        "readiness": {"status": "PROJECT_NOT_READY"}}
+
+            outcome = run_isolated_attempt(case, repository, "a" * 40, "test", "fixture",
+                                           {"max_calls": 10}, lambda *_: "APPROVE",
+                                           engine=readiness, evidence_root=root)
+            stored = root / outcome["readiness_evidence_path"]
+            self.assertTrue(stored.is_file())
+            self.assertNotIn("private", stored.read_text())
+
     def test_cli_uses_suite_source_name(self):
         command = [
             "bench", "run", "example", "--adapter", "codex", "--model", "fixture",
@@ -202,6 +285,7 @@ class RealBenchTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("--yes", result.stderr)
             self.assertIn("2 次", result.stderr)
+            self.assertIn("2 次；预计累计约 1.3～2.2 小时", result.stderr)
 
     def test_default_refusal_with_complete_real_arguments(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -216,6 +300,7 @@ class RealBenchTests(unittest.TestCase):
                 input="", capture_output=True, text=True)
             self.assertEqual(result.returncode, 2)
             self.assertIn("真实评测默认关闭", result.stderr)
+            self.assertIn("2 次，约 1.3～2.2 小时", result.stderr)
 
 
 if __name__ == "__main__":

@@ -68,7 +68,7 @@ class BenchRunTests(unittest.TestCase):
             self.assertEqual(attempts[1]["nonroutine_types"], {"replan": 1})
             self.assertEqual(attempts[0]["verdict"], "PASSED")
 
-    def test_missing_cost_and_config_mismatch_are_not_comparable(self):
+    def test_missing_cost_does_not_block_outcome_comparison(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             source = case_fixture(root)
@@ -77,8 +77,10 @@ class BenchRunTests(unittest.TestCase):
                                   "known_cost_usd": None, "cost_coverage": None}
             result = run_bench([source], "a" * 40, "b" * 40, "test", "fixture",
                                {"max_calls": 10}, adapter, lambda *_: True, root)
-            self.assertEqual(result["cases"][0]["comparison"]["status"], "NOT_COMPARABLE")
-            self.assertIn("cost", result["cases"][0]["comparison"]["reasons"])
+            self.assertEqual(result["scoring_contract"]["version"], 2)
+            self.assertEqual(result["cases"][0]["comparison"]["status"], "COMPARABLE")
+            self.assertEqual(result["cases"][0]["comparison"]["cost_dimension"], "NOT_COMPARABLE")
+            self.assertEqual(result["cases"][0]["attempts"][0]["cost_accounting"], "UNAVAILABLE")
             other = {**result, "model": "different"}
             self.assertEqual(compare_runs(result, other)["status"], "NOT_COMPARABLE")
             self.assertIn("model", compare_runs(result, other)["reasons"])
@@ -86,6 +88,39 @@ class BenchRunTests(unittest.TestCase):
             self.assertIn("case_version", compare_runs(result, other)["reasons"])
             other = {**result, "scope": "base-only"}
             self.assertIn("scope", compare_runs(result, other)["reasons"])
+
+    def test_readiness_evidence_survives_attempt_record(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = case_fixture(root)
+            evidence = {"status": "PROJECT_NOT_READY", "blockers": ["unit"], "layers": {}}
+            outcome = {"status": "NOT_COMPARABLE", "reason": "readiness:PROJECT_NOT_READY",
+                       "events": [], "calls": 0, "agent_ms": 0, "wall_ms": 3,
+                       "readiness": evidence, "readiness_evidence_path": ".storyloop/bench/evidence/x/readiness.json"}
+            result = run_bench([source], "a" * 40, "", "test", "fixture",
+                               {"max_calls": 10}, lambda *_: outcome, lambda *_: True,
+                               root, scope="base-only")
+            attempt = result["cases"][0]["attempts"][0]
+            self.assertEqual(attempt["verdict"], "NOT_COMPARABLE")
+            self.assertEqual(attempt["readiness"], evidence)
+            self.assertEqual(attempt["readiness_evidence_path"], outcome["readiness_evidence_path"])
+
+    def test_partial_cost_does_not_block_but_missing_calls_does(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = case_fixture(root)
+            base = {"status": "PASSED", "events": [], "calls": 1, "agent_ms": 1,
+                    "wall_ms": 2, "known_cost_usd": 0.1, "cost_coverage": 0.5}
+            result = run_bench([source], "a" * 40, "", "test", "fixture",
+                               {"max_calls": 10}, lambda *_: base, lambda *_: True,
+                               root, scope="base-only")
+            self.assertEqual(result["cases"][0]["comparison"]["status"], "BASE_ONLY")
+            self.assertEqual(result["cases"][0]["attempts"][0]["cost_accounting"], "PARTIAL")
+            missing = {**base, "calls": None}
+            result = run_bench([source], "a" * 40, "", "test", "fixture",
+                               {"max_calls": 10}, lambda *_: missing, lambda *_: True,
+                               root, scope="base-only")
+            self.assertIn("calls", result["cases"][0]["comparison"]["reasons"])
 
     def test_real_adapter_requires_explicit_cost_confirmation(self):
         with tempfile.TemporaryDirectory() as folder:
