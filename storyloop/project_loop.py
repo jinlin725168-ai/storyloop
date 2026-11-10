@@ -175,12 +175,12 @@ def _resume_and_prepare(project: Path, change: dict, state: dict, services: Loop
         paused = reprove_after_base(project, change, state)
         if paused is not None:
             return paused
-    if fresh or state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}:
+    red_environment = (state.get("acceptance") or {}).get("reason") == "RED_ENVIRONMENT_ERROR"
+    if fresh or red_environment or state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}:
         paused = _prepare_acceptance(project, change, services, state)
         if paused is not None:
             return paused
     return prepare_execution(project, change, state, services, config)
-
 
 def _attempts(project: Path, change: dict, state: dict, services: LoopServices,
               config: dict, start_attempt: int) -> dict:

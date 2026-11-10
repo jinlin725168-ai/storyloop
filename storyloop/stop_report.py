@@ -271,6 +271,9 @@ def _stop_actions(project: Path | str, state: dict, status: str, details: dict
     options = routing_options(project, change_id, status, {**state, **details}) or _options(
         status, project_text, change_id, bool(state.get("routed")),
         details.get("ci_requires_human_proposal", False))
+    if (details.get("acceptance") or {}).get("reason") == "RED_ENVIRONMENT_ERROR":
+        options = [{"action": "修复 RED 执行环境后重试", "command": _command(
+            "storyloop", "run", project_text, "--change", change_id)}]
     convergence = details.get("convergence") or {}
     if convergence.get("exhausted"):
         options = _convergence_options(status, project_text, change_id) or options

@@ -149,7 +149,7 @@ def _run_until_stop(project, change_id, run_change, approve_design, load_run_sta
             result = run_change(project, change_id)
             status = result.get("status")
         except StoryLoopError as exc:
-            result, status = {"error": str(exc)}, exc.code
+            result, status = {"error": str(exc), "details": exc.details}, exc.code
         state = _safe_run_state(project, change_id, load_run_state)
         status = state.get("status") or status
         if status == "PASSED":
@@ -243,7 +243,7 @@ def _bound(value, depth: int = 0):
     from storyloop.processutil import redact
     if isinstance(value, str):
         return redact(value)[:2000]
-    if depth >= 5:
+    if depth >= 7:
         return "[TRUNCATED]"
     if isinstance(value, list):
         return [_bound(item, depth + 1) for item in value[:20]]
@@ -271,7 +271,8 @@ def _stop_detail(state: dict, result: dict) -> dict:
     failures = state.get("failures") or []
     return _bound({"reason": state.get("error") or stop.get("blocker") or result.get("error"),
                    "stop": stop, "acceptance": state.get("acceptance"),
-                   "failure": failures[-1] if failures else None})
+                   "failure": failures[-1] if failures else None,
+                   "error_details": result.get("details")})
 
 
 def _capture_stop_files(project: Path, change_id: str, root: Path, number: int) -> list[str]:

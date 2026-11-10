@@ -42,9 +42,15 @@ def run_smoke(
     results = _run_tiered(project, manifest["tests"], project_patterns(project), run_all=expect_red)
     errors = [item for item in results if item["status"] == "ERROR"]
     failures = [item for item in results if item["status"] == "FAIL"]
+    red_error = None
     if expect_red:
-        _judge_red(results, manifest, change)
-        status = "RED"
+        try:
+            _judge_red(results, manifest, change)
+        except StoryLoopError as exc:
+            if exc.code != "BLOCKED" or not exc.details.get("results"):
+                raise
+            red_error = exc
+        status = "ERROR" if red_error else "RED"
     elif errors:
         status = "ERROR"
     elif failures or any(item["status"] == "NOT_RUN" for item in results):
@@ -65,10 +71,14 @@ def run_smoke(
         "suite_digests": suite,
         "results": results,
     }
+    if red_error is not None:
+        evidence["red_error"] = {"code": red_error.code, "message": redact(str(red_error))}
     path = project / ".storyloop" / "evidence" / change_id / (
         RED_EVIDENCE if expect_red else RESULT_EVIDENCE
     )
     write_json(path, evidence, max_bytes=4_000_000)
+    if red_error is not None:
+        raise red_error
     return {**evidence, "evidence_path": str(path), "evidence_sha256": _sha256(path)}
 
 
@@ -171,16 +181,26 @@ def run_smoke_isolated(project: Path, change: dict, expect_red: bool = False,
         _copy_smoke_control(project, candidate, change_id)
         before = capture_snapshot(candidate, include_control=True, include_ignored=True)
         digest = _files_digest(candidate, paths)
-        result = run_smoke(
-            candidate, change, expect_red, head_commit=head,
-            workspace_sha256=digest,
-        )
-        source = Path(result["evidence_path"])
+        failure = None
+        try:
+            result = run_smoke(candidate, change, expect_red, head_commit=head,
+                               workspace_sha256=digest)
+        except StoryLoopError as exc:
+            if not (expect_red and exc.details.get("results")):
+                raise
+            failure = exc
+            result = None
+        source = (Path(result["evidence_path"]) if result else
+                  candidate / ".storyloop/evidence" / change_id / RED_EVIDENCE)
         after = capture_snapshot(candidate, include_control=True, include_ignored=True)
         allowed = f".storyloop/evidence/{change_id}/{source.name}"
         _require_only_evidence_changed(before, after, allowed)
-        target = project / ".storyloop/evidence" / change_id / source.name
-        write_json(target, load_json(source), max_bytes=4_000_000)
+        fresh = result is not None or any(item.path == allowed for item in snapshot_changes(before, after))
+        if source.is_file() and fresh:
+            target = project / ".storyloop/evidence" / change_id / source.name
+            write_json(target, load_json(source), max_bytes=4_000_000)
+        if failure is not None:
+            raise failure
     return {**load_json(target), "evidence_path": str(target),
             "evidence_sha256": _sha256(target)}
 
