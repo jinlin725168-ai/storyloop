@@ -5,7 +5,10 @@ import tempfile
 import unittest
 
 from storyloop import __version__
-from storyloop.smoke_runner import run_commands
+from storyloop.acceptance_repair import _last_smoke_evidence
+from storyloop.models import StoryLoopError
+from storyloop.smoke_runner import _judge_red, run_commands
+from storyloop.stop_report import _evidence
 
 
 SCRIPT = '''from storyloop.testing.smoke_harness.v1 import python_cases
@@ -47,6 +50,54 @@ def invoke(root, *cases):
 
 
 class HarnessTests(unittest.TestCase):
+    def test_failure_diagnostic_is_redacted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            (root / "cases/b.py").write_text(
+                "import unittest\nclass Case(unittest.TestCase):\n"
+                "    def test_case(self):\n        self.fail('token=private')\n")
+            result = invoke(root, "cases/b.py")
+            self.assertEqual(result["status"], "FAIL")
+            diagnostic = next(item for item in result["counts"]["diagnostics"]
+                              if isinstance(item, dict))
+            self.assertEqual(diagnostic["kind"], "fail")
+            self.assertNotIn("private", str(diagnostic))
+
+    def test_import_error_diagnostic_reaches_red_stop_and_repair_input(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            (root / "cases/import.py").write_text(
+                "import unittest\nclass Case(unittest.TestCase):\n"
+                "    def test_fixture(self):\n        raise ImportError('missing_fixture_lib')\n")
+            result = invoke(root, "cases/import.py")
+            diagnostic = next(item for item in result["counts"]["diagnostics"]
+                              if isinstance(item, dict))
+            self.assertEqual(diagnostic["kind"], "error")
+            self.assertIn("ImportError: missing_fixture_lib", diagnostic["message"])
+            self.assertIn("cases/import.py", diagnostic["traceback_tail"])
+            self.assertNotIn(str(root), diagnostic["traceback_tail"])
+            self.assertLessEqual(len(diagnostic["traceback_tail"]), 4000)
+
+            judged = {**result, "id": "SMOKE-1", "criteria": ["AC-1"],
+                      "stdout": "", "stderr": ""}
+            manifest = {"tests": [{"id": "SMOKE-1", "criteria": ["AC-1"]}]}
+            with self.assertRaises(StoryLoopError) as caught:
+                _judge_red([judged], manifest, {"product": {"stories": []}})
+            self.assertEqual(caught.exception.code, "ORACLE_DEFECT")
+            stop = {"status": "ORACLE_DEFECT", **caught.exception.details}
+            self.assertIn("ImportError: missing_fixture_lib", " ".join(
+                _evidence({"status": "ORACLE_DEFECT"}, {"acceptance": stop})))
+            repair_payload = {"repair": {"failure_evidence": _last_smoke_evidence(
+                root, "FEAT-20261109-x", {"status": "ORACLE_DEFECT", "acceptance": stop})}}
+            self.assertIn("ImportError: missing_fixture_lib",
+                          str(repair_payload["repair"]["failure_evidence"]))
+            later_failure = {"status": "IMPLEMENTING", "failures": [{"acceptance": {
+                "status": "FAILED", "results": [judged]}}]}
+            self.assertIn("ImportError: missing_fixture_lib", str(_last_smoke_evidence(
+                root, "FEAT-20261109-x", later_failure)))
+
     def test_only_requested_case_runs_and_produces_real_counts(self):
         with tempfile.TemporaryDirectory(prefix="harness 空格 ") as folder:
             root = Path(folder)
@@ -72,7 +123,7 @@ class HarnessTests(unittest.TestCase):
                 with self.subTest(cases=cases):
                     result = invoke(root, *cases)
                     self.assertEqual(result.get("returncode"), want, result)
-                    self.assertNotIn("private fixture detail", str(result))
+                    self.assertNotIn(str(root), str(result["counts"]["diagnostics"]))
 
     def test_candidate_package_and_pythonpath_cannot_shadow_trusted_helper(self):
         with tempfile.TemporaryDirectory() as folder:

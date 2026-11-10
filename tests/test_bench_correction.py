@@ -10,10 +10,32 @@ from storyloop.bench_worker import _run_until_stop
 from storyloop.bench_real_exec import _preserve_stop_evidence, run_isolated_attempt
 from storyloop.bench_case import load_case
 from storyloop.design_approval import REPLAN_STOPS
+from storyloop.models import StoryLoopError
 from tests.test_bench_calibrate import calibration_fixture
 
 
 class BenchCorrectionTests(unittest.TestCase):
+    def test_run_state_stop_overrides_blocked_exception(self):
+        statuses = iter(["ORACLE_DEFECT", "PASSED"])
+        current = {"status": None}
+        repairs = []
+
+        def run(*_):
+            current["status"] = next(statuses)
+            if current["status"] == "ORACLE_DEFECT":
+                raise StoryLoopError("RED failed", code="BLOCKED")
+            return {"status": "PASSED"}
+
+        outcome = _run_until_stop(
+            Path("/tmp/fixture"), "FEAT-20261109-x", run, lambda *_: None,
+            lambda *_: {"status": current["status"], "stop": {"blocker": "RED failed"},
+                        "intervention_events": []},
+            repair_smoke=lambda *_: repairs.append("acceptance-repair"),
+        )
+        self.assertEqual(outcome["status"], "PASSED")
+        self.assertEqual(outcome["stops"][0]["status"], "ORACLE_DEFECT")
+        self.assertEqual(repairs, ["acceptance-repair"])
+
     def test_one_oracle_repair_can_pass_after_routine_design_approval(self):
         statuses = iter(["ORACLE_DEFECT", "DESIGN_APPROVAL_REQUIRED", "PASSED"])
         current = {"status": None}

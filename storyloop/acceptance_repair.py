@@ -215,5 +215,7 @@ def _last_smoke_evidence(project: Path, change_id: str, state: dict) -> dict:
         if isinstance(smoke, dict) and smoke.get("results"):
             return {"status": smoke.get("status"), "results": [
                 {"id": r.get("id"), "status": r.get("status"), "stdout": str(r.get("stdout", ""))[-6000:],
-                 "stderr": str(r.get("stderr", ""))[-6000:]} for r in smoke["results"]]}
+                 "stderr": str(r.get("stderr", ""))[-6000:],
+                 "diagnostics": (r.get("counts") or {}).get("diagnostics", [])[:20]}
+                for r in smoke["results"]]}
     return {}

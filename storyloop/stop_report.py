@@ -202,9 +202,13 @@ def _evidence(state: dict, details: dict) -> list[str]:
     for result in acceptance.get("results") or []:
         if not isinstance(result, dict) or result.get("status") not in {"FAIL", "ERROR"}:
             continue
-        output = "\n".join(str(result.get(key) or "") for key in ("stdout", "stderr")).strip()
+        diagnostics = result.get("diagnostics") or (result.get("counts") or {}).get("diagnostics") or []
+        case_details = [item.get("traceback_tail", "") + "\n" + item.get("message", "")
+                        for item in diagnostics if isinstance(item, dict)]
+        output = "\n".join(case_details or
+                           [str(result.get(key) or "") for key in ("stdout", "stderr")]).strip()
         prefix = f"{result.get('id', '验收用例')} {result['status']}: "
-        evidence.append(prefix + (output or "无输出")[-(1500 - len(prefix)):])
+        evidence.append(prefix + redact((output or "无输出")[-(1500 - len(prefix)):]))
     if state.get("status") == "ORACLE_DEFECT" and acceptance.get("fixture_repairable") is True:
         automatic = [item for item in state.get("repairs") or [] if item.get("automatic") is True]
         for index, item in enumerate(automatic, 1):
