@@ -42,6 +42,7 @@ from .planning import review_focus  # noqa: F401  # 兼容再导出：阶段 D �
 from .routing_execution import prepare_execution, candidate_l3
 from .routing_risks import merge_routing_risks
 from .routing_upgrade import enforce_forbidden_paths
+from .regression_updates import mark_undeclared_existing_tests
 from .project_loop_gates import characterize_paths, design_plan, uncharacterized_paths
 from .guarded_calls import read_only_call, write_safely  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .project_loop_guards import (require_control_unchanged, require_git_visible,  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
@@ -293,7 +294,6 @@ def _run_attempt(
     cost_resume.checkpoint(project, state, response, touched)
     return _judge_attempt(project, change, state, services, config, response, touched, preexisting)
 
-
 def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServices, config: dict,
                    response: dict, touched: list, preexisting: set[str]) -> dict | None:
     """Apply deterministic gates to one valid implement response."""
@@ -304,6 +304,8 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
         state["design"] = response["design"]
     boundary = audit_project_changes(project, change_id)
     require_git_visible(touched, boundary)
+    boundary = mark_undeclared_existing_tests(project, state, config, boundary,
+                                              design_plan(state) or {})
     enforce_forbidden_paths(state, boundary)
     if boundary["violations"]:
         return record_boundary(project, state, boundary, touched, preexisting)
@@ -368,13 +370,12 @@ def _verify_attempt(project, change, state, services, config, boundary):
             if discard_characterization_attempt(project, state, boundary, evidence):
                 return prepare_execution(project, change, state, services, config)
     if verdict == "fail" or not layers_green(layers):
-        return route_review(project, change, state, review, layers)
+        return route_review(project, change, state, review, layers, config)
     verified = {"boundary": boundary, "layers": layers, "review": review}
     paused = _manual_acceptance_gate(project, change, state, verified)
     if paused is not None:
         return paused
     return complete_change(project, change, state, **verified)
-
 
 def _hand_back_attempt(project: Path, state: dict, error: StoryLoopError) -> None:
     """An agent that never answered (crash, timeout, rate limit) did not spend the quality budget.

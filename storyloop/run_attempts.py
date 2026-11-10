@@ -15,6 +15,7 @@ from .project_loop_support import control_digest
 from .project_profile import layer_commands
 from .run_stops import pause
 from .run_transitions import transition
+from .regression_updates import review_diffs
 from .project_loop_support import save_run
 from .smoke import RESULT_EVIDENCE
 from .smoke_runner import implementation_digest, run_commands_isolated, run_smoke_isolated
@@ -106,11 +107,14 @@ def run_checks_safely(project: Path, change: dict, config: dict,
 
 def perform_review(project: Path, change: dict, state: dict, services,
                    boundary: dict, layers: dict) -> dict:
+    plan = design_plan(state)
     context = {"change": change, "attempt": state["attempt"],
                "facts": list(state.get("facts") or []),
-               "layers": layers, "boundary": boundary, "design_plan": design_plan(state),
+               "layers": layers, "boundary": boundary, "design_plan": plan,
                "answers": load_answers(project, change["change_id"]),
                "design": state.get("design") or "", **review_focus(state)}
+    if plan and "regression_updates" in plan:
+        context["regression_update_diffs"] = review_diffs(project, state, plan)
     try:
         from .review_disposition import perform_review as review
         return review(project, state, services, context, load_project_config(project))

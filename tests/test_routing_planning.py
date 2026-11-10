@@ -38,7 +38,7 @@ class PlanningTests(unittest.TestCase):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.root = Path(self.folder.name)
-        readiness_repository(self.root, module_roots=['app'])
+        readiness_repository(self.root, module_roots=['app'], test_roots=['tests'])
         self.commit = git(self.root, 'rev-parse', 'HEAD').strip()
         self.change = {'change_id': 'FEAT-planning', 'routing_version': 1,
                        'product': assessed_product(), 'approval': {'tier': 'light'},
@@ -63,6 +63,34 @@ class PlanningTests(unittest.TestCase):
                                       ('standard', 'refactor', ['app/a.py']),
                                       ('heavy', 'feature', ['app/a.py'])]:
             self.assertEqual(required_locks(tier, nature, ['app/a.py']), expected)
+
+    def test_regression_updates_require_existing_test_path_and_approved_ac(self):
+        response = answer()
+        option = response['options'][0]
+        option['touched'].append('tests/test_service.py')
+        option['regression_updates'] = [{
+            'path': 'tests/test_service.py', 'criterion_ids': ['AC-1'],
+            'reason': 'AC-1 changes the old snapshot assertion'}]
+        plan = self.plan(response)
+        self.assertEqual(plan['options'][0]['regression_updates'], option['regression_updates'])
+        for path, ids in [('tests/missing.py', ['AC-1']),
+                          ('../escape.py', ['AC-1']),
+                          ('tests/test_service.py', ['AC-NOT-APPROVED']),
+                          ('app/service.py', ['AC-1'])]:
+            with self.subTest(path=path, ids=ids):
+                bad = deepcopy(response)
+                bad['options'][0]['regression_updates'][0].update(path=path, criterion_ids=ids)
+                with self.assertRaises(StoryLoopError):
+                    self.plan(bad)
+
+    def test_old_saved_plan_without_regression_updates_preserves_legacy_test_scope(self):
+        from storyloop.regression_updates import undeclared_existing_tests
+        plan = self.plan(answer())['options'][0]
+        self.assertEqual(plan['regression_updates'], [])
+        plan.pop('regression_updates')
+        boundary = {'allowed': [{'path': 'tests/test_service.py', 'category': 'TEST'}]}
+        self.assertEqual(undeclared_existing_tests(self.root, self.state, self.config,
+                                                    boundary, plan), [])
 
     def test_light_plan_is_complete_and_does_not_call_design(self):
         self.assertIsNone(self.ensure(lambda p, c: self.fail('light called design')))

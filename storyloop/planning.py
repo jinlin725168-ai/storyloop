@@ -88,6 +88,8 @@ def _design(project: Path, change: dict, state: dict, services,
                'answers': load_answers(project, change['change_id']),
                'facts': list(state.get('facts') or []), 'principles': load_principles(project),
                'replanning': deepcopy(state.get('planning', {}))}
+    if state.get('regression_conflict'):
+        context['regression_conflict'] = deepcopy(state['regression_conflict'])
     if missing:
         context['missing_plan_evidence'] = missing
         context['evidence_guidance'] = (

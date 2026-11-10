@@ -13,6 +13,7 @@ from .role_schemas import schema_errors, schema_for
 from .routing_evidence import measure_scope
 from .smoke import smoke_digests
 from .verification_entries import new_format, validate_entry_paths
+from .regression_updates import validate_updates
 
 SCOPE_KEYS = ('touched', 'creates', 'interfaces', 'symbols')
 
@@ -72,6 +73,7 @@ def _option(item: dict, project: Path, change: dict, state: dict) -> dict:
                 f"L3 option {option['id']!r} omits observed candidate scope; every option must "
                 f"include all observed paths; {'; '.join(omissions)}")
     _paths_and_constraints(project, change, option)
+    validate_updates(project, change, state, option)
     require(bool(option['regression']), 'Regression steps are required')
     for step in option['regression'] + option['migration']['steps']:
         text(step, 'verification or migration step')

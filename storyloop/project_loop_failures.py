@@ -9,7 +9,7 @@ import hashlib
 from .evidence_locations import evidence_location_exists
 from .base_collision import link_base_collision
 from .failure_attribution import (check_findings, failure_signature, finding_key, location_file,
-                                  no_progress, route)
+                                  no_progress, route, contract_ids)
 from .models import require, text
 from .project_loop_support import save_run
 from .run_transitions import transition
@@ -18,6 +18,9 @@ from .smoke import suite_relative
 from .baseline import _git
 from .path_security import safe_target
 from .boundaries import capture_snapshot
+from .project_loop_guards import exists_at
+from .project_profile import matches_test_root
+from .processutil import redact
 
 ROUTED_STOPS = {"oracle": "ORACLE_DEFECT", "contract": "NEEDS_SPEC_FIX"}
 
@@ -85,8 +88,12 @@ def _checked_findings(project: Path, change: dict, state: dict, review: dict) ->
 
 
 def route_review(project: Path, change: dict, state: dict, review: dict,
-                 layers: dict | None = None) -> dict | None:
+                 layers: dict | None = None, config: dict | None = None) -> dict | None:
     """Attribute checked findings without discarding the deterministic layer evidence."""
+    if config is not None and review["verdict"] == "fail":
+        conflict = reviewed_regression_conflict(project, change, state, review, layers or {}, config)
+        if conflict is not None:
+            return conflict
     findings = _checked_findings(project, change, state, review)
     review = {**review, "findings": findings}
     entry = {"attempt": state["attempt"], **(layers or {}), "review": review}
@@ -101,6 +108,51 @@ def route_review(project: Path, change: dict, state: dict, review: dict,
     if target == 'oracle' and reviewed_characterization_conflict(project, change, state, review):
         state['characterization_pause_digest'] = characterization_workspace_digest(project)
     return _pause_routed(project, state, target, findings)
+
+
+def reviewed_regression_conflict(project: Path, change: dict, state: dict,
+                                 review: dict, layers: dict, config: dict) -> dict | None:
+    """Route a confirmed old-test conflict to replan before another implement attempt."""
+    from .planning import plan_projection
+    plan = plan_projection(state) or {}
+    if "regression_updates" not in plan or all(
+            layer.get("status") in {"PASSED", "SKIPPED"} for layer in layers.values()
+            if isinstance(layer, dict)):
+        return None
+    declared = {row["path"] for row in plan["regression_updates"]}
+    roots = config["profile"].get("test_roots") or []
+    for finding in _checked_findings(project, change, state, review):
+        path = location_file(finding.get("location"))
+        confirmed = (finding.get("regression_conflict") is True or
+                     finding.get("introduced") is False)
+        if (finding.get("perspective") != "oracle-strength" or not confirmed
+                or finding.get("disposition") == "ADVISORY"
+                or finding.get("criterion_id") not in contract_ids(change)
+                or not path or not matches_test_root(path, roots) or path in declared
+                or not exists_at(project, state["contract_commit"], path)):
+            continue
+        summary = _failed_layer_summary(layers)
+        conflict = {"path": path, "criterion_id": finding["criterion_id"],
+                    "finding_id": finding.get("id"), "failure_summary": summary,
+                    "review_evidence": redact(str(finding.get("evidence") or ""))[:1500]}
+        state["failures"].append(_failure(state, {"attempt": state["attempt"], **layers,
+                                            "review": review}, "design"))
+        return pause(project, state, "DESIGN_REVISION_REQUIRED",
+                     error="Existing regression assertion conflicts with the approved contract; replan",
+                     regression_conflict=conflict)
+    return None
+
+
+def _failed_layer_summary(layers: dict) -> str:
+    for name, layer in layers.items():
+        if not isinstance(layer, dict) or layer.get("status") in {"PASSED", "SKIPPED"}:
+            continue
+        for result in layer.get("results") or []:
+            if result.get("status") in {"PASS", "NOT_RUN"}:
+                continue
+            detail = result.get("output_tail") or result.get("stderr") or result.get("stdout") or ""
+            return redact(f"{name}/{result.get('id')}: {result.get('status')} {detail}")[-1500:]
+    return redact(str(layers.get("unit", {}).get("status") or "review failure"))[:1500]
 
 
 def reviewed_characterization_conflict(project: Path, change: dict, state: dict,
