@@ -145,7 +145,9 @@ class EditableHarnessTests(unittest.TestCase):
             change_id = legacy_create_change(project, "orders", product())["change_id"]
             approve_change(project, change_id)
             payload = smoke_payload(change_id)
-            payload["files"][0]["content"] = "print('RED launch diagnostic'); raise SystemExit(2)\n"
+            payload["files"][0]["content"] = (
+                "import time\nprint('RED launch diagnostic', flush=True)\ntime.sleep(3)\n")
+            payload["manifest"]["tests"][0]["timeout_seconds"] = 1
             result = run_change(project, change_id, services(change_id, lambda *_: payload))
             state = load_run_state(project, change_id)
             red = project / ".storyloop/evidence" / change_id / "acceptance-red.json"
