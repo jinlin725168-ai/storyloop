@@ -1,6 +1,6 @@
 ---
 name: oracle-craft
-version: 1.1.4
+version: 1.1.5
 roles: [product, acceptance, design, review]
 description: 如何写 StoryLoop 的判据与公共验证入口：行类型、测试有效性、结构断言、执行器退出码。product、acceptance、design、review 角色使用。
 ---
@@ -33,6 +33,31 @@ description: 如何写 StoryLoop 的判据与公共验证入口：行类型、�
 - 好：经 `storyloop status <project> --change <id> --json` 读取 `stop.options[].action`，用合同给出的字面预期断言某个停点的下一步。
 - 坏：只断言文件存在、私有路由函数被调用一次，或根据生产代码同一算法重算 expected；这些不能证明外部行为。
 - 尽量经真实公共接口观察；只在外部服务、时钟等系统边界替换依赖，不 mock StoryLoop 自己的守卫、路由或候选行为。测试前提失败须作为夹具问题报告，不能伪装成 RED。
+
+### 准备 / 执行 / 观察
+
+- **准备**：可构造测试仓库、写 `.storyloop` 状态文件，或调用内部 helper 建立前提；这些文件与 helper 须在 manifest `source_files` 中，前提失败要明确报夹具错误。准备动作不充当入口调用。
+- **执行**：通过合同声明的入口触发被测行为。CLI 与 `stop_json` 入口在测试子进程中用 `subprocess` 运行公开命令；`public_function` 入口显式导入并调用声明符号。不得用 `product_cli.dispatch` 等内部函数代替 CLI。
+- **观察**：经同一声明入口读取结果。CLI 与 `stop_json` 解析公开命令的 JSON 输出并断言字段；公共函数断言其公开返回值或公开可观察效果。不要只检查内部状态或文件存在性。
+
+CLI 入口的最小骨架（`status` 的参数形式以本仓库 CLI 为准；前提准备函数由用例实现）：
+
+```python
+import json
+import subprocess
+import sys
+
+prepare_state(project, change_id)  # 仅准备；所需 helper 列入 source_files
+completed = subprocess.run(
+    [sys.executable, "-m", "storyloop", "status", str(project),
+     "--change", change_id, "--json"],
+    check=True, capture_output=True, text=True,
+)
+status = json.loads(completed.stdout)
+assert status["stop"]["status"] == "DESIGN_REVISION_REQUIRED"  # 按合同字面预期替换
+```
+
+若已批准入口在准备成本上不可行，报告入口争议并交由 `NEEDS_SPEC_FIX` 路径澄清合同；不得自行绕过入口。引擎的入口校验和停点规则始终优先。
 
 acceptance 提交前自查三项，发现问题先改套件；引擎的确定性校验和自动退回仍是最终规则：
 
