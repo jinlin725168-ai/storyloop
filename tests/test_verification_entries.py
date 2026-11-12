@@ -108,6 +108,12 @@ class ManifestEntryTests(unittest.TestCase):
         self.assertTrue(caught.exception.details["fixture_repairable"])
         self.assertEqual(caught.exception.details["defect_category"], "UNVERIFIED_ENTRY_USE")
         self.assertEqual(caught.exception.details["test_ids"], ["T-1"])
+        finding = caught.exception.details["entry_use_findings"][0]
+        self.assertEqual(finding["path"], "case.py")
+        self.assertEqual(finding["line"], 2)
+        self.assertEqual(finding["entry_kind"], "cli")
+        self.assertEqual(finding["entry_locator"], "storyloop run <project>")
+        self.assertIn("subprocess", finding["required_call"])
 
     def test_cli_entry_requires_subprocess_call_in_its_own_case(self):
         value = new_product()
@@ -123,6 +129,35 @@ class ManifestEntryTests(unittest.TestCase):
         findings = verification_entries.entry_use_findings(value, suite, sources)
         self.assertEqual([item["test_id"] for item in findings], ["T-2"])
         self.assertEqual(findings[0]["entry"]["id"], "VE-CLI")
+
+    def test_internal_setup_then_public_cli_execution_is_valid(self):
+        value = new_product()
+        value["stories"] = value["stories"][:1]
+        value["stories"][0]["verification_entries"][0]["locator"] = (
+            "storyloop status <project> --change <id> --json")
+        suite = {"tests": [{"id": "T-1", "criteria": ["AC-1"], "entry_ids": ["VE-CLI"],
+                            "command": ["{python}", "acceptance/changes/C/case.py"]}]}
+        sources = {"case.py": (
+            "import subprocess\nimport sys\nfrom storyloop.internal import prepare_state\n"
+            "def test_status():\n"
+            "    prepare_state()\n"
+            "    result = subprocess.run([sys.executable, '-m', 'storyloop', 'status', "
+            "'/tmp/project', '--change', 'C', '--json'], capture_output=True)\n"
+            "    assert result.returncode == 0\n")}
+        self.assertEqual(verification_entries.entry_use_findings(value, suite, sources), [])
+
+    def test_unverified_entry_points_to_test_method_and_required_call(self):
+        value = new_product()
+        value["stories"] = value["stories"][:1]
+        suite = {"tests": [{"id": "T-1", "criteria": ["AC-1"], "entry_ids": ["VE-CLI"],
+                            "command": ["{python}", "acceptance/changes/C/case.py"]}]}
+        sources = {"case.py": (
+            "from storyloop.cli import dispatch\n\n"
+            "def prepare():\n    dispatch([])\n\n"
+            "def test_run():\n    assert dispatch([])\n")}
+        finding = verification_entries.entry_use_findings(value, suite, sources)[0]
+        self.assertEqual((finding["path"], finding["line"]), ("case.py", 6))
+        self.assertIn("storyloop run", finding["required_call"])
 
     def test_public_function_entry_requires_import_and_call(self):
         value = new_product()

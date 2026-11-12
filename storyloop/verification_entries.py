@@ -34,11 +34,18 @@ def check_entry_use(project: Path, change: dict, manifest: dict) -> None:
                     "message": redact(item["message"])[:2000],
                     "traceback_tail": f"{item['path']}:{item['line']}"}
                    for item in findings[:20]]
+    entry_use = [{"test_id": item["test_id"], "path": item["path"],
+                  "line": item["line"], "entry_id": item["entry"]["id"],
+                  "entry_kind": item["entry"]["kind"],
+                  "entry_locator": item["entry"]["locator"],
+                  "required_call": item["required_call"]}
+                 for item in findings if item["category"] == "UNVERIFIED_ENTRY_USE"]
     raise StoryLoopError("Acceptance test does not invoke its declared verification entry",
                          code="ORACLE_DEFECT", details={
                              "fixture_repairable": True, "defect_category": findings[0]["category"],
                              "test_ids": sorted({item["test_id"] for item in findings}),
                              "entries": [item["entry"] for item in findings],
+                             "entry_use_findings": entry_use,
                              "diagnostics": diagnostics})
 
 
@@ -74,11 +81,33 @@ def entry_use_findings(product: dict, manifest: dict, sources: dict[str, str]) -
             if any(_uses_entry(entry, tree) for tree in selected.values()):
                 continue
             path = next(iter(selected), "manifest.json")
+            tree = selected.get(path)
             findings.append({"test_id": test["id"], "entry": entry,
-                             "path": path, "line": 1,
+                             "path": path, "line": _test_line(tree),
                              "category": "UNVERIFIED_ENTRY_USE",
+                             "required_call": _required_call(entry),
                              "message": f"Test {test['id']} does not invoke declared entry {entry_id}"})
     return findings
+
+
+def _test_line(tree: ast.AST | None) -> int:
+    if tree is None:
+        return 1
+    methods = [node.lineno for node in ast.walk(tree)
+               if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+               and node.name.startswith("test")]
+    if methods:
+        return min(methods)
+    calls = [node.lineno for node in ast.walk(tree) if isinstance(node, ast.Call)]
+    return min(calls, default=1)
+
+
+def _required_call(entry: dict) -> str:
+    if entry["kind"] in {"cli", "stop_json"}:
+        return (f"在执行与观察阶段用 subprocess 运行 {entry['locator']} 所声明的公开命令，"
+                "解析命令输出；内部 helper 仅可用于准备阶段。")
+    return (f"在执行与观察阶段显式导入并调用 {entry['locator']}；"
+            "内部 helper 仅可用于准备阶段。")
 
 
 def _command_sources(command: list[str], parsed: dict[str, ast.AST]) -> dict[str, ast.AST]:

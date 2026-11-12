@@ -270,6 +270,43 @@ class PlanningTests(unittest.TestCase):
         self.assertIn('validation_errors', calls[1])
         self.assertEqual(self.state['routing']['effective_tier'], 'heavy')
 
+    def test_absent_scope_symbol_retries_design_then_stops_with_evidence(self):
+        self.state['routing'].update(initial_tier='heavy', effective_tier='heavy')
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            response['options'][0]['symbols'] = [
+                {'path': 'app/service.py', 'symbol': 'absent_at_contract_commit'}]
+            return response
+
+        stopped = self.ensure(design)
+
+        self.assertEqual(len(requests), 2)
+        self.assertIn('Declared symbol is absent at the contract commit',
+                      requests[1]['validation_errors'][0])
+        self.assertEqual(stopped['status'], 'NEEDS_INPUT')
+        self.assertIn('Declared symbol is absent at the contract commit', stopped['error'])
+        self.assertIn('storyloop replan', stopped['next'])
+        self.assertEqual(self.state['status'], 'NEEDS_INPUT')
+
+    def test_absent_scope_symbol_can_be_corrected_on_semantic_retry(self):
+        self.state['routing'].update(initial_tier='heavy', effective_tier='heavy')
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            if len(requests) == 1:
+                response['options'][0]['symbols'] = [
+                    {'path': 'app/service.py', 'symbol': 'absent_at_contract_commit'}]
+            return response
+
+        self.assertIsNone(self.ensure(design))
+        self.assertEqual(len(requests), 2)
+        self.assertIn('validation_errors', requests[1])
+
     def test_post_contract_evidence_path_is_repaired_against_explicit_source_commit(self):
         self.state['routing'].update(initial_tier='heavy', effective_tier='heavy')
         test = self.root / 'tests/test_service_characterization.py'

@@ -1,6 +1,7 @@
 """L2 tiered planning under the run lock, before characterization and implementation."""
 from copy import deepcopy
 from pathlib import Path
+import shlex
 
 from .answers import load_answers
 from .facts import merge_facts
@@ -17,6 +18,7 @@ from .routing_state import advance_tier
 from .semantic_repair import answer_with_repair
 from .planning_choice import selected_option
 from .verification_entries import new_format
+from .models import StoryLoopError
 
 
 def required_locks(tier: str, nature: str, touched: list[str]) -> list[str]:
@@ -28,6 +30,20 @@ def required_locks(tier: str, nature: str, touched: list[str]) -> list[str]:
 def ensure_routing_plan(project: Path, change: dict, state: dict, services,
                         config: dict) -> dict | None:
     """Build and measure a complete plan; approval/consistency gates run after this gate."""
+    try:
+        return _ensure_routing_plan(project, change, state, services, config)
+    except StoryLoopError as exc:
+        if exc.details.get('repairable') is not True or services.design is None:
+            raise
+        command = shlex.join(['storyloop', 'replan', str(project), '--change', change['change_id'],
+                              '--reason', 'Correct the plan evidence'])
+        return pause(project, state, 'NEEDS_INPUT', phase='planning',
+                     error=str(exc), questions=[f'Design plan evidence needs correction: {exc}'],
+                     next=f'{command}; then rerun storyloop run')
+
+
+def _ensure_routing_plan(project: Path, change: dict, state: dict, services,
+                         config: dict) -> dict | None:
     planning = state.setdefault('planning', {})
     if (planning.get('plan') or {}).get('status') == 'DONE':
         return None

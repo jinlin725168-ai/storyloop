@@ -181,6 +181,12 @@ class AcceptanceFixtureRetryTests(unittest.TestCase):
                              "UNVERIFIED_ENTRY_USE")
             self.assertEqual(calls[1]["repair"]["failure_evidence"]["entries"][0]["id"],
                              "VE-STATUS")
+            entry_use = calls[1]["repair"]["failure_evidence"]["entry_use_findings"][0]
+            self.assertEqual(entry_use["entry_kind"], "cli")
+            self.assertIn("storyloop status", entry_use["entry_locator"])
+            self.assertIn("subprocess", entry_use["required_call"])
+            self.assertTrue(entry_use["path"].endswith(".py"))
+            self.assertGreater(entry_use["line"], 0)
             self.assertTrue(state["repairs"][0]["automatic"])
 
     def test_approve_repairs_two_fixture_errors_then_proves_red(self):
