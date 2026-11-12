@@ -12,6 +12,7 @@ from storyloop.product_contract import validate_product
 from storyloop.requirement_checklist import evaluate_checklist
 from storyloop.smoke import _validate_manifest
 from storyloop.role_schemas import schema_errors, schema_for
+from storyloop import verification_entries
 from tests.support import product
 from tests.test_routing_planning import answer
 
@@ -91,6 +92,69 @@ class ContractEntryTests(unittest.TestCase):
 
 
 class ManifestEntryTests(unittest.TestCase):
+    def test_red_returns_uninvoked_entry_to_acceptance_before_running_cases(self):
+        value = new_product()
+        value["stories"] = value["stories"][:1]
+        suite = {"tests": [{"id": "T-1", "criteria": ["AC-1"], "entry_ids": ["VE-CLI"],
+                            "command": ["{python}", "acceptance/changes/C/case.py"]}]}
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "case.py").write_text("from storyloop.cli import dispatch\ndispatch([])\n")
+            change = {"change_id": "C", "product": value}
+            with patch("storyloop.verification_entries.suite_root", return_value=root), \
+                 self.assertRaises(StoryLoopError) as caught:
+                verification_entries.check_entry_use(root, change, suite)
+        self.assertEqual(caught.exception.code, "ORACLE_DEFECT")
+        self.assertTrue(caught.exception.details["fixture_repairable"])
+        self.assertEqual(caught.exception.details["defect_category"], "UNVERIFIED_ENTRY_USE")
+        self.assertEqual(caught.exception.details["test_ids"], ["T-1"])
+
+    def test_cli_entry_requires_subprocess_call_in_its_own_case(self):
+        value = new_product()
+        value["stories"] = value["stories"][:1]
+        suite = {"tests": [
+            {"id": "T-1", "criteria": ["AC-1"], "entry_ids": ["VE-CLI"],
+             "command": ["{python}", "acceptance/changes/C/one.py"]},
+            {"id": "T-2", "criteria": ["AC-1"], "entry_ids": ["VE-CLI"],
+             "command": ["{python}", "acceptance/changes/C/two.py"]}]}
+        sources = {
+            "one.py": "import subprocess\nsubprocess.run(['storyloop', 'run', '/tmp'])\n",
+            "two.py": "from storyloop.cli import dispatch\n# storyloop run\ndispatch([])\n"}
+        findings = verification_entries.entry_use_findings(value, suite, sources)
+        self.assertEqual([item["test_id"] for item in findings], ["T-2"])
+        self.assertEqual(findings[0]["entry"]["id"], "VE-CLI")
+
+    def test_public_function_entry_requires_import_and_call(self):
+        value = new_product()
+        value["stories"] = value["stories"][:1]
+        value["stories"][0]["verification_entries"][0].update(
+            kind="public_function", locator="storyloop.acceptance_repair.repair_smoke")
+        suite = {"tests": [{"id": "T-1", "criteria": ["AC-1"], "entry_ids": ["VE-CLI"],
+                            "command": ["{python}", "acceptance/changes/C/case.py"]}]}
+        sources = {"case.py": "from storyloop.acceptance_repair import repair_smoke\n"
+                              "repair_smoke('/tmp', 'C', 'reason')\n"}
+        self.assertEqual(verification_entries.entry_use_findings(value, suite, sources), [])
+        sources["case.py"] = ("import storyloop.acceptance_repair\n"
+                              "storyloop.acceptance_repair.repair_smoke('/tmp', 'C', 'reason')\n")
+        self.assertEqual(verification_entries.entry_use_findings(value, suite, sources), [])
+        sources["case.py"] = "# repair_smoke('/tmp', 'C', 'reason')\n"
+        self.assertEqual(len(verification_entries.entry_use_findings(value, suite, sources)), 1)
+        value["stories"][0]["verification_entries"][0]["locator"] = (
+            "storyloop.project_loop_guards.write_safely / read_only_call")
+        sources["case.py"] = ("from storyloop.project_loop_guards import read_only_call\n"
+                              "read_only_call('/tmp', 'C', lambda: None)\n")
+        self.assertEqual(verification_entries.entry_use_findings(value, suite, sources), [])
+
+    def test_invalid_case_syntax_is_a_repairable_entry_finding(self):
+        value = new_product()
+        value["stories"] = value["stories"][:1]
+        suite = {"tests": [{"id": "T-1", "criteria": ["AC-1"], "entry_ids": ["VE-CLI"],
+                            "command": ["{python}", "acceptance/changes/C/case.py"]}]}
+        findings = verification_entries.entry_use_findings(
+            value, suite, {"case.py": "def broken(:\n"})
+        self.assertEqual(findings[0]["test_id"], "T-1")
+        self.assertEqual(findings[0]["line"], 1)
+
     def test_role_schemas_accept_entry_fields(self):
         self.assertEqual(schema_errors(new_product(), schema_for("product", {})), [])
         self.assertEqual(schema_errors({"files": [], "manifest": manifest()},

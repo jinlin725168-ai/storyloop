@@ -25,6 +25,7 @@ from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, without_m
 from .smoke import suite_relative, suite_root as acceptance_suite_root
 from .smoke_runner import run_commands_at_commit, run_smoke_isolated
 from .storage import load_json
+from .verification_entries import check_entry_use
 
 if TYPE_CHECKING:  # the loop imports this module; the services type is only an annotation
     from .run_services import LoopServices
@@ -140,6 +141,8 @@ def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict
                           reuse: dict | None = None) -> dict:
     change_id = change["change_id"]
     try:
+        from .smoke import load_smoke_manifest
+        check_entry_use(project, change, load_smoke_manifest(project, change))
         red = read_only_call(
             project, change_id,
             lambda: run_smoke_isolated(project, change, expect_red=True, at_commit=state["contract_commit"]),

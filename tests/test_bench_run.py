@@ -4,13 +4,24 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from storyloop.bench_run import run_bench, compare_runs
+from storyloop.bench_run import _events, run_bench, compare_runs
 from tests.test_bench_case import case_fixture, stale_approval_fixture, v2_case_fixture
 from tests.test_bench_calibrate import calibration_fixture
 from storyloop.models import StoryLoopError
 
 
 class BenchRunTests(unittest.TestCase):
+    def test_automatic_acceptance_returns_do_not_use_nonroutine_budget(self):
+        routine, nonroutine, unknown = _events([
+            {"kind": "acceptance_repair", "automatic": True},
+            {"kind": "acceptance_repair", "automatic": True}])
+        self.assertEqual((sum(routine.values()), sum(nonroutine.values()), unknown), (0, 0, 0))
+        _, nonroutine, _ = _events([
+            {"kind": "acceptance_repair", "automatic": True},
+            {"kind": "acceptance_repair", "automatic": True},
+            {"kind": "acceptance_repair", "simulated": True}])
+        self.assertEqual(nonroutine["acceptance_repair"], 1)
+
     def test_modified_approved_v2_contract_is_rejected_before_adapter(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
