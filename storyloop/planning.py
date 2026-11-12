@@ -37,8 +37,8 @@ def ensure_routing_plan(project: Path, change: dict, state: dict, services,
             raise
         command = shlex.join(['storyloop', 'replan', str(project), '--change', change['change_id'],
                               '--reason', 'Correct the plan evidence'])
-        return pause(project, state, 'NEEDS_INPUT', phase='planning',
-                     error=str(exc), questions=[f'Design plan evidence needs correction: {exc}'],
+        return pause(project, state, 'DESIGN_REVISION_REQUIRED', phase='planning',
+                     error=str(exc),
                      next=f'{command}; then rerun storyloop run')
 
 

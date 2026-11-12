@@ -33,6 +33,35 @@ class BindingTests(unittest.TestCase):
 class DesignApprovalTests(unittest.TestCase):
     setUp = test_routing_state.RunRoutingTests.setUp
 
+    def test_invalid_design_evidence_stops_for_replan_and_replan_recovers(self):
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            if len(requests) <= 2:
+                response['options'][0]['symbols'] = [
+                    {'path': 'app/service.py', 'symbol': 'absent_at_contract_commit'}]
+            return response
+
+        services = LoopServices(lambda p, c: smoke_payload(self.identifier),
+                                lambda p, c: self.fail('implementation must not start'),
+                                passing_review, design=design)
+        stopped = run_change(self.root, self.identifier, services)
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(stopped['status'], 'DESIGN_REVISION_REQUIRED')
+        self.assertIn('Declared symbol is absent at the contract commit',
+                      stopped['stop']['blocker'])
+        self.assertIn('storyloop replan', stopped['next'])
+        self.assertEqual(load_run_state(self.root, self.identifier)['status'],
+                         'DESIGN_REVISION_REQUIRED')
+        replanned = approvals.replan(self.root, self.identifier, 'Correct the plan evidence')
+        self.assertEqual(replanned['status'], 'DESIGN_REVISION_REQUIRED')
+        self.assertEqual(replanned['intervention_events'][-1]['kind'], 'replan')
+        self.assertEqual(run_change(self.root, self.identifier, services)['status'],
+                         'DESIGN_APPROVAL_REQUIRED')
+        self.assertEqual(len(requests), 3)
+
     def start(self, response=None):
         self.calls = []
         def forbidden(*args):

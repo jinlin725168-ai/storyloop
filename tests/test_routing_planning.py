@@ -271,6 +271,7 @@ class PlanningTests(unittest.TestCase):
         self.assertEqual(self.state['routing']['effective_tier'], 'heavy')
 
     def test_absent_scope_symbol_retries_design_then_stops_with_evidence(self):
+        self.state['status'] = 'IMPLEMENTING'
         self.state['routing'].update(initial_tier='heavy', effective_tier='heavy')
         requests = []
 
@@ -286,10 +287,12 @@ class PlanningTests(unittest.TestCase):
         self.assertEqual(len(requests), 2)
         self.assertIn('Declared symbol is absent at the contract commit',
                       requests[1]['validation_errors'][0])
-        self.assertEqual(stopped['status'], 'NEEDS_INPUT')
+        self.assertEqual(stopped['status'], 'DESIGN_REVISION_REQUIRED')
         self.assertIn('Declared symbol is absent at the contract commit', stopped['error'])
         self.assertIn('storyloop replan', stopped['next'])
-        self.assertEqual(self.state['status'], 'NEEDS_INPUT')
+        self.assertIn('Declared symbol is absent at the contract commit',
+                      stopped['stop']['blocker'])
+        self.assertEqual(self.state['status'], 'DESIGN_REVISION_REQUIRED')
 
     def test_absent_scope_symbol_can_be_corrected_on_semantic_retry(self):
         self.state['routing'].update(initial_tier='heavy', effective_tier='heavy')
