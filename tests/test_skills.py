@@ -154,9 +154,9 @@ class OracleCraftTests(unittest.TestCase):
         self.assertIn("root_cause", implement)
         self.assertIn('failure_evidence.source is "review"', acceptance)
 
-    def test_oracle_craft_is_version_1_1_3(self):
+    def test_oracle_craft_is_version_1_1_4(self):
         from storyloop.skills import packaged_skills
-        self.assertEqual(packaged_skills()["oracle-craft"]["version"], "1.1.3")
+        self.assertEqual(packaged_skills()["oracle-craft"]["version"], "1.1.4")
 
     def test_oracle_skill_does_not_require_exit_two_for_unittest_errors(self):
         with tempfile.TemporaryDirectory() as folder:

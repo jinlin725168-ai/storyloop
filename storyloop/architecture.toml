@@ -95,6 +95,7 @@ rank = 7
 "baseline" = { module = "evidence_kernel", zone = "base", split = "D" }
 "project_boundaries" = { module = "evidence_kernel", zone = "base" }
 "smoke_runner" = { module = "evidence_kernel", zone = "base" }
+"acceptance_defects" = { module = "evidence_kernel", zone = "base" }
 "self_harness_preflight" = { module = "evidence_kernel", zone = "base" }
 "oracle_counts" = { module = "evidence_kernel", zone = "base" }
 "project_loop_support" = { module = "evidence_kernel", zone = "base" }

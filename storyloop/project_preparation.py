@@ -21,6 +21,7 @@ from .smoke import (RED_EVIDENCE, install_smoke_suite, load_smoke_manifest, prot
                     suite_root as acceptance_suite_root)
 from .smoke_runner import run_commands_at_commit, run_smoke_isolated
 from .storage import load_json, write_bytes_atomic
+from .verification_entries import check_entry_use
 if TYPE_CHECKING:
     from .run_services import LoopServices
 
@@ -121,6 +122,7 @@ def _ensure_red_evidence(project: Path, change: dict, contract_commit: str,
     """RED is proven on the contract commit plus the current suite: never on the workspace, which after a
     stop may already hold implementation edits that would make the new behaviour look present."""
     change_id = change["change_id"]
+    check_entry_use(project, change, load_smoke_manifest(project, change))
     path = project / ".storyloop/evidence" / change_id / RED_EVIDENCE
     if path.exists() and not refresh and load_json(path).get("status") == "RED":
         return read_red_evidence(project, change_id)

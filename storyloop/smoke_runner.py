@@ -26,6 +26,9 @@ from .processutil import redact, redaction_prefix, run_process
 from .smoke import (RED_EVIDENCE, RESULT_EVIDENCE, load_smoke_manifest, protection_path, smoke_digests,
                     suite_relative, suite_root)
 from .storage import load_json, write_json
+from .acceptance_defects import (red_fixture_category as _red_fixture_category,
+                                 red_defect_context as _red_defect_context,
+                                 red_failure_classification as _red_failure_classification)
 
 
 def run_smoke(
@@ -124,18 +127,27 @@ def _judge_red(results: list[dict], manifest: dict, change: dict) -> None:
                            {"precondition"} for item in judged)
         message = ("Smoke RED proof failed a fixture precondition" if precondition else
                    "Smoke RED proof contains acceptance fixture errors")
+        broken = [item for item in judged if item["status"] == "ERROR" or (
+            item["status"] == "FAIL" and (item.get("counts") or {}).get("executed") == 0)]
+        category = _red_fixture_category(broken)
         raise StoryLoopError(message, code="ORACLE_DEFECT",
-                             details={"fixture_repairable": True, "results": tails})
+                             details={"fixture_repairable": True, "results": tails,
+                                      **_red_defect_context(manifest, change, broken, category)})
     expects_red = {criterion["id"]: criterion_expects_red(criterion)
                    for story in change["product"]["stories"] for criterion in story["acceptance"]}
     failed = {criterion for item in judged if item["status"] == "FAIL" for criterion in item["criteria"]}
     covered = {criterion for item in judged for criterion in item["criteria"]}
     must_hold = sorted(c for c in covered if not expects_red[c] and c in failed)
     if must_hold:
+        offending = [item for item in judged if item["status"] == "FAIL"
+                     and set(item["criteria"]) & set(must_hold)]
         raise StoryLoopError(
             "Criteria that must already hold fail on the code before implementation: "
             + ", ".join(must_hold) + " (the tests are wrong, not the code)",
-            code="ORACLE_DEFECT", details={"criteria_failing": must_hold, "results": tails})
+            code="ORACLE_DEFECT", details={"criteria_failing": must_hold, "results": tails,
+                                           "fixture_repairable": True,
+                                           **_red_defect_context(manifest, change, offending,
+                                                                 "MUST_HOLD_RED")})
     green = sorted(c for c in covered if expects_red[c] and c not in failed)
     if green:
         raise StoryLoopError(
@@ -154,22 +166,6 @@ def _tail(result: dict) -> dict:
 def _diagnostic_stages(result: dict) -> list[str]:
     return [item for item in (result.get("counts") or {}).get("diagnostics", [])
             if isinstance(item, str)]
-
-
-def _red_failure_classification(judged: list[dict]) -> str | None:
-    """Classify broken RED checks by concrete execution signals, not ERROR status alone."""
-    broken = [item for item in judged if item["status"] == "ERROR" or (
-        item["status"] == "FAIL" and (item.get("counts") or {}).get("executed") == 0)]
-    if not broken:
-        return None
-    for item in broken:
-        diagnostics = (item.get("counts") or {}).get("diagnostics") or []
-        isolation = any(isinstance(diag, dict) and str(diag.get("message", "")).startswith(
-            "ImportIsolationError:") for diag in diagnostics)
-        if (item.get("timed_out") or item.get("truncated") or item.get("process_error")
-                or item.get("returncode") is None or isolation):
-            return "environment"
-    return "oracle"
 
 
 def run_smoke_isolated(project: Path, change: dict, expect_red: bool = False,

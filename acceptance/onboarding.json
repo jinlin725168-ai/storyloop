@@ -25,6 +25,7 @@
       "source_files": [
         "storyloop/__init__.py",
         "storyloop/__main__.py",
+        "storyloop/acceptance_defects.py",
         "storyloop/acceptance_repair.py",
         "storyloop/adapter_capabilities.py",
         "storyloop/adapter_profiles.py",

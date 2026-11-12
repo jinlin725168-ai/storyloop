@@ -1,6 +1,6 @@
 ---
 name: oracle-craft
-version: 1.1.3
+version: 1.1.4
 roles: [product, acceptance, design, review]
 description: 如何写 StoryLoop 的判据与公共验证入口：行类型、测试有效性、结构断言、执行器退出码。product、acceptance、design、review 角色使用。
 ---
@@ -33,6 +33,12 @@ description: 如何写 StoryLoop 的判据与公共验证入口：行类型、�
 - 好：经 `storyloop status <project> --change <id> --json` 读取 `stop.options[].action`，用合同给出的字面预期断言某个停点的下一步。
 - 坏：只断言文件存在、私有路由函数被调用一次，或根据生产代码同一算法重算 expected；这些不能证明外部行为。
 - 尽量经真实公共接口观察；只在外部服务、时钟等系统边界替换依赖，不 mock StoryLoop 自己的守卫、路由或候选行为。测试前提失败须作为夹具问题报告，不能伪装成 RED。
+
+acceptance 提交前自查三项，发现问题先改套件；引擎的确定性校验和自动退回仍是最终规则：
+
+- `regression`、`state_preservation`、`non_goal` 行在实现前必须已通过；若 RED 中失败，检查是否把新行为断言误放在必须保持行。
+- manifest 的用例须在声明的 case roots 内；执行器需要的源文件须列入 `source_files`，让隔离镜像能加载。
+- `entry_ids` 是引用，不等于调用：CLI/停点 JSON 入口要由测试进程经 `subprocess` 调用声明的公开命令；公共函数入口要显式导入并调用该符号。不要只写注释、字符串或直接调用内部 `dispatch` / `build_stop` 冒充公开入口。
 
 同一 AC 连续被判强度不足时，完整判据规格须一次写明 `inputs`、`preconditions`、已批准 `entry`、`expected`、`negative_boundary` 与 `contract_plan` 对应关系；不得在修复理由中新增合同要求。
 

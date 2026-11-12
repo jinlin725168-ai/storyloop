@@ -43,6 +43,7 @@
 |  | `project_loop_support` | 底座 | 为外部闭环提供控制面完整性与文件枚举辅助 | `control_digest`、`relative_files`、`run_path`、`save_run`、`set_change_status` |
 |  | `project_receipt` | 底座 | 崩溃安全地核验并持久化明确的功能合并回执字节 | `authoritative_report`、`ensure_merge_receipt`、`recover_completed_merge`、`verify_verified_artifacts` |
 |  | `smoke_runner` | 底座 | 以 CI 中立方式执行受保护冒烟清单 | `candidate_digest`、`implementation_digest`、`run_commands`、`run_commands_at_commit`、`run_commands_isolated`、`run_smoke_isolated`、`visible_paths` |
+|  | `acceptance_defects` | 底座 | 按 RED 执行证据归类夹具缺陷并整理自动修复输入 | `red_failure_classification`、`red_fixture_category`、`red_defect_context` |
 |  | `self_harness_preflight` | 底座 | 拒绝自举验收用例从候选镜像导入旧 helper | `preflight_self_harness` |
 | 代理网关 | `capability_protocol` | 底座 | 项目代理适配器的能力握手、响应与缓存格式 | `PROTOCOL`、`ROLES`、`probe`、`lane_metadata` |
 |  | `agent_transport` | 底座 | 执行已组装的代理请求并校验角色回答 | `conform`、`invoke` |

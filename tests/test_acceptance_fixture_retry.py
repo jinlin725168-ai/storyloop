@@ -3,12 +3,15 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from storyloop.acceptance_repair import repair_smoke
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
 from storyloop.project_loop import load_run_state, run_change
 from storyloop.stop_report import build_stop
+from storyloop.models import StoryLoopError
+from storyloop.smoke_runner import _judge_red
 from tests.routing_support import legacy_create_change
 from tests.support import product
 from tests.test_baseline_behavior import git, repository
@@ -42,12 +45,143 @@ def precondition_error(change_id: str) -> dict:
 
 
 class AcceptanceFixtureRetryTests(unittest.TestCase):
-    def approved(self, root: Path, overrides: dict | None = None) -> str:
+    def approved(self, root: Path, overrides: dict | None = None,
+                 contract: dict | None = None) -> str:
         repository(root)
         bootstrap_project(root, {"test_commands": [], **(overrides or {})})
-        change_id = legacy_create_change(root, "orders", product())["change_id"]
+        change_id = legacy_create_change(root, "orders", contract or product())["change_id"]
         approve_change(root, change_id)
         return change_id
+
+    def test_must_hold_red_is_rewritten_automatically(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            contract = product()
+            contract["stories"][0]["acceptance"][0]["row_type"] = "regression"
+            change_id = self.approved(root, contract=contract)
+            calls = []
+
+            def generate(project, request):
+                calls.append(request)
+                answer = smoke_payload(change_id)
+                if len(calls) > 1:
+                    answer["files"][0]["content"] = "raise SystemExit(0)\n"
+                return answer
+
+            result = run_change(root, change_id, services(change_id, generate))
+            self.assertEqual(result["status"], "PASSED", result)
+            state = load_run_state(root, change_id)
+            self.assertEqual(len(state["repairs"]), 1)
+            self.assertTrue(state["repairs"][0]["automatic"])
+            self.assertEqual(calls[1]["repair"]["failure_evidence"]["defect_category"],
+                             "MUST_HOLD_RED")
+            self.assertEqual(calls[1]["repair"]["failure_evidence"]["diagnostics"][0]["case_id"],
+                             "SMOKE-1")
+            self.assertEqual(state["intervention_events"][-1]["automatic"], True)
+
+    def test_third_must_hold_red_stops_after_two_automatic_rewrites(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            contract = product()
+            contract["stories"][0]["acceptance"][0]["row_type"] = "regression"
+            change_id = self.approved(root, contract=contract)
+            calls = []
+
+            def generate(project, request):
+                calls.append(request)
+                answer = smoke_payload(change_id)
+                answer["files"][0]["content"] += f"# retry {len(calls)}\n"
+                return answer
+
+            result = run_change(root, change_id, services(change_id, generate))
+            self.assertEqual(result["status"], "ORACLE_DEFECT", result)
+            state = load_run_state(root, change_id)
+            self.assertEqual(len(calls), 3)
+            self.assertEqual(sum(r.get("automatic") is True for r in state["repairs"]), 2)
+            self.assertTrue(all(event.get("automatic") is True for event in
+                                state["intervention_events"] if event["kind"] == "acceptance_repair"))
+
+    def test_case_root_violation_is_returned_to_acceptance_automatically(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            change_id = self.approved(root)
+            calls = []
+
+            def generate(project, request):
+                calls.append(request)
+                answer = smoke_payload(change_id)
+                answer["files"][0]["content"] += f"# revision {len(calls)}\n"
+                return answer
+
+            diagnostic = {"case_id": "launcher", "kind": "error",
+                          "message": "StoryLoopError: Case is outside declared roots",
+                          "traceback_tail": ""}
+            evidence = {"fixture_repairable": True,
+                        "defect_category": "MANIFEST_OR_SOURCE_BOUNDARY",
+                        "test_ids": ["SMOKE-1"], "diagnostics": [diagnostic],
+                        "results": [{"id": "SMOKE-1", "status": "ERROR",
+                                     "diagnostics": ["launch", diagnostic]}]}
+            error = StoryLoopError("Case is outside declared roots", code="ORACLE_DEFECT",
+                                   details=evidence)
+            with patch("storyloop.project_preparation._ensure_red_evidence", side_effect=error):
+                result = run_change(root, change_id, services(change_id, generate))
+            self.assertEqual(result["status"], "PASSED", result)
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(calls[1]["repair"]["failure_evidence"]["defect_category"],
+                             "MANIFEST_OR_SOURCE_BOUNDARY")
+            self.assertEqual(calls[1]["repair"]["failure_evidence"]["diagnostics"][0]["case_id"],
+                             "launcher")
+            self.assertTrue(load_run_state(root, change_id)["repairs"][0]["automatic"])
+
+    def test_missing_source_module_is_a_repairable_suite_boundary(self):
+        contract = product()
+        manifest = {"tests": [{"id": "T-1", "criteria": ["AC-1"]}]}
+        row = {"id": "T-1", "criteria": ["AC-1"], "status": "ERROR", "returncode": 1,
+               "timed_out": False, "stdout": "", "stderr": "",
+               "counts": {"executed": 1, "failed": 0, "errors": 1,
+                          "diagnostics": [{"case_id": "Case.test_one", "kind": "error",
+                                           "message": "ModuleNotFoundError: No module named 'probe'",
+                                           "traceback_tail": "acceptance/changes/C/test.py:5"}]}}
+        with self.assertRaises(StoryLoopError) as caught:
+            _judge_red([row], manifest, {"product": contract})
+        self.assertEqual(caught.exception.details["defect_category"], "MANIFEST_OR_SOURCE_BOUNDARY")
+        self.assertTrue(caught.exception.details["fixture_repairable"])
+        row["counts"]["diagnostics"] = []
+        row["stderr"] = "ModuleNotFoundError: No module named 'probe'"
+        with self.assertRaises(StoryLoopError) as caught:
+            _judge_red([row], manifest, {"product": contract})
+        self.assertEqual(caught.exception.details["defect_category"], "MANIFEST_OR_SOURCE_BOUNDARY")
+
+    def test_uninvoked_entry_is_returned_to_acceptance_automatically(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            contract = product()
+            contract["stories"][0]["verification_entries"] = [{
+                "id": "VE-STATUS", "kind": "cli", "locator": "storyloop status <project> --json",
+                "observable": "status JSON", "reason": "public command"}]
+            change_id = self.approved(root, contract=contract)
+            calls = []
+
+            def generate(project, request):
+                calls.append(request)
+                answer = smoke_payload(change_id)
+                answer["manifest"]["tests"][0]["entry_ids"] = ["VE-STATUS"]
+                if len(calls) > 1:
+                    answer["files"][0]["content"] = (
+                        "import subprocess, sys\n"
+                        "subprocess.run([sys.executable, '-m', 'storyloop', 'status', '.', "
+                        "'--change', 'C', '--json'], capture_output=True)\n"
+                        "raise SystemExit(1)\n")
+                return answer
+
+            run_change(root, change_id, services(change_id, generate))
+            state = load_run_state(root, change_id)
+            self.assertGreaterEqual(len(calls), 2)
+            self.assertEqual(calls[1]["repair"]["failure_evidence"]["defect_category"],
+                             "UNVERIFIED_ENTRY_USE")
+            self.assertEqual(calls[1]["repair"]["failure_evidence"]["entries"][0]["id"],
+                             "VE-STATUS")
+            self.assertTrue(state["repairs"][0]["automatic"])
 
     def test_approve_repairs_two_fixture_errors_then_proves_red(self):
         with tempfile.TemporaryDirectory() as folder:
