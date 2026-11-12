@@ -100,13 +100,15 @@ class InvariantGuardTests(unittest.TestCase):
 
     def test_i4_environment_exit_and_timeout_cannot_prove_red(self):
         with tempfile.TemporaryDirectory() as folder:
-            for script in ["raise SystemExit(2)", "import time; time.sleep(10)"]:
+            for script, code in [("raise SystemExit(2)", "ORACLE_DEFECT"),
+                                 ("import time; time.sleep(10)", "BLOCKED")]:
                 with self.subTest(script=script):
                     result = run_commands(Path(folder), [[sys.executable, "-c", script]], 1)
                     row = {**result["results"][0], "criteria": ["AC-1"]}
                     self.assertEqual(row["status"], "ERROR")
-                    with self.assertRaisesRegex(StoryLoopError, "environment error"):
+                    with self.assertRaises(StoryLoopError) as caught:
                         _judge_red([row], {"tests": [{"id": row["id"]}]}, {})
+                    self.assertEqual(caught.exception.code, code)
 
     def test_i4_zero_execution_and_skipping_cannot_prove_red(self):
         change = {"product": {"stories": [{"acceptance": [{"id": "AC-1"}]}]}}

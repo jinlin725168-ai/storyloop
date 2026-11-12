@@ -120,7 +120,7 @@ class AcceptancePreconditionTests(unittest.TestCase):
                 _run_test(root, test, [])
             self.assertEqual(caught.exception.code, "BLOCKED")
 
-    def test_environment_error_stop_shows_failed_case_output(self):
+    def test_fixture_error_stop_shows_failed_case_output(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             test = {**_test("cases/b.py"),
@@ -128,9 +128,10 @@ class AcceptancePreconditionTests(unittest.TestCase):
             result = _run_test(root, test, [])
             with self.assertRaises(StoryLoopError) as caught:
                 _judge_red([result], {"tests": [test]}, {"product": product()})
-            self.assertEqual(caught.exception.code, "BLOCKED")
+            self.assertEqual(caught.exception.code, "ORACLE_DEFECT")
+            self.assertTrue(caught.exception.details["fixture_repairable"])
             stop = build_stop(root, {"change_id": "FEAT-fixture", "status": "CONTRACT_COMMITTED"},
-                              "BLOCKED", {"acceptance": caught.exception.details})
+                              "ORACLE_DEFECT", {"acceptance": caught.exception.details})
             self.assertIn("environment marker", "\n".join(stop["evidence"]))
 
     def test_environment_error_still_dominates_a_fixture_precondition(self):

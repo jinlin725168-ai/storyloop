@@ -12,13 +12,69 @@ from storyloop.baseline import bootstrap_project
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.smoke import install_smoke_suite, load_smoke_manifest
-from storyloop.smoke_runner import _run_test, run_smoke_isolated
+from storyloop.smoke_runner import _judge_red, _red_failure_classification, _run_test, run_smoke_isolated
 from storyloop.processutil import redact
 from tests.support import product
 from tests.test_baseline_behavior import repository
 
 
 NOW = datetime(2026, 9, 16, tzinfo=timezone.utc)
+
+
+class RedFailureClassificationTests(unittest.TestCase):
+    def judge(self, result):
+        manifest = {"tests": [{"id": result["id"], "tier": "fast"}]}
+        change = {"product": {"stories": [{"acceptance": [{"id": "AC-1"}]}]}}
+        with self.assertRaises(StoryLoopError) as caught:
+            _judge_red([result], manifest, change)
+        return caught.exception
+
+    def row(self, diagnostics, *, executed=1, failed=0, errors=1, returncode=2,
+            timed_out=False):
+        return {"id": "SMOKE-1", "criteria": ["AC-1"], "status": "ERROR",
+                "returncode": returncode, "timed_out": timed_out,
+                "counts": {"executed": executed, "failed": failed, "errors": errors,
+                           "diagnostics": diagnostics}, "stdout": "", "stderr": ""}
+
+    def test_case_traceback_and_mixed_failures_are_fixture_defects(self):
+        for name, message in (("dogfood3", "Business subprocess failed"),
+                              ("dogfood9", "AssertionError: 'UNEXPECTED' != 'PASSED'")):
+            with self.subTest(case=name):
+                diagnostic = {"case_id": "storyloop_protected_case.Case.test_path",
+                              "kind": "error", "message": message,
+                              "traceback_tail": "acceptance/changes/X/test_red.py:20 in test_path"}
+                row = self.row([diagnostic], executed=3, failed=1, errors=1)
+                self.assertEqual(_red_failure_classification([row]), "oracle")
+                error = self.judge(row)
+                self.assertEqual(error.code, "ORACLE_DEFECT")
+                self.assertTrue(error.details["fixture_repairable"])
+
+    def test_declared_case_root_violation_is_fixture_defect(self):
+        diagnostic = {"case_id": "launcher", "kind": "error",
+                      "message": "StoryLoopError: Case is outside declared roots",
+                      "traceback_tail": ""}
+        row = self.row(["launch", diagnostic], executed=0)
+        self.assertEqual(_red_failure_classification([row]), "oracle")
+        error = self.judge(row)
+        self.assertEqual(error.code, "ORACLE_DEFECT")
+        self.assertTrue(error.details["fixture_repairable"])
+
+    def test_timeout_missing_command_and_import_isolation_remain_environment_errors(self):
+        isolation = {"case_id": "launcher", "kind": "error",
+                     "message": "ImportIsolationError: Untrusted helper installation",
+                     "traceback_tail": ""}
+        cases = [self.row(["runner"], timed_out=True),
+                 self.row(["runner"], returncode=None),
+                 self.row(["launch", isolation], executed=0)]
+        resource = self.row(["runner"])
+        resource["truncated"] = True
+        cases.append(resource)
+        for row in cases:
+            with self.subTest(row=row):
+                self.assertEqual(_red_failure_classification([row]), "environment")
+                error = self.judge(row)
+                self.assertEqual(error.code, "BLOCKED")
+                self.assertNotIn("fixture_repairable", error.details)
 
 
 class SmokeOutputLimitTests(unittest.TestCase):

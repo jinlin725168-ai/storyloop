@@ -115,26 +115,17 @@ def _judge_red(results: list[dict], manifest: dict, change: dict) -> None:
     if not judged:
         raise StoryLoopError("Smoke RED proof has no judged tests", code="ORACLE_DEFECT",
                              details={"results": tails})
-    fixture_errors = [item for item in judged if item["status"] == "ERROR" and set(
-        _diagnostic_stages(item)) == {"precondition"}]
-    all_test_errors = all(
-        item["status"] == "ERROR" and ((item.get("counts") or {}).get("executed") or 0) > 0
-        and (item.get("counts") or {}).get("errors") == (item.get("counts") or {}).get("executed")
-        and (item.get("counts") or {}).get("failed") == 0
-        and not set(_diagnostic_stages(item)) - {"precondition"}
-        and not item.get("timed_out") and item.get("returncode") in (1, 2)
-        for item in judged)
-    broken = [item for item in judged if item["status"] == "ERROR" or (
-        item["status"] == "FAIL" and (item.get("counts") or {}).get("executed") == 0)]
-    if any(item not in fixture_errors for item in broken):
-        if all_test_errors:
-            raise StoryLoopError("Smoke RED proof failed only with test errors",
-                                 code="ORACLE_DEFECT", details={"fixture_repairable": True, "results": tails})
+    classification = _red_failure_classification(judged)
+    if classification == "environment":
         raise StoryLoopError("Smoke RED proof encountered an environment error",
                              details={"results": tails})
-    if fixture_errors:
-        raise StoryLoopError("Smoke RED proof failed a fixture precondition",
-                             code="ORACLE_DEFECT", details={"fixture_repairable": True, "results": tails})
+    if classification == "oracle":
+        precondition = all(item["status"] == "ERROR" and set(_diagnostic_stages(item)) ==
+                           {"precondition"} for item in judged)
+        message = ("Smoke RED proof failed a fixture precondition" if precondition else
+                   "Smoke RED proof contains acceptance fixture errors")
+        raise StoryLoopError(message, code="ORACLE_DEFECT",
+                             details={"fixture_repairable": True, "results": tails})
     expects_red = {criterion["id"]: criterion_expects_red(criterion)
                    for story in change["product"]["stories"] for criterion in story["acceptance"]}
     failed = {criterion for item in judged if item["status"] == "FAIL" for criterion in item["criteria"]}
@@ -163,6 +154,22 @@ def _tail(result: dict) -> dict:
 def _diagnostic_stages(result: dict) -> list[str]:
     return [item for item in (result.get("counts") or {}).get("diagnostics", [])
             if isinstance(item, str)]
+
+
+def _red_failure_classification(judged: list[dict]) -> str | None:
+    """Classify broken RED checks by concrete execution signals, not ERROR status alone."""
+    broken = [item for item in judged if item["status"] == "ERROR" or (
+        item["status"] == "FAIL" and (item.get("counts") or {}).get("executed") == 0)]
+    if not broken:
+        return None
+    for item in broken:
+        diagnostics = (item.get("counts") or {}).get("diagnostics") or []
+        isolation = any(isinstance(diag, dict) and str(diag.get("message", "")).startswith(
+            "ImportIsolationError:") for diag in diagnostics)
+        if (item.get("timed_out") or item.get("truncated") or item.get("process_error")
+                or item.get("returncode") is None or isolation):
+            return "environment"
+    return "oracle"
 
 
 def run_smoke_isolated(project: Path, change: dict, expect_red: bool = False,
@@ -454,6 +461,10 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None,
         "stdout": redact(redaction_prefix(str(outcome.get("stdout", "")), 100_000)),
         "stderr": redact(redaction_prefix(str(outcome.get("stderr", "")), 100_000)),
     }
+    if outcome.get("truncated"):
+        result["truncated"] = True
+    if outcome.get("error") or outcome.get("contained") is not True:
+        result["process_error"] = True
     if capture_output_tail and status != "PASS":
         raw = outcome.get("output_tail") or {}
         stdout = redact(raw.get("stdout", ""))
