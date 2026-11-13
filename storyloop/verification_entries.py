@@ -152,7 +152,8 @@ def _uses_entry(entry: dict, tree: ast.AST) -> bool:
     if entry["kind"] in {"cli", "stop_json"}:
         match = re.search(r"\bstoryloop\s+([a-z][a-z0-9-]*)", entry["locator"])
         return bool(match and _calls_cli(tree, match.group(1)))
-    choices = [part.strip() for part in entry["locator"].split(" / ")]
+    # Locators may show a call signature, e.g. "pkg.mod.fn(project, role)"; match the dotted name.
+    choices = [re.sub(r"\s*\(.*$", "", part.strip()) for part in entry["locator"].split(" / ")]
     module, dot, first = choices[0].rpartition(".")
     return bool(dot and any(_calls_function(tree, module, symbol)
                             for symbol in [first, *choices[1:]]))

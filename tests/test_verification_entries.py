@@ -206,6 +206,24 @@ class ManifestEntryTests(unittest.TestCase):
                               "read_only_call('/tmp', 'C', lambda: None)\n")
         self.assertEqual(verification_entries.entry_use_findings(value, suite, sources), [])
 
+    def test_public_function_locator_may_show_its_signature(self):
+        # Self-iteration FIX-20261113-codex-resume-args: product wrote the call signature in the
+        # locator, and the real call inside an imported suite helper was never recognised.
+        value = new_product()
+        value["stories"] = value["stories"][:1]
+        value["stories"][0]["verification_entries"][0].update(
+            kind="public_function",
+            locator="storyloop.project_agents.invoke_project_agent(project, role, payload)")
+        suite = {"tests": [{"id": "T-1", "criteria": ["AC-1"], "entry_ids": ["VE-CLI"],
+                            "command": ["{python}", "acceptance/changes/C/case.py"]}]}
+        sources = {"case.py": "from probe import PROBE_PATH\n",
+                   "probe.py": "def main():\n"
+                               "    from storyloop.project_agents import invoke_project_agent\n"
+                               "    return invoke_project_agent('/tmp', 'implement', {})\n"}
+        self.assertEqual(verification_entries.entry_use_findings(value, suite, sources), [])
+        sources["probe.py"] = "PROBE_PATH = 'invoke_project_agent(project, role, payload)'\n"
+        self.assertEqual(len(verification_entries.entry_use_findings(value, suite, sources)), 1)
+
     def test_invalid_case_syntax_is_a_repairable_entry_finding(self):
         value = new_product()
         value["stories"] = value["stories"][:1]
