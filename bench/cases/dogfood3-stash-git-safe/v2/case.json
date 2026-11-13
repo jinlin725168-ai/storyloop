@@ -15,8 +15,8 @@
   "case_id": "dogfood3-stash-git-safe",
   "case_revision": "2.1",
   "case_version": 2,
-  "contract_sha256": "e637407a67257017b65affcb4894638ca6271cce63798b02324502784ae31d43",
-  "gold_sha256": "04bbdd1865396d347e144f4b5d775289f752724af32eabf94ae21cfa4ac9427d",
+  "contract_sha256": "f1b323fc5be7eba270b42864e14b02a9941a6424d82792856b6d70f4d7872e97",
+  "gold_sha256": "5e32c8d1c57d17ed4b623f98bab1babd6818739084ca40f2b2459c984a001edf",
   "legacy_seam": false,
   "python": {
     "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
