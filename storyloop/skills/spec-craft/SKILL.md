@@ -1,6 +1,6 @@
 ---
 name: spec-craft
-version: 1.4.1
+version: 1.4.2
 roles: [product]
 description: 与人共创需求和规格，产出需求文档和规格文档交给 StoryLoop；适用于“写需求”“需求共创”“帮我把这个想法写成规格”、write a spec、co-create requirements。AI 只引导和起草，值不值得做及例子的预期结果由人拍板。
 ---
@@ -31,6 +31,8 @@ description: 与人共创需求和规格，产出需求文档和规格文档交�
 ## 工作方式
 
 新合同的每个非 BASE 故事须写 `verification_entries`（`id`、`kind`、`locator`、`observable`、`reason`）。从现有最高层公共入口选择，说明哪些 AC 经该入口可观察；把入口交给人确认后才能批准合同。若没有可信入口或人有异议，留在规格澄清，不让验收或实现阶段另选入口。旧合同无此字段时沿用原流程。
+
+入口覆盖自检：对每条自动 AC 写非空 `entry_ids`，只引用同故事入口；逐条核对 `given/when/then` 的结果能否在所引入口的 `observable` 上看见。看不见就补充公共入口或修订 AC，并把选择交人确认；不能把入口缺口留给 design 阶段猜测。
 
 ### 需求决策树
 

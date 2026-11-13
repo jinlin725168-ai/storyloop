@@ -106,6 +106,13 @@ class SurveyUsesSkillTests(unittest.TestCase):
 
 
 class OracleCraftTests(unittest.TestCase):
+    def test_spec_craft_requires_entry_coverage_self_check(self):
+        skill = packaged_skills()['spec-craft']
+        self.assertEqual(skill['version'], '1.4.2')
+        content = (skill['root'] / 'SKILL.md').read_text(encoding='utf-8')
+        self.assertIn('入口覆盖自检', content)
+        self.assertIn('observable', content)
+
     def test_oracle_craft_ships_and_reaches_the_oracle_roles(self):
         self.assertIn("oracle-craft", packaged_skills())
         with tempfile.TemporaryDirectory() as folder:

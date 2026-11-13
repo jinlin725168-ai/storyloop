@@ -9,6 +9,7 @@ from .models import require, text
 from .principles import check_principles, load_principles
 from .path_security import forbidden_path_root, repository_relative, safe_target
 from .project_boundaries import _category, _inside
+from .project_loop_guards import exists_at
 from .role_schemas import schema_errors, schema_for
 from .routing_evidence import measure_scope
 from .smoke import smoke_digests
@@ -41,6 +42,13 @@ def validate_plan(answer: object, project: Path, change: dict, state: dict) -> d
         from . import smoke
         selected = next(option for option in options if option['id'] == answer['main_option'])
         validate_entry_paths(selected, change['product'], smoke.load_smoke_manifest(project, change))
+        scope_paths = set(selected['touched'] + selected['creates'])
+        for entry_path in selected['entry_paths']:
+            path = entry_path['path']
+            if path not in scope_paths:
+                safe_target(project, path, 'entry path')
+                require(exists_at(project, state['contract_commit'], path),
+                        'Unchanged entry path must exist at the contract commit')
     binding = {'product_digest': digest(change['product']),
                'source_commit': state['contract_commit'],
                'scope_digest': digest([{ 'id': o['id'], **option_scope(o)} for o in options]),

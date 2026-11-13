@@ -222,7 +222,11 @@ Path(sys.argv[2]).write_text(json.dumps({'status': 'PASSED', 'engine_import': OR
             actions.append("acceptance_role")
             return {"status": "PASSED"}
 
-        common = dict(create_change=lambda *_args, **_kwargs: {"change_id": contract["change_id"]},
+        def frozen_case_change(*_args, **kwargs):
+            self.assertFalse(kwargs["require_entry_coverage"])
+            return {"change_id": contract["change_id"]}
+
+        common = dict(create_change=frozen_case_change,
                       approve_change=lambda *_args, **_kwargs: actions.append("approve"),
                       load_change=lambda *_: {"change_id": contract["change_id"]},
                       install_smoke_suite=lambda *_: actions.append("install"),

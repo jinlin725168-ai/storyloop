@@ -39,6 +39,9 @@ def _approve_locked(project, change_id, approved_by, now, tier) -> dict:
     base = nature_of(product) == "base"
     if not base:
         require(bool(product["stories"]), "Approval requires at least one user story")
+        if state.get("entry_coverage_required") is True:
+            from .verification_entries import validate_criterion_entry_ids
+            validate_criterion_entry_ids(product)
         blocking = blocking_items(evaluate_checklist(
             product, project, require_entries=state.get("verification_entries_required") is True))
         require(not blocking, "Requirement checklist has blocking items; revise the contract: "

@@ -87,6 +87,7 @@ ACCEPTANCE_TEST = _obj({"id": STRING, "criteria": STRINGS, "command": STRINGS,
                         "tier": _nullable({"type": "string", "enum": ["fast", "heavy"]})})
 CRITERION = _obj({"id": STRING, "given": STRING, "when": STRING, "then": STRING,
                   "kind": {"type": "string", "enum": ["automated", "manual"]},
+                  "entry_ids": _nullable(STRINGS),
                   "row_type": _nullable(ROW_TYPE),
                   "oracle_class": _nullable({"type": "string", "enum": ["auto-fast", "auto-heavy", "manual"]}),
                   "consumers": _nullable(STRINGS),

@@ -43,6 +43,32 @@ def manifest() -> dict:
 
 
 class ContractEntryTests(unittest.TestCase):
+    def test_approval_rejects_missing_automatic_ac_entry_ids(self):
+        from storyloop.approvals import approve_change
+        from storyloop.baseline import bootstrap_project
+        from storyloop.changes import create_change
+        from tests.test_baseline_behavior import repository
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            draft = create_change(root, "idea", new_product(),
+                                  require_verification_entries=True)
+            with self.assertRaisesRegex(StoryLoopError, "entry_ids"):
+                approve_change(root, draft["change_id"])
+
+    def test_automatic_ac_entry_ids_must_belong_to_its_story(self):
+        from storyloop.verification_entries import validate_criterion_entry_ids
+
+        value = new_product()
+        value["stories"][0]["acceptance"][0]["entry_ids"] = ["VE-HTTP"]
+        value["stories"][1]["acceptance"][0]["entry_ids"] = ["VE-HTTP"]
+        with self.assertRaisesRegex(StoryLoopError, "same story"):
+            validate_criterion_entry_ids(value)
+        value["stories"][0]["acceptance"][0]["entry_ids"] = ["VE-CLI"]
+        self.assertIsNone(validate_criterion_entry_ids(value))
+
     def test_new_change_cannot_be_approved_without_entries(self):
         from storyloop.approvals import approve_change
         from storyloop.baseline import bootstrap_project
@@ -215,6 +241,35 @@ class ManifestEntryTests(unittest.TestCase):
 
 
 class PlanEntryTests(unittest.TestCase):
+    def test_must_hold_entry_path_may_observe_unchanged_file(self):
+        from storyloop.verification_entries import validate_entry_paths
+
+        value = new_product()
+        value["stories"] = value["stories"][:1]
+        value["stories"][0]["acceptance"][0]["row_type"] = "regression"
+        suite = {"tests": [manifest()["tests"][0]]}
+        option = {"touched": ["app/service.py"], "creates": [], "entry_paths": [
+            {"entry_id": "VE-CLI", "criterion_ids": ["AC-1"],
+             "path": "app/public_status.py", "via": "CLI reads unchanged status view"}]}
+
+        self.assertIsNone(validate_entry_paths(option, value, suite))
+
+    def test_expect_red_entry_path_must_reach_a_changed_file(self):
+        from storyloop.verification_entries import validate_entry_paths
+
+        value = new_product()
+        value["stories"] = value["stories"][:1]
+        suite = {"tests": [manifest()["tests"][0]]}
+        option = {"touched": ["app/service.py"], "creates": [], "entry_paths": [
+            {"entry_id": "VE-CLI", "criterion_ids": ["AC-1"],
+             "path": "app/public_status.py", "via": "Unchanged status view"}]}
+
+        with self.assertRaisesRegex(StoryLoopError, "touched/creates"):
+            validate_entry_paths(option, value, suite)
+        option["entry_paths"].append({"entry_id": "VE-CLI", "criterion_ids": ["AC-1"],
+                                      "path": "app/service.py", "via": "CLI reaches changed service"})
+        self.assertIsNone(validate_entry_paths(option, value, suite))
+
     def test_selected_option_covers_automatic_entry_pairs_and_scope(self):
         from storyloop.verification_entries import validate_entry_paths
 
@@ -254,6 +309,22 @@ class PlanningEntryIntegrationTests(unittest.TestCase):
         self.change["product"]["stories"][0]["verification_entries"] = [
             {"id": "VE-CLI", "kind": "cli", "locator": "app run", "observable": "result",
              "reason": "public command"}]
+
+    def test_must_hold_observation_path_is_existing_unchanged_file(self):
+        from storyloop.planning import validate_plan
+
+        self._new_contract()
+        self.change["product"]["stories"][0]["acceptance"][0]["row_type"] = "regression"
+        suite = {"version": 1, "tests": [manifest()["tests"][0]]}
+        response = answer()
+        response["options"][0]["entry_paths"] = [{"entry_id": "VE-CLI",
+            "criterion_ids": ["AC-1"], "path": "tests/test_service.py",
+            "via": "CLI observes existing service behavior"}]
+        with patch("storyloop.smoke.load_smoke_manifest", return_value=suite):
+            self.assertEqual(validate_plan(response, self.root, self.change, self.state)["status"], "DONE")
+            response["options"][0]["entry_paths"][0]["path"] = "app/missing.py"
+            with self.assertRaisesRegex(StoryLoopError, "contract commit"):
+                validate_plan(response, self.root, self.change, self.state)
 
     def test_selected_option_requires_entry_paths_and_scoped_file(self):
         self._new_contract()

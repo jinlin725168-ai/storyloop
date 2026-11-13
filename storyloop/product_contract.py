@@ -49,7 +49,7 @@ def _acceptance(value: object, seen: set, consumers: set) -> None:
     require(isinstance(value, list) and bool(value), "Story needs acceptance criteria")
     for criterion in value:
         fields(criterion, {"id", "given", "when", "then", "kind"},
-               {"row_type", "oracle_class", "consumers", "reproduces_defect"})
+               {"row_type", "oracle_class", "consumers", "reproduces_defect", "entry_ids"})
         key = identifier(criterion["id"], "criterion id")
         require(key not in seen, "Duplicate acceptance id")
         seen.add(key)
@@ -60,6 +60,10 @@ def _acceptance(value: object, seen: set, consumers: set) -> None:
 
 
 def _criterion_extras(criterion: dict, consumers: set) -> None:
+    if "entry_ids" in criterion:
+        entry_ids = strings(criterion["entry_ids"], "criterion entry_ids")
+        require(bool(entry_ids) and len(entry_ids) == len(set(entry_ids)),
+                "Criterion entry_ids must be nonempty and unique")
     require(criterion.get("row_type", "positive") in ROW_TYPES, "Invalid acceptance row_type")
     if "oracle_class" in criterion:
         require(criterion["oracle_class"] in ORACLE_CLASSES, "Invalid acceptance oracle_class")
