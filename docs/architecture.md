@@ -1,31 +1,48 @@
 # 架构与运行机制
 
-对应引擎版本：0.1.0，核对日期 2026-10-11。StoryLoop 把产品共创、验收程序和实现过程分开，用可恢复的程序状态连接它们。它是 CLI 工程工具，作用于一个已有的 Git 仓库（`storyloop init <仓库>`）；没有远程服务器或生产部署功能。早期的独立实例模式与 v2 Stage/DAG 引擎已删除，最后的代码保存在本地 tag `archive/legacy-modes`。
+对应引擎版本：0.1.0，核对日期 2026-10-11；2026-11-13 按验证入口与评测底座设计更新分层与链路。StoryLoop 把产品共创、验收程序和实现过程分开，用可恢复的程序状态连接它们。它是 CLI 工程工具，作用于一个已有的 Git 仓库（`storyloop init <仓库>`）；没有远程服务器或生产部署功能。早期的独立实例模式与 v2 Stage/DAG 引擎已删除，最后的代码保存在本地 tag `archive/legacy-modes`。
 
 ## 技术栈
 
 Python 3.11+，只用标准库，没有运行时依赖（`pyproject.toml` 的 `dependencies = []`）；入口 `storyloop = storyloop.cli:main`。外部依赖都是目标仓库或用户环境自带的：`git`（必需）、代理 CLI（`codex` 或 `claude`）、可选的 `openspec` CLI、项目自己的测试命令。模块分层见 [modules.md](modules.md)。
 
+## 分层：引擎、角色、技能、评测
+
+| 层 | 内容 | 例子 |
+|---|---|---|
+| 引擎（外环） | 判定、状态流转与恢复、边界、跨角色契约、评测度量；只认命令结果与指纹 | RED 证明、分层验证、边界审计、`verification_entries` 三方核对、`regression_updates` 校验、确定性验收缺陷自动退回、审查意见三级与收敛、停点与下一步 |
+| 角色 | 按权限边界划分：能写什么、看到什么、结论是否为门 | survey、product、acceptance、design、characterize、implement、review（[roles.md](roles.md)） |
+| 技能 | 方法、经验与判断质量，按 `roles:` 挂载 | `spec-craft`、`oracle-craft`、`tdd`、`impact-analysis`、`systematic-debugging`、`review`、`foundation-survey`、`foundation-use` |
+| 评测 | L1 每次运行的介入与资源；L2 冻结 Case 比较引擎版本；L3 真实项目 | `intervention_events`、`metrics`、`storyloop bench`（[bench.md](bench.md)） |
+
+归类规则：违反会造成误判通过、越界或数据损坏，能确定性检查，改变状态流转或恢复，属于跨角色契约或评测度量的，进引擎；其余进技能。见[设计 §1](superpowers/specs/2026-11-08-验证入口与评测底座-design.md#1-目标和归类边界)。
+
 ## 一次变更的链路
 
 ```mermaid
 flowchart TD
-    U[人与 product 角色] --> C[合同：故事 EARS 规则 验收条件]
-    C --> H{人批准}
-    H --> A[acceptance 盲写变更验收套件]
-    A --> R[候选副本里观察 RED]
-    R --> D[design 方案与 touched<br/>故事数 ≥ design_min_stories]
+    U[人与 product 角色] --> C[合同：故事 EARS 规则 验收条件 验证入口]
+    C --> H{人批准<br/>入口覆盖校验}
+    H --> A[acceptance 经入口盲写变更验收套件]
+    A --> P[review 判据强度预审]
+    P -->|MUST_FIX 自动退回| A
+    P --> R[入口调用检查 + 候选副本里观察 RED]
+    R -->|确定性缺陷自动退回 ≤ 预算| A
+    R -->|超出预算| O[ORACLE_DEFECT 停给人]
+    R --> D[design 方案：touched entry_paths regression_updates<br/>故事数 ≥ design_min_stories]
     D --> K[characterize 在旧代码上锁定现有行为<br/>配置了 test_roots 与 unit_commands]
     K --> I[implement 先红后绿]
-    I --> B[边界审计]
+    I --> B[边界审计<br/>未声明的已有测试改动判越界]
     B --> V[单元 集成 变更验收 系统冒烟 静态检查]
     V -->|失败| I
-    V -->|通过| W[review 独立审查]
+    V -->|通过| W[review 独立审查<br/>MUST_FIX / DECISION_NEEDED / ADVISORY]
     W -->|fail| I
+    W -->|旧判据与合同冲突| X[DESIGN_REVISION_REQUIRED → run --replan]
     W -->|needs_input| Q[人回答]
     Q --> I
     W -->|pass| M[人工验收停点 或 直接完成]
     M --> F[实现提交 报告 design.md decisions.md 活规格并入 no-ff 合并 回执]
+    F -.-> KP[knowledge-propose → 人 authorize-knowledge]
 ```
 
 ## 状态与持久化

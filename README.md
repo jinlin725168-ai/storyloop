@@ -1,8 +1,92 @@
 # StoryLoop
 
-StoryLoop 是面向已有 Git 工程的产品需求—开发—验收闭环。你只需要与 AI 共创用户故事和验收用例并最终批准；批准后的核心流程测试、实现迭代、回归、独立验收、证据报告和本地合并由外部 Loop 控制。
+StoryLoop 是面向已有 Git 工程的需求—开发—验收闭环。人和 AI 共创用户故事、验收条件与**验证入口**，人批准合同；之后的验收用例、方案、实现、回归、独立审查、证据报告和本地合并由仓库外的引擎驱动，只在需要人判断的地方停下。
 
-它不绑定 Java、Python 或前端技术栈，不要求拆分多个仓库，也不改写现有 CI 文件。
+它不绑定技术栈，不要求拆仓库，也不改写现有 CI 文件。
+
+## 设计主线
+
+StoryLoop 回答的不是“AI 能不能写代码”，而是**“凭什么相信它做完了”**。2026-11 参考 [HelixHarness 调研](docs/research/2026-11-08-HelixHarness调研.md)重新规划后，设计按四条主线组织（完整设计见[验证入口及评测底座设计](docs/superpowers/specs/2026-11-08-验证入口与评测底座-design.md)）：
+
+1. **判定权在外环。** 引擎在仓库外运行，代理的“我做完了”不是证据，只有真实命令结果、退出码和指纹算数。验收用例由独立角色在实现前盲写、受保护，并在候选副本中观察到 RED；任何红层都不能被审查的 pass 覆盖。
+2. **引擎管契约，技能管方法。** 违反会造成误判通过、越界或数据损坏的，能确定性检查的，改变状态流转或恢复的，跨角色契约，以及评测度量，都由引擎强制。其余方法、经验和判断质量写成技能（`SKILL.md`），按 `roles:` 挂到权限明确的角色上。不靠提示词约束引擎本该强制的纪律。
+3. **验证入口进合同。** 每个故事声明公共验证入口，由人确认；验收用例必须经入口执行与观察，方案说明入口如何到达改动文件，审查核对三方一致。这是此前 dogfood 反复返工的根因：三个角色各自猜入口。
+4. **用评测驱动演进。** 人工介入分**例行**（批准、可确定性判定后的自动退回）与**非例行**（需要人判断）。L1 逐次记录，L2 用冻结 Case 衡量引擎版本，L3 观察真实项目。产品目标是压低非例行介入，同时不出现假通过。
+
+## 一次变更怎么走
+
+```mermaid
+flowchart TD
+    A[干净的单一 Git 仓库] --> B[init 锁定底座 + readiness]
+    B --> C[product 共创合同<br/>故事 · 验收条件 · 验证入口]
+    C --> D{人批准<br/>入口覆盖校验}
+    D --> E[acceptance 盲写验收<br/>准备 / 执行 / 观察]
+    E --> P[review 判据强度预审]
+    P -->|MUST_FIX 自动退回| E
+    P --> R[候选副本证明 RED]
+    R -->|确定性缺陷自动退回| E
+    R --> DS[design 方案<br/>touched · entry_paths · regression_updates]
+    DS --> K[characterize 锁定将改动的旧行为]
+    K --> I[implement：TDD]
+    I --> V[边界审计 + 单元/集成/验收/系统冒烟/静态检查]
+    V -->|失败| I
+    V --> W[review 独立审查<br/>MUST_FIX / DECISION_NEEDED / ADVISORY]
+    W -->|fail| I
+    W -->|pass| M[人工验收条件 accept]
+    M --> F[报告 · 文档 · 活规格 · 本地 no-ff 合并 · 回执]
+    F -.-> KP[knowledge-propose<br/>人批准 foundation 精确 diff]
+    W -->|底座影响| H[BASE 提案，人工实现]
+```
+
+## 角色与技能
+
+角色按权限边界划分（[角色目录](docs/roles.md)）。技能写方法，引擎守门：
+
+| 角色 | 能写 | 挂载技能 | 引擎强制的门 |
+|---|---|---|---|
+| `survey` | 无（只读） | `foundation-survey` | 产物经 BASE 保护；事实需带 `path:line` 证据 |
+| `product` | 无 | `spec-craft`、`oracle-craft`、`foundation-use` | 需求质量门；验证入口必填、自动条件绑定入口；人批准后合同指纹锁定 |
+| `acceptance` | 本变更验收套件 | `oracle-craft`、`foundation-use` | 套件受保护、证明 RED；保持性条件实现前失败、越界、未经入口自动退回；预审 MUST_FIX 退回 |
+| `design` | 无 | `oracle-craft`、`impact-analysis`、`foundation-use` | 范围证据、`entry_paths`、`regression_updates` 校验；heavy 方案需人批准 |
+| `characterize` | `test_roots` | `tdd`、`foundation-use` | 锁定测试须在旧代码上跑绿 |
+| `implement` | 可变区 + `test_roots` | `tdd`、`review`、`systematic-debugging`、`foundation-use` | 边界审计；已有测试只能改方案声明的；分层验证；`max_attempts` 预算 |
+| `review` | 无（只读） | `oracle-craft`、`review`、`foundation-use` | 意见稳定 ID 与三级；同一条件连续判强度不足按收敛规则停一次；不能覆盖红层 |
+
+技能随引擎发布，`storyloop skills` 装进项目的 `.claude/skills/` 与 `.codex/skills/`（Claude Code 与 Codex 通用）；项目可放同名副本覆盖，这两个目录属于底座，实现者不能修改。
+
+## 人在哪里介入
+
+- **例行**：批准合同、批准 heavy 方案、引擎能确定性判定后的自动退回（验收缺陷、预审 MUST_FIX，与夹具自动修复共用 `acceptance_fixture_retry_limit`，默认 2 次）。
+- **非例行**：需要人判断的停点。业务歧义（`NEEDS_INPUT`）；超出自动预算的判据缺陷（`ORACLE_DEFECT`，人判断后 `acceptance-repair`）；方案需修订（`DESIGN_REVISION_REQUIRED`、`NO_PROGRESS`，用 `run --replan`）；需改底座（`BASE_CHANGE_REQUIRED`）；越界或工作区被污染（`WORKSPACE_TAINTED`，`reset`）；`manual` 验收条件（`MANUAL_ACCEPTANCE_REQUIRED`，`accept`）。
+- 合同改变既有行为、旧快照或断言随之失效时，由方案声明 `regression_updates` 受控修改；实现阶段才发现的冲突停到 `DESIGN_REVISION_REQUIRED` 并附冲突证据，不在实现循环里空转。
+
+每个停点都给出可复制的下一步命令。
+
+## 知识维护
+
+- **底座知识库** `openspec/foundation/`：`survey` 按领域分节摸底，事实与规范分开，逐条附证据；经 BASE 保护，所有角色先读，用前对照当前代码核实（`foundation-use`）。
+- **增量**：变更 PASSED 后，`knowledge-propose` 提议经代码证实的精确 diff；人用 `authorize-knowledge` 批准具体路径，引擎重验哈希后原子写入并推进底座版本。
+- **经验与勘误**：`openspec/lessons/` 与 `errata.md` 由代理提草案、人审批后落地，下一次变更按合同提交冻结的版本取用；OpenSpec 活规格记录需求契约。
+
+## 评测与当前状态
+
+- **L1**：每次运行记录例行/非例行介入、调用数、耗时与成本覆盖率（`storyloop metrics`）。
+- **L2**：`storyloop bench` 冻结 5 个 dogfood Case 的 Base、已批准合同、参考修复和隐藏 Gold。校准只跑 Gold；真实参测时，模拟人自动处理例行批准，每次 attempt 至多纠正一次。门槛：至少 4 个 Case 两次均 `PASSED` 且 Gold 通过，每次非例行停点不超过 1。见 [bench.md](docs/bench.md)。
+- **L3**：真实项目观察（阶段②）。
+
+截至 2026-11-13，门槛 1～3 均未达标，10 次 attempt 中 PASSED 依次为 1、1、3。瓶颈从 RED 误判，依次移到验收绕过入口，再到合同入口覆盖不足；门槛 3 出现 1 次假通过。每次的修复与数据见[路线图](docs/roadmap.md)。门槛 4 使用 v2.1 Case。
+
+## 路线
+
+**①a 评测底座 ✅ → ①b 验证入口与审查收敛 ✅ → ①c 技能融合与知识维护 ✅ → 门槛（进行中） → ② 扩面：RuoYi 多故事、真实模型撞底座、L3 → ③ 需求与测试充分性。** 详见 [路线图](docs/roadmap.md)。
+
+## 不变的工程保证
+
+- 单仓库底座：初始化提交和文件摘要构成逻辑底座；业务改动只进入可变区 `module_roots`，测试改动进入 `test_roots`；功能变更触碰底座就暂停并产生 `BASE-*` 提案，base 只由人实现（[决策 0018](docs/decisions/0018-base-human-only.md)）。
+- 需求质量门与 OpenSpec：合同采用 spec-kit 结构（EARS 规则、Gherkin 验收条件），澄清以选择题逐条回答；批准合同、增量规格、design.md、decisions.md 进入 `openspec/changes/<id>/`，完成时并入活规格。
+- 测试分层：变更验收（先红、受保护）、项目级系统冒烟（只经人批准更新）、特征化门（旧代码上先绿）、单元与集成分开、静态检查；每层各自出结论，任何一层红都不能过。
+- 证据追溯与调用对账：报告映射需求 → 故事 → 条件 → 测试 → 命令结果 → 提交，并区分 🔧 机器事实、👤 人工记录、🤖 代理陈述；`NOT_AVAILABLE` 不会显示成零或通过。
+- CI 中立、只做本地 Git：只提供 `storyloop ci`，不创建或覆盖 CI 文件；控制器只建本地分支、提交并 `--no-ff` 合并，不 push、不删分支、不改写历史。
 
 ## 快速开始
 
@@ -49,51 +133,6 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 新人从 [定位与概念手册](docs/concepts.md) 和 [入门教程](docs/tutorial.md) 开始；完整说明见 [使用指南](docs/product-iteration-guide.md)，接入自己的仓库见 [接入手册](docs/onboarding-a-repository.md)。`docs/` 是本项目的知识库，入口是 [docs/README.md](docs/README.md)：使用文档之外，按模块、架构、扩展、接口、能力、积木、测试组织了给贡献者和代理读的工程文档。
 
 新协议按 light / standard / heavy 分流，重档先审核方案再实现；完整命令、预算与恢复见 [分流指南](docs/routing-guide.md)。最终报告按读者分成 0–6 节，并在每条信息旁保留来源与可用性。
-
-## 核心保证
-
-- 产品层输入：用户无需编写技术方案和详细任务文档。
-- 用户批准：未决问题会阻止批准；任何故事或验收条件修订都会使旧批准失效。
-- 底座知识库：`foundation-survey` 技能包（随引擎维护，`storyloop skills` 装进任何项目，Claude Code 与 Codex 通用）摸清底座的模块组成、架构与运行机制、扩展机制、接口与能力、可复用积木和测试基础设施，产物挂在底座受保护；product 据此不重复建设，implement 据此复用而不是重写，review 据此核对。
-- 角色按权限边界划分（[角色目录](docs/roles.md)）：survey 摸底、product 立合同、acceptance 盲写验收、design 出方案并圈定要改的既有文件、characterize 锁定现有行为、implement 实现、review 独立审查；细分工放在角色内的子代理。
-- 需求质量门：合同采用 spec-kit 结构（优先级、独立验证方式、EARS 规则、Gherkin 验收条件），澄清问题以选择题形式逐条回答并入合同；批准前有确定性 checklist 把关。
-- OpenSpec 管理：批准合同、增量规格、实现方案（design.md）和人为决策（decisions.md）进入 `openspec/changes/<change-id>/`，完成时并入 `openspec/specs/<capability>/spec.md` 活规格；装了 `openspec` CLI 时结构校验是门。
-- 测试分层：变更验收套件（`acceptance/changes/<id>/`，acceptance 角色盲写、先红、受保护）、项目级系统冒烟（`acceptance/smoke/`，跨变更累积、只能经人批准更新）、实现前的特征化测试门（锁定将被修改路径的现有行为，在旧代码上跑绿才开工，机器验证）、单元与集成分开的回归命令、静态检查。每层各自出结论，任何一层红都不能过。用例缺陷走 `acceptance-repair` 通道并从合同提交重新证明 RED。
-- 验证入口：新变更的每个故事必须声明公共验证入口（`verification_entries`），每条自动验收条件绑定入口（`entry_ids`），批准时校验覆盖。验收用例的执行与观察必须经过声明入口（准备阶段可直接构造状态），方案的 `entry_paths` 说明入口如何到达改动文件，审查核对三方一致。
-- 判据质量自动把关：RED 证明前，review 角色以判据强度视角预审验收套件（每个前置与分支都执行、断言完整可观察结果、不超出合同）；保持性条件实现前就失败、用例越界、未经声明入口这三类可确定性判定的缺陷，以及预审的 MUST_FIX，自动退回 acceptance 角色重写（共用 `acceptance_fixture_retry_limit`，默认 2 次），记为例行；超出预算或需人判断才停 `ORACLE_DEFECT` / `NEEDS_INPUT`。
-- 已有测试受控更新：合同改变既有行为、旧快照或断言随之失效时，design 在方案的 `regression_updates` 中声明要改的已有测试并绑定验收条件；实现只能改声明过的已有测试，审查逐处核对；未声明的冲突停到 `DESIGN_REVISION_REQUIRED` 并附冲突证据。
-- 审查收敛：审查意见有稳定 ID，分 MUST_FIX / DECISION_NEEDED / ADVISORY 三级；同一验收条件连续被判判据强度不足时，下一轮必须给完整判据规格，仍不收敛就停给人一次。
-- 知识增量：变更 PASSED 后，`knowledge-propose` 提议经代码证实的 foundation 精确 diff；人用 `authorize-knowledge` 批准具体路径，引擎重验哈希后原子写入并推进底座版本。
-- 人工验收：合同里的 `manual` 条件停在 `MANUAL_ACCEPTANCE_REQUIRED`，人用 `accept` 逐条留痕，记录与实现指纹绑定。
-- 单仓库底座：初始化提交和文件摘要构成逻辑底座；业务改动只进入可变区 `module_roots`（默认 `modules/`、`features/`），测试改动进入 `test_roots`。
-- 底座独立演进：普通功能触碰底座会暂停并产生 `BASE-*` 提案。
-- CI 中立：只提供 `storyloop ci ...`；不创建或覆盖 GitHub Actions、GitLab CI、Jenkins 文件。项目自己的流水线由人通过 `base-propose --allow-ci` 纳入底座，参考模板见 [接入手册的 CI 一节](docs/onboarding-a-repository.md#9-ci)。
-- 自动本地 Git：控制器只创建本地功能分支、提交并 `--no-ff` 合并；控制器代码不调用 push、删除分支或重写历史。
-- 证据追溯：报告映射需求、故事、验收条件、测试、命令结果、证据摘要、实现提交和最终合并提交。🔧 是引擎可核对的事实或计算，👤 是人工记录，🤖 是代理陈述；`NOT_AVAILABLE` 与 `PENDING` 不会显示成零或通过。
-- 调用对账：报告将 telemetry ledger 与每次调用的诊断 metadata 双向核对，列出失败调用及实际冻结的技能版本/哈希。调用覆盖只证明已持久化的实际调用，不会倒推未记录的理论调度次数；费用仅部分回报时显示已知小计，完整总额保持未知。
-
-```mermaid
-flowchart TD
-    A[干净的单一 Git 仓库] --> B[锁定底座]
-    B --> R[readiness 与缺口处理]
-    R --> C[产品故事与验收条件共创]
-    C --> D{用户批准}
-    D --> E[变更验收套件盲写<br/>经声明验证入口]
-    E --> EP[判据强度预审<br/>确定性缺陷自动退回]
-    EP --> ER[证明 RED]
-    ER --> E1[L2 方案量测<br/>heavy 须明确方案批准]
-    E1 --> E2[特征化测试锁定将改动的现有行为]
-    E2 --> F[AI 实现：TDD 先红后绿]
-    F --> G[单元 + 集成 + 变更验收 + 系统冒烟 + 静态检查 + 独立审查]
-    G -->|失败| F
-    G -->|底座影响| H[独立 BASE 变更提案]
-    G -->|全部通过| H2{有 manual 条件?}
-    H2 -->|是| M[人工验收 accept]
-    H2 -->|否| I
-    M --> I[可追溯验收报告 + 方案与决策归档 + 活规格并入]
-    I --> J[本地 no-ff 合并]
-    J --> K[写入合并回执并推进基线]
-```
 
 ## CI 入口
 
