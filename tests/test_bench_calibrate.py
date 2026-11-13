@@ -8,7 +8,8 @@ import tempfile
 import unittest
 import sys
 
-from storyloop.bench_calibrate import calibrate_case
+from storyloop.bench_calibrate import _overlay, _snapshot, calibrate_case
+from storyloop.bench_case import load_case
 from tests.test_bench_case import case_fixture, stale_approval_fixture, v2_case_fixture
 
 
@@ -50,6 +51,21 @@ def calibration_fixture(root: Path) -> tuple[Path, Path]:
 
 
 class BenchCalibrationTests(unittest.TestCase):
+    def test_snapshot_and_overlay_accept_canonical_alias_of_destination(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source, repository = calibration_fixture(root)
+            alias = root / "alias"
+            try:
+                alias.symlink_to(root, target_is_directory=True)
+            except OSError:
+                self.skipTest("Directory symlinks unavailable")
+            destination = alias / "snapshot"
+            _snapshot(repository, git(repository, "rev-parse", "HEAD"), destination)
+            _overlay(load_case(source), destination)
+            self.assertTrue((root / "snapshot/feature.py").is_file())
+            self.assertTrue((root / "snapshot/test_example.py").is_file())
+
     def test_stale_approved_v2_is_marked_in_calibration_record(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

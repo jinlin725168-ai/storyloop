@@ -4,6 +4,7 @@ import ast
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -18,16 +19,24 @@ CASES = Path(__file__).resolve().parents[1] / "bench/cases"
 
 
 class BenchV2DraftTests(unittest.TestCase):
+    def test_frozen_case_bytes_are_not_rewritten_by_checkout(self):
+        source = CASES / "dogfood3-stash-git-safe/v2/case.json"
+        result = subprocess.run(
+            ["git", "check-attr", "text", "--", str(source)],
+            cwd=CASES.parents[1], capture_output=True, text=True, check=True,
+        )
+        self.assertIn("text: unset", result.stdout)
+
     def test_derived_cases_keep_source_interval_and_gold_commands(self):
         for original in sorted(CASES.glob("*/v1")):
             with self.subTest(case=original.parent.name):
                 draft = original.parent / "v2"
-                old_case = json.loads((original / "case.json").read_text())
-                old_contract = json.loads((original / "contract.json").read_text())
-                case = json.loads((draft / "case.json").read_text())
-                contract = json.loads((draft / "contract.json").read_text())
-                gold = json.loads((draft / "gold.json").read_text())
-                old_gold = json.loads((original / "gold.json").read_text())
+                old_case = json.loads((original / "case.json").read_text(encoding="utf-8"))
+                old_contract = json.loads((original / "contract.json").read_text(encoding="utf-8"))
+                case = json.loads((draft / "case.json").read_text(encoding="utf-8"))
+                contract = json.loads((draft / "contract.json").read_text(encoding="utf-8"))
+                gold = json.loads((draft / "gold.json").read_text(encoding="utf-8"))
+                old_gold = json.loads((original / "gold.json").read_text(encoding="utf-8"))
                 self.assertEqual(case["case_version"], 2)
                 self.assertFalse(case["legacy_seam"])
                 for key in ("case_id", "repository_id", "base_commit", "solution_commit"):
@@ -64,7 +73,7 @@ class BenchV2DraftTests(unittest.TestCase):
         for case_id, (entry_id, kind, command) in expected.items():
             with self.subTest(case=case_id):
                 source = CASES / case_id / "v2"
-                contract = json.loads((source / "contract.json").read_text())
+                contract = json.loads((source / "contract.json").read_text(encoding="utf-8"))
                 entry = next(entry for story in contract["product"]["stories"]
                              for entry in story["verification_entries"] if entry["id"] == entry_id)
                 self.assertEqual(entry["kind"], kind)
@@ -73,18 +82,18 @@ class BenchV2DraftTests(unittest.TestCase):
     def test_entries_suite_and_provenance_are_linked(self):
         for draft in sorted(CASES.glob("*/v2")):
             with self.subTest(case=draft.parent.name):
-                case = json.loads((draft / "case.json").read_text())
-                contract = json.loads((draft / "contract.json").read_text())
-                evidence = json.loads((draft / "verification-evidence.json").read_text())
+                case = json.loads((draft / "case.json").read_text(encoding="utf-8"))
+                contract = json.loads((draft / "contract.json").read_text(encoding="utf-8"))
+                evidence = json.loads((draft / "verification-evidence.json").read_text(encoding="utf-8"))
                 manifest_path = next(draft.glob("checks/acceptance/changes/*/manifest.json"))
-                manifest = json.loads(manifest_path.read_text())
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
                 product = validate_product(contract["product"])
                 _validate_manifest(manifest, {"product": product})
                 self.assertFalse([item for item in evaluate_checklist(product, require_entries=True)
                                   if item["level"] == "error"])
                 owners = {entry["id"]: story["id"] for story in contract["product"]["stories"]
                           for entry in story["verification_entries"]}
-                gold = json.loads((draft / "gold.json").read_text())
+                gold = json.loads((draft / "gold.json").read_text(encoding="utf-8"))
                 gold_by_criterion = {item["requirement_id"]: item["check_ids"]
                                      for item in gold["requirements"]}
                 criteria = {item["id"]: story["id"] for story in contract["product"]["stories"]
@@ -118,37 +127,37 @@ class BenchV2DraftTests(unittest.TestCase):
                     suite.update(item["path"].encode() + b"\0" + content)
                 self.assertEqual(suite.hexdigest(), case["suite_sha256"])
                 _check_inventory(draft, [item["path"] for item in case["suite_files"]])
-                _gold(json.loads((draft / "gold.json").read_text()), draft, contract)
+                _gold(json.loads((draft / "gold.json").read_text(encoding="utf-8")), draft, contract)
 
     def test_protected_selectors_match_original_tests(self):
         for draft in sorted(CASES.glob("*/v2")):
             for wrapper in draft.glob("checks/acceptance/changes/*/bench_*.py"):
                 with self.subTest(wrapper=wrapper):
-                    tree = ast.parse(wrapper.read_text())
+                    tree = ast.parse(wrapper.read_text(encoding="utf-8"))
                     constants = {node.targets[0].id: ast.literal_eval(node.value)
                                  for node in tree.body if isinstance(node, ast.Assign)
                                  and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
                                  and node.targets[0].id in {"SOURCE", "SHA256", "SELECTOR"}}
                     source = wrapper.with_name(constants["SOURCE"])
                     self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), constants["SHA256"])
-                    tests = {f"{item.name}.{method.name}" for item in ast.parse(source.read_text()).body
+                    tests = {f"{item.name}.{method.name}" for item in ast.parse(source.read_text(encoding="utf-8")).body
                              if isinstance(item, ast.ClassDef)
                              for method in item.body if isinstance(method, ast.FunctionDef)
                              and method.name.startswith("test_")}
-                    classes = {item.name for item in ast.parse(source.read_text()).body
+                    classes = {item.name for item in ast.parse(source.read_text(encoding="utf-8")).body
                                if isinstance(item, ast.ClassDef)}
                     self.assertIn(constants["SELECTOR"], tests | classes)
 
     def test_selector_wrapper_runs_only_its_selected_method(self):
         original = next(CASES.glob("dogfood3-stash-git-safe/v2/checks/acceptance/changes/*/bench_*.py"))
-        code = original.read_text()
+        code = original.read_text(encoding="utf-8")
         source = ("import unittest\n"
                   "class Demo(unittest.TestCase):\n"
                   "    def test_selected(self): pass\n"
                   "    def test_other(self): self.fail('not selected')\n")
         with tempfile.TemporaryDirectory() as folder:
             project = Path(folder)
-            (project / "test_sample.py").write_text(source)
+            (project / "test_sample.py").write_text(source, encoding="utf-8")
             code = code.replace("SOURCE = 'test_core.py'", "SOURCE = 'test_sample.py'")
             old_hash = next(line.split("'")[1] for line in code.splitlines()
                             if line.startswith("SHA256 = "))
@@ -156,7 +165,7 @@ class BenchV2DraftTests(unittest.TestCase):
             old_selector = next(line.split("'")[1] for line in code.splitlines()
                                 if line.startswith("SELECTOR = "))
             code = code.replace(old_selector, "Demo.test_selected")
-            (project / "selected.py").write_text(code)
+            (project / "selected.py").write_text(code, encoding="utf-8")
             result = python_cases(project, ["selected.py"], cwd=project)
             self.assertEqual((result.executed, result.failed, result.errors), (1, 0, 0))
 

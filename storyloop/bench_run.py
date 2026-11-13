@@ -100,7 +100,7 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
     records = Path(output_root) / ".storyloop/bench/runs"
     records.mkdir(parents=True, exist_ok=True)
     target = records / f"{result['run_id']}.json"
-    target.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
+    target.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     result["record_path"] = str(target)
     return result
 

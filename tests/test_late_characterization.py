@@ -35,6 +35,10 @@ class LateCharacterizationTests(unittest.TestCase):
             return response
         plan = answer(routed_product())
         plan['options'][0]['touched'].append('tests/test_service.py')
+        plan['options'][0]['regression_updates'] = [{
+            'path': 'tests/test_service.py', 'criterion_ids': ['AC-1'],
+            'reason': 'AC-1 的新行为测试需追加到已有测试文件',
+        }]
         plan['options'][0]['creates'].append('tests/test_new.py')
         return root, change['change_id'], replace(services, implement=implement, design=lambda p, c: plan)
 

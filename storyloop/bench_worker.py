@@ -15,7 +15,7 @@ RECOVERABLE = {"ORACLE_DEFECT": "acceptance_repair", "EXISTING_GREEN": "acceptan
 
 
 def main(request_path: str, response_path: str) -> None:
-    request = json.loads(Path(request_path).read_text())
+    request = json.loads(Path(request_path).read_text(encoding="utf-8"))
     sys.path.insert(0, request["engine_tree"])
     sys.path.extend(request.get("engine_sites", []))
     from storyloop import __version__
@@ -40,7 +40,7 @@ def main(request_path: str, response_path: str) -> None:
         settings_path = project / "acceptance/storyloop-settings.json"
         if not settings_path.is_file():
             raise StoryLoopError("Frozen repository lacks acceptance/storyloop-settings.json")
-        settings = json.loads(settings_path.read_text())
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
         settings.update(_adapter_settings(request))
         bootstrap_with_project_checks(project, settings)
         config = load_project_config(project)
@@ -68,7 +68,7 @@ def main(request_path: str, response_path: str) -> None:
         outcome["events"] = [*change.get("intervention_events", []), *outcome["events"]]
     except (StoryLoopError, OSError):
         pass
-    Path(response_path).write_text(json.dumps(outcome, ensure_ascii=False))
+    Path(response_path).write_text(json.dumps(outcome, ensure_ascii=False), encoding="utf-8")
 
 
 def _adapter_settings(request: dict) -> dict:
@@ -136,8 +136,8 @@ def _execute_change(project: Path, contract: dict, source: str, version: int,
 
 def _install_suite(project: Path, source: str, change_id: str, load_change, install) -> None:
     root = Path(source) / "checks/acceptance/changes" / change_id
-    manifest = json.loads((root / "manifest.json").read_text())
-    files = [{"path": item.relative_to(root).as_posix(), "content": item.read_text()}
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    files = [{"path": item.relative_to(root).as_posix(), "content": item.read_text(encoding="utf-8")}
              for item in root.rglob("*") if item.is_file() and item.name != "manifest.json"]
     install(project, load_change(project, change_id), files, manifest)
 
@@ -308,7 +308,8 @@ def _stage_stop_json(source_root: Path, source: Path, target_root: Path, target:
     require(destination.resolve().is_relative_to(target_root.resolve()),
             "Bench evidence target is outside output root")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(_redact_json(json.loads(original.read_text())), ensure_ascii=False))
+    destination.write_text(json.dumps(_redact_json(json.loads(original.read_text(encoding="utf-8"))),
+                                      ensure_ascii=False), encoding="utf-8")
 
 
 def _run_events(project, change_id, load_run_state):
