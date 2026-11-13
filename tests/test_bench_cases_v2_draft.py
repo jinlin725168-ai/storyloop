@@ -157,7 +157,8 @@ class BenchV2DraftTests(unittest.TestCase):
                   "    def test_other(self): self.fail('not selected')\n")
         with tempfile.TemporaryDirectory() as folder:
             project = Path(folder)
-            (project / "test_sample.py").write_text(source, encoding="utf-8")
+            # The selector hashes source bytes, so a Windows text write must not add CRLF.
+            (project / "test_sample.py").write_bytes(source.encode("utf-8"))
             code = code.replace("SOURCE = 'test_core.py'", "SOURCE = 'test_sample.py'")
             old_hash = next(line.split("'")[1] for line in code.splitlines()
                             if line.startswith("SHA256 = "))
