@@ -1,4 +1,4 @@
-"""The spec-craft package is available to agents without changing engine roles."""
+"""The spec-craft package reaches product without changing engine gates."""
 
 from pathlib import Path
 import re
@@ -39,21 +39,22 @@ def section(text: str, title: str) -> str:
 class SpecCraftPackageTests(unittest.TestCase):
     def test_spec_craft_is_packaged_with_exactly_its_references(self):
         skill = packaged_skills()["spec-craft"]
-        self.assertEqual(skill["version"], "1.4.0")
+        self.assertEqual(skill["version"], "1.4.2")
         self.assertEqual(skill["files"], sorted(["SKILL.md", *(f"references/{n}" for n in REFERENCES)]))
 
-    def test_frontmatter_has_only_name_version_description(self):
+    def test_frontmatter_names_product_role(self):
         meta = _frontmatter(read("SKILL.md"))
-        self.assertEqual(set(meta), {"name", "version", "description"})
+        self.assertEqual(set(meta), {"name", "version", "roles", "description"})
+        self.assertEqual(meta["roles"], "[product]")
         self.assertEqual(meta["name"], "spec-craft")
         self.assertIn("需求", meta["description"])
         self.assertIn("spec", meta["description"].lower())
 
-    def test_spec_craft_reaches_no_engine_role(self):
+    def test_spec_craft_reaches_only_product(self):
         with tempfile.TemporaryDirectory() as folder:
             for role in ("product", "acceptance", "implement", "review", "design", "characterize", "survey"):
                 with self.subTest(role=role):
-                    self.assertNotIn("spec-craft", select_skills(Path(folder), role, []))
+                    self.assertEqual("spec-craft" in select_skills(Path(folder), role, []), role == "product")
 
     def test_skill_md_links_every_reference_and_nothing_else(self):
         linked = set(re.findall(r"references/([a-z-]+\.md)", read("SKILL.md")))
@@ -209,7 +210,7 @@ class ClarifyAndHandoffTests(unittest.TestCase):
 class DocumentationTests(unittest.TestCase):
     def test_roles_explains_chat_only_usage_and_installation(self):
         text = (ROOT / "docs/roles.md").read_text(encoding="utf-8")
-        for phrase in ("spec-craft", "Claude Code", "Codex", "storyloop skills", "不下发给任何引擎角色"):
+        for phrase in ("spec-craft", "Claude Code", "Codex", "storyloop skills", "下发给引擎的 product 角色"):
             self.assertIn(phrase, text)
 
     def test_testing_map_lists_spec_craft(self):

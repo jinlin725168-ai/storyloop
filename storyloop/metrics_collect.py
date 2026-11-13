@@ -109,14 +109,21 @@ def _load_report(root: Path, change_id: str, missing: list[dict]) -> dict | None
 def _record(root: Path, change_id: str, change: dict | None, run: dict | None,
             report: dict | None, missing: list[dict], discrepancies: list[dict]) -> dict:
     gaps: dict[str, str] = {}
-    record = {"change_id": change_id, "has_report": report is not None, "gaps": gaps}
+    record = {"change_id": change_id, "has_report": report is not None,
+              "run_present": run is not None, "gaps": gaps}
     _identity_fields(record, gaps, change, run, report)
+    record["contract_approved"] = isinstance(_nested(change, "approval", "approved_at"), str) or isinstance(
+        _nested(report, "requirement", "approval", "approved_at"), str)
     _preferred_fields(record, gaps, change_id, report, run, discrepancies)
-    record["base_review_mode"] = (_string(_nested(report, "review_mode"))
-                                  or _string(_nested(run, "base_review", "mode")))
     _run_fields(record, gaps, root, change_id, run, missing)
+    record["intervention_events"] = _intervention_events(change, run, root, change_id)
+    record["planning_history"] = _nested(run, "planning", "history") if run else None
+    record["started_at"] = _nested(run, "started_at") if run else None
+    record["ended_at"] = _first(_nested(run, "ended_at"), _nested(report, "generated_at"))
+    record["repair_entries"] = _nested(run, "repairs") if run else None
     _link_fields(record, change, run, report)
     _commit_fields(record, gaps, change_id, report, run, discrepancies)
+    record["ledger_present"] = _present(root / ".storyloop/state/telemetry" / f"{change_id}.json")
     record["ledger"] = _ledger(root, change_id)
     if record["ledger"] is None:
         gaps["ledger"] = "UNREADABLE"
@@ -124,6 +131,29 @@ def _record(root: Path, change_id: str, change: dict | None, run: dict | None,
             _add_missing(missing, change_id, "UNREADABLE")
     record["signal_evidence"] = _signal_evidence(change, report)
     return record
+
+
+def _intervention_events(change: dict | None, run: dict | None, root: Path,
+                         change_id: str) -> list[dict] | None:
+    events: list[dict] = []
+    observed = False
+    if isinstance(change, dict) and isinstance(change.get("intervention_events"), list):
+        events.extend(change["intervention_events"])
+        observed = True
+    if isinstance(run, dict) and isinstance(run.get("intervention_events"), list):
+        events.extend(run["intervention_events"])
+        observed = True
+    for folder in ("answers", "acceptance"):
+        path = root / ".storyloop/state" / folder / f"{change_id}.json"
+        if not _present(path):
+            continue
+        value = _read_object(root, path, MAX_AUX_BYTES)
+        if (isinstance(value, dict) and value.get("version") == 1
+                and value.get("change_id") == change_id
+                and isinstance(value.get("intervention_events"), list)):
+            events.extend(value["intervention_events"])
+            observed = True
+    return events if observed else None
 
 
 def _identity_fields(record: dict, gaps: dict, change: dict | None, run: dict | None,

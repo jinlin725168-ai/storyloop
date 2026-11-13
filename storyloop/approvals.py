@@ -17,6 +17,7 @@ from .project_profile import base_commands_digest, effective_base_profile
 from .path_security import safe_target
 from .requirement_checklist import blocking_items, evaluate_checklist
 from .storage import locked, write_bytes_atomic, write_json
+from .intervention_events import append_event
 
 Clock = Callable[[], datetime]
 
@@ -38,7 +39,11 @@ def _approve_locked(project, change_id, approved_by, now, tier) -> dict:
     base = nature_of(product) == "base"
     if not base:
         require(bool(product["stories"]), "Approval requires at least one user story")
-        blocking = blocking_items(evaluate_checklist(product, project))
+        if state.get("entry_coverage_required") is True:
+            from .verification_entries import validate_criterion_entry_ids
+            validate_criterion_entry_ids(product)
+        blocking = blocking_items(evaluate_checklist(
+            product, project, require_entries=state.get("verification_entries_required") is True))
         require(not blocking, "Requirement checklist has blocking items; revise the contract: "
                 + "; ".join(item["text"] for item in blocking[:3]))
     approved_by = text(approved_by, "approver")
@@ -60,6 +65,10 @@ def _approve_locked(project, change_id, approved_by, now, tier) -> dict:
         "approved_at": _timestamp(moment),
     }
     state["updated_at"] = _timestamp(moment)
+    previously_approved = any(isinstance(item, dict) and item.get("kind") == "contract_approval"
+                              for item in state.get("intervention_events", []))
+    append_event(state, "contract_approval", source="approve", stop="DRAFT",
+                 at=_timestamp(moment), repeated=previously_approved)
     _write_state(project, state)
     return deepcopy(state)
 
@@ -83,7 +92,8 @@ def version_snapshot(project: Path) -> dict:
 def _base_approval(project: Path, tier: str | None) -> dict:
     require(tier in {None, "heavy"}, "Base changes require the heavy tier")
     profile, supplement = effective_base_profile(project, load_project_config(project)["profile"])
-    binding = {"tier": "heavy", "base_commands_sha256": base_commands_digest(profile)}
+    binding = {"tier": "heavy", "base_commands_sha256": base_commands_digest(profile),
+               "criteria_test_roots": list(profile.get("test_roots") or [])}
     if supplement is not None:
         binding["base_build_config_sha256"] = supplement
     return binding

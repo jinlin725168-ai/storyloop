@@ -173,16 +173,19 @@ def routed_implement(project, context):
 
 def routed_characterize(project, context):
     name = 'tests/test_lock.py'
+    suffix = 2
+    while (project / name).exists():
+        name = f'tests/test_lock_{suffix}.py'
+        suffix += 1
     target = project / name
     source = ('import unittest\nfrom app.service import serve\n'
               'class Lock(unittest.TestCase):\n'
               '    def test_serve(self): self.assertEqual(serve(), "ok")\n')
-    # Replanning must produce an auditable test edit, not re-write identical tracked bytes.
-    if target.exists():
-        source = target.read_text(encoding='utf-8') + '# Revalidated behavior after replan\n'
     target.write_text(source, encoding='utf-8')
     return {'summary': 'Preserve serve behavior', 'touched': ['app/service.py'],
-            'tests': [name], 'questions': []}
+            'tests': [name], 'questions': [], 'claims': [
+                {'test': name, 'behavior': 'serve still returns the original stable value',
+                 'symbols': [], 'criterion_ids': []}]}
 
 
 def routed_acceptance(identifier):

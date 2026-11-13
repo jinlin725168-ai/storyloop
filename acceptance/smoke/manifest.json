@@ -1,0 +1,3 @@
+{"version": 1, "tests": [{"id": "cli", "description": "CLI 版本与帮助可用",
+  "command": ["{storyloop_harness}", "acceptance/tools/python_smoke.py", "acceptance/smoke/test_cli.py"],
+  "timeout_seconds": 120}]}

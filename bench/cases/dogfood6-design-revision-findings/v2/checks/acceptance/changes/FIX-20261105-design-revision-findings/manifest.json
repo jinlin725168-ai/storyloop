@@ -1,0 +1,41 @@
+{
+  "tests": [
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261105-design-revision-findings/bench_design_revision_red.py"
+      ],
+      "criteria": [
+        "AC-1",
+        "AC-2",
+        "AC-5"
+      ],
+      "entry_ids": [
+        "VE-DESIGN-STOP",
+        "VE-LOG"
+      ],
+      "id": "design-revision-red",
+      "tier": "fast",
+      "timeout_seconds": 90
+    },
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261105-design-revision-findings/bench_design_revision_existing.py"
+      ],
+      "criteria": [
+        "AC-3",
+        "AC-4"
+      ],
+      "entry_ids": [
+        "VE-DESIGN-STOP"
+      ],
+      "id": "design-revision-existing",
+      "tier": "fast",
+      "timeout_seconds": 90
+    }
+  ],
+  "version": 1
+}

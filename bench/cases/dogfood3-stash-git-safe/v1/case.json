@@ -1,0 +1,42 @@
+{
+  "allowed": {
+    "adapters": [
+      "codex",
+      "claude",
+      "test"
+    ],
+    "max_calls": 100,
+    "max_cost_usd": null,
+    "models": [
+      "configured"
+    ]
+  },
+  "base_commit": "535c5e95ff04ba4456b9646e664207db538e6280",
+  "case_id": "dogfood3-stash-git-safe",
+  "case_version": 1,
+  "contract_sha256": "c74e6907582015ac23a265f91c1dfc07904795c86d0a9184acdfd099a68f5f24",
+  "gold_sha256": "5bb82a3e6404ebcbec3198e5145414ee9263ebb11ee242a989ec02f14cf932e6",
+  "legacy_seam": true,
+  "python": {
+    "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
+    "version": "3.11"
+  },
+  "repository_id": "storyloop-dogfood3",
+  "schema_version": 1,
+  "solution_commit": "46d94733874d32917201d69d9b8be1b344cb0007",
+  "suite_files": [
+    {
+      "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/manifest.json",
+      "sha256": "439a131e5208f2b06887951f2d5195316d49dce63edf81f6f3c9e76f05b01f64"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
+      "sha256": "459699ebaa52487c3f650372b54638f9f3a3f4883a9d83ae770b88a77c6bcf31"
+    },
+    {
+      "path": "checks/tests/test_failure_routing.py",
+      "sha256": "578520460f2ca139c83818b6352c05eaad9e489677c81fbe8dc477921dcc12c9"
+    }
+  ],
+  "suite_sha256": "184288f85b5d1e158c50e55749213e1f37c2def20fea980211708d8179cb75af"
+}

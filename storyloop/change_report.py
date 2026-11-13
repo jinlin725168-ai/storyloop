@@ -16,6 +16,7 @@ from .report_markdown import render_presentation
 from .report_presentation import build_presentation
 from .smoke import RESULT_EVIDENCE, load_smoke_manifest, smoke_digests
 from .smoke_runner import candidate_digest
+from .run_guards import review_passes
 from .storage import load_json, write_bytes_atomic, write_json, write_text_atomic
 
 COMMIT = re.compile(r"[0-9a-fA-F]{40,64}")
@@ -110,9 +111,7 @@ def _validate_gate(
     for name in ("unit", "integration", "smoke", "checks"):
         require(layers[name].get("status") in {"PASSED", "SKIPPED"}, f"{name} layer did not pass")
     require(smoke.get("status") == "PASSED", "Change acceptance did not pass")
-    require(review.get("verdict") == "pass"
-            and not review.get("findings") and not review.get("questions"),
-            "Independent review did not pass")
+    require(review_passes(review), "Independent review did not pass")
     evidence_path = project / ".storyloop/evidence" / change["change_id"] / RESULT_EVIDENCE
     evidence = load_json(evidence_path)
     evidence_digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()

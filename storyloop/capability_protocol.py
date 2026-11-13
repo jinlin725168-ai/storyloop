@@ -21,13 +21,6 @@ def normalize_vendor(value: object) -> str | None:
     return value.strip().casefold() if isinstance(value, str) and value.strip() else None
 
 
-def observed_vendors(adapters: dict, capabilities: dict) -> tuple[dict, set[str] | None]:
-    """Use one handshake record for every non-manual adapter vendor decision."""
-    vendors = {name: normalize_vendor(capabilities.get(name, {}).get("vendor"))
-               for name, adapter in adapters.items() if adapter["kind"] != "manual"}
-    return vendors, set(vendors.values()) if vendors and all(vendors.values()) else None
-
-
 def expand_agent_token(value: str, project: Path) -> str:
     """Use the running engine's interpreter for both handshake and transport."""
     return {"{python}": sys.executable, "{project}": str(project)}.get(value, value)

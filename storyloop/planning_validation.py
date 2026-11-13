@@ -9,9 +9,12 @@ from .models import require, text
 from .principles import check_principles, load_principles
 from .path_security import forbidden_path_root, repository_relative, safe_target
 from .project_boundaries import _category, _inside
+from .project_loop_guards import exists_at
 from .role_schemas import schema_errors, schema_for
 from .routing_evidence import measure_scope
 from .smoke import smoke_digests
+from .verification_entries import new_format, validate_entry_paths
+from .regression_updates import validate_updates
 
 SCOPE_KEYS = ('touched', 'creates', 'interfaces', 'symbols')
 
@@ -35,6 +38,17 @@ def validate_plan(answer: object, project: Path, change: dict, state: dict) -> d
     ids = [item['id'] for item in options]
     require(len(ids) == len(set(ids)), 'Duplicate option id')
     require(answer['main_option'] in ids, 'Main option is absent')
+    if new_format(change['product']):
+        from . import smoke
+        selected = next(option for option in options if option['id'] == answer['main_option'])
+        validate_entry_paths(selected, change['product'], smoke.load_smoke_manifest(project, change))
+        scope_paths = set(selected['touched'] + selected['creates'])
+        for entry_path in selected['entry_paths']:
+            path = entry_path['path']
+            if path not in scope_paths:
+                safe_target(project, path, 'entry path')
+                require(exists_at(project, state['contract_commit'], path),
+                        'Unchanged entry path must exist at the contract commit')
     binding = {'product_digest': digest(change['product']),
                'source_commit': state['contract_commit'],
                'scope_digest': digest([{ 'id': o['id'], **option_scope(o)} for o in options]),
@@ -67,6 +81,7 @@ def _option(item: dict, project: Path, change: dict, state: dict) -> dict:
                 f"L3 option {option['id']!r} omits observed candidate scope; every option must "
                 f"include all observed paths; {'; '.join(omissions)}")
     _paths_and_constraints(project, change, option)
+    validate_updates(project, change, state, option)
     require(bool(option['regression']), 'Regression steps are required')
     for step in option['regression'] + option['migration']['steps']:
         text(step, 'verification or migration step')

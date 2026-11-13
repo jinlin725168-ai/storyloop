@@ -1,0 +1,103 @@
+{
+  "VE-DESIGN-STOP": {
+    "chain": [
+      {
+        "line": 252,
+        "path": "storyloop/cli.py",
+        "quote": "return _product_dispatch(project, args)"
+      },
+      {
+        "line": 110,
+        "path": "storyloop/product_cli.py",
+        "quote": "if args.command == \"status\":"
+      },
+      {
+        "line": 117,
+        "path": "storyloop/product_cli.py",
+        "quote": "\"stop\": stop_of(project, run) if run else draft_stop(project, change),"
+      },
+      {
+        "line": 259,
+        "path": "storyloop/stop_report.py",
+        "quote": "def _review_findings(findings: list[dict]) -> list[dict]:"
+      },
+      {
+        "line": 307,
+        "path": "storyloop/stop_report.py",
+        "quote": "if status == \"DESIGN_REVISION_REQUIRED\":"
+      },
+      {
+        "line": 326,
+        "path": "storyloop/stop_report.py",
+        "quote": "if run[\"status\"] == \"DESIGN_REVISION_REQUIRED\" and \"review_findings\" not in saved:"
+      },
+      {
+        "line": 340,
+        "path": "storyloop/stop_report.py",
+        "quote": "def render_stop(stop: dict) -> list[str]:"
+      },
+      {
+        "line": 343,
+        "path": "storyloop/stop_report.py",
+        "quote": "if stop.get(\"status\") == \"DESIGN_REVISION_REQUIRED\" and stop.get(\"review_findings\"):"
+      }
+    ],
+    "criterion_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "AC-4",
+      "AC-5"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-1",
+      "F2P-reference",
+      "P2P-acceptance-2"
+    ],
+    "manifest_test_ids": [
+      "design-revision-red",
+      "design-revision-existing"
+    ]
+  },
+  "VE-LOG": {
+    "chain": [
+      {
+        "line": 302,
+        "path": "storyloop/cli.py",
+        "quote": "return dispatch(project, args, run_with_answers, _draft_result, load_run_state)"
+      },
+      {
+        "line": 124,
+        "path": "storyloop/product_cli.py",
+        "quote": "if args.command == \"log\":"
+      },
+      {
+        "line": 19,
+        "path": "storyloop/change_log.py",
+        "quote": "def change_log(project: Path, change_id: str) -> dict:"
+      },
+      {
+        "line": 314,
+        "path": "storyloop/stop_report.py",
+        "quote": "def stop_of(project: Path | str, run: dict | None) -> dict | None:"
+      },
+      {
+        "line": 326,
+        "path": "storyloop/stop_report.py",
+        "quote": "if run[\"status\"] == \"DESIGN_REVISION_REQUIRED\" and \"review_findings\" not in saved:"
+      }
+    ],
+    "criterion_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-5"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-1",
+      "F2P-reference"
+    ],
+    "manifest_test_ids": [
+      "design-revision-red"
+    ]
+  }
+}

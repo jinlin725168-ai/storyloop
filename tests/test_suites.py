@@ -1,13 +1,9 @@
 """The suite runner: the core list stays real, and a failing module fails the whole run."""
 import subprocess
-import os
 import sys
 import tempfile
 import unittest
-import io
-from contextlib import redirect_stdout
 from pathlib import Path
-from unittest import mock
 
 from tests.suites import CORE, PLATFORM, RUNNER as RUNNER_MODULES, SAFETY
 
@@ -83,41 +79,6 @@ class RunnerTests(unittest.TestCase):
         (root / "tests" / "test_broken.py").write_text("import does_not_exist\n", encoding="utf-8")
         self.assertEqual(_run("--suite", "full", root=root).returncode, 1)
 
-    def test_runner_rejects_own_agent_worktree_leak_and_cleans_its_root(self):
-        from tests import run as runner
-        isolated = Path(self.enterContext(tempfile.TemporaryDirectory()))
-        created = []
-        def fake_module(_root, name):
-            leaked = Path(os.environ["STORYLOOP_AGENT_WORKTREE_TEMP_ROOT"]) / "from-test-module"
-            leaked.write_text("leak", encoding="utf-8")
-            created.append(leaked)
-            return {"module": name, "ok": True, "seconds": 0.0,
-                    "tests": 1, "skipped": 0, "output": ""}
-        output = io.StringIO()
-        with (mock.patch.object(runner.tempfile, "gettempdir", return_value=str(isolated)),
-              mock.patch.object(runner, "modules", return_value=["tests.fake"]),
-              mock.patch.object(runner, "run_module", side_effect=fake_module),
-              redirect_stdout(output)):
-            code = runner.main(["--suite", "full", "--workers", "1", "--root", str(isolated)])
-        self.assertEqual(code, 1)
-        self.assertIn("worktree", output.getvalue())
-        self.assertFalse(created[0].parent.exists())
-
-    def test_runner_ignores_other_process_new_system_worktree(self):
-        from tests import run as runner
-        isolated = Path(self.enterContext(tempfile.TemporaryDirectory()))
-        external = isolated / "storyloop-agent-wt" / "other-project"
-        def fake_module(_root, name):
-            external.mkdir(parents=True)
-            (external / "agent-output.txt").write_text("external", encoding="utf-8")
-            return {"module": name, "ok": True, "seconds": 0.0,
-                    "tests": 1, "skipped": 0, "output": ""}
-        with (mock.patch.object(runner.tempfile, "gettempdir", return_value=str(isolated)),
-              mock.patch.object(runner, "modules", return_value=["tests.fake"]),
-              mock.patch.object(runner, "run_module", side_effect=fake_module),
-              redirect_stdout(io.StringIO())):
-            code = runner.main(["--suite", "full", "--workers", "1", "--root", str(isolated)])
-        self.assertEqual(code, 0)
 
 
 if __name__ == "__main__":

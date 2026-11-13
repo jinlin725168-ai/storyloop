@@ -25,7 +25,6 @@ def audit_base_scope(project: Path, change: dict, paths: set[str]) -> None:
                "ci": {"CI_CHANGE", "FOUNDATION_CHANGE", "INTEGRATION_CHANGE"},
                "upstream": {"UPSTREAM_MUTABLE", "FOUNDATION_CHANGE", "INTEGRATION_CHANGE"},
                "skills": {"FOUNDATION_CHANGE"}, "knowledge": {"FOUNDATION_CHANGE"}}[scope]
-    profile = load_project_config(project)["profile"]
     require(set(categories) == set(change["product"]["base"]["paths"]),
             "Base proposal paths differ from approved contract")
     require("CI_PROTECTED" not in categories.values(),
@@ -34,8 +33,7 @@ def audit_base_scope(project: Path, change: dict, paths: set[str]) -> None:
     for path in paths:
         require(categories.get(path) in allowed and base_scope_path_allowed(scope, path),
                 f"Base scope {scope} cannot write {path}")
-        require(not (is_system_smoke_path(path) or path.startswith("acceptance/changes/")
-                     or matches_test_root(path, profile.get("test_roots") or [])
+        require(not (path.startswith("acceptance/changes/")
                      or path == "acceptance/storyloop-settings.json"),
                 f"Base oracle path requires E2: {path}")
         require(not _git(project, "ls-tree", "HEAD", "--", path).startswith("120000 "),
@@ -61,25 +59,15 @@ def role_path_boundary(project: Path, role: str, payload: dict) -> dict:
     product = change.get("product", {}) if isinstance(change, dict) else {}
     scope = definition_for(type_of(product)).writable_scope
     writable = []
-    base_agent = role == "implement" and product.get("nature") == "base"
-    approved = set(product.get("base", {}).get("paths", [])) if base_agent else set()
-    if base_agent:
-        writable.extend(sorted(approved))
     if role == "implement":
-        if "mutable" in scope and not base_agent:
+        if "mutable" in scope:
             writable.extend(f"{root.rstrip('/')}/**" for root in baseline["module_roots"])
     if role in {"implement", "characterize"} and "test_roots" in scope:
         writable.extend(f"{root.rstrip('/')}/**" for root in profile.get("test_roots", []))
     plan = payload.get("design_plan") if isinstance(payload.get("design_plan"), dict) else {}
-    forbidden = [*(path for path in baseline["foundation_paths"] if path not in approved),
-                 *(path for path in baseline["protected_paths"] if path not in approved),
-                 *([] if base_agent else ["openspec/lessons/**", f"{CUSTOM_ROOT}/**"]),
+    forbidden = [*baseline["foundation_paths"], *baseline["protected_paths"],
+                 "openspec/lessons/**", f"{CUSTOM_ROOT}/**",
                  ".storyloop/**"]
-    if base_agent:
-        forbidden.extend(["reports/storyloop/**", "acceptance/changes/**",
-                          "acceptance/smoke/**", "acceptance/storyloop-settings.json",
-                          ".github/workflows/**", *[f"{root.rstrip('/')}/**"
-                                                   for root in profile.get("test_roots", [])]])
     forbidden.extend(plan.get("forbidden_paths", []) if isinstance(plan.get("forbidden_paths", []), list) else [])
     return {"writable_paths": sorted(set(writable)), "forbidden_paths": sorted(set(forbidden))}
 
@@ -168,6 +156,14 @@ def _write_base_proposal(
 ) -> Path:
     root = project / ".storyloop" / "base-proposals"
     root.mkdir(parents=True, exist_ok=True)
+    if change_id != "manual":
+        for existing_path in sorted(root.glob("BASE-*.json")):
+            existing = load_json(existing_path)
+            if (existing.get("triggered_by") == change_id
+                    and existing.get("baseline_source_head") == baseline["source_head"]
+                    and existing.get("changes") == changes
+                    and existing.get("status") == "PROPOSED"):
+                return existing_path
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
     existing = {path.stem for path in root.glob(f"BASE-{stamp}-*.json")}
     number = next(index for index in range(1, 1000)

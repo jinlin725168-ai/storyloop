@@ -1,0 +1,201 @@
+{
+  "VE-BASE-STOP": {
+    "chain": [
+      {
+        "line": 252,
+        "path": "storyloop/cli.py",
+        "quote": "return _product_dispatch(project, args)"
+      },
+      {
+        "line": 110,
+        "path": "storyloop/product_cli.py",
+        "quote": "if args.command == \"status\":"
+      },
+      {
+        "line": 117,
+        "path": "storyloop/product_cli.py",
+        "quote": "\"stop\": stop_of(project, run) if run else draft_stop(project, change),"
+      },
+      {
+        "line": 27,
+        "path": "storyloop/run_hints.py",
+        "quote": "def next_step(status: str | None, change_id: str | None, project: Path | str = \"<project>\","
+      },
+      {
+        "line": 66,
+        "path": "storyloop/run_hints.py",
+        "quote": "return base_legacy_action(project_path, change_id, details)"
+      },
+      {
+        "line": 208,
+        "path": "storyloop/stop_report.py",
+        "quote": "def base_legacy_action(project: Path | str, change_id: str, details: dict) -> str:"
+      },
+      {
+        "line": 244,
+        "path": "storyloop/stop_report.py",
+        "quote": "options[0][\"action\"] = base_legacy_action(project, change_id, context)"
+      },
+      {
+        "line": 296,
+        "path": "storyloop/stop_report.py",
+        "quote": "if run[\"status\"] == \"BASE_CHANGE_REQUIRED\" and run.get(\"legacy_paths\"):"
+      }
+    ],
+    "criterion_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "AC-4",
+      "AC-5",
+      "AC-6"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-1",
+      "F2P-acceptance-2",
+      "F2P-acceptance-3",
+      "F2P-public-views",
+      "F2P-reference",
+      "P2P-acceptance-4",
+      "P2P-acceptance-5",
+      "P2P-acceptance-6",
+      "P2P-public-run-stop"
+    ],
+    "manifest_test_ids": [
+      "ac1-literal-stash",
+      "ac2-view-parity",
+      "ac3-no-legacy-paths",
+      "ac4-approval-order",
+      "ac5-read-preserves-state",
+      "ac6-no-automatic-stash"
+    ]
+  },
+  "VE-LOG": {
+    "chain": [
+      {
+        "line": 302,
+        "path": "storyloop/cli.py",
+        "quote": "return dispatch(project, args, run_with_answers, _draft_result, load_run_state)"
+      },
+      {
+        "line": 124,
+        "path": "storyloop/product_cli.py",
+        "quote": "if args.command == \"log\":"
+      },
+      {
+        "line": 19,
+        "path": "storyloop/change_log.py",
+        "quote": "def change_log(project: Path, change_id: str) -> dict:"
+      },
+      {
+        "line": 284,
+        "path": "storyloop/stop_report.py",
+        "quote": "def stop_of(project: Path | str, run: dict | None) -> dict | None:"
+      },
+      {
+        "line": 296,
+        "path": "storyloop/stop_report.py",
+        "quote": "if run[\"status\"] == \"BASE_CHANGE_REQUIRED\" and run.get(\"legacy_paths\"):"
+      }
+    ],
+    "criterion_ids": [
+      "AC-2",
+      "AC-5"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-2",
+      "F2P-public-views",
+      "P2P-acceptance-5",
+      "P2P-public-run-stop"
+    ],
+    "manifest_test_ids": [
+      "ac2-view-parity",
+      "ac5-read-preserves-state",
+      "ac2-public-views",
+      "ac5-public-run-stop"
+    ]
+  },
+  "VE-REPORT": {
+    "chain": [
+      {
+        "line": 302,
+        "path": "storyloop/cli.py",
+        "quote": "return dispatch(project, args, run_with_answers, _draft_result, load_run_state)"
+      },
+      {
+        "line": 136,
+        "path": "storyloop/product_cli.py",
+        "quote": "if args.command == \"report\":"
+      },
+      {
+        "line": 284,
+        "path": "storyloop/stop_report.py",
+        "quote": "def stop_of(project: Path | str, run: dict | None) -> dict | None:"
+      },
+      {
+        "line": 296,
+        "path": "storyloop/stop_report.py",
+        "quote": "if run[\"status\"] == \"BASE_CHANGE_REQUIRED\" and run.get(\"legacy_paths\"):"
+      }
+    ],
+    "criterion_ids": [
+      "AC-2",
+      "AC-5"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-2",
+      "F2P-public-views",
+      "P2P-acceptance-5",
+      "P2P-public-run-stop"
+    ],
+    "manifest_test_ids": [
+      "ac2-view-parity",
+      "ac5-read-preserves-state",
+      "ac2-public-views",
+      "ac5-public-run-stop"
+    ]
+  },
+  "VE-RUN-STOP": {
+    "chain": [
+      {
+        "line": 302,
+        "path": "storyloop/cli.py",
+        "quote": "return dispatch(project, args, run_with_answers, _draft_result, load_run_state)"
+      },
+      {
+        "line": 103,
+        "path": "storyloop/product_cli.py",
+        "quote": "return run_with_answers(project, change_id, interactive=not args.no_interactive)"
+      },
+      {
+        "line": 152,
+        "path": "storyloop/project_loop.py",
+        "quote": "if state[\"status\"] == \"BASE_CHANGE_REQUIRED\" and state.get(\"blocked_by\"):"
+      },
+      {
+        "line": 156,
+        "path": "storyloop/project_loop.py",
+        "quote": "return pause(project, state, \"BASE_CHANGE_REQUIRED\", blocked_by=state[\"blocked_by\"],"
+      },
+      {
+        "line": 208,
+        "path": "storyloop/stop_report.py",
+        "quote": "def base_legacy_action(project: Path | str, change_id: str, details: dict) -> str:"
+      }
+    ],
+    "criterion_ids": [
+      "AC-2",
+      "AC-5"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-2",
+      "F2P-public-views",
+      "P2P-acceptance-5",
+      "P2P-public-run-stop"
+    ],
+    "manifest_test_ids": [
+      "ac2-public-views",
+      "ac5-public-run-stop"
+    ]
+  }
+}

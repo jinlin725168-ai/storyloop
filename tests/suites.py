@@ -7,46 +7,72 @@ it keeps cross-platform regressions, safety boundaries and the suite runner.
 
 # Pure logic and small fixtures: each module took under 3 s on Linux (2026-10-20 timing).
 FAST = [
-    "tests.test_base_agent_policy",
     "tests.test_architecture", "tests.test_invariants", "tests.test_lifecycle_architecture", "tests.test_lifecycle_rules", "tests.test_lifecycle_guards", "tests.test_run_transitions",
     "tests.test_acceptance_layout", "tests.test_adapter_capabilities", "tests.test_adapter_conformance",
     "tests.test_baseline_api", "tests.test_baseline_behavior", "tests.test_baseline_cli",
     "tests.test_baseline_contract", "tests.test_candidate_allow", "tests.test_change_approval",
+    "tests.test_bench_case", "tests.test_bench_calibrate", "tests.test_bench_run",
+    "tests.test_bench_real_exec",
+    "tests.test_bench_cases_v2_draft",
     "tests.test_change_report", "tests.test_changes_behavior", "tests.test_changes_contract",
+    "tests.test_characterization_claims", "tests.test_characterize_design_revision_stop_report",
+    "tests.test_characterize_onboarding_scratch", "tests.test_characterize_scratch_docs",
     "tests.test_ci_runner", "tests.test_claude_adapter", "tests.test_claude_role_profiles",
     "tests.test_codex_adapter", "tests.test_core", "tests.test_correction_views",
+    "tests.test_design_revision_findings",
     "tests.test_failure_attribution", "tests.test_final_role_boundaries", "tests.test_forbidden_path_legacy",
     "tests.test_foundation_survey", "tests.test_foundation_quality", "tests.test_git_command", "tests.test_git_identity", "tests.test_init_git_control", "tests.test_monorepo_detection",
-    "tests.test_metrics_rules", "tests.test_metrics_compute",
+    "tests.test_harness_editable_path",
+    "tests.test_metrics_rules", "tests.test_metrics_compute", "tests.test_intervention_events",
     "tests.test_product_spec", "tests.test_project_agents", "tests.test_project_git_lifecycle",
     "tests.test_project_profile", "tests.test_project_profile_behavior", "tests.test_report_call_provenance",
     "tests.test_report_evidence", "tests.test_report_final_fixes", "tests.test_report_git_process", "tests.test_report_focus",
     "tests.test_report_presentation", "tests.test_report_rendering", "tests.test_role_context_integration",
     "tests.test_role_profiles", "tests.test_role_schemas", "tests.test_role_subagents",
+    "tests.test_review_convergence",
     "tests.test_routing_policy", "tests.test_routing_risks", "tests.test_skill_custom", "tests.test_skill_selection",
     "tests.test_skills", "tests.test_spec_craft", "tests.test_smoke", "tests.test_state_format", "tests.test_stop_report",
-    "tests.test_onboarding", "tests.test_onboarding_lock", "tests.test_smoke_harness",
+    "tests.test_onboarding", "tests.test_onboarding_source_files", "tests.test_onboarding_lock", "tests.test_smoke_harness",
     "tests.test_smoke_harness_protocol", "tests.test_smoke_harness_scratch",
 ]
 
 # The main flow end to end: contract, RED, implementation, review, report, merge.
 END_TO_END = [
-    "tests.test_base_agent_flow", "tests.test_base_agent_end_to_end",
     "tests.test_trace_ids", "tests.test_execution_profile",
+    "tests.test_verification_entries",
     "tests.test_product_e2e", "tests.test_nature_e2e", "tests.test_change_types",
     "tests.test_reports_e2e", "tests.test_roles_e2e",
+    "tests.test_regression_updates",
     "tests.test_project_loop", "tests.test_lifecycle_golden", "tests.test_lifecycle_recovery_entries",
 ]
 
 # Safety boundaries: out-of-scope writes, tampering, path and process containment.
 SAFETY = [
-    "tests.test_base_agent_safety", "tests.test_base_agent_recovery",
-    "tests.test_base_agent_cleanup_hints",
-    "tests.test_base_agent_worktree", "tests.test_base_agent_transport",
-    "tests.test_base_agent_transfer",
+    "tests.test_acceptance_fixture_retry",
+    "tests.test_characterize_acceptance_repair_next",
+    "tests.test_acceptance_preconditions",
+    "tests.test_routing_e2e.RoutedEndToEndTests.test_oracle_repair_reproves_red_and_keeps_approved_plan",
+    "tests.test_consistency.ConsistencyGateTests.test_acceptance_repair_keeps_approval_but_design_review_can_block",
+    "tests.test_consistency.ConsistencyGateTests.test_standard_repair_review_retries_after_needs_input",
+    "tests.test_consistency.ConsistencyGateTests.test_changed_scope_replans_after_acceptance_repair",
+    "tests.test_consistency.ConsistencyGateTests.test_changed_risk_replans_after_acceptance_repair",
+    "tests.test_consistency.ConsistencyGateTests.test_invalid_approval_does_not_survive_acceptance_repair",
+    "tests.test_consistency.ConsistencyGateTests.test_l3_origin_does_not_survive_acceptance_repair",
+    "tests.test_oracle_tiers.RedByRowTypeTests.test_heavy_regression_failure_is_an_oracle_defect",
+    "tests.test_oracle_tiers.RedByRowTypeTests.test_heavy_new_red_and_regression_green_prove_red",
+    "tests.test_oracle_tiers.RedByRowTypeTests.test_no_judged_test_is_an_oracle_defect",
+    "tests.test_oracle_tiers.RedByRowTypeTests.test_new_rows_red_and_kept_rows_green_prove_red",
+    "tests.test_smoke_cli_exit_attribution",
+    "tests.test_characterize_boundary_legacy_flow",
+    "tests.test_characterize_scratch_boundaries", "tests.test_characterize_scratch_guards",
+    "tests.test_failure_routing.BoundaryAttributionTests."
+    "test_linked_collision_stashes_preexisting_feature_and_deleted_tests",
+    "tests.test_characterization.CharacterizationGateTests.test_multiple_claims_for_one_file_survive_the_gate",
+    "tests.test_characterize_base_hint_flow", "tests.test_characterize_base_stop_report",
     "tests.test_custom_protection",
     "tests.test_base_contract", "tests.test_base_lifecycle", "tests.test_base_compatibility",
     "tests.test_base_trust", "tests.test_base_restart", "tests.test_base_supplement",
+    "tests.test_base_criteria_preserve",
     "tests.test_git_diff_paths",
     "tests.test_lesson_landing.LandingTests.test_base_proposal_paths_detect_renamed_foundation_source",
     "tests.test_landing_recovery",
@@ -63,6 +89,7 @@ COMMAND_LINE = ["tests.test_cli", "tests.test_product_cli"]
 
 # Cross-platform regressions: 8.3 short paths, core.autocrlf checkouts, UTF-8 pipes (all under 1 s).
 PLATFORM = [
+    "tests.test_bench_correction",
     "tests.test_characterization_baseline", "tests.test_claude_adapter_encoding",
     "tests.test_evidence_root_spelling", "tests.test_line_endings",
     "tests.test_memory_fixture_portability",
@@ -73,6 +100,7 @@ RUNNER = ["tests.test_suites"]
 
 # Keep I8 in core without running the entire slow completion-resilience module.
 INVARIANTS = [
+    "tests.test_design_approval.DesignApprovalTests.test_no_progress_can_replan_through_public_recovery_entry",
     "tests.test_completion_resilience.CompletionResilienceTests."
     "test_completion_resumes_after_a_crash_following_the_implementation_commit",
 ]

@@ -117,6 +117,43 @@ class ReadinessTests(unittest.TestCase):
         self.assertEqual(record['status'], 'PROJECT_NOT_READY')
         self.assertTrue(record['layers']['checks']['results'][0]['timed_out'])
 
+    def test_failure_tail_is_redacted_bounded_and_pass_has_no_output(self):
+        script = ("import sys; sys.stdout.write('y'*100000 + ' OUTTAIL'); "
+                  "sys.stderr.write('x'*100000 + ' token=synthetic-secret TAIL'); "
+                  "sys.exit(1)")
+        self.config(check_commands=[['{python}', '-c', script]])
+        record = inspect_readiness(self.project)
+        result = record['layers']['checks']['results'][0]
+        self.assertIn('OUTTAIL', result['output_tail']['stdout'])
+        self.assertIn('TAIL', result['output_tail']['stderr'])
+        self.assertIn('[REDACTED]', result['output_tail']['stderr'])
+        self.assertNotIn('synthetic-secret', str(record))
+        self.assertLessEqual(sum(map(len, result['output_tail'].values())), 1500)
+        evidence = load_json(self.project / record['layers']['checks']['evidence_path'])
+        self.assertEqual(evidence['layers']['checks']['results'][0]['output_tail'],
+                         result['output_tail'])
+
+        self.config(check_commands=[['{python}', '-c', "print('PASSED')"]])
+        passed = inspect_readiness(self.project)['layers']['checks']['results'][0]
+        self.assertNotIn('output_tail', passed)
+
+    def test_timeout_preserves_output_and_start_failure_keeps_check_identity(self):
+        self.config(check_commands=[['{python}', '-c',
+                    "import sys,time; print('TIMEOUT TAIL', flush=True); time.sleep(10)"]])
+        config = load_json(self.project / '.storyloop/config.json')
+        config['check_timeout_seconds'] = 1
+        write_json(self.project / '.storyloop/config.json', config)
+        timed = inspect_readiness(self.project)['layers']['checks']['results'][0]
+        self.assertTrue(timed['timed_out'])
+        self.assertIn('TIMEOUT TAIL', timed['output_tail']['stdout'])
+
+        self.config(check_commands=[['nonexistent-storyloop-command']])
+        failed = inspect_readiness(self.project)['layers']['checks']['results'][0]
+        self.assertEqual(failed['id'], 'REGRESSION-001')
+        self.assertEqual(failed['status'], 'ERROR')
+        self.assertEqual(failed['command'], ['nonexistent-storyloop-command'])
+        self.assertEqual(failed['output_tail'], {'message': '无可用输出'})
+
     def test_protected_smoke_counts_and_drift(self):
         from storyloop.system_smoke import install_system_smoke
         files = [{'path': 'test_core.py', 'content':

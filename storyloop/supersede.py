@@ -46,7 +46,8 @@ def _supersede_locked(project: Path, old_id: str, message: str,
         return existing
     link, request = _revision_context(project, old, run, message, checked_reason)
     product = read_only_call(project, old_id, lambda: reviser(request))
-    new = create_change(project, old["idea"], product, supersedes=link)
+    new = create_change(project, old["idea"], product, supersedes=link,
+                        require_verification_entries=old.get("verification_entries_required") is True)
     _finish_link(project, old, run, new["change_id"])
     return _result(project, new, run)
 
@@ -91,6 +92,10 @@ def _finish_link(project: Path, old: dict, run: dict, new_id: str) -> None:
     updated = set_change_status(project, {**old, "superseded_by": new_id}, "SUPERSEDED")
     write_change_preview(project, updated)
     updated_run = dict(run)
+    from .intervention_events import append_event
+    if not any(isinstance(item, dict) and item.get("kind") == "supersede"
+               for item in run.get("intervention_events", [])):
+        append_event(updated_run, "supersede", source="change --supersede", stop=run.get("status"))
     transition(project, updated_run, "SUPERSEDED", event="supersede", updates={"superseded_by": new_id})
     save_run(project, updated_run)
 

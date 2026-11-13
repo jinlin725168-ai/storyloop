@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import shlex
 from .routing_report import routing_options
-from .run_state import base_design_approved
+from .stop_report import base_legacy_action
 
 
 def append_pending_memory(project: Path | str, value: str | None) -> str | None:
@@ -28,16 +28,17 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
               details: dict | None = None) -> str | None:
     """A copy-pasteable next action for a run status or error code; None when nothing is pending."""
     details = details or {}
-    if status == "DESIGN_APPROVAL_REQUIRED" and isinstance(details.get("base_design"), dict):
-        plan_id = details["base_design"].get("plan_id")
-        if isinstance(plan_id, str) and plan_id:
-            if base_design_approved(project, details):
-                return f"storyloop run <project> --change {change_id}"
-            return (f"storyloop base-design-approve <project> --change {change_id} "
-                    f"--plan-id {plan_id}")
+    if status == "BASE_AGENT_REMOVED" or (details.get("implementer") == "agent"
+                                          and status != "PASSED"):
+        return ("保留旧代理运行的状态与分支；另开已批准的 base 变更，"
+                "再用 storyloop run <project> --change <new-BASE-ID> --implementer human")
     options = routing_options(project, change_id, status, details)
     if options:
         return options[0]["command"]
+    if not change_id:
+        return ("检查错误并重试原命令；此时尚未创建变更，无可查看的 change id"
+                if status else None)
+    project_path = project
     project = shlex.quote(str(project))
     change = shlex.quote(change_id or "<change-id>")
     where = f"{project} --change {change}"
@@ -55,6 +56,18 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
             return (f"代理触碰了 CI 路径；先撤回越界改动，再由人运行 storyloop base-propose "
                     f"{project} --path <CI路径> --reason '<原因>' --allow-ci，批准新 BASE 后在底座分支重放；"
                     f"完成底座变更后再 {run}")
+        if details.get("blocked_by"):
+            git_project = shlex.quote(str(Path(project_path).resolve()))
+            base = shlex.quote(str(details["blocked_by"]))
+            source = shlex.quote(str(details.get("source_branch", "<source-branch>")))
+            feature = shlex.quote(str(details.get("feature_branch", "<feature-branch>")))
+            legacy_paths = details.get("legacy_paths") or []
+            if legacy_paths:
+                return base_legacy_action(project_path, change_id, details)
+            return (f"底座草案 {base} 已生成：git -C {git_project} switch {source}；"
+                    f"storyloop approve {project} --change {base}；"
+                    f"storyloop run {project} --change {base} --implementer human；"
+                    f"base 通过后 git -C {git_project} switch {feature}，再 {run} 自动合并并重证")
         proposal = details.get("base_proposal")
         named = f"（提案 {Path(str(proposal)).stem}）" if proposal else ""
         return (f"底座改动要独立迭代{named}：storyloop base-update {project} --proposal <BASE-ID> "
@@ -73,6 +86,11 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
                 f"--reason <原因>；实现问题就提高 .storyloop/config.json 的 max_attempts 后 {run}，"
                 f"或另开新变更（运行开始后合同不能修订）")
     if status == "ORACLE_DEFECT":
+        from .failure_attribution import characterization_oracle
+        if characterization_oracle(details):
+            return (f"特征化测试锁定了合同要改变的行为；请作废本次变更并运行 "
+                    f"storyloop change {where} --supersede {change_id} --reason <原因> "
+                    "--message <重新描述需求> 重开")
         return (f"验收判据被判定存在缺陷，请根据停止报告中的证据修正：storyloop acceptance-repair {where} "
                 f"--reason <哪条断言写错了> 让 acceptance 角色修正，再 {run}")
     if status == "EXISTING_GREEN":
@@ -113,7 +131,9 @@ def draft_next(project: Path | str, change: dict) -> str:
     change_id = change["change_id"]
     where = shlex.join([str(project), "--change", change_id])
     questions = len(change["product"].get("questions") or [])
-    blocking = len(blocking_items(evaluate_checklist(change["product"], Path(project))))
+    blocking = len(blocking_items(evaluate_checklist(
+        change["product"], Path(project),
+        require_entries=change.get("verification_entries_required") is True)))
     if not questions and not blocking:
         return next_step("DRAFT", change_id, project)
     drafts = f".storyloop/drafts/{change_id}"

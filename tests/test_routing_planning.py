@@ -38,7 +38,7 @@ class PlanningTests(unittest.TestCase):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.root = Path(self.folder.name)
-        readiness_repository(self.root, module_roots=['app'])
+        readiness_repository(self.root, module_roots=['app'], test_roots=['tests'])
         self.commit = git(self.root, 'rev-parse', 'HEAD').strip()
         self.change = {'change_id': 'FEAT-planning', 'routing_version': 1,
                        'product': assessed_product(), 'approval': {'tier': 'light'},
@@ -63,6 +63,34 @@ class PlanningTests(unittest.TestCase):
                                       ('standard', 'refactor', ['app/a.py']),
                                       ('heavy', 'feature', ['app/a.py'])]:
             self.assertEqual(required_locks(tier, nature, ['app/a.py']), expected)
+
+    def test_regression_updates_require_existing_test_path_and_approved_ac(self):
+        response = answer()
+        option = response['options'][0]
+        option['touched'].append('tests/test_service.py')
+        option['regression_updates'] = [{
+            'path': 'tests/test_service.py', 'criterion_ids': ['AC-1'],
+            'reason': 'AC-1 changes the old snapshot assertion'}]
+        plan = self.plan(response)
+        self.assertEqual(plan['options'][0]['regression_updates'], option['regression_updates'])
+        for path, ids in [('tests/missing.py', ['AC-1']),
+                          ('../escape.py', ['AC-1']),
+                          ('tests/test_service.py', ['AC-NOT-APPROVED']),
+                          ('app/service.py', ['AC-1'])]:
+            with self.subTest(path=path, ids=ids):
+                bad = deepcopy(response)
+                bad['options'][0]['regression_updates'][0].update(path=path, criterion_ids=ids)
+                with self.assertRaises(StoryLoopError):
+                    self.plan(bad)
+
+    def test_old_saved_plan_without_regression_updates_preserves_legacy_test_scope(self):
+        from storyloop.regression_updates import undeclared_existing_tests
+        plan = self.plan(answer())['options'][0]
+        self.assertEqual(plan['regression_updates'], [])
+        plan.pop('regression_updates')
+        boundary = {'allowed': [{'path': 'tests/test_service.py', 'category': 'TEST'}]}
+        self.assertEqual(undeclared_existing_tests(self.root, self.state, self.config,
+                                                    boundary, plan), [])
 
     def test_light_plan_is_complete_and_does_not_call_design(self):
         self.assertIsNone(self.ensure(lambda p, c: self.fail('light called design')))
@@ -94,6 +122,48 @@ class PlanningTests(unittest.TestCase):
         response = answer()
         response['options'][0]['symbols'] = []
         self.assertEqual(self.ensure(lambda p, c: response)['status'], 'NEEDS_INPUT')
+
+    def test_incomplete_plan_evidence_gets_one_design_retry(self):
+        self.state['routing'].update(initial_tier='standard', effective_tier='standard')
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            if len(requests) == 1:
+                response['options'][0]['symbols'] = []
+            return response
+
+        self.assertIsNone(self.ensure(design))
+        self.assertEqual(len(requests), 2)
+        self.assertIn('max_references', requests[1]['missing_plan_evidence'])
+        self.assertIn('symbols', requests[1]['evidence_guidance'])
+
+    def test_persistently_incomplete_plan_evidence_stops_after_one_retry(self):
+        self.state['routing'].update(initial_tier='standard', effective_tier='standard')
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            response['options'][0]['symbols'] = []
+            return response
+
+        self.assertEqual(self.ensure(design)['status'], 'NEEDS_INPUT')
+        self.assertEqual(len(requests), 2)
+
+    def test_unknown_plan_risk_still_requires_human_without_retry(self):
+        self.state['routing'].update(initial_tier='standard', effective_tier='standard')
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            response['options'][0]['risks']['migration']['value'] = 'unknown'
+            return response
+
+        self.assertEqual(self.ensure(design)['status'], 'NEEDS_INPUT')
+        self.assertEqual(len(requests), 1)
 
     def test_plan_fields_scope_and_constraints_are_validated(self):
         mutations = [lambda a: a['options'][0].pop('symbols'),
@@ -199,6 +269,46 @@ class PlanningTests(unittest.TestCase):
         self.assertEqual(calls[0]['mode'], 'routing-plan')
         self.assertIn('validation_errors', calls[1])
         self.assertEqual(self.state['routing']['effective_tier'], 'heavy')
+
+    def test_absent_scope_symbol_retries_design_then_stops_with_evidence(self):
+        self.state['status'] = 'IMPLEMENTING'
+        self.state['routing'].update(initial_tier='heavy', effective_tier='heavy')
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            response['options'][0]['symbols'] = [
+                {'path': 'app/service.py', 'symbol': 'absent_at_contract_commit'}]
+            return response
+
+        stopped = self.ensure(design)
+
+        self.assertEqual(len(requests), 2)
+        self.assertIn('Declared symbol is absent at the contract commit',
+                      requests[1]['validation_errors'][0])
+        self.assertEqual(stopped['status'], 'DESIGN_REVISION_REQUIRED')
+        self.assertIn('Declared symbol is absent at the contract commit', stopped['error'])
+        self.assertIn('storyloop replan', stopped['next'])
+        self.assertIn('Declared symbol is absent at the contract commit',
+                      stopped['stop']['blocker'])
+        self.assertEqual(self.state['status'], 'DESIGN_REVISION_REQUIRED')
+
+    def test_absent_scope_symbol_can_be_corrected_on_semantic_retry(self):
+        self.state['routing'].update(initial_tier='heavy', effective_tier='heavy')
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            if len(requests) == 1:
+                response['options'][0]['symbols'] = [
+                    {'path': 'app/service.py', 'symbol': 'absent_at_contract_commit'}]
+            return response
+
+        self.assertIsNone(self.ensure(design))
+        self.assertEqual(len(requests), 2)
+        self.assertIn('validation_errors', requests[1])
 
     def test_post_contract_evidence_path_is_repaired_against_explicit_source_commit(self):
         self.state['routing'].update(initial_tier='heavy', effective_tier='heavy')

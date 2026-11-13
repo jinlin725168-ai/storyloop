@@ -15,7 +15,7 @@ from storyloop.models import StoryLoopError
 from storyloop.smoke import install_smoke_suite
 from storyloop.acceptance_repair import repair_smoke
 from storyloop.project_loop import LoopServices, load_run_state, run_change
-from storyloop.smoke_runner import run_smoke
+from storyloop.smoke_runner import _judge_red, run_smoke
 from tests.support import product
 from tests.test_baseline_behavior import repository
 
@@ -95,6 +95,36 @@ class RedByRowTypeTests(unittest.TestCase):
         payload = suite(change_id, red_exit, green_exit, red_output)
         install_smoke_suite(root, load_change(root, change_id), payload["files"], payload["manifest"])
         return root, change_id
+
+    def _prove_heavy(self, red_exit: int, green_exit: int):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        root = Path(folder.name)
+        value = two_row_product()
+        for criterion in value["stories"][0]["acceptance"]:
+            criterion["oracle_class"] = "auto-heavy"
+        change_id = approved(root, value)
+        payload = suite(change_id, red_exit, green_exit)
+        for entry in payload["manifest"]["tests"]:
+            entry["tier"] = "heavy"
+        install_smoke_suite(root, load_change(root, change_id), payload["files"], payload["manifest"])
+        return root, change_id
+
+    def test_heavy_regression_failure_is_an_oracle_defect(self):
+        root, change_id = self._prove_heavy(1, 1)
+        with self.assertRaises(StoryLoopError) as raised:
+            run_smoke(root, load_change(root, change_id), expect_red=True)
+        self.assertEqual(raised.exception.code, "ORACLE_DEFECT")
+        self.assertEqual(raised.exception.details["criteria_failing"], ["AC-2"])
+
+    def test_heavy_new_red_and_regression_green_prove_red(self):
+        root, change_id = self._prove_heavy(1, 0)
+        self.assertEqual(run_smoke(root, load_change(root, change_id), expect_red=True)["status"], "RED")
+
+    def test_no_judged_test_is_an_oracle_defect(self):
+        with self.assertRaises(StoryLoopError) as raised:
+            _judge_red([], {"tests": []}, {"product": two_row_product()})
+        self.assertEqual(raised.exception.code, "ORACLE_DEFECT")
 
     def test_new_rows_red_and_kept_rows_green_prove_red(self):
         root, change_id = self._prove(1, 0)

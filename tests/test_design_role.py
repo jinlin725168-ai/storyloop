@@ -108,7 +108,9 @@ class DesignRoleTests(unittest.TestCase):
             (project / "tests/test_lock.py").write_text(
                 "import unittest\nfrom modules.orders import service\n\n\nclass Lock(unittest.TestCase):\n"
                 "    def test_value(self):\n        self.assertIn('VALUE', dir(service))\n", encoding="utf-8")
-            return {"summary": "locked", "touched": [], "tests": ["tests/test_lock.py"], "questions": []}
+            return {"summary": "locked", "touched": [], "tests": ["tests/test_lock.py"],
+                    "questions": [], "claims": [{"test": "tests/test_lock.py",
+                    "behavior": "VALUE remains present", "symbols": [], "criterion_ids": []}]}
 
         try:
             result = run_change(root, change_id, _services(change_id, design, characterize=characterize, seen=seen))

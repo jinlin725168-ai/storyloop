@@ -74,7 +74,9 @@ class RefactorEndToEndTests(unittest.TestCase):
             def characterize(project, context):
                 (project / "tests/test_lock_service.py").write_text(LOCK, encoding="utf-8")
                 return {"summary": "locked", "touched": ["modules/orders/service.py"],
-                        "tests": ["tests/test_lock_service.py"], "questions": []}
+                        "tests": ["tests/test_lock_service.py"], "questions": [], "claims": [
+                            {"test": "tests/test_lock_service.py", "behavior": "old service invariant",
+                             "symbols": [], "criterion_ids": []}]}
 
             def implement(project, context):
                 from storyloop.storage import load_json

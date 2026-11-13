@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "tests": [
+    {
+      "id": "design-revision-red",
+      "criteria": [
+        "AC-1",
+        "AC-2",
+        "AC-5"
+      ],
+      "command": [
+        "{python}",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "acceptance/changes/FIX-20261105-design-revision-findings",
+        "-p",
+        "test_findings.py",
+        "-k",
+        "RedBehavior"
+      ],
+      "timeout_seconds": 90,
+      "tier": "fast"
+    },
+    {
+      "id": "design-revision-existing",
+      "criteria": [
+        "AC-3",
+        "AC-4"
+      ],
+      "command": [
+        "{python}",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "acceptance/changes/FIX-20261105-design-revision-findings",
+        "-p",
+        "test_findings.py",
+        "-k",
+        "ExistingBehavior"
+      ],
+      "timeout_seconds": 90,
+      "tier": "fast"
+    }
+  ]
+}

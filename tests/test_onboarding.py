@@ -9,6 +9,18 @@ from tests.test_baseline_behavior import git
 
 
 class ScaffoldTests(unittest.TestCase):
+    def test_python_settings_draft_contains_common_cache_scratch_paths(self):
+        from storyloop.onboarding_templates import render
+        settings = json.loads(render(["python"])["acceptance/storyloop-settings.json"])
+        self.assertEqual(settings["scratch_paths"], [
+            "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache",
+            "*.egg-info", "build", "dist"])
+
+    def test_non_python_settings_omit_python_build_scratch_paths(self):
+        from storyloop.onboarding_templates import render
+        settings = json.loads(render(["node"])["acceptance/storyloop-settings.json"])
+        self.assertEqual(settings["scratch_paths"], [])
+
     def test_scaffold_only_writes_drafts_and_rejects_unfinished_executor(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

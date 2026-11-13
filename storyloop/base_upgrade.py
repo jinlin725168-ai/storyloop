@@ -18,7 +18,8 @@ from .project_profile import base_commands_digest, effective_base_profile, is_ci
 from .project_profile import layer_commands
 from .project_git import changed_paths
 from .smoke_runner import run_commands_at_commit, run_commands_isolated
-from .system_smoke import adopt_system_smoke, load_system_smoke, run_system_smoke_isolated
+from .system_smoke import adopt_system_smoke, load_system_smoke_at_commit, run_system_smoke_isolated
+from .base_criteria import check_base_criteria
 from .storage import load_json, locked, write_json
 from .lesson_store import load_lessons_at
 from .lessons import scope_matches
@@ -91,6 +92,15 @@ def draft_from_proposal(project: Path, proposal_id: str, *, scope: str) -> dict:
     project = Path(project).resolve()
     proposal = load_json(project / ".storyloop/base-proposals" / f"{proposal_id}.json")
     proposal_path = project / ".storyloop/base-proposals" / f"{proposal_id}.json"
+    reference = proposal.get("reference")
+    if reference is not None:
+        expected = f".storyloop/base-proposals/{proposal_id}-reference.json"
+        require(isinstance(reference, dict) and set(reference) == {"path", "sha256"}
+                and reference["path"] == expected, "Invalid base proposal reference")
+        reference_path = project / expected
+        require(reference_path.is_file()
+                and hashlib.sha256(reference_path.read_bytes()).hexdigest() == reference["sha256"],
+                "Base proposal reference changed")
     proposal_sha256 = hashlib.sha256(proposal_path.read_bytes()).hexdigest()
     require(proposal.get("change_id") == proposal_id, "Base proposal identity mismatch")
     state_path = project / ".storyloop/state/changes" / f"{proposal_id}.json"
@@ -138,7 +148,7 @@ def establish_old_green(project: Path, change: dict, state: dict) -> dict:
                 f"Old base {name} layer is not green")
     require(any(layer_commands(profile, name) for name in layers),
             "Old base has no configured regression commands")
-    manifest = load_system_smoke(project)
+    manifest = load_system_smoke_at_commit(project, source)
     require(manifest is not None, "Old base has no installed system smoke suite")
     smoke = run_commands_at_commit(project, source,
                                    [item["command"] for item in manifest["tests"]], timeout)
@@ -179,6 +189,7 @@ def base_candidate_paths(project: Path, change: dict, state: dict) -> list[str]:
             "Base committed paths differ from approved contract; extra: " + ", ".join(extra)
             + "; missing: " + ", ".join(missing))
     audit_base_scope(project, change, actual)
+    check_base_criteria(project, change, state, expected)
     return sorted(actual)
 
 

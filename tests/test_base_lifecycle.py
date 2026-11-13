@@ -1,7 +1,10 @@
 """The base G1 gate uses green checks on the locked old foundation."""
 
 from pathlib import Path
+from contextlib import redirect_stderr
 import hashlib
+import io
+import json
 import sys
 import tempfile
 import unittest
@@ -25,12 +28,6 @@ class BaseG1Tests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
-        agent_temp = tempfile.TemporaryDirectory()
-        self.addCleanup(agent_temp.cleanup)
-        agent_env = mock.patch.dict("os.environ", {"STORYLOOP_AGENT_WORKTREE_TEMP_ROOT":
-                                           agent_temp.name})
-        agent_env.start()
-        self.addCleanup(agent_env.stop)
         self.root = Path(self.folder.name)
         repository(self.root)
         smoke = self.root / "acceptance/smoke"
@@ -107,6 +104,77 @@ class BaseG1Tests(unittest.TestCase):
         self.assertEqual(result["status"], "HUMAN_IMPLEMENTATION_REQUIRED")
         self.assertEqual(git(self.root, "branch", "--show-current"),
                          f"storyloop/{self.change['change_id']}")
+
+    def test_cli_rejects_removed_base_agent_option(self):
+        with self.assertRaises(SystemExit):
+            parser().parse_args(["run", str(self.root), "--change", self.change["change_id"],
+                                 "--implementer", "agent"])
+        with self.assertRaises(SystemExit):
+            parser().parse_args(["base-design-approve", str(self.root), "--change",
+                                 self.change["change_id"], "--plan-id", "0" * 64])
+
+    def test_saved_agent_run_gives_guidance_without_mutating_state(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        path = self.root / ".storyloop/state/runs" / f"{change_id}.json"
+        state = load_json(path)
+        state["implementer"] = "agent"
+        write_json(path, state)
+        original = path.read_bytes()
+        with self.assertRaisesRegex(StoryLoopError, "agent.*removed.*human"):
+            run_change(self.root, change_id)
+        from storyloop.run_recovery import reset_run
+        with self.assertRaisesRegex(StoryLoopError, "agent.*removed.*human"):
+            reset_run(self.root, change_id, "改用人工通道")
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_cli_legacy_agent_error_does_not_suggest_resuming_old_stop(self):
+        from storyloop.cli import main
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        path = self.root / ".storyloop/state/runs" / f"{change_id}.json"
+        state = load_json(path)
+        state["implementer"] = "agent"
+        write_json(path, state)
+        original = path.read_bytes()
+        class Capture(io.StringIO):
+            def reconfigure(self, **_kwargs):
+                pass
+        stderr = Capture()
+        with redirect_stderr(stderr):
+            code = main(["run", str(self.root), "--change", change_id])
+        error = json.loads(stderr.getvalue())
+        self.assertEqual(code, 2)
+        self.assertEqual(error["status"], "BASE_AGENT_REMOVED")
+        self.assertIn("human", error["next"])
+        self.assertNotIn("继续", error["next"])
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_status_of_legacy_agent_attempt_does_not_offer_old_stop(self):
+        change_id = self.change["change_id"]
+        run_change(self.root, change_id, implementer="human")
+        path = self.root / ".storyloop/state/runs" / f"{change_id}.json"
+        state = load_json(path)
+        state["implementer"] = "agent"
+        write_json(path, state)
+        original = path.read_bytes()
+        args = parser().parse_args(["status", str(self.root), "--change", change_id])
+        status = dispatch(args)
+        self.assertIsNone(status["stop"])
+        self.assertIn("--implementer human", status["next"])
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_completed_agent_trial_remains_readable(self):
+        change_id = self._accepted_candidate()
+        self.assertEqual(run_change(self.root, change_id)["status"], "FINALIZING")
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+        path = self.root / ".storyloop/state/runs" / f"{change_id}.json"
+        state = load_json(path)
+        state["implementer"] = "agent"
+        write_json(path, state)
+        original = path.read_bytes()
+        self.assertEqual(run_change(self.root, change_id)["status"], "PASSED")
+        self.assertEqual(path.read_bytes(), original)
 
     def test_base_run_records_engine_source_and_target_tree(self):
         run_change(self.root, self.change["change_id"], implementer="human")

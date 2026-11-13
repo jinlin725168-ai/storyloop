@@ -72,6 +72,7 @@ rank = 7
 [modules]
 "models" = { module = "foundation", zone = "base", split = "D" }
 "product_contract" = { module = "contract", zone = "mutable" }
+"verification_entries" = { module = "implementation", zone = "mutable" }
 "change_types" = { module = "change_types", zone = "base" }
 "errors" = { module = "foundation", zone = "base" }
 "path_security" = { module = "foundation", zone = "base" }
@@ -87,12 +88,15 @@ rank = 7
 "git_command" = { module = "git", zone = "base" }
 "project_profile" = { module = "project_contract", zone = "base" }
 "state_format" = { module = "project_contract", zone = "base" }
+"planning_choice" = { module = "foundation", zone = "base" }
 "smoke" = { module = "project_contract", zone = "base" }
 "onboarding_manifest" = { module = "project_contract", zone = "base" }
 "testing.smoke_harness.*" = { module = "project_contract", zone = "base" }
 "baseline" = { module = "evidence_kernel", zone = "base", split = "D" }
 "project_boundaries" = { module = "evidence_kernel", zone = "base" }
 "smoke_runner" = { module = "evidence_kernel", zone = "base" }
+"acceptance_defects" = { module = "evidence_kernel", zone = "base" }
+"self_harness_preflight" = { module = "evidence_kernel", zone = "base" }
 "oracle_counts" = { module = "evidence_kernel", zone = "base" }
 "project_loop_support" = { module = "evidence_kernel", zone = "base" }
 "project_loop_guards" = { module = "evidence_kernel", zone = "base" }
@@ -124,17 +128,21 @@ rank = 7
 "answers" = { module = "contract", zone = "mutable" }
 "supersede" = { module = "contract", zone = "mutable" }
 "acceptance_repair" = { module = "oracle", zone = "mutable" }
+"oracle_strength_precheck" = { module = "oracle", zone = "mutable" }
 "system_smoke" = { module = "oracle", zone = "mutable" }
 "oracle_skill_approval" = { module = "oracle", zone = "mutable" }
 "project_loop_gates" = { module = "implementation", zone = "mutable" }
 "planning" = { module = "implementation", zone = "mutable" }
 "planning_validation" = { module = "implementation", zone = "mutable" }
+"regression_updates" = { module = "implementation", zone = "mutable" }
 "characterization_baseline" = { module = "implementation", zone = "mutable" }
 "facts" = { module = "implementation", zone = "mutable" }
 "failure_attribution" = { module = "implementation", zone = "mutable" }
 "project_loop_failures" = { module = "implementation", zone = "mutable" }
+"base_collision" = { module = "implementation", zone = "mutable" }
 "review_context" = { module = "verification", zone = "mutable" }
 "review_disposition" = { module = "verification", zone = "mutable" }
+"review_convergence" = { module = "verification", zone = "mutable" }
 "finding_disposition" = { module = "verification", zone = "mutable" }
 "consistency" = { module = "verification", zone = "mutable" }
 "consistency_locations" = { module = "verification", zone = "mutable" }
@@ -162,14 +170,11 @@ rank = 7
 "readiness" = { module = "onboarding", zone = "mutable" }
 "readiness_lineage" = { module = "onboarding", zone = "mutable" }
 "base_upgrade" = { module = "onboarding", zone = "mutable" }
+"base_criteria" = { module = "onboarding", zone = "mutable" }
+"base_follow" = { module = "onboarding", zone = "mutable" }
 "base_build_config" = { module = "onboarding", zone = "mutable" }
 "base_execution" = { module = "lifecycle", zone = "mutable" }
 "base_run_open" = { module = "lifecycle", zone = "mutable" }
-"base_design" = { module = "implementation", zone = "mutable" }
-"base_agent_execution" = { module = "implementation", zone = "mutable" }
-"base_agent_worktree" = { module = "implementation", zone = "mutable" }
-"base_agent_transfer" = { module = "implementation", zone = "mutable" }
-"engine_source_safety" = { module = "implementation", zone = "mutable" }
 "base_review" = { module = "implementation", zone = "mutable" }
 "base_finalization" = { module = "lifecycle", zone = "mutable" }
 "foundation_survey" = { module = "onboarding", zone = "mutable" }
@@ -179,6 +184,7 @@ rank = 7
 "lesson_store" = { module = "memory", zone = "mutable" }
 "lesson_retrieval" = { module = "memory", zone = "mutable" }
 "lesson_landing" = { module = "memory", zone = "mutable" }
+"knowledge_delta" = { module = "memory", zone = "mutable" }
 "drafts" = { module = "memory", zone = "mutable" }
 "errata" = { module = "memory", zone = "mutable" }
 "retrospective" = { module = "memory", zone = "mutable" }
@@ -190,11 +196,18 @@ rank = 7
 "call_context" = { module = "outer_loop", zone = "mutable" }
 "metrics" = { module = "outer_loop", zone = "mutable" }
 "metrics_collect" = { module = "outer_loop", zone = "mutable" }
+"bench_case" = { module = "outer_loop", zone = "mutable" }
+"bench_calibrate" = { module = "outer_loop", zone = "mutable" }
+"bench_run" = { module = "outer_loop", zone = "mutable" }
+"bench_cli" = { module = "outer_loop", zone = "mutable" }
+"bench_real_exec" = { module = "outer_loop", zone = "mutable" }
+"bench_worker" = { module = "command", zone = "mutable" }
 "metrics_compute" = { module = "outer_loop", zone = "mutable" }
 "metrics_compute_support" = { module = "outer_loop", zone = "mutable" }
 "metrics_cost" = { module = "outer_loop", zone = "mutable" }
 "metrics_render" = { module = "outer_loop", zone = "mutable" }
 "metrics_rules" = { module = "outer_loop", zone = "mutable" }
+"intervention_events" = { module = "evidence_kernel", zone = "mutable" }
 "ci_results" = { module = "outer_loop", zone = "mutable" }
 "change_report" = { module = "reporting", zone = "mutable" }
 "change_log" = { module = "reporting", zone = "mutable" }

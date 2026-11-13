@@ -1,0 +1,63 @@
+{
+  "unit_commands": [
+    [
+      "{python}",
+      "tests/run.py",
+      "--suite",
+      "core",
+      "--workers",
+      "8"
+    ]
+  ],
+  "integration_commands": [],
+  "check_commands": [
+    [
+      "{python}",
+      "-m",
+      "ruff",
+      "check",
+      "storyloop",
+      "tests",
+      "examples"
+    ]
+  ],
+  "base_build_commands": [
+    [
+      "{python}",
+      "-m",
+      "compileall",
+      "-q",
+      "storyloop",
+      "storyloop_cli.py"
+    ]
+  ],
+  "module_roots": [
+    "storyloop",
+    "docs",
+    "examples"
+  ],
+  "test_roots": [
+    "tests"
+  ],
+  "integration_paths": [
+    "pyproject.toml"
+  ],
+  "candidate_allow": [],
+  "scratch_paths": [
+    "__pycache__",
+    ".pytest_cache",
+    "build",
+    "*.egg-info",
+    ".ruff_cache",
+    ".mypy_cache"
+  ],
+  "stacks": [
+    "python"
+  ],
+  "test_count_patterns": [
+    {
+      "match": "tests/run.py",
+      "executed": "(?P<executed>\\d+) 个测试"
+    }
+  ]
+}

@@ -16,6 +16,7 @@ from storyloop.baseline import bootstrap_project, load_baseline
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.project_loop import LoopServices, load_run_state, run_change
+from storyloop.project_loop_support import save_run
 from tests.support import product
 from tests.test_baseline_behavior import git, repository
 from tests.test_project_loop import smoke_payload
@@ -55,8 +56,12 @@ def _services(change_id, touch_readme):
 def _pause_on_readme(root, change_id):
     paused = run_change(root, change_id, _services(change_id, touch_readme=True))
     assert paused["status"] == "BASE_CHANGE_REQUIRED", paused
+    # Preserve coverage of the historical unlinked base-update recovery path.
+    state = load_run_state(root, change_id)
+    state.pop("blocked_by", None)
+    save_run(root, state)
     git(root, "checkout", "-q", "--", ".")
-    return load_run_state(root, change_id)["base_proposal"]
+    return state["base_proposal"]
 
 
 class ResumeAfterBaseUpgradeTests(unittest.TestCase):

@@ -12,6 +12,8 @@ from .project_loop_support import save_run
 from .review_context import strong_verification
 from .role_profiles import enabled, role_settings
 from .role_schemas import schema_errors, schema_for
+from .review_convergence import remember_ids
+from .semantic_repair import answer_with_repair
 from .smoke_runner import implementation_digest
 
 
@@ -34,6 +36,7 @@ def _answer(project, state, services, context, pending, decisions):
         save_run(project, state)
     try:
         _check_decisions(project, state, pending, decisions)
+        validate_review(pending['review'])
     except StoryLoopError as error:
         if pending.get('repaired'):
             raise
@@ -49,7 +52,7 @@ def _answer(project, state, services, context, pending, decisions):
         pending['repaired'] = True
         save_run(project, state)
         _check_decisions(project, state, pending, decisions)
-    validate_review(pending['review'])
+        validate_review(pending['review'])
     return pending['review']
 
 
@@ -69,7 +72,8 @@ def _check_decisions(project, state, pending, decisions):
 
 
 def _verify(project, state, services, context, pending, result):
-    findings = result['fix'] + result['stop']
+    findings = [item for item in result['fix'] + result['stop']
+                if item.get('disposition') != 'DECISION_NEEDED']
     if not findings or pending['tier_requested'] == 'strong':
         return
     request = {**context, 'mode': 'verify', 'findings': findings}
@@ -85,6 +89,9 @@ def _verify(project, state, services, context, pending, result):
     for bucket in ('fix', 'stop'):
         retained = []
         for item in result[bucket]:
+            if item.get('disposition') == 'DECISION_NEEDED':
+                retained.append(item)
+                continue
             item['verification'] = confirmed[item['id']]
             (retained if confirmed[item['id']]['confirmed'] else result['focus']).append(item)
         result[bucket] = retained
@@ -94,10 +101,13 @@ def perform_review(project, state, services, context, config):
     """Persist first review before verification so cost resume does not repeat it."""
     active = enabled(config)
     if not active:
-        answer = _call(project, state['change_id'], services, context)
-        validate_review(answer)
+        answer = answer_with_repair(
+            lambda request: _call(project, state['change_id'], services, request),
+            context, validate_review)
+        verdict = validate_review(answer)
+        remember_ids(state, answer['findings'])
         if not any('confidence' in item for item in answer.get('findings', [])):
-            return answer
+            return {**answer, 'verdict': verdict, 'questions': _decision_questions(answer)}
         result = dispose(answer['findings'], config.get('review_thresholds', {}), [])
         result['verification'] = {'status': 'not_performed', 'reason': 'PROFILE_NOT_CONFIGURED'}
         return _finish(project, state, answer, result)
@@ -111,6 +121,7 @@ def perform_review(project, state, services, context, config):
     require(all(pending.get(key) == value for key, value in binding.items()),
             'Pending review does not match the current candidate')
     answer = _answer(project, state, services, context, pending, decisions)
+    remember_ids(state, answer['findings'])
     result = dispose(answer['findings'], config.get('review_thresholds', {}), decisions)
     _verify(project, state, services, context, pending, result)
     return _finish(project, state, answer, result)
@@ -118,8 +129,21 @@ def perform_review(project, state, services, context, config):
 
 def _finish(project, state, answer, result):
     findings = result['fix'] + result['stop']
-    verdict = 'fail' if findings else 'needs_input' if answer.get('questions') and not answer['findings'] else 'pass'
+    advisories = [item for item in result['focus'] if item.get('disposition') == 'ADVISORY']
+    verdict = ('needs_input' if any(item.get('disposition') == 'DECISION_NEEDED'
+                                     for item in findings)
+               else 'fail' if findings else 'needs_input' if answer.get('questions')
+               and not answer['findings'] else 'pass')
     state['review_disposition'] = {'attempt': state['attempt'], **_redacted(result)}
     state.pop('pending_review', None)
     save_run(project, state)
-    return {**answer, 'verdict': verdict, 'findings': findings}
+    return {**answer, 'verdict': verdict, 'findings': findings + advisories,
+            'questions': _decision_questions(answer)}
+
+
+def _decision_questions(answer):
+    questions = list(answer.get('questions') or [])
+    for item in answer.get('findings') or []:
+        if item.get('disposition') == 'DECISION_NEEDED' and item['required_change'] not in questions:
+            questions.append(item['required_change'])
+    return questions

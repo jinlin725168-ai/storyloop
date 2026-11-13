@@ -18,11 +18,25 @@ from tests.test_baseline_behavior import git, repository
 
 
 class PackagedSkillTests(unittest.TestCase):
+    def test_domain_sections_and_foundation_use_are_packaged(self):
+        from storyloop.skills import SKILLS_ROOT
+        survey = (SKILLS_ROOT / "foundation-survey/SKILL.md").read_text(encoding="utf-8")
+        template = (SKILLS_ROOT / "foundation-survey/references/doc-templates.md").read_text(encoding="utf-8")
+        guidance = (SKILLS_ROOT / "foundation-use/SKILL.md").read_text(encoding="utf-8")
+        for domain in ("tech", "db", "api", "领域模型", "服务边界", "前端"):
+            self.assertIn(domain, survey)
+        for heading in ("已核实事实", "必须遵守的约束", "source:", "3～5 条"):
+            self.assertIn(heading, template)
+        self.assertIn("roles: [product, acceptance, design, characterize, implement, review]", guidance)
+        with tempfile.TemporaryDirectory() as folder:
+            for role in ("product", "acceptance", "design", "characterize", "implement", "review"):
+                self.assertIn("Follow foundation-use", instructions_for(Path(folder), role))
+
     def test_foundation_survey_skill_is_packaged_with_its_references(self):
         skills = packaged_skills()
         self.assertIn("foundation-survey", skills)
         skill = skills["foundation-survey"]
-        self.assertEqual(skill["version"], "1.1.0")
+        self.assertEqual(skill["version"], "1.2.0")
         self.assertTrue(skill["description"])
         names = {Path(p).name for p in skill["files"]}
         self.assertEqual(names, {"SKILL.md", "doc-templates.md", "survey-checklist.md", "source-and-sampling.md"})
@@ -41,8 +55,8 @@ class PackagedSkillTests(unittest.TestCase):
             second = install_skills(root)
             self.assertEqual(second["written"], [])
             status = skill_status(root)
-            self.assertEqual(status["foundation-survey"]["packaged"], "1.1.0")
-            self.assertEqual(status["foundation-survey"]["installed"], {t: "1.1.0" for t in SKILL_TARGETS})
+            self.assertEqual(status["foundation-survey"]["packaged"], "1.2.0")
+            self.assertEqual(status["foundation-survey"]["installed"], {t: "1.2.0" for t in SKILL_TARGETS})
 
     def test_install_on_an_initialized_project_opens_a_base_proposal(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -92,15 +106,23 @@ class SurveyUsesSkillTests(unittest.TestCase):
 
 
 class OracleCraftTests(unittest.TestCase):
+    def test_spec_craft_requires_entry_coverage_self_check(self):
+        skill = packaged_skills()['spec-craft']
+        self.assertEqual(skill['version'], '1.4.2')
+        content = (skill['root'] / 'SKILL.md').read_text(encoding='utf-8')
+        self.assertIn('入口覆盖自检', content)
+        self.assertIn('observable', content)
+
     def test_oracle_craft_ships_and_reaches_the_oracle_roles(self):
         self.assertIn("oracle-craft", packaged_skills())
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            for role in ("product", "acceptance", "characterize", "review"):
+            for role in ("product", "acceptance", "design", "review"):
                 self.assertIn("oracle-craft", select_skills(root, role, []))
             text = instructions_for(root, "acceptance")
             self.assertIn("unknown_state", text)          # from references/acceptance-matrix.md
             self.assertIn("contains", instructions_for(root, "characterize"))
+            self.assertNotIn("oracle-craft", select_skills(root, "characterize", []))
             self.assertNotIn("oracle-craft", instructions_for(root, "implement"))
 
     def test_the_product_role_is_told_what_a_reproduction_is(self):
@@ -139,10 +161,64 @@ class OracleCraftTests(unittest.TestCase):
         self.assertIn("root_cause", implement)
         self.assertIn('failure_evidence.source is "review"', acceptance)
 
-    def test_oracle_craft_is_version_1_1_1(self):
+    def test_oracle_craft_describes_preparation_execution_observation(self):
         from storyloop.skills import packaged_skills
-        self.assertEqual(packaged_skills()["oracle-craft"]["version"], "1.1.1")
+        skill = packaged_skills()["oracle-craft"]
+        self.assertEqual(skill["version"], "1.1.5")
+        oracle = (skill["root"] / "SKILL.md").read_text(encoding="utf-8")
+        for phrase in ("准备 / 执行 / 观察", "subprocess", "NEEDS_SPEC_FIX"):
+            self.assertIn(phrase, oracle)
 
+    def test_oracle_skill_does_not_require_exit_two_for_unittest_errors(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for role in ('acceptance', 'review'):
+                instruction = instructions_for(root, role)
+                self.assertIn('unittest', instruction)
+                self.assertIn('`errors`', instruction)
+                self.assertNotIn('2：环境错误', instruction)
+
+
+class SkillFusionTests(unittest.TestCase):
+    def test_each_packaged_skill_has_exact_roles_and_valid_frontmatter(self):
+        from storyloop.skills import SKILLS_ROOT, _frontmatter
+        expected = {
+            "spec-craft": ["product"],
+            "oracle-craft": ["product", "acceptance", "design", "review"],
+            "tdd": ["implement", "characterize"],
+            "review": ["review", "implement"],
+            "impact-analysis": ["design"],
+            "systematic-debugging": ["implement"],
+        }
+        for name, roles in expected.items():
+            with self.subTest(skill=name):
+                path = SKILLS_ROOT / name / "SKILL.md"
+                text = path.read_text(encoding="utf-8")
+                meta = _frontmatter(text)
+                self.assertEqual(meta["name"], name)
+                self.assertTrue(meta["version"] and meta["description"])
+                self.assertEqual(meta["roles"], "[" + ", ".join(roles) + "]")
+                self.assertLessEqual(len(text.splitlines()), 120)
+                self.assertTrue(text.rstrip().endswith("思路参考 HelixHarness 对应文件。"))
+                if name == "spec-craft":
+                    self.assertIn("按角色给定 schema 返回产品合同 JSON", text)
+
+    def test_role_instructions_point_to_each_selected_skill(self):
+        expected = {
+            "product": ["spec-craft", "oracle-craft"],
+            "acceptance": ["oracle-craft"],
+            "design": ["impact-analysis", "oracle-craft"],
+            "characterize": ["tdd"],
+            "implement": ["tdd", "review", "systematic-debugging"],
+            "review": ["review", "oracle-craft"],
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for role, names in expected.items():
+                with self.subTest(role=role):
+                    instructions = instructions_for(root, role)
+                    for name in names:
+                        self.assertIn(name, instructions)
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,6 +12,7 @@
 | 基础 | `models` | 底座 | 提供纯 JSON 合同原语 | `fields`、`identifier`、`require`、`strings`、`text` |
 |  | `errors` | 底座 | 提供跨基础模块共享的安全工作流错误与断言 | `StoryLoopError`、`require` |
 |  | `path_security` | 底座 | 跨平台仓库路径校验，拒绝跟随链接 | `forbidden_path_root`、`repository_relative`、`safe_absolute_target`、`safe_target` |
+|  | `planning_choice` | 底座 | 从具名批准中选择方案选项的纯函数 | `selected_option` |
 | 变更生命周期内核 | `run_transitions` | 底座 | 显式迁移表、状态元数据与唯一状态写入口 | `transition`、`set_change_status` |
 | | `run_guards` | 底座 | 确定性守卫，不调用代理和停点视图 | `guard_g1`、`guard_g2`、`guard_g3`、`pending_manual_criteria` |
 | 状态存储 | `initialization_transaction` | 底座 | 对显式控制面文件实施独占、按内容归属的初始化事务 | `initialization_transaction` |
@@ -32,6 +33,7 @@
 |  | `smoke` | 底座 | 管理按合同盲写、先证明 RED 且受保护的变更验收套件 | `install_smoke_suite`、`load_smoke_manifest`、`protection_path`、`smoke_digests`、`suite_relative`、`suite_root`、`validate_suite`、`without_manifest_echo` |
 |  | `testing.smoke_harness` | 底座 | 汇总13个版本化冒烟执行器模块，受支持接口由 v1 导入 | `case_bytes`、`case_directory`、`evidence`、`free_port`、`protected_cases`、`python_cases`、`run_command`、`run_hooks`、`source_list`、`source_path`、`validate_cases`、`wait_http` |
 | 证据内核 | `baseline` | 底座 | 管理既有 Git 仓库的逻辑底座基线 | `advance_repository_head`、`bootstrap_project`、`load_baseline`、`load_project_config`、`verify_baseline` |
+|  | `intervention_events` | 可变区 | 记录人工介入事实，并保守分类新旧运行 | `append_event`、`summarize_interventions` |
 |  | `characterization_locks` | 底座 | 以证据支持分流特征化门的覆盖声明 | `capture_locks`、`require_saved_coverage`、`routed_coverage`、`verified_locks` |
 |  | `evidence_locations` | 底座 | 安全校验候选或合同提交中的仓库证据位置 | `evidence_location_exists` |
 |  | `harness_command` | 底座 | 通过可信当前安装解析可移植冒烟执行器标记 | `expand_command`、`harness_counts` |
@@ -41,6 +43,8 @@
 |  | `project_loop_support` | 底座 | 为外部闭环提供控制面完整性与文件枚举辅助 | `control_digest`、`relative_files`、`run_path`、`save_run`、`set_change_status` |
 |  | `project_receipt` | 底座 | 崩溃安全地核验并持久化明确的功能合并回执字节 | `authoritative_report`、`ensure_merge_receipt`、`recover_completed_merge`、`verify_verified_artifacts` |
 |  | `smoke_runner` | 底座 | 以 CI 中立方式执行受保护冒烟清单 | `candidate_digest`、`implementation_digest`、`run_commands`、`run_commands_at_commit`、`run_commands_isolated`、`run_smoke_isolated`、`visible_paths` |
+|  | `acceptance_defects` | 底座 | 按 RED 执行证据归类夹具缺陷并整理自动修复输入 | `red_failure_classification`、`red_fixture_category`、`red_defect_context` |
+|  | `self_harness_preflight` | 底座 | 拒绝自举验收用例从候选镜像导入旧 helper | `preflight_self_harness` |
 | 代理网关 | `capability_protocol` | 底座 | 项目代理适配器的能力握手、响应与缓存格式 | `PROTOCOL`、`ROLES`、`probe`、`lane_metadata` |
 |  | `agent_transport` | 底座 | 执行已组装的代理请求并校验角色回答 | `conform`、`invoke` |
 |  | `role_schemas` | 底座 | 以统一 JSON Schema 校验引擎及适配器的角色最终回答 | `normalize`、`schema_errors`、`schema_for`、`wire_schema` |
@@ -67,19 +71,18 @@
 |  | `requirement_checklist` | 可变区 | 确定性检查需求质量 | `blocking_items`、`evaluate_checklist`、`render_checklist` |
 |  | `supersede` | 可变区 | 作废已停运行，以新变更 ID 重开修订合同 | `supersede_change` |
 | 判据 | `acceptance_repair` | 可变区 | 修复单次变更验收套件缺陷的唯一命令通道 | `repair_smoke` |
+|  | `oracle_strength_precheck` | 可变区 | RED 前复核新格式合同的验收判据强度 | `assess`、`stamp_red` |
 |  | `oracle_skill_approval` | 可变区 | 为修改验收判据技能提供显式 CLI 授权 | `confirmed_upgrade`、`require_confirmation` |
 |  | `system_smoke` | 可变区 | 管理每个变更必须保持通过的项目级系统冒烟层 | `adopt_system_smoke`、`apply_smoke_update`、`is_system_smoke_path`、`load_system_smoke`、`preflight_system_smoke`、`propose_smoke_update`、`run_system_smoke_isolated`、`system_smoke_digests`、`validate_manifest` |
 | 实现 | `characterization_baseline` | 可变区 | 在已提交旧代码及声明锁定产物上证明特征化判据 | `run_characterization_baseline` |
-|  | `base_design` | 可变区 | 将 base 代理方案与具名人工批准绑定到当前合同和运行 | `propose_design`、`approve_base_design` |
-|  | `base_agent_execution` | 可变区 | 审计代理写入并由引擎提交单个 base 候选 | `implement_base_candidate` |
-|  | `base_agent_worktree` | 可变区 | 为单次 base 代理调用创建、校验和清理独立 Git worktree | `create_agent_worktree`、`remove_agent_worktree` |
-|  | `base_agent_transfer` | 可变区 | 校验独立树的精确路径并由引擎提交 base 候选 | `transfer_agent_candidate` |
-|  | `engine_source_safety` | 可变区 | 代理调用前后比较引擎源码摘要并给出提醒 | `engine_source_digest`、`engine_warning` |
-|  | `base_review` | 可变区 | 绑定跨厂商审查与单厂商人工替代 | `review_agent_candidate`、`human_substitute_fields` |
+|  | `base_review` | 可变区 | 绑定 E1 人工候选的具名独立审查 | `record_human_review`、`review_base_candidate` |
 |  | `facts` | 可变区 | 记录并跨运行传递代理声明的安全代码事实位置 | `merge_facts`、`valid_location` |
 |  | `failure_attribution` | 可变区 | 判定失败尝试的修复责任与闭环是否仍有进展 | `check_findings`、`failure_signature`、`finding_key`、`layer_attribution`、`location_file`、`next_mode`、`no_progress`、`route` |
 |  | `planning` | 可变区 | 运行锁内、特征化与实现之前的 L2 分档方案 | `assess_plan`、`ensure_routing_plan`、`plan_projection`、`required_locks`、`review_focus`、`selected_option` |
 |  | `planning_validation` | 可变区 | 结构化角色方案字段与确定性范围校验 | `option_scope`、`validate_plan` |
+|  | `regression_updates` | 可变区 | 校验计划中已有回归判据更新的路径与 AC，并提供审查差异 | `validate_updates`、`mark_undeclared_existing_tests`、`review_diffs` |
+|  | `verification_entries` | 可变区 | 校验合同入口与方案路径对自动判据的覆盖 | `new_format`、`entry_owners`、`validate_entry_paths` |
+|  | `base_collision` | 可变区 | 保存撞底座参考、关联草案并恢复本轮可归属候选 | `link_base_collision` |
 |  | `project_loop_failures` | 可变区 | 记录失败尝试并路由到问题责任方 | `apply_overrule`、`epoch_of`、`record_boundary`、`record_failure`、`require_routed_choice`、`route_review` |
 |  | `project_loop_gates` | 可变区 | RED 与首次实现之间的方案、特征化两道门 | `characterize_paths`、`design_plan`、`ensure_characterization`、`ensure_design`、`resume_characterization`、`uncharacterized_paths` |
 | 验证 | `consistency` | 可变区 | 批准后、特征化前的重档只读一致性审查 | `ensure_consistency`、`invalidate_consistency`、`overrule_consistency` |
@@ -89,6 +92,7 @@
 |  | `manual_acceptance` | 可变区 | 把人工条件的验收绑定到已验证的实现提交 | `load_manual_acceptance`、`pending_manual_criteria`、`record_manual_acceptance` |
 |  | `review_context` | 可变区 | 引擎内部调用上下文，适配器回答不能改变档位 | `strong_verification`、`verification_active` |
 |  | `review_disposition` | 可变区 | 审查分类、语义修复与可恢复的强验证 | `perform_review` |
+|  | `review_convergence` | 可变区 | 记录稳定意见 ID、同一判据的阻断轮次与完整规格收敛 | `advance`、`review_request`、`reset_binding` |
 | 交付 | `openspec_docs` | 可变区 | 生成增量规格、合并活规格并记录变更决策 | `capability_of`、`document_change`、`merge_into_main_spec`、`render_decisions`、`render_delta_spec`、`validate_with_cli` |
 |  | `project_loop_finish` | 可变区 | 幂等完成阶段：实现提交、报告、文档、合并与回执 | `complete_change`、`finalize_change`、`finish_merged`、`finish_receipting`、`finish_verified`、`passed_result` |
 | 分流 | `assessment` | 可变区 | 校验产品角色上报的分流证据结构，不执行命令 | `validate_assessment` |
@@ -106,6 +110,8 @@
 |  | `routing_state` | 可变区 | 提供纯分流快照及按版本区分的执行预算 | `advance_tier`、`is_routed`、`open_routing`、`run_config` |
 |  | `routing_upgrade` | 可变区 | 单调升级 L3 范围评估并使旧方案失效 | `check_l3`、`enforce_forbidden_paths` |
 | 接入与底座 | `base_upgrade` | 可变区 | 生成 base 草案、旧底座 G1 与历史回执兼容读取 | `propose_base_change`、`upgrade_baseline` |
+|  | `base_criteria` | 可变区 | 保留源提交的判据路径并提示人工审查改动 | `check_base_criteria`、`criteria_review_summary` |
+|  | `base_follow` | 可变区 | 核验已通过的关联 base 并合并回原功能分支 | `merge_blocking_base` |
 |  | `base_build_config` | 可变区 | 在无在途批准时记录旧项目构建命令的人工确认 | `confirm_legacy_base_build` |
 |  | `foundation_survey` | 可变区 | 受保护的底座知识库摸底与扩展说明 | `foundation_payload`、`survey_foundation` |
 |  | `onboarding` | 可变区 | 两阶段仓库接入：先草案，再建立干净且已提交的底座 | `scaffold_project` |
@@ -119,6 +125,7 @@
 | 记忆 | `drafts` | 可变区 | 统一、安全寻址的经验与勘误草案 | `create_draft`、`list_drafts`、`load_draft`、`reject_draft`、`set_draft_status` |
 |  | `errata` | 可变区 | 校验底座更正，生成草案并通过 BASE 审批落地 | `capture_errata`、`defer_errata`、`land_errata`、`release_errata` |
 |  | `lesson_landing` | 可变区 | 以限定路径的 Git 事务审批人工记忆草案 | `approve_draft`、`land_transaction` |
+|  | `knowledge_delta` | 可变区 | PASSED 后提议知识差异、精确路径授权与底座版本更新 | `propose_knowledge`、`authorize_knowledge` |
 |  | `lesson_retrieval` | 可变区 | 选择冻结经验，区分代理声明使用与未知使用情况 | `change_id`、`claimed_lessons`、`lessons_payload`、`provided_ids` |
 |  | `lesson_store` | 可变区 | 从不可变 Git 提交读取并评估经验 | `confirm_lesson`、`effective_status`、`lesson_source_commit`、`lessons_digest`、`list_lessons`、`load_lessons_at`、`require_idle_source`、`retire_lesson`、`stale_ids` |
 |  | `lessons` | 可变区 | 解析、渲染与校验仓库经验条目 | `next_lesson_id`、`parse_lesson`、`render_lesson`、`scope_matches`、`validate_lessons` |
@@ -130,6 +137,11 @@
 |  | `cost_resume` | 可变区 | 跨成本停点保留候选证据，不消耗质量尝试 | `candidate`、`checkpoint`、`restore`、`stop` |
 |  | `metrics` | 可变区 | 只读编排跨变更指标，并按显式请求持久化 | `build_metrics`、`save_metrics` |
 |  | `metrics_collect` | 可变区 | 有界、只读地规范化持久化变更证据 | `collect` |
+|  | `bench_case` | 可变区 | 校验冻结 Case、合同、套件与 Gold 哈希和路径 | `load_case` |
+|  | `bench_calibrate` | 可变区 | 在隔离 Base/Solution 副本校准确定性 Gold | `calibrate_case` |
+|  | `bench_run` | 可变区 | 冻结配置、交错调度和证据比较 | `run_bench`、`compare_runs` |
+|  | `bench_cli` | 可变区 | bench 校准、报告与真实运行成本门禁 | `dispatch_bench` |
+|  | `bench_real_exec` | 可变区 | 每次尝试隔离克隆来源与引擎、执行隐藏 Gold | `run_isolated_attempt`、`stage_gate` |
 |  | `metrics_compute` | 可变区 | 计算跨变更指标，包含一个显式只读 Git 指标 | `attempts`、`contract_ratio`、`escapes`、`first_pass`、`forced_heavy`、`interventions`、`lessons`、`local_green_ci_red`、`overrule_rate`、`rework`、`stuck`、`upgrades` |
 |  | `metrics_compute_support` | 可变区 | 指标计算共用的构造器与解析器 | `metric` |
 |  | `metrics_cost` | 可变区 | 从报告汇总聚合 M11，必要时回退读取原始账本 | `cost` |
@@ -163,6 +175,7 @@
 |  | `routing_execution` | 可变区 | 按序执行分流中的方案、批准、一致性及锁迁移 | `candidate_l3`、`prepare_execution` |
 |  | `run_recovery` | 可变区 | 显式人工恢复卡住的产品运行，并保留审计轨迹 | `reset_run` |
 | 命令面 | `__main__` | 可变区 | 以 python -m storyloop 启动命令面（入口模块无 docstring） | — |
+|  | `bench_worker` | 可变区 | 子进程用指定引擎完成冻结合同的真实流程 | `main` |
 |  | `ci_command` | 可变区 | 执行 CI 并可选记录结果的命令适配器 | `run_ci`、`run_ci_command` |
 |  | `cli` | 可变区 | 提供公共命令行接口与如实反映结果的机器退出码 | `main`、`run_with_answers` |
 |  | `product_cli` | 可变区 | 编排产品变更创建、修订与命令处理 | `change`、`dispatch` |

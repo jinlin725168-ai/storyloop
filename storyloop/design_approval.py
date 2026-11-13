@@ -2,6 +2,7 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
+import hashlib
 import json
 
 from .baseline import _git, load_baseline, load_project_config, verify_baseline
@@ -18,8 +19,10 @@ from .run_stops import pause
 from .routing_state import is_routed, run_config
 from .smoke import smoke_digests
 from .storage import load_json, locked
+from .path_security import safe_target
 
 PLANNING_STOPS = {'DESIGN_APPROVAL_REQUIRED', 'DESIGN_REVISION_REQUIRED', 'SPLIT_RECOMMENDED'}
+REPLAN_STOPS = PLANNING_STOPS | {'NO_PROGRESS'}
 
 
 def approval_matches(approval: dict | None, binding: dict) -> bool:
@@ -103,10 +106,16 @@ def _record(binding: dict, **fields) -> dict:
 
 
 def _clear_checks(project: Path, state: dict) -> None:
+    _retire_failed_characterization(project, state)
     state['planning'].pop('consistency', None)
     state.pop('consistency', None)
     if not (state['planning'].get('origin') == 'L3'
             and state.get('characterization', {}).get('status') == 'GREEN'):
+        retired = list((state.get('characterization') or {}).get('tests') or [])
+        retired.extend((state.get('pending_characterization') or {}).get('tests') or [])
+        if retired:
+            state['retired_characterization_tests'] = sorted(
+                set(state.get('retired_characterization_tests') or []) | set(retired))
         state.pop('characterization', None)
     state.pop('pending_characterization', None)
     # Only this stop depends on the pending locks being cleared here.
@@ -116,11 +125,102 @@ def _clear_checks(project: Path, state: dict) -> None:
         transition(project, state, 'DESIGN_APPROVAL_REQUIRED', event='design_reapprove', updates={'phase': 'planning'})
 
 
+def _retire_failed_characterization(project: Path, state: dict) -> None:
+    if state.get('status') != 'CHARACTERIZATION_FAILED':
+        return
+    pending = state.get('pending_characterization') or {}
+    created = pending.get('created_sha256') or {}
+    untracked = set(_git(project, 'ls-files', '--others', '--exclude-standard', '-z').split('\0'))
+    targets = []
+    for path in pending.get('changed') or []:
+        target = safe_target(project, path, 'retired characterization test')
+        require(path in untracked and path in created and target.is_file()
+                and not target.is_symlink()
+                and hashlib.sha256(target.read_bytes()).hexdigest() == created[path],
+                f'Cannot retire modified characterization test: {path}; restore it before reapproval')
+        targets.append(target)
+    for target in targets:
+        target.unlink()
+
+
 def _valid_design(plan: dict, binding: dict) -> bool:
     approval = plan.get('approval') or {}
     return (approval_matches(approval, binding) and approval.get('actor') == 'user'
             and approval.get('plan_id') == plan['id']
             and approval.get('option_id') in {o['id'] for o in plan['options']})
+
+
+def _same_repair_assessment(project: Path, change: dict, state: dict, expected_id: str) -> bool:
+    """Require the selected plan, frozen routing scope and risks to still agree."""
+    assessed = assess_plan(project, change, state, state['planning']['plan'])
+    routing = state['routing']
+    new_risks = {item['risk'] for item in routing.get('risk_updates', [])}
+    accepted = {key for key, value in routing['assessed_risks'].items() if value == 'yes'}
+    return (assessed['id'] == expected_id == state['planning']['assessment']['id']
+            and routing['scope'] == assessed['scope']
+            and routing['assessed_risks'] == assessed['signals']['risks']
+            and not new_risks - accepted)
+
+
+def repair_reuse_snapshot(project: Path, change: dict, state: dict) -> dict | None:
+    """Capture a valid human decision before replacing its bound acceptance suite."""
+    planning = state.get('planning', {})
+    if not is_routed(change, state) or planning.get('origin') == 'L3':
+        return None
+    try:
+        binding = current_binding(project, change, state)
+        plan = planning['plan']
+        assessment_id = planning['assessment']['id']
+        if not _valid_design(plan, binding) or not _same_repair_assessment(
+                project, change, state, assessment_id):
+            return None
+        continuation = planning.get('continue_heavy')
+        if continuation and not _valid_continue(state, binding, planning['assessment']):
+            return None
+        return {'binding': binding, 'assessment_id': assessment_id, 'plan_id': plan['id']}
+    except (StoryLoopError, KeyError, TypeError, ValueError):
+        return None
+
+
+def rebind_repaired_plan(project: Path, change: dict, state: dict, snapshot: dict | None) -> bool:
+    """Rebind only the suite digest; leave the selected option and human decision intact."""
+    planning = state.get('planning', {})
+    if not snapshot or planning.get('origin') == 'L3':
+        return False
+    try:
+        plan = planning['plan']
+        if plan['id'] != snapshot['plan_id'] or not _same_repair_assessment(
+                project, change, state, snapshot['assessment_id']):
+            return False
+        from .routing_upgrade import observed_scope, scope_expanded
+        actual = observed_scope(project, state, load_project_config(project))
+        if scope_expanded(state['routing']['scope'], actual):
+            return False
+        binding = {**snapshot['binding'], 'suite_digest': digest(smoke_digests(project, change))}
+        if not approval_matches(plan['approval'], snapshot['binding']):
+            return False
+        updated = deepcopy(plan)
+        updated['binding'] = binding
+        updated['id'] = digest({key: value for key, value in updated.items()
+                                if key not in {'id', 'status', 'approval'}})
+        updated['approval']['binding'] = deepcopy(binding)
+        updated['approval']['plan_id'] = updated['id']
+        continuation = deepcopy(planning.get('continue_heavy'))
+        if continuation:
+            continuation['binding'] = deepcopy(binding)
+        previous = planning['plan'], planning.get('continue_heavy')
+        planning['plan'] = updated
+        if continuation:
+            planning['continue_heavy'] = continuation
+        try:
+            if not _valid_design(updated, current_binding(project, change, state)):
+                raise StoryLoopError('Repaired plan approval is stale')
+        except StoryLoopError:
+            planning['plan'], planning['continue_heavy'] = previous
+            return False
+        return True
+    except (StoryLoopError, KeyError, TypeError, ValueError):
+        return False
 
 
 def approve_design(project: Path, change_id: str, plan_id: str, *, option_id: str | None = None) -> dict:
@@ -138,6 +238,11 @@ def _approve_design_locked(project: Path, change_id: str, plan_id: str, *,
     require(plan_id == plan['id'], 'Stale plan id')
     selected = option_id if option_id is not None else plan['main_option']
     require(selected in {o['id'] for o in plan['options']}, 'Unknown plan option')
+    from .verification_entries import new_format, validate_entry_paths
+    if new_format(change['product']):
+        from .smoke import load_smoke_manifest
+        option = next(item for item in plan['options'] if item['id'] == selected)
+        validate_entry_paths(option, change['product'], load_smoke_manifest(project, change))
     old = plan.get('approval')
     plan['approval'] = _record(binding, plan_id=plan_id, option_id=selected, selected_option=selected)
     assessed = assess_plan(project, change, state, plan)
@@ -154,6 +259,22 @@ def _approve_design_locked(project: Path, change_id: str, plan_id: str, *,
     if old:
         _clear_checks(project, state)
     state['planning'].pop('pending_option', None)
+    from .intervention_events import CORRECTIONS, append_event
+    events = state.get("intervention_events", [])
+    previous = next((index for index in range(len(events) - 1, -1, -1)
+                     if isinstance(events[index], dict) and events[index].get("kind") == "design_approval"), None)
+    follows = None
+    if previous is not None:
+        for event in reversed(events[previous + 1:]):
+            if not isinstance(event, dict):
+                continue
+            kind = event.get("kind")
+            if kind in CORRECTIONS or kind == "acceptance_repair" and event.get("automatic") is not True:
+                follows = kind
+                break
+    repeated = (bool(old) or previous is not None) and follows is None
+    append_event(state, "design_approval", source="design-approve",
+                 stop=state.get("status"), repeated=repeated, follows=follows)
     save_run(project, state)
     return deepcopy(plan['approval'])
 
@@ -201,12 +322,12 @@ def _replan_locked(project: Path, change_id: str, reason: str) -> dict:
     _validate_context(project, change, state)
     planning_input = state['status'] == 'NEEDS_INPUT' and (
         state.get('phase') == 'planning' or state.get('stop', {}).get('phase') == 'planning')
-    require(state['status'] in PLANNING_STOPS or planning_input, 'Replan requires a planning stop')
+    require(state['status'] in REPLAN_STOPS or planning_input, 'Replan requires a planning stop')
     _clear_checks(project, state)
     planning = state['planning']
     planning.setdefault('history', []).append({'reason': reason, 'plan': planning.get('plan'),
                                               'attempt': state.get('attempt', 0)})
-    for key in ('plan', 'assessment', 'continue_heavy', 'split', 'pending_option'):
+    for key in ('plan', 'assessment', 'continue_heavy', 'split', 'pending_option', 'review_repaired_suite'):
         planning.pop(key, None)
     if planning.get('origin') == 'L3':
         # Compatibility for older READY checkpoints that still carry a completed write intent.
@@ -223,7 +344,10 @@ def _replan_locked(project: Path, change_id: str, reason: str) -> dict:
         state.pop(key, None)
     state.pop('questions', None)
     state.pop('stop', None)
+    source_status = state['status']
     transition(project, state, 'DESIGN_REVISION_REQUIRED', event='design_replan', updates={'phase': 'planning'})
+    from .intervention_events import append_event
+    append_event(state, "replan", source="run --replan", stop=source_status)
     save_run(project, state)
     return deepcopy(state)
 
@@ -239,7 +363,8 @@ def _split_suggestions(change: dict) -> dict:
                        for index, story in enumerate(change['product']['stories'])]}
 
 
-def ensure_design_approval(project: Path, change: dict, state: dict, config: dict) -> dict | None:
+def ensure_design_approval(project: Path, change: dict, state: dict, config: dict,
+                           services=None) -> dict | None:
     """Validate every DONE plan and enforce split then heavy approval before locks."""
     if not is_routed(change, state):
         return None
@@ -258,6 +383,14 @@ def ensure_design_approval(project: Path, change: dict, state: dict, config: dic
         _clear_checks(project, state)
     assessed = assess_plan(project, change, state, _assessment_plan(state))
     _record_assessment(state, config, assessed)
+    if assessed['decision']['unresolved']:
+        from .planning import retry_plan_evidence
+        revised, assessed, _ = retry_plan_evidence(
+            project, change, state, services, config, plan, assessed)
+        if revised is not plan:
+            state['planning']['plan'] = plan = revised
+            for key in ('continue_heavy', 'consistency', 'pending_option'):
+                state['planning'].pop(key, None)
     if assessed['decision']['unresolved']:
         state['phase'] = 'planning'
         return pause(project, state, 'NEEDS_INPUT', phase='planning', questions=[

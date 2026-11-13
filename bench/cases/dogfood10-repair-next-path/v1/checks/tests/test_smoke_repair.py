@@ -1,0 +1,313 @@
+"""A defective smoke suite can be repaired by its owner (smoke role) and RED re-proven at the contract commit."""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from contextlib import redirect_stdout
+import io
+import json
+from pathlib import Path
+import shlex
+import subprocess
+import tempfile
+import unittest
+
+from storyloop.approvals import approve_change
+from storyloop.baseline import bootstrap_project, load_project_config
+from tests.routing_support import legacy_create_change as create_change
+from storyloop.models import StoryLoopError
+from storyloop.acceptance_repair import repair_smoke
+from storyloop.cli_output import display
+from storyloop.project_loop import LoopServices, load_run_state, run_change
+from storyloop.smoke_runner import _copy_candidate
+from storyloop.storage import write_json
+from tests.support import product
+from tests.test_baseline_behavior import git, repository
+from tests.test_project_loop import smoke_payload as good_payload
+from tests.test_product_spec import rich_product
+
+NOW = datetime(2026, 9, 21, tzinfo=timezone.utc)
+
+
+def defective_payload(change_id: str) -> dict:
+    """Fails whatever the implementation does (a test defect), yet proves RED like a real suite."""
+    payload = good_payload(change_id)
+    payload["files"][0]["content"] = "raise SystemExit(1)\n"
+    return payload
+
+
+def weak_payload(change_id: str) -> dict:
+    """Passes on the code before implementation: it cannot prove RED."""
+    payload = good_payload(change_id)
+    payload["files"][0]["content"] = "raise SystemExit(0)\n"
+    return payload
+
+
+def self_writing_payload(change_id: str) -> dict:
+    """Fails RED proof because the suite writes an unprotected sibling file in its candidate."""
+    payload = good_payload(change_id)
+    payload["files"][0]["content"] = (
+        "from pathlib import Path\n"
+        "Path(__file__).with_suffix('.observation.json').write_text('{}', encoding='utf-8')\n"
+        "raise SystemExit(1)\n"
+    )
+    return payload
+
+
+def services(change_id: str, smoke) -> LoopServices:
+    def implement(project, context):
+        target = project / "modules/orders/service.py"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("VALUE = 1\n", encoding="utf-8")
+        return {"summary": "done", "questions": []}
+
+    return LoopServices(generate_smoke=smoke, implement=implement,
+                        review=lambda p, c: {"verdict": "pass", "summary": "ok", "findings": [], "questions": []})
+
+
+class CandidateTests(unittest.TestCase):
+    def test_ui_regression_assets_stay_out_of_acceptance_candidates(self):
+        with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryDirectory() as target:
+            root = Path(folder)
+            repository(root)
+            (root / "acceptance/ui/cap").mkdir(parents=True)
+            (root / "acceptance/ui/cap/menu.spec.ts").write_text("// asset\n", encoding="utf-8")
+            (root / "acceptance/changes").mkdir(parents=True)
+            (root / "acceptance/changes/keep.py").write_text("pass\n", encoding="utf-8")
+            git(root, "add", "."); git(root, "commit", "-q", "-m", "assets")
+            bootstrap_project(root)
+            paths = _copy_candidate(root, Path(target))
+            self.assertIn("acceptance/changes/keep.py", paths)
+            self.assertFalse(any(path.startswith("acceptance/ui/") for path in paths))
+            self.assertFalse((Path(target) / "acceptance/ui").exists())
+
+
+class SmokeRepairTests(unittest.TestCase):
+    def test_repair_rejects_staged_candidate_with_actionable_instruction(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"test_commands": []})
+            value = rich_product(); value["questions"] = []
+            change_id = create_change(root, "orders", value, now=lambda: NOW)["change_id"]
+            approve_change(root, change_id, now=lambda: NOW)
+            run_change(root, change_id, services(change_id, lambda p, s: defective_payload(change_id)))
+            git(root, "add", "modules/orders/service.py")
+            head = git(root, "rev-parse", "HEAD")
+            with self.assertRaisesRegex(StoryLoopError, "git restore --staged") as caught:
+                repair_smoke(root, change_id, "wrong oracle", services(
+                    change_id, lambda p, s: good_payload(change_id)))
+            self.assertEqual(caught.exception.code, "GIT_BLOCKED")
+            self.assertEqual(git(root, "rev-parse", "HEAD"), head)
+
+    def test_noop_repair_does_not_commit_dirty_candidate(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"test_commands": []})
+            value = rich_product(); value["questions"] = []
+            change_id = create_change(root, "orders", value, now=lambda: NOW)["change_id"]
+            approve_change(root, change_id, now=lambda: NOW)
+            run_change(root, change_id, services(change_id, lambda p, s: defective_payload(change_id)))
+            head = git(root, "rev-parse", "HEAD")
+            with self.assertRaisesRegex(StoryLoopError, "没有改动|no changes") as caught:
+                repair_smoke(root, change_id, "wrong oracle", services(
+                    change_id, lambda p, s: defective_payload(change_id)))
+            self.assertEqual(caught.exception.code, "GIT_BLOCKED")
+            self.assertEqual(git(root, "rev-parse", "HEAD"), head)
+            self.assertIn("modules/", git(root, "status", "--porcelain"))
+
+    def test_contract_committed_before_red_can_repair_a_self_writing_suite(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"test_commands": []})
+            value = rich_product(); value["questions"] = []
+            change_id = create_change(root, "orders", value, now=lambda: NOW)["change_id"]
+            approve_change(root, change_id, now=lambda: NOW)
+
+            with self.assertRaisesRegex(StoryLoopError, "Protected smoke suite was modified") as raised:
+                run_change(root, change_id,
+                           services(change_id, lambda p, s: self_writing_payload(change_id)))
+            self.assertEqual(raised.exception.code, "BLOCKED")
+            stopped = load_run_state(root, change_id)
+            self.assertEqual(stopped["status"], "CONTRACT_COMMITTED")
+            self.assertEqual(stopped["attempt"], 0)
+            self.assertNotIn("red_evidence_sha256", stopped)
+            suite = root / "acceptance/changes" / change_id
+            self.assertFalse((suite / "flow.observation.json").exists())
+
+            result = repair_smoke(
+                root, change_id, "acceptance test writes an observation beside itself",
+                services(change_id, lambda p, s: good_payload(change_id)), now=lambda: NOW,
+            )
+            self.assertEqual(result["status"], "ACCEPTANCE_REPAIRED", result)
+            self.assertEqual(shlex.split(result["next"]),
+                             ["storyloop", "run", str(root.resolve()), "--change", change_id])
+            repaired = load_run_state(root, change_id)
+            self.assertEqual(repaired["status"], "IMPLEMENTING")
+            self.assertEqual(repaired["attempt"], 0)
+            self.assertTrue(repaired["red_evidence_sha256"])
+            self.assertEqual(repaired["oracle"]["baseline"], {"unit": [], "integration": []})
+            self.assertEqual(repaired["repairs"][0]["reason"],
+                             "acceptance test writes an observation beside itself")
+
+            done = run_change(root, change_id,
+                              services(change_id, lambda p, s: good_payload(change_id)))
+            self.assertEqual(done["status"], "PASSED", done)
+
+    def test_repair_replaces_suite_reproves_red_at_contract_commit_and_run_passes(self):
+        with tempfile.TemporaryDirectory(prefix="repair path ;$ ") as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"test_commands": []})
+            config = load_project_config(root); config["max_attempts"] = 1
+            write_json(root / ".storyloop/config.json", config)
+            value = rich_product(); value["questions"] = []
+            state = create_change(root, "orders", value, now=lambda: NOW)
+            change_id = state["change_id"]
+            approve_change(root, change_id, now=lambda: NOW)
+
+            exhausted = run_change(root, change_id, services(change_id, lambda p, s: defective_payload(change_id)))
+            self.assertEqual(exhausted["status"], "BUDGET_EXHAUSTED", exhausted)
+            old_red = load_run_state(root, change_id)["red_evidence_sha256"]
+
+            seen = {}
+
+            def repaired_smoke(project, change):
+                seen["repair"] = change.get("repair")
+                payload = good_payload(change_id)
+                payload.update(lessons_used=[], errata=[])
+                payload["files"].append({"path": "manifest.json", "content": "{}"})  # echoed back; must be ignored
+                return payload
+
+            for invalid in ({**good_payload(change_id), "unexpected": []},
+                            {"files": [], "lessons_used": []}):
+                with self.subTest(keys=sorted(invalid)):
+                    with self.assertRaisesRegex(StoryLoopError, "invalid contract"):
+                        repair_smoke(root, change_id, "invalid response",
+                                     services(change_id, lambda p, s: invalid))
+
+            result = repair_smoke(root, change_id, "loading-mask locator is a test defect",
+                                  services(change_id, repaired_smoke), now=lambda: NOW)
+            self.assertEqual(result["status"], "ACCEPTANCE_REPAIRED", result)
+            self.assertEqual(result["change_id"], change_id)
+            self.assertEqual(result["commit"], git(root, "rev-parse", "HEAD"))
+            expected_command = ["storyloop", "run", str(root.resolve()), "--change", change_id]
+            self.assertEqual(shlex.split(result["next"]), expected_command)
+            for as_json in (False, True):
+                with self.subTest(as_json=as_json):
+                    output = io.StringIO()
+                    with redirect_stdout(output):
+                        display(result, complete_json=as_json)
+                    next_value = (json.loads(output.getvalue())["next"] if as_json else
+                                  next(line.removeprefix("next: ") for line in output.getvalue().splitlines()
+                                       if line.startswith("next: ")))
+                    self.assertEqual(shlex.split(next_value), expected_command)
+            self.assertEqual(seen["repair"]["reason"], "loading-mask locator is a test defect")
+            self.assertTrue(any(f["path"] == "flow.py" for f in seen["repair"]["existing_files"]))
+            self.assertFalse(any(f["path"] == "manifest.json" for f in seen["repair"]["existing_files"]))
+            self.assertIn("failure_evidence", seen["repair"])
+            new_state = load_run_state(root, change_id)
+            self.assertEqual(new_state["status"], "IMPLEMENTING")
+            self.assertEqual(new_state["attempt"], 0)
+            self.assertNotEqual(new_state["red_evidence_sha256"], old_red)
+            self.assertEqual(new_state["repairs"][0]["reason"], "loading-mask locator is a test defect")
+            log = subprocess.run(["git", "log", "--oneline", "-3"], cwd=root, capture_output=True, text=True).stdout
+            self.assertIn("repair acceptance suite", log)
+            # implementation files from the failed attempt are still in the tree, uncommitted
+            self.assertTrue((root / "modules/orders/service.py").is_file())
+            red = json.loads((root / ".storyloop/evidence" / change_id / "acceptance-red.json").read_text(encoding="utf-8"))
+            self.assertEqual(red["status"], "RED")
+            self.assertEqual(red["head_commit"], new_state["contract_commit"])
+
+            done = run_change(root, change_id, services(change_id, lambda p, s: good_payload(change_id)))
+            self.assertEqual(done["status"], "PASSED", done)
+            decisions = (root / "openspec/changes" / change_id / "decisions.md").read_text(encoding="utf-8")
+            self.assertIn("loading-mask locator is a test defect", decisions)
+
+    def test_repair_is_refused_before_a_contract_exists_or_after_completion(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"test_commands": []})
+            value = rich_product(); value["questions"] = []
+            state = create_change(root, "orders", value, now=lambda: NOW)
+            change_id = state["change_id"]
+            with self.assertRaises(StoryLoopError):
+                repair_smoke(root, change_id, "too early", services(change_id, lambda p, s: good_payload(change_id)))
+            approve_change(root, change_id, now=lambda: NOW)
+
+            def unavailable(project, change):
+                raise StoryLoopError("acceptance generator unavailable")
+
+            with self.assertRaisesRegex(StoryLoopError, "generator unavailable"):
+                run_change(root, change_id, services(change_id, unavailable))
+            self.assertEqual(load_run_state(root, change_id)["status"], "PREPARING")
+            with self.assertRaisesRegex(StoryLoopError, "current: PREPARING"):
+                repair_smoke(root, change_id, "still too early",
+                             services(change_id, lambda p, s: good_payload(change_id)))
+
+            run_change(root, change_id, services(change_id, lambda p, s: good_payload(change_id)))
+            self.assertEqual(load_run_state(root, change_id)["status"], "PASSED")
+            with self.assertRaisesRegex(StoryLoopError, "current: PASSED"):
+                repair_smoke(root, change_id, "already passed", services(change_id, lambda p, s: good_payload(change_id)))
+
+
+    def test_a_suite_green_before_implementation_stops_and_is_repairable(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"test_commands": []})
+            value = rich_product(); value["questions"] = []
+            change_id = create_change(root, "orders", value, now=lambda: NOW)["change_id"]
+            approve_change(root, change_id, now=lambda: NOW)
+            weak = services(change_id, lambda p, s: weak_payload(change_id))
+
+            stopped = run_change(root, change_id, weak)
+            self.assertEqual(stopped["status"], "EXISTING_GREEN", stopped)
+            self.assertIn("acceptance-repair", stopped["next"])
+            state = load_run_state(root, change_id)
+            self.assertEqual(state["status"], "EXISTING_GREEN")
+            self.assertTrue(state["contract_commit"])
+            # Resuming without a fix proves nothing new: it stops at the same place, no agent call.
+            self.assertEqual(run_change(root, change_id, weak)["status"], "EXISTING_GREEN")
+
+            seen = {}
+
+            def stronger(project, change):
+                seen["evidence"] = change["repair"]["failure_evidence"]
+                return good_payload(change_id)
+
+            result = repair_smoke(root, change_id, "suite did not assert the new behaviour",
+                                  services(change_id, stronger), now=lambda: NOW)
+            self.assertEqual(result["status"], "ACCEPTANCE_REPAIRED", result)
+            self.assertEqual(seen["evidence"]["status"], "EXISTING_GREEN")
+            self.assertEqual(load_run_state(root, change_id)["status"], "IMPLEMENTING")
+            done = run_change(root, change_id, services(change_id, lambda p, s: good_payload(change_id)))
+            self.assertEqual(done["status"], "PASSED", done)
+
+
+
+    def test_a_repair_that_drops_files_commits_their_deletion(self):
+        """Found in real acceptance: replacing a suite deleted the old files but committed only the new
+        ones, so the next attempt saw uncommitted deletions in the protected suite (BOUNDARY_VIOLATION)."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"test_commands": []})
+            config = load_project_config(root); config["max_attempts"] = 1
+            write_json(root / ".storyloop/config.json", config)
+            change_id = create_change(root, "orders", product(), now=lambda: NOW)["change_id"]
+            approve_change(root, change_id, now=lambda: NOW)
+            first = defective_payload(change_id)
+            first["files"].append({"path": "helpers/extra.txt", "content": "only in the first suite\n"})
+            run_change(root, change_id, services(change_id, lambda p, s: first))
+            repair_smoke(root, change_id, "the first suite is defective",
+                         services(change_id, lambda p, c: good_payload(change_id)), now=lambda: NOW)
+            self.assertEqual(git(root, "status", "--porcelain=v1", "--untracked-files=all", "--", "acceptance"), "")
+            done = run_change(root, change_id, services(change_id, lambda p, s: good_payload(change_id)))
+            self.assertEqual(done["status"], "PASSED", done)
+
+if __name__ == "__main__":
+    unittest.main()

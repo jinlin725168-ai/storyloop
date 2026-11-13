@@ -1,0 +1,159 @@
+{
+  "checks": [
+    {
+      "argv": [
+        "{python}",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "checks/acceptance/changes/FIX-20261107-repair-next-path",
+        "-p",
+        "test_repair_next.py",
+        "-k",
+        "test_next_uses_real_path"
+      ],
+      "check_id": "F2P-acceptance-1",
+      "kind": "F2P",
+      "timeout_seconds": 400
+    },
+    {
+      "argv": [
+        "{python}",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "checks/acceptance/changes/FIX-20261107-repair-next-path",
+        "-p",
+        "test_repair_next.py",
+        "-k",
+        "test_text_and_json_next_match"
+      ],
+      "check_id": "F2P-acceptance-2",
+      "kind": "F2P",
+      "timeout_seconds": 240
+    },
+    {
+      "argv": [
+        "{python}",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "checks/acceptance/changes/FIX-20261107-repair-next-path",
+        "-p",
+        "test_repair_next.py",
+        "-k",
+        "test_success_fields_and_saved_state"
+      ],
+      "check_id": "P2P-acceptance-3",
+      "kind": "P2P",
+      "timeout_seconds": 240
+    },
+    {
+      "argv": [
+        "{python}",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "checks/acceptance/changes/FIX-20261107-repair-next-path",
+        "-p",
+        "test_repair_next.py",
+        "-k",
+        "test_unproven_repair_keeps_stop"
+      ],
+      "check_id": "P2P-acceptance-4",
+      "kind": "P2P",
+      "timeout_seconds": 240
+    },
+    {
+      "argv": [
+        "{python}",
+        "-m",
+        "unittest",
+        "tests.test_smoke_repair.SmokeRepairTests.test_repair_replaces_suite_reproves_red_at_contract_commit_and_run_passes"
+      ],
+      "check_id": "F2P-reference",
+      "kind": "F2P",
+      "timeout_seconds": 400
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "approved-contract",
+      "path": "contract.json",
+      "sha256": "5a296dac9c18f789f53ad6eb4f544f5203caddb5ba809efce39e84ce0eef81fb"
+    },
+    {
+      "evidence_id": "frozen-suite",
+      "path": "checks/acceptance/changes/FIX-20261107-repair-next-path/manifest.json",
+      "sha256": "a1c1ba9503077881e703e400a44329f89d8aad807dc21acc6d93616353f09ca0"
+    },
+    {
+      "evidence_id": "reference-test",
+      "path": "checks/tests/test_smoke_repair.py",
+      "sha256": "639586980494ecef87945f2da6e54ff31f24615c1fd447088a19855b683b512d"
+    }
+  ],
+  "requirements": [
+    {
+      "check_ids": [
+        "F2P-acceptance-1",
+        "F2P-reference"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "S1-C1"
+    },
+    {
+      "check_ids": [
+        "F2P-acceptance-2"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "S1-C2"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-3"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "S1-C3"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-3"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "S1-C4"
+    },
+    {
+      "check_ids": [
+        "P2P-acceptance-4"
+      ],
+      "evidence_ids": [
+        "approved-contract",
+        "frozen-suite",
+        "reference-test"
+      ],
+      "requirement_id": "S1-C5"
+    }
+  ],
+  "schema_version": 1
+}

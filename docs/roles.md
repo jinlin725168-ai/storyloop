@@ -6,11 +6,11 @@
 |---|---|---|---|---|---|
 | 架构师 / 技术负责人（摸底） | `survey` | 无（只读） | 整个仓库 | `openspec/foundation/` 底座知识库（经 BASE 迭代受保护） | 否，是所有角色的输入 |
 | 产品经理 / BA | `product` | 无 | 意图、知识库的能力清单与活规格、澄清回答 | 合同：故事、EARS 规则、Given/When/Then 条件、澄清记录 | 人批准才生效 |
-| 测试 / QA | `acceptance` | `acceptance/changes/<id>/`（仅生成与修复时） | 合同、知识库的 testing 与 building-blocks | 变更验收套件：feature 的验收用例、fix 的复现测试、refactor 的结构断言；按行类型应红的先红、应绿的先绿；合并后的系统冒烟提议 | 套件是门；提议需人 `smoke-apply` |
-| 架构师（方案） | `design` | 无 | 合同、知识库的 extension / building-blocks / modules、既有代码 | 方案：Files、Data And Interfaces、Decisions、Risks，以及将修改的既有文件 `touched` | 否，但 `touched` 喂特征化门，方案是审查的对照物；故事数少于 `design_min_stories`（默认 2）时跳过 |
+| 测试 / QA | `acceptance` | `acceptance/changes/<id>/`（仅生成与修复时） | 合同、知识库的 testing 与 building-blocks | 变更验收套件：feature 的验收用例、fix 的复现测试、refactor 的结构断言；按行类型应红的先红、应绿的先绿；执行与观察经合同声明的验证入口（manifest `entry_ids`）；合并后的系统冒烟提议 | 套件是门；确定性缺陷与预审 MUST_FIX 自动退回重写；提议需人 `smoke-apply` |
+| 架构师（方案） | `design` | 无 | 合同、知识库的 extension / building-blocks / modules、既有代码 | 方案：Files、Data And Interfaces、Decisions、Risks，将修改的既有文件 `touched`，入口到改动的 `entry_paths`，以及需随合同更新的已有测试 `regression_updates` | 否，但 `touched` 喂特征化门，方案是审查的对照物；故事数少于 `design_min_stories`（默认 2）时跳过 |
 | 开发（开工前） | `characterize` | `test_roots` | 合同、完整方案（含 `touched`）、`test_roots`、已锁定清单、需补锁的路径 | 锁定现有行为的特征化测试，在旧代码上跑绿 | 是（机器验证）；没配置 `test_roots` 或 `unit_commands` 时跳过 |
-| 开发 | `implement` | 可变区 + `test_roots`；特征化门生效时，未锁定的既有文件改动会被还原、补锁并计一轮失败 | 合同、方案、失败证据、答案、特征化结果 | 代码；`design` 记录（Tests First、Decisions） | 由各层验证判定 |
-| 代码评审 | `review` | 无（只读 + 受限命令） | 合同、各层证据（含功能红层）、方案、实现记录、知识库 | verdict + findings | 是；判断失败属于实现、判据还是合同，但不能用 pass 覆盖红层 |
+| 开发 | `implement` | 可变区 + `test_roots`（已有测试只能改方案 `regression_updates` 声明的文件）；特征化门生效时，未锁定的既有文件改动会被还原、补锁并计一轮失败 | 合同、方案、失败证据、答案、特征化结果 | 代码；`design` 记录（Tests First、Decisions） | 由各层验证判定 |
+| 代码评审 | `review` | 无（只读 + 受限命令） | 合同、各层证据（含功能红层）、方案、实现记录、知识库 | verdict + findings（稳定 ID，MUST_FIX / DECISION_NEEDED / ADVISORY）；RED 前另以判据强度视角预审验收套件 | 是；判断失败属于实现、判据还是合同，但不能用 pass 覆盖红层 |
 | 产品负责人 | 人 | 批准、回答、人工验收、应用冒烟、批准底座 | 一切 | 决定 | 是 |
 
 ## 每个变更里角色出场的顺序
@@ -19,8 +19,11 @@
 flowchart LR
     S[survey<br/>一次性] -.知识库.-> P
     P[product] --> H1{人批准}
-    H1 --> A[acceptance<br/>盲写 + RED]
-    A --> D[design<br/>方案 + touched]
+    H1 --> A[acceptance<br/>盲写，经验证入口]
+    A --> R0[review<br/>判据强度预审]
+    R0 -->|MUST_FIX 自动退回| A
+    R0 --> RED[证明 RED]
+    RED --> D[design<br/>方案 + touched]
     D --> C[characterize<br/>旧代码上跑绿]
     C --> I[implement<br/>TDD]
     I --> V[单元 / 集成 / 验收 / 系统冒烟 / 静态检查]
@@ -56,6 +59,6 @@ flowchart LR
 
 ## 判据相关角色的技能包
 
-product、acceptance、characterize、review 的角色说明里嵌入 `oracle-craft` 技能包（行类型、特征化写法、结构断言、执行器退出码）。项目可以在 `.claude/skills/` 或 `.codex/skills/` 放同名副本覆盖；这两个目录属于底座，实现者不能修改，运行状态的 `skills_used` 记录本次实际使用的版本。
+product、acceptance、design、review 的角色说明里嵌入 `oracle-craft` 技能包（行类型、公共验证入口、结构断言、执行器退出码）。characterize 使用 `tdd` 锁定不变项；design 还使用 `impact-analysis`，implement 使用 `tdd`、`review`、`systematic-debugging`。项目可以在 `.claude/skills/` 或 `.codex/skills/` 放同名副本覆盖；这两个目录属于底座，实现者不能修改，运行状态的 `skills_used` 记录本次实际使用的版本。
 
-`spec-craft` 用于在 Claude Code、Codex 对话里与人共创需求和规格，运行 `storyloop skills <项目路径>` 安装。团队和个人可以分别在 `storyloop-custom/spec-craft.toml`、`storyloop-custom/spec-craft.user.toml` 追加定制，包括每步骤提问上限 `question_limit`；运行 `storyloop skills <项目路径> --view spec-craft`，让对话代理读取 `.storyloop/skills-view/spec-craft.md` 末尾的生效值、来源和项目定制。安装副本仍是技能本体，定制不能改“只能由人判断的事”。目前 spec-craft 不下发给任何引擎角色，命令行的 product 角色不受影响；对话草稿仍经现有 `storyloop change` 流程进入引擎。
+`spec-craft` 用于在 Claude Code、Codex 对话里与人共创需求和规格，也下发给引擎的 product 角色；运行 `storyloop skills <项目路径>` 安装。团队和个人可以分别在 `storyloop-custom/spec-craft.toml`、`storyloop-custom/spec-craft.user.toml` 追加定制，包括每步骤提问上限 `question_limit`；运行 `storyloop skills <项目路径> --view spec-craft`，让对话代理读取 `.storyloop/skills-view/spec-craft.md` 末尾的生效值、来源和项目定制。安装副本仍是技能本体，定制不能改“只能由人判断的事”；对话草稿仍经现有 `storyloop change` 流程进入引擎。

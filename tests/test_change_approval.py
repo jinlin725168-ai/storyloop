@@ -3,12 +3,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from storyloop.approvals import approve_change, materialize_approved_change
 from storyloop.baseline import bootstrap_project
 from storyloop.changes import load_change, revise_change
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
+from storyloop.intervention_events import summarize_interventions
 from tests.support import product
 from tests.test_baseline_behavior import repository
 
@@ -30,9 +32,12 @@ class ChangeApprovalTests(unittest.TestCase):
 
             clean = create_change(root, "another", product(), now=lambda: NOW)
             approved = approve_change(root, clean["change_id"], now=lambda: NOW)
+            approve_change(root, clean["change_id"], now=lambda: NOW)
             destination = materialize_approved_change(root, clean["change_id"])
 
             self.assertEqual(approved["status"], "APPROVED")
+            self.assertEqual(len(load_change(root, clean["change_id"])["intervention_events"]), 1)
+            self.assertEqual(approved["intervention_events"][0]["kind"], "contract_approval")
             self.assertEqual(len(approved["approval"]["contract_digest"]), 64)
             self.assertTrue((destination / "proposal.md").is_file())
             self.assertTrue((destination / "approval.json").is_file())
@@ -51,6 +56,24 @@ class ChangeApprovalTests(unittest.TestCase):
 
             self.assertEqual(revised["status"], "DRAFT")
             self.assertIsNone(load_change(root, created["change_id"])["approval"])
+
+    def test_two_draft_revisions_before_first_approval_are_routine(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            created = create_change(root, "idea", product(), now=lambda: NOW)
+            for index in (1, 2):
+                draft = deepcopy(product())
+                draft["goal"] = f"reviewed draft {index}"
+                revise_change(root, created["change_id"], draft, message=f"review {index}")
+            with patch("storyloop.approvals._intake_approval", return_value={}):
+                approved = approve_change(root, created["change_id"], now=lambda: NOW)
+
+            row = summarize_interventions([approved])["by_change"][created["change_id"]]
+            self.assertEqual(approved["revision"], 3)
+            self.assertEqual((row["routine"], row["nonroutine"]), (1, 0))
+            self.assertNotIn("repeated", approved["intervention_events"][0])
 
 
 if __name__ == "__main__":

@@ -18,13 +18,17 @@ from .boundaries import capture_snapshot, snapshot_changes
 from .models import StoryLoopError, require
 from .state_format import criterion_expects_red
 from .harness_command import expand_command, harness_counts
+from .self_harness_preflight import preflight_self_harness
 from .oracle_counts import count_tests, project_patterns
 from .path_security import safe_target
 from .project_profile import GENERATED_PATHS
-from .processutil import redact, run_process
+from .processutil import redact, redaction_prefix, run_process
 from .smoke import (RED_EVIDENCE, RESULT_EVIDENCE, load_smoke_manifest, protection_path, smoke_digests,
                     suite_relative, suite_root)
 from .storage import load_json, write_json
+from .acceptance_defects import (red_fixture_category as _red_fixture_category,
+                                 red_defect_context as _red_defect_context,
+                                 red_failure_classification as _red_failure_classification)
 
 
 def run_smoke(
@@ -36,13 +40,20 @@ def run_smoke(
     project = Path(project).resolve()
     change_id = change["change_id"]
     manifest = load_smoke_manifest(project, change)
+    preflight_self_harness(project, change_id, manifest, expect_red=expect_red)
     started = _timestamp()
     results = _run_tiered(project, manifest["tests"], project_patterns(project), run_all=expect_red)
     errors = [item for item in results if item["status"] == "ERROR"]
     failures = [item for item in results if item["status"] == "FAIL"]
+    red_error = None
     if expect_red:
-        _judge_red(results, manifest, change)
-        status = "RED"
+        try:
+            _judge_red(results, manifest, change)
+        except StoryLoopError as exc:
+            if exc.code != "BLOCKED" or not exc.details.get("results"):
+                raise
+            red_error = exc
+        status = "ERROR" if red_error else "RED"
     elif errors:
         status = "ERROR"
     elif failures or any(item["status"] == "NOT_RUN" for item in results):
@@ -63,10 +74,14 @@ def run_smoke(
         "suite_digests": suite,
         "results": results,
     }
+    if red_error is not None:
+        evidence["red_error"] = {"code": red_error.code, "message": redact(str(red_error))}
     path = project / ".storyloop" / "evidence" / change_id / (
         RED_EVIDENCE if expect_red else RESULT_EVIDENCE
     )
     write_json(path, evidence, max_bytes=4_000_000)
+    if red_error is not None:
+        raise red_error
     return {**evidence, "evidence_path": str(path), "evidence_sha256": _sha256(path)}
 
 
@@ -93,25 +108,46 @@ def _not_run(test: dict) -> dict:
 def _judge_red(results: list[dict], manifest: dict, change: dict) -> None:
     """RED by row type: new-behaviour rows must fail, kept-behaviour rows must already pass.
 
-    Only fast tests decide (heavy ones are recorded, not judged). A failure that executed zero tests
-    is a collection or import error, not a behaviour failure, so it never counts as RED.
+    Fast tests decide when present; otherwise the executed heavy tests decide. A failure that
+    executed zero tests is a collection or import error, not a behaviour failure.
     """
     tiers = {test["id"]: test.get("tier", "fast") for test in manifest["tests"]}
-    fast = [item for item in results if tiers[item["id"]] == "fast"]
-    broken = [item for item in fast if item["status"] == "ERROR" or (
-        item["status"] == "FAIL" and (item.get("counts") or {}).get("executed") == 0)]
-    require(not broken, "Smoke RED proof encountered an environment error")
+    fast = [item for item in results if tiers[item["id"]] == "fast" and item["status"] != "NOT_RUN"]
+    judged = fast or [item for item in results if item["status"] != "NOT_RUN"]
+    tails = [_tail(item) for item in results]
+    if not judged:
+        raise StoryLoopError("Smoke RED proof has no judged tests", code="ORACLE_DEFECT",
+                             details={"results": tails})
+    classification = _red_failure_classification(judged)
+    if classification == "environment":
+        raise StoryLoopError("Smoke RED proof encountered an environment error",
+                             details={"results": tails})
+    if classification == "oracle":
+        precondition = all(item["status"] == "ERROR" and set(_diagnostic_stages(item)) ==
+                           {"precondition"} for item in judged)
+        message = ("Smoke RED proof failed a fixture precondition" if precondition else
+                   "Smoke RED proof contains acceptance fixture errors")
+        broken = [item for item in judged if item["status"] == "ERROR" or (
+            item["status"] == "FAIL" and (item.get("counts") or {}).get("executed") == 0)]
+        category = _red_fixture_category(broken)
+        raise StoryLoopError(message, code="ORACLE_DEFECT",
+                             details={"fixture_repairable": True, "results": tails,
+                                      **_red_defect_context(manifest, change, broken, category)})
     expects_red = {criterion["id"]: criterion_expects_red(criterion)
                    for story in change["product"]["stories"] for criterion in story["acceptance"]}
-    failed = {criterion for item in fast if item["status"] == "FAIL" for criterion in item["criteria"]}
-    covered = {criterion for item in fast for criterion in item["criteria"]}
-    tails = [_tail(item) for item in results]
+    failed = {criterion for item in judged if item["status"] == "FAIL" for criterion in item["criteria"]}
+    covered = {criterion for item in judged for criterion in item["criteria"]}
     must_hold = sorted(c for c in covered if not expects_red[c] and c in failed)
     if must_hold:
+        offending = [item for item in judged if item["status"] == "FAIL"
+                     and set(item["criteria"]) & set(must_hold)]
         raise StoryLoopError(
             "Criteria that must already hold fail on the code before implementation: "
             + ", ".join(must_hold) + " (the tests are wrong, not the code)",
-            code="ORACLE_DEFECT", details={"criteria_failing": must_hold, "results": tails})
+            code="ORACLE_DEFECT", details={"criteria_failing": must_hold, "results": tails,
+                                           "fixture_repairable": True,
+                                           **_red_defect_context(manifest, change, offending,
+                                                                 "MUST_HOLD_RED")})
     green = sorted(c for c in covered if expects_red[c] and c not in failed)
     if green:
         raise StoryLoopError(
@@ -123,7 +159,13 @@ def _judge_red(results: list[dict], manifest: dict, change: dict) -> None:
 def _tail(result: dict) -> dict:
     """A bounded copy of one test result for a stop record (full output stays in the evidence)."""
     return {"id": result.get("id"), "status": result.get("status"),
-            "stdout": str(result.get("stdout", ""))[-6000:], "stderr": str(result.get("stderr", ""))[-6000:]}
+            "diagnostics": (result.get("counts") or {}).get("diagnostics", [])[:20],
+            "stdout": str(result.get("stdout", ""))[-1500:], "stderr": str(result.get("stderr", ""))[-1500:]}
+
+
+def _diagnostic_stages(result: dict) -> list[str]:
+    return [item for item in (result.get("counts") or {}).get("diagnostics", [])
+            if isinstance(item, str)]
 
 
 def run_smoke_isolated(project: Path, change: dict, expect_red: bool = False,
@@ -142,16 +184,26 @@ def run_smoke_isolated(project: Path, change: dict, expect_red: bool = False,
         _copy_smoke_control(project, candidate, change_id)
         before = capture_snapshot(candidate, include_control=True, include_ignored=True)
         digest = _files_digest(candidate, paths)
-        result = run_smoke(
-            candidate, change, expect_red, head_commit=head,
-            workspace_sha256=digest,
-        )
-        source = Path(result["evidence_path"])
+        failure = None
+        try:
+            result = run_smoke(candidate, change, expect_red, head_commit=head,
+                               workspace_sha256=digest)
+        except StoryLoopError as exc:
+            if not (expect_red and exc.details.get("results")):
+                raise
+            failure = exc
+            result = None
+        source = (Path(result["evidence_path"]) if result else
+                  candidate / ".storyloop/evidence" / change_id / RED_EVIDENCE)
         after = capture_snapshot(candidate, include_control=True, include_ignored=True)
         allowed = f".storyloop/evidence/{change_id}/{source.name}"
         _require_only_evidence_changed(before, after, allowed)
-        target = project / ".storyloop/evidence" / change_id / source.name
-        write_json(target, load_json(source), max_bytes=4_000_000)
+        fresh = result is not None or any(item.path == allowed for item in snapshot_changes(before, after))
+        if source.is_file() and fresh:
+            target = project / ".storyloop/evidence" / change_id / source.name
+            write_json(target, load_json(source), max_bytes=4_000_000)
+        if failure is not None:
+            raise failure
     return {**load_json(target), "evidence_path": str(target),
             "evidence_sha256": _sha256(target)}
 
@@ -261,7 +313,7 @@ def _require_only_evidence_changed(before, after, allowed: str) -> None:
 
 
 def run_commands(project: Path, commands: list[list[str]], timeout_seconds: int,
-                 patterns: list[dict] | None = None) -> dict:
+                 patterns: list[dict] | None = None, *, capture_output_tail: bool = False) -> dict:
     """Run generic project regression commands with the same safe process contract."""
     require(isinstance(commands, list), "Regression commands must be a list")
     if not commands:
@@ -271,7 +323,8 @@ def run_commands(project: Path, commands: list[list[str]], timeout_seconds: int,
          "timeout_seconds": timeout_seconds}
         for index, command in enumerate(commands, start=1)
     ]
-    results = [_run_test(Path(project).resolve(), item, patterns) for item in tests]
+    results = [_run_test(Path(project).resolve(), item, patterns,
+                         capture_output_tail=capture_output_tail) for item in tests]
     status = "PASSED" if all(item["status"] == "PASS" for item in results) else "FAILED"
     return {"status": status, "results": results}
 
@@ -297,7 +350,7 @@ def run_commands_isolated(
 
 
 def run_commands_at_commit(project: Path, commit: str, commands: list[list[str]], timeout_seconds: int,
-                           exclude: list[str] | tuple = ()) -> dict:
+                           exclude: list[str] | tuple = (), *, capture_output_tail: bool = False) -> dict:
     """Run regression commands on a commit's tree (workspace edits excluded), minus `exclude` paths."""
     project = Path(project).resolve()
     skipped = set(exclude)
@@ -310,7 +363,8 @@ def run_commands_at_commit(project: Path, commit: str, commands: list[list[str]]
             for member in members:
                 safe_target(candidate, member.name, "baseline target")
             tar.extractall(candidate, members=members, filter="data")
-        return run_commands(candidate, commands, timeout_seconds, project_patterns(project))
+        return run_commands(candidate, commands, timeout_seconds, project_patterns(project),
+                            capture_output_tail=capture_output_tail)
 
 
 def git_visible_digest(project: Path) -> str:
@@ -344,9 +398,14 @@ def _files_digest(root: Path, paths: list[str]) -> str:
     return digest.hexdigest()
 
 
-def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> dict:
+def _run_test(project: Path, test: dict, patterns: list[dict] | None = None,
+              *, capture_output_tail: bool = False) -> dict:
     argv = expand_command(test["command"])
     executable = argv[0] if Path(argv[0]).is_absolute() else shutil.which(argv[0])
+    if capture_output_tail and not executable:
+        return {"id": test["id"], "status": "ERROR", "command": argv,
+                "returncode": None, "timed_out": False, "counts": {},
+                "output_tail": {"message": "无可用输出"}}
     require(bool(executable), "Smoke executable is unavailable")
     require(Path(executable).suffix.lower() not in {".cmd", ".bat", ".ps1"},
             "Smoke executable must be native or use an explicit interpreter")
@@ -360,11 +419,25 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> 
         environment_allowlist=["PATH", "SYSTEMROOT", "TEMP", "TMP",
                                "PYTHONDONTWRITEBYTECODE"],
         source_environment=environment,
+        capture_output_tail=capture_output_tail,
     )
     counts = (harness_counts(outcome) if test["command"][0] == "{storyloop_harness}" else
               count_tests(argv, str(outcome.get("stdout", "")) + "\n" + str(outcome.get("stderr", "")), patterns))
-    if (outcome.get("contained") is not True or outcome.get("timed_out")
-            or outcome.get("truncated") or outcome.get("error")):
+    execution_error = (outcome.get("contained") is not True or any(
+        outcome.get(key) for key in ("timed_out", "truncated", "error")))
+    if execution_error:
+        counts["diagnostics"] = list(dict.fromkeys([*counts.get("diagnostics", []), "runner"]))
+    if (counts.get("parser") == "unittest" and counts.get("errors")
+            and outcome.get("contained") is True and not any(
+                outcome.get(key) for key in ("timed_out", "truncated", "error"))
+            and outcome.get("returncode") in (1, 2)):
+        markers = sum(line.startswith("STORYLOOP_PRECONDITION_FAILED: ") for line in
+                      str(outcome.get("stderr", "")).splitlines())
+        if markers == counts["errors"] and not counts["failed"]:
+            counts["diagnostics"] = ["precondition"]
+    if execution_error:
+        status = "ERROR"
+    elif counts.get("errors", 0) > 0:
         status = "ERROR"
     elif outcome.get("returncode") == 0:
         status = "PASS"
@@ -372,7 +445,7 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> 
         status = "FAIL"
     else:
         status = "ERROR"
-    return {
+    result = {
         "id": test["id"],
         "criteria": list(test["criteria"]),
         "command": argv,
@@ -381,9 +454,22 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None) -> 
         "returncode": outcome.get("returncode"),
         "timed_out": bool(outcome.get("timed_out")),
         "counts": counts,
-        "stdout": redact(str(outcome.get("stdout", "")))[:100_000],
-        "stderr": redact(str(outcome.get("stderr", "")))[:100_000],
+        "stdout": redact(redaction_prefix(str(outcome.get("stdout", "")), 100_000)),
+        "stderr": redact(redaction_prefix(str(outcome.get("stderr", "")), 100_000)),
     }
+    if outcome.get("truncated"):
+        result["truncated"] = True
+    if outcome.get("error") or outcome.get("contained") is not True:
+        result["process_error"] = True
+    if capture_output_tail and status != "PASS":
+        raw = outcome.get("output_tail") or {}
+        stdout = redact(raw.get("stdout", ""))
+        stderr = redact(raw.get("stderr", ""))
+        stdout_limit = min(len(stdout), 1500 - min(len(stderr), 750))
+        tail = {"stdout": stdout[-stdout_limit:] if stdout_limit else "",
+                "stderr": stderr[-(1500 - stdout_limit):]}
+        result["output_tail"] = tail if any(tail.values()) else {"message": "无可用输出"}
+    return result
 
 
 def _expand(value: str) -> str:

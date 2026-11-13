@@ -3,6 +3,7 @@ from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from storyloop.consistency import consistency_status, validate_consistency, ensure_consistency
 from storyloop.consistency_locations import validate_plan_location
@@ -25,6 +26,14 @@ def finding(target='design', location='plan:main/constraints/0', blocking=True):
 
 
 class ConsistencyTests(unittest.TestCase):
+    def test_consistency_instruction_records_weakening_suggestions_without_blocking(self):
+        from storyloop.role_instructions import INSTRUCTIONS
+        instruction = INSTRUCTIONS['review']
+        self.assertIn('regression, state_preservation, non_goal', instruction)
+        self.assertIn('blocking:false', instruction)
+        self.assertIn('positive, degradation, unknown_state, form_parity', instruction)
+        self.assertIn('all blocking findings in one response', instruction)
+
     def test_contract_blocker_has_priority_without_losing_findings(self):
         findings = [finding(target) for target in ('design', 'oracle', 'contract')]
         self.assertEqual(consistency_status(findings), 'NEEDS_SPEC_FIX')
@@ -166,7 +175,9 @@ class ConsistencyGateTests(unittest.TestCase):
                 '    def test_behavior(self):\n'
                 "        self.assertEqual(serve(), 'ok')\n")
             return {'summary': 'Lock existing behavior', 'touched': ['app/service.py'],
-                    'tests': ['tests/test_lock.py'], 'questions': []}
+                    'tests': ['tests/test_lock.py'], 'questions': [], 'claims': [
+                        {'test': 'tests/test_lock.py', 'behavior': 'serve keeps old invariant',
+                         'symbols': [], 'criterion_ids': []}]}
         services = replace(self.services, characterize=characterize,
                            implement=lambda p, c: {'summary': 'Reached implementation',
                                                    'questions': ['Stop at implementation']})
@@ -192,7 +203,7 @@ class ConsistencyGateTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertEqual(self.state['characterization'], {'status': 'GREEN'})
 
-    def test_acceptance_repair_reproves_red_then_requires_new_l2_approval(self):
+    def _repair_after_oracle_block(self, mutate=None):
         self.prepared()
         from storyloop.smoke import suite_relative
         from storyloop.acceptance_repair import repair_smoke
@@ -202,21 +213,103 @@ class ConsistencyGateTests(unittest.TestCase):
             finding('oracle', path.relative_to(self.root).as_posix() + ':1')]}
         self.services = replace(self.services, review=lambda p, c: response)
         self.assertEqual(run_change(self.root, self.identifier, self.services)['status'], 'ORACLE_DEFECT')
+        previous = deepcopy(load_run_state(self.root, self.identifier)['planning']['plan'])
+        if mutate:
+            state = load_run_state(self.root, self.identifier)
+            mutate(state)
+            save_run(self.root, state)
         def repaired(project, context):
             payload = smoke_payload(self.identifier)
             payload['files'][0]['content'] += '\n# repaired oracle reference\n'
             return payload
         repair_smoke(self.root, self.identifier, 'Correct oracle obligation',
                      replace(self.services, generate_smoke=repaired))
-        state = load_run_state(self.root, self.identifier)
-        self.assertNotIn('plan', state['planning'])
+        return previous, load_run_state(self.root, self.identifier)
+
+    def test_acceptance_repair_keeps_approval_but_design_review_can_block(self):
+        previous, state = self._repair_after_oracle_block()
+        self.assertEqual(state['planning']['plan']['approval']['time'], previous['approval']['time'])
+        self.assertEqual(state['planning']['plan']['approval']['option_id'], previous['approval']['option_id'])
+        self.assertNotEqual(state['planning']['plan']['binding']['suite_digest'],
+                            previous['binding']['suite_digest'])
         self.assertNotIn('consistency', state['planning'])
         self.assertEqual(state['attempt'], 0)
+        self.assertEqual(len(state['repairs']), 1)
+        self.services = replace(self.services, review=lambda p, c: {
+            **coherent(), 'verdict': 'blocked', 'findings': [finding()]})
         self.assertEqual(run_change(self.root, self.identifier, self.services)['status'],
-                         'DESIGN_APPROVAL_REQUIRED')
+                         'DESIGN_REVISION_REQUIRED')
         state = load_run_state(self.root, self.identifier)
-        self.assertNotIn('approval', state['planning']['plan'])
+        self.assertEqual(state['planning']['consistency']['findings'], [finding()])
+        from storyloop.stop_report import render_stop
+        self.assertIn('阻塞方案意见', '\n'.join(render_stop(state['stop'])))
         self.assertEqual(self.calls, [])
+
+    def test_repair_red_exception_discards_old_plan_binding(self):
+        self.prepared()
+        from storyloop.acceptance_repair import repair_smoke
+        from storyloop.smoke import suite_relative
+        from tests.test_project_loop import smoke_payload
+        path = next((self.root / suite_relative(self.root, self.identifier)).rglob('*.py'))
+        response = {**coherent(), 'verdict': 'blocked', 'findings': [
+            finding('oracle', path.relative_to(self.root).as_posix() + ':1')]}
+        self.services = replace(self.services, review=lambda p, c: response)
+        self.assertEqual(run_change(self.root, self.identifier, self.services)['status'], 'ORACLE_DEFECT')
+        self.assertIn('plan', load_run_state(self.root, self.identifier)['planning'])
+
+        def repaired(project, context):
+            payload = smoke_payload(self.identifier)
+            payload['files'][0]['content'] += '\n# repaired suite\n'
+            return payload
+
+        with patch('storyloop.acceptance_repair.run_smoke_isolated', side_effect=RuntimeError('RED crashed')):
+            with self.assertRaisesRegex(RuntimeError, 'RED crashed'):
+                repair_smoke(self.root, self.identifier, 'Repair oracle',
+                             replace(self.services, generate_smoke=repaired))
+        state = load_run_state(self.root, self.identifier)
+        self.assertEqual(len(state['repairs']), 1)
+        self.assertNotIn('plan', state['planning'])
+        self.assertNotIn('red_evidence_sha256', state)
+
+    def test_standard_repair_review_retries_after_needs_input(self):
+        self.prepared()
+        from storyloop.answers import record_answers
+        self.state['routing']['effective_tier'] = 'standard'
+        self.state['planning']['review_repaired_suite'] = True
+        responses = [{**coherent(), 'verdict': 'needs_input', 'questions': ['Clarify repaired oracle']},
+                     coherent()]
+        calls = []
+        self.services = replace(self.services,
+                                review=lambda p, c: calls.append(c) or responses[len(calls) - 1])
+        self.assertEqual(ensure_consistency(self.root, self.change, self.state, self.services)['status'],
+                         'NEEDS_INPUT')
+        record_answers(self.root, self.identifier, ['Oracle now covers the contract'])
+        self.assertIsNone(ensure_consistency(self.root, self.change, self.state, self.services))
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(self.state['planning']['consistency']['verdict'], 'coherent')
+
+    def test_changed_scope_replans_after_acceptance_repair(self):
+        def expand(state):
+            state['routing']['scope']['creates'].append('app/extra.py')
+        _, state = self._repair_after_oracle_block(expand)
+        self.assertNotIn('plan', state['planning'])
+
+    def test_changed_risk_replans_after_acceptance_repair(self):
+        def elevate(state):
+            state['routing']['assessed_risks']['sensitive'] = 'yes'
+        _, state = self._repair_after_oracle_block(elevate)
+        self.assertNotIn('plan', state['planning'])
+
+    def test_invalid_approval_does_not_survive_acceptance_repair(self):
+        def invalidate(state):
+            state['planning']['plan']['approval']['actor'] = 'agent'
+        _, state = self._repair_after_oracle_block(invalidate)
+        self.assertNotIn('plan', state['planning'])
+
+    def test_l3_origin_does_not_survive_acceptance_repair(self):
+        _, state = self._repair_after_oracle_block(
+            lambda run: run['planning'].update(origin='L3'))
+        self.assertNotIn('plan', state['planning'])
 
 
     def test_overrule_preserves_remaining_oracle_then_design_blockers(self):

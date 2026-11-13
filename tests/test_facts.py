@@ -214,7 +214,9 @@ class CharacterizationStopPhaseTests(unittest.TestCase):
             path = project / "tests/test_characterize_service.py"
             path.write_text(GREEN_TEST.replace("assertIn", "assertNotIn"), encoding="utf-8")
             return {"summary": "wrong lock", "touched": ["modules/orders/service.py"],
-                    "tests": ["tests/test_characterize_service.py"], "questions": []}
+                    "tests": ["tests/test_characterize_service.py"], "questions": [], "claims": [
+                        {"test": "tests/test_characterize_service.py", "behavior": "old invariant",
+                         "symbols": [], "criterion_ids": []}]}
 
         services = LoopServices(
             generate_smoke=lambda project, state: smoke_payload(change_id),

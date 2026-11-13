@@ -1,6 +1,7 @@
 """L2 tiered planning under the run lock, before characterization and implementation."""
 from copy import deepcopy
 from pathlib import Path
+import shlex
 
 from .answers import load_answers
 from .facts import merge_facts
@@ -15,6 +16,9 @@ from .routing_policy import evaluate
 from .change_types import definition_for
 from .routing_state import advance_tier
 from .semantic_repair import answer_with_repair
+from .planning_choice import selected_option
+from .verification_entries import new_format
+from .models import StoryLoopError
 
 
 def required_locks(tier: str, nature: str, touched: list[str]) -> list[str]:
@@ -23,22 +27,30 @@ def required_locks(tier: str, nature: str, touched: list[str]) -> list[str]:
     return sorted(set(touched)) if tier == 'heavy' or required else []
 
 
-def selected_option(plan: dict) -> dict:
-    """Project the explicitly approved option, or the main option before approval."""
-    selected = (plan.get('approval') or {}).get('option_id', plan['main_option'])
-    return next(option for option in plan['options'] if option['id'] == selected)
-
-
 def ensure_routing_plan(project: Path, change: dict, state: dict, services,
                         config: dict) -> dict | None:
     """Build and measure a complete plan; approval/consistency gates run after this gate."""
+    try:
+        return _ensure_routing_plan(project, change, state, services, config)
+    except StoryLoopError as exc:
+        if exc.details.get('repairable') is not True or services.design is None:
+            raise
+        command = shlex.join(['storyloop', 'replan', str(project), '--change', change['change_id'],
+                              '--reason', 'Correct the plan evidence'])
+        return pause(project, state, 'DESIGN_REVISION_REQUIRED', phase='planning',
+                     error=str(exc),
+                     next=f'{command}; then rerun storyloop run')
+
+
+def _ensure_routing_plan(project: Path, change: dict, state: dict, services,
+                         config: dict) -> dict | None:
     planning = state.setdefault('planning', {})
     if (planning.get('plan') or {}).get('status') == 'DONE':
         return None
     state['phase'] = 'planning'
     response = None
     if (state['routing']['effective_tier'] == 'light' and planning.get('origin') != 'L3'
-            and not load_principles(project)['principles']):
+            and not load_principles(project)['principles'] and not new_format(change['product'])):
         response = _compact_plan(change)
         plan = validate_plan(response, project, change, state)
         assessed = assess_plan(project, change, state, plan)
@@ -55,6 +67,10 @@ def ensure_routing_plan(project: Path, change: dict, state: dict, services,
         return pause(project, state, 'NEEDS_INPUT', phase='planning', questions=plan['questions'])
     assessed = assess_plan(project, change, state, plan)
     _record_assessment(state, config, assessed)
+    plan, assessed, retry_response = retry_plan_evidence(
+        project, change, state, services, config, plan, assessed)
+    if retry_response is not None:
+        response = retry_response
     if assessed['decision']['unresolved']:
         return pause(project, state, 'NEEDS_INPUT', phase='planning', questions=[
             'Complete plan evidence: ' + ', '.join(assessed['decision']['unresolved'])])
@@ -66,13 +82,36 @@ def ensure_routing_plan(project: Path, change: dict, state: dict, services,
     return None
 
 
-def _design(project: Path, change: dict, state: dict, services) -> dict:
+def retry_plan_evidence(project: Path, change: dict, state: dict, services,
+                        config: dict, plan: dict, assessed: dict) -> tuple[dict, dict, dict | None]:
+    """Give design one chance to repair measurable plan evidence before asking a human."""
+    missing = [field for field in assessed['decision']['unresolved']
+               if not field.startswith('risks.')]
+    if not missing or services is None or services.design is None:
+        return plan, assessed, None
+    response = _design(project, change, state, services, missing, plan)
+    revised = validate_plan(response, project, change, state)
+    reassessed = assess_plan(project, change, state, revised)
+    _record_assessment(state, config, reassessed)
+    return revised, reassessed, response
+
+
+def _design(project: Path, change: dict, state: dict, services,
+            missing: list[str] | None = None, current_plan: dict | None = None) -> dict:
     context = {'mode': 'routing-plan', 'change': change,
                'evidence_source_commit': state['contract_commit'],
                'routing': deepcopy(state['routing']),
                'answers': load_answers(project, change['change_id']),
                'facts': list(state.get('facts') or []), 'principles': load_principles(project),
                'replanning': deepcopy(state.get('planning', {}))}
+    if state.get('regression_conflict'):
+        context['regression_conflict'] = deepcopy(state['regression_conflict'])
+    if missing:
+        context['missing_plan_evidence'] = missing
+        context['evidence_guidance'] = (
+            'For each existing non-test code file in touched, provide a matching symbol. '
+            'Documentation paths (docs/** and *.md) need no symbols and may be explained in Files.')
+        context['current_plan'] = deepcopy(current_plan)
     return answer_with_repair(
         lambda request: read_only_call(project, change['change_id'],
                                        lambda: services.design(project, request)),

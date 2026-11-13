@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import shlex
 from .cost_limits import stop_fields, render_usage
-from .run_state import base_design_approved
+from .processutil import redact
 from .routing_report import STATUSES, routing_options, routing_view  # noqa: F401  # 兼容再导出：保留旧模块导入路径
 
 
@@ -182,11 +182,43 @@ def _last_verdict(state: dict, details: dict) -> dict | None:
 def _evidence(state: dict, details: dict) -> list[str]:
     routed = (state.get("routed") or {}).get("findings") or []
     evidence = [item["location"] for item in routed if isinstance(item, dict) and item.get("location")]
+    if state.get("status") == "DESIGN_APPROVAL_REQUIRED":
+        evidence.extend(_plan_summary(state))
+    evidence += list(details.get("criteria_summary") or [])
+    conflict = details.get("regression_conflict") or state.get("regression_conflict") or {}
+    if conflict:
+        evidence.append(f"{conflict.get('path')}: {conflict.get('failure_summary')}")
+        evidence.append(str(conflict.get("review_evidence") or "")[:1500])
     violations = details.get("violations") or state.get("violations") or []
     evidence += [item.get("path", "") for item in violations if isinstance(item, dict)]
     acceptance = details.get("acceptance") or state.get("acceptance") or {}
+    precheck = acceptance.get("precheck") or {}
+    if precheck:
+        evidence.append("判据强度预审: " + redact(str(precheck.get("summary") or ""))[:500])
+        evidence.extend(redact(str(item.get("message") or ""))[:500]
+                        for item in precheck.get("findings") or [] if isinstance(item, dict))
+    if acceptance.get("reason") == "HARNESS_SHADOWED":
+        evidence += [f"HARNESS_SHADOWED: {str(path)[:300]}"
+                     for path in (acceptance.get("files") or [])[:10]]
+        evidence.append("引擎 helper: " + str(acceptance.get("engine_helper") or "未知")[:300])
+        evidence.append("候选 helper: " + str(acceptance.get("candidate_helper") or "未知")[:300])
     for key in ("criteria_failing", "criteria_green"):
         evidence += [f"条件 {criterion}" for criterion in acceptance.get(key) or []]
+    for result in acceptance.get("results") or []:
+        if not isinstance(result, dict) or result.get("status") not in {"FAIL", "ERROR"}:
+            continue
+        diagnostics = result.get("diagnostics") or (result.get("counts") or {}).get("diagnostics") or []
+        case_details = [item.get("traceback_tail", "") + "\n" + item.get("message", "")
+                        for item in diagnostics if isinstance(item, dict)]
+        output = "\n".join(case_details or
+                           [str(result.get(key) or "") for key in ("stdout", "stderr")]).strip()
+        prefix = f"{result.get('id', '验收用例')} {result['status']}: "
+        evidence.append(prefix + redact((output or "无输出")[-(1500 - len(prefix)):]))
+    if state.get("status") == "ORACLE_DEFECT" and acceptance.get("fixture_repairable") is True:
+        automatic = [item for item in state.get("repairs") or [] if item.get("automatic") is True]
+        for index, item in enumerate(automatic, 1):
+            if item.get("failure_summary"):
+                evidence.append(f"自动修复 {index}: {item['failure_summary']}")
     for item in details.get("pending") or state.get("pending") or []:
         criterion = item.get("criterion_id") or item.get("id") if isinstance(item, dict) else item
         evidence.append(f"条件 {criterion}")
@@ -203,33 +235,39 @@ def _evidence(state: dict, details: dict) -> list[str]:
     return [item for item in dict.fromkeys(evidence) if item]
 
 
-def _base_design_stop(project: Path | str, state: dict, change_id: str) -> tuple[str, list[dict]]:
-    plan = state["base_design"]
-    approved = base_design_approved(project, state)
-    hint = (f"storyloop run <project> --change {change_id}" if approved else
-            f"storyloop base-design-approve <project> --change {change_id} "
-            f"--plan-id {plan['plan_id']}")
-    action = "继续已批准底座方案" if approved else "具名批准底座方案"
-    return hint, [{"action": action, "command": hint}]
+def base_legacy_action(project: Path | str, change_id: str, details: dict) -> str:
+    """Describe the linked base flow without executing any Git command."""
+    root = shlex.quote(str(Path(project).resolve()))
+    project_arg = shlex.quote(str(project))
+    change = shlex.quote(change_id)
+    base = shlex.quote(str(details["blocked_by"]))
+    source = shlex.quote(str(details.get("source_branch", "<source-branch>")))
+    feature = shlex.quote(str(details.get("feature_branch", "<feature-branch>")))
+    paths = " ".join(shlex.quote(str(path)) for path in details["legacy_paths"])
+    run = f"storyloop run {project_arg} --change {change}"
+    return (f"先用 git -C {root} --literal-pathspecs stash push -u -- {paths} 保存遗留业务改动；"
+            f"用 git -C {root} status --short 检查并另行保存其他改动，确保工作区干净；"
+            f"git -C {root} switch {source}；"
+            f"storyloop approve {project_arg} --change {base}；"
+            f"storyloop run {project_arg} --change {base} --implementer human；"
+            f"base 通过后 git -C {root} switch {feature}，先 {run} 自动合并并重证；"
+            "完成后由你决定取回或丢弃暂存的改动")
 
 
-def _agent_review_stop(state: dict, change_id: str) -> tuple[str, list[dict], str]:
-    mode = state.get("base_review_mode", "unknown")
-    if mode == "single":
-        hint = (f"storyloop base-review <project> --change {change_id} --verdict pass "
-                "--note '<核对内容>' --human-review '<至少 12 字理由>'")
-        return hint, [{"action": "具名人工替代审查", "command": hint}], "等待具名人工替代审查"
-    if mode == "distinct":
-        hint = f"storyloop run <project> --change {change_id}"
-        return hint, [{"action": "触发跨厂商代理审查", "command": hint}], "等待下一次 storyloop run 触发跨厂商代理审查"
-    if mode == "reconfigure":
-        hint = ("把 roles.review.adapter 改配到其他已握手 vendor 的适配器，然后 "
-                f"storyloop run <project> --change {change_id}")
-        return (hint, [{"action": "改配跨厂商审查", "command": hint}],
-                "实现与审查同厂商；把 roles.review.adapter 改配到其他已握手 vendor 的适配器，然后 run")
-    hint = "storyloop adapters check <project>"
-    return (hint, [{"action": "修复审查者握手", "command": hint}],
-            "审查者 vendor 握手未知；修复握手或配置后会作废本次尝试，从合同提交重新验证")
+def _convergence_options(status: str, project: str, change_id: str) -> list[dict]:
+    where = (project, "--change", change_id)
+    repair = {"action": "按合同补全判据", "command": _command(
+        "storyloop", "acceptance-repair", *where, "--reason", "<按已批准合同补全判据>")}
+    contract = {"action": "修订合同并重开", "command": _command(
+        "storyloop", "change", project, "--supersede", change_id,
+        "--reason", "<合同修订理由>", "--message", "<合同修订说明>")}
+    overrule = {"action": "驳回归属", "command": _command(
+        "storyloop", "run", *where, "--overrule", "<理由>")}
+    design = {"action": "修订方案", "command": _command(
+        "storyloop", "run", *where, "--replan", "--reason", "<方案修订说明>")}
+    return {"ORACLE_DEFECT": [repair, contract, overrule],
+            "DESIGN_REVISION_REQUIRED": [design],
+            "NEEDS_SPEC_FIX": [contract, overrule]}.get(status, [])
 
 
 def _stop_actions(project: Path | str, state: dict, status: str, details: dict
@@ -238,17 +276,61 @@ def _stop_actions(project: Path | str, state: dict, status: str, details: dict
     options = routing_options(project, change_id, status, {**state, **details}) or _options(
         status, project_text, change_id, bool(state.get("routed")),
         details.get("ci_requires_human_proposal", False))
+    if (details.get("acceptance") or {}).get("reason") == "RED_ENVIRONMENT_ERROR":
+        options = [{"action": "修复 RED 执行环境后重试", "command": _command(
+            "storyloop", "run", project_text, "--change", change_id)}]
+    convergence = details.get("convergence") or {}
+    if convergence.get("exhausted"):
+        options = _convergence_options(status, project_text, change_id) or options
+    if status == "ORACLE_DEFECT":
+        from .failure_attribution import characterization_oracle
+        if characterization_oracle({**state, **details}):
+            options[0] = {"action": "作废变更并重开", "command": _command(
+                "storyloop", "change", project_text, "--supersede", change_id,
+                "--reason", "<原因>", "--message", "<重新描述需求>")}
+    if status == "BASE_CHANGE_REQUIRED" and details.get("blocked_by"):
+        options = [{"action": "批准已生成的底座草案", "command": _command(
+            "storyloop", "approve", project_text, "--change", details["blocked_by"])}]
+        context = {**state, **details}
+        if context.get("legacy_paths"):
+            options[0]["action"] = base_legacy_action(project, change_id, context)
     blocker = details.get("error") or state.get("error") or BLOCKERS.get(status, status)
-    if status == "DESIGN_APPROVAL_REQUIRED":
-        if (change_id.startswith("BASE-") and state.get("implementer") == "agent"
-                and isinstance(state.get("base_design"), dict)):
-            _, options = _base_design_stop(project, state, change_id)
-    elif status == "BASE_REVIEW_REQUIRED" and state.get("implementer") == "agent":
-        _, options, blocker = _agent_review_stop({**state, **details}, change_id)
-    elif status == "WORKSPACE_TAINTED" and details.get("base_resume_status") == "FINALIZING":
+    if status == "WORKSPACE_TAINTED" and details.get("base_resume_status") == "FINALIZING":
         options = [{"action": "恢复已批准 baseline 后继续", "command": _command(
             "storyloop", "run", project_text, "--change", change_id)}]
     return options, blocker
+
+
+def _review_findings(findings: list[dict]) -> list[dict]:
+    """Project blocking review findings into bounded, redacted stop summaries."""
+    result = []
+    for finding in findings:
+        if not isinstance(finding, dict) or finding.get("blocking") is not True:
+            continue
+        target = str(finding.get("target") or "")
+        severity = "阻塞"
+        prefix = f"目标：{target}；严重度：{severity}；内容："
+        separator = "；位置："
+        message = " ".join(redact(str(finding.get("message") or "")).split())[:160]
+        location = " ".join(redact(str(finding.get("location") or "")).split())
+        location = location[:max(0, 300 - len(prefix) - len(message) - len(separator))]
+        summary = f"{prefix}{message}{separator}{location}"
+        result.append({"target": target, "severity": severity, "message": message,
+                       "location": location, "summary": summary})
+    return result
+
+
+def _convergence_view(value: dict) -> dict:
+    """Keep recovery metadata bounded and redact role-provided prose in JSON stops."""
+    return {"criterion_id": redact(str(value.get("criterion_id") or ""))[:80],
+            "round": value.get("round"),
+            "finding_ids": [redact(str(item))[:80] for item in (value.get("finding_ids") or [])[:20]],
+            "missing_spec_fields": [str(item)[:40] for item in (value.get("missing_spec_fields") or [])[:10]],
+            "prior_findings": [{key: redact(str(item.get(key) or ""))[:500]
+                                for key in ("id", "evidence", "message")}
+                               for item in (value.get("prior_findings") or [])[:2]
+                               if isinstance(item, dict)],
+            "exhausted": value.get("exhausted") is True}
 
 
 def build_stop(project: Path | str, state: dict, status: str, details: dict) -> dict:
@@ -275,50 +357,42 @@ def build_stop(project: Path | str, state: dict, status: str, details: dict) -> 
         "facts": list(details.get("facts") or state.get("facts") or []),
         "questions": list(details.get("questions") or state.get("questions") or []),
         "options": options,
-        "resume": (options[0]["command"] if status in {"NEEDS_SPEC_FIX", "DESIGN_APPROVAL_REQUIRED"}
-                   or (status == "BASE_REVIEW_REQUIRED" and state.get("implementer") == "agent")
+        "resume": (options[0]["command"] if status in {"NEEDS_SPEC_FIX", "DESIGN_APPROVAL_REQUIRED",
+                                                   "ORACLE_DEFECT"}
                    or routed else
                    _command("storyloop", "run", project, "--change", change_id)),
     }
-    if (status == "DESIGN_APPROVAL_REQUIRED" and change_id.startswith("BASE-")
-            and isinstance(state.get("base_design"), dict)):
-        result["plan_summary"] = _plan_summary(state["base_design"])
+    if status == "DESIGN_REVISION_REQUIRED":
+        findings = details.get("findings")
+        result["review_findings"] = _review_findings(
+            findings if findings is not None else state.get("findings") or [])
+    if isinstance(details.get("convergence"), dict):
+        result["convergence"] = _convergence_view(details["convergence"])
     return result
-
-
-def _plan_summary(plan: dict) -> dict:
-    def short(value):
-        value = " ".join(str(value).split())
-        return value[:239] + "…" if len(value) > 240 else value
-    paths, steps, risks = (plan.get(key) or [] for key in ("paths", "steps", "risks"))
-    shown = {"paths": [short(item) for item in paths[:8]],
-             "steps": [short(item) for item in steps[:5]],
-             "risks": [short(item) for item in risks[:5]]}
-    return {"goal": short(plan.get("goal", "")), "summary": short(plan.get("summary", "")),
-            "rollback": short(plan.get("rollback", "")), **shown,
-            "totals": {"paths": len(paths), "steps": len(steps), "risks": len(risks)},
-            "source": f".storyloop/state/base-designs/{plan.get('change_id', '<BASE-ID>')}.json"}
-
-
-def _render_plan_list(label: str, key: str, summary: dict) -> str:
-    shown = summary[key]
-    total = summary["totals"][key]
-    suffix = f"（展示 {len(shown)}/{total} 项，共 {total} 项）" if len(shown) < total else ""
-    return f"  {label}：{'; '.join(shown)}{suffix}"
 
 
 def stop_of(project: Path | str, run: dict | None) -> dict | None:
     """Return a saved report, or synthesize one for a legacy explicit-stop run."""
     if not run:
         return None
+    if run.get("implementer") == "agent" and run.get("status") != "PASSED":
+        return None
     saved = run.get("stop")
     if isinstance(saved, dict) and saved.get("status") == "AGENT_UNAVAILABLE":
         return saved
     if run.get("status") not in STOP_STATUSES:
         return None
-    if (run["status"] == "DESIGN_APPROVAL_REQUIRED" and base_design_approved(project, run)):
-        return build_stop(project, run, run["status"], {})
     if isinstance(saved, dict) and saved.get("status") == run["status"]:
+        if run["status"] == "DESIGN_REVISION_REQUIRED" and "review_findings" not in saved:
+            return {**saved, "review_findings": _review_findings(run.get("findings") or [])}
+        if run["status"] == "BASE_CHANGE_REQUIRED" and run.get("legacy_paths"):
+            options, _ = _stop_actions(project, run, run["status"], run)
+            return {**saved, "options": options}
+        if run["status"] == "ORACLE_DEFECT":
+            from .failure_attribution import characterization_oracle
+            if characterization_oracle(run):
+                options, _ = _stop_actions(project, run, run["status"], {})
+                return {**saved, "options": options, "resume": options[0]["command"]}
         return saved
     return build_stop(project, run, run["status"], {})
 
@@ -326,14 +400,17 @@ def stop_of(project: Path | str, run: dict | None) -> dict | None:
 def render_stop(stop: dict) -> list[str]:
     """Render the report in the decision order defined by the design."""
     lines = [f"阻塞点：{stop['blocker']}"] + render_usage(stop)
-    if stop.get("plan_summary"):
-        summary = stop["plan_summary"]
-        lines += ["底座方案摘要：", f"  目标：{summary['goal']}",
-                  f"  方案：{summary['summary']}",
-                  _render_plan_list("路径", "paths", summary),
-                  _render_plan_list("步骤", "steps", summary),
-                  _render_plan_list("风险", "risks", summary),
-                  f"  回退：{summary['rollback']}", f"  完整方案：{summary['source']}"]
+    convergence = stop.get("convergence") or {}
+    if convergence.get("exhausted"):
+        missing = "、".join(convergence.get("missing_spec_fields") or []) or "无"
+        lines.append(f"收敛停止：{convergence.get('criterion_id')} 第{convergence.get('round')}轮；缺少：{missing}")
+        for item in (convergence.get("prior_findings") or [])[:2]:
+            message = redact(str(item.get("message") or ""))[:200]
+            evidence = redact(str(item.get("evidence") or ""))[:200]
+            lines.append(f"  - {item.get('id')}: {message}；证据：{evidence}")
+    if stop.get("status") == "DESIGN_REVISION_REQUIRED" and stop.get("review_findings"):
+        lines.append("阻塞方案意见：")
+        lines += [f"  - {item['summary']}" for item in stop["review_findings"]]
     for key, heading in (("evidence", "证据"), ("facts", "代理陈述事实"), ("questions", "问题")):
         if stop.get(key):
             lines.append(f"{heading}：")
@@ -352,10 +429,58 @@ def _render_item(item: object) -> str:
     return str(item)
 
 
+def _plan_summary(state: dict) -> list[str]:
+    plan = (state.get("planning") or {}).get("plan") or {}
+    if plan.get("status") != "DONE" or not plan.get("options"):
+        return []
+    from .planning_choice import selected_option
+    option = selected_option(plan)
+    selected = option['id']
+    location = f".storyloop/state/runs/{state['change_id']}.json → planning.plan"
+    paths = [str(item) for item in option.get("touched", []) + option.get("creates", [])]
+    risks = [f"{name}: {value.get('reason', value.get('value', ''))}"
+             for name, value in (option.get("risks") or {}).items() if isinstance(value, dict)]
+    decisions = _plan_section(str(plan.get("design") or ""), "Decisions")
+    return [f"方案选项 {selected}：{option.get('summary', '')}（全文：{location}）",
+            _plan_items("涉及文件", paths, location), _plan_items("Risks", risks, location),
+            f"Decisions：{decisions[:400]}" + (f"…完整内容见 {location}" if len(decisions) > 400 else "")]
+
+
+def _plan_items(label: str, values: list[str], location: str) -> str:
+    remainder = f"；共 {len(values)} 项，完整内容见 {location}" if len(values) > 8 else ""
+    return f"{label}：" + "、".join(values[:8]) + remainder
+
+
+def _plan_section(markdown: str, heading: str) -> str:
+    lines = markdown.splitlines()
+    start = next((i for i, line in enumerate(lines)
+                  if line.strip().lower().startswith(f"## {heading.lower()}")), None)
+    if start is None:
+        return "详见方案全文"
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    return " ".join(line.strip() for line in lines[start + 1:end] if line.strip()) or "详见方案全文"
+
+
 def build_entry_stop(project: Path, status: str, details: dict) -> dict:
     """Report a blocked entry without fabricating a run or implementation attempts."""
-    options = routing_options(project, details.get('change_id'), status, details)
-    return {'status': status, 'phase': 'intake', 'blocker': details.get('error', status),
-            'evidence': details.get('evidence', details.get('layers', {})),
+    intake = details.get('intake') or details
+    unresolved = (intake.get('decision') or {}).get('unresolved') or []
+    risks = [field for field in unresolved if isinstance(field, str) and field.startswith('risks.')]
+    risk_stop = status == 'NEEDS_INPUT' and bool(risks)
+    options = routing_options(project, details.get('change_id'), status,
+                              {**intake, **details} if risk_stop else details)
+    blocker = ('未决风险：' + ', '.join(risks)) if risk_stop else details.get('error', status)
+    evidence = details.get('evidence', details.get('layers', {}))
+    if status == 'PROJECT_NOT_READY':
+        evidence = []
+        for layer, data in (details.get('layers') or {}).items():
+            for result in data.get('results', []):
+                if result.get('status') == 'PASS':
+                    continue
+                tail = result.get('output_tail') or {'message': '无可用输出'}
+                summary = ' '.join(str(value) for value in tail.values() if value)
+                evidence.append(f"{layer} {result.get('id', '?')} {result.get('status', 'ERROR')}: {summary}")
+    return {'status': status, 'phase': 'intake', 'blocker': blocker,
+            'evidence': evidence,
             'details': details, 'options': options,
             'resume': options[0]['command'] if options else _command('storyloop', 'readiness', project)}

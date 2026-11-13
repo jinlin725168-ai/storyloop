@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from .baseline import load_baseline, load_project_config
-from .models import identifier, require, text
+from .models import StoryLoopError, identifier, require, text
 from .product_contract import SLUG, nature_of, validate_product
 from .openspec_docs import capability_of, render_delta_spec
 from .requirement_checklist import evaluate_checklist, render_checklist
@@ -22,6 +22,8 @@ Clock = Callable[[], datetime]
 def create_change(
     project: Path, idea: str, product: dict, now: Clock | None = None,
     supersedes: dict | None = None, slug: str | None = None,
+    *, require_verification_entries: bool = False,
+    require_entry_coverage: bool | None = None,
 ) -> dict:
     """Create a local ignored draft from one short product idea."""
     project = Path(project).resolve()
@@ -49,6 +51,12 @@ def create_change(
         "history": [],
         "approval": None,
     }
+    if require_verification_entries:
+        state["verification_entries_required"] = True
+    coverage_required = (require_verification_entries if require_entry_coverage is None
+                         else require_entry_coverage)
+    if coverage_required:
+        state["entry_coverage_required"] = True
     if supersedes is not None:
         state["supersedes"] = _supersedes(supersedes)
     from .intake import project_intake
@@ -60,22 +68,36 @@ def create_change(
 def load_change(project: Path, change_id: str) -> dict:
     """Load a validated local product change state."""
     change_id = identifier(change_id, "change id")
-    value = load_json(_state_path(Path(project).resolve(), change_id))
+    path = _state_path(Path(project).resolve(), change_id)
+    if not path.exists():
+        raise StoryLoopError(f"变更 {change_id} 不存在")
+    value = load_json(path)
     required = {
         "version", "change_id", "status", "revision", "idea", "product",
         "created_at", "updated_at", "history", "approval",
     }
     from .models import require
     optional = {"supersedes", "superseded_by", "routing_version", "intake",
-                "base_proposal_sha256"}
+                "base_proposal_sha256", "blocked_by", "intervention_events",
+                "verification_entries_required", "entry_coverage_required"}
     require(required <= set(value) <= required | optional and value["version"] == 1,
             "Invalid change state")
     require(value["change_id"] == change_id, "Change state identity mismatch")
+    if "intervention_events" in value:
+        require(isinstance(value["intervention_events"], list), "Invalid intervention events")
+    if "verification_entries_required" in value:
+        require(value["verification_entries_required"] is True, "Invalid verification entry requirement")
+    if "entry_coverage_required" in value:
+        require(value["entry_coverage_required"] is True, "Invalid entry coverage requirement")
     if "base_proposal_sha256" in value:
         require(nature_of(value["product"]) == "base"
                 and isinstance(value["base_proposal_sha256"], str)
                 and len(value["base_proposal_sha256"]) == 64,
                 "Invalid base proposal digest")
+    if "blocked_by" in value:
+        require(nature_of(value["product"]) != "base"
+                and isinstance(value["blocked_by"], str)
+                and value["blocked_by"].startswith("BASE-"), "Invalid blocking base change")
     require(value["status"] in {
         "DRAFT", "APPROVED", "RUNNING", "PASSED", "PAUSED", "FAILED", "SUPERSEDED",
     },
@@ -218,13 +240,20 @@ def write_change_preview(project: Path, state: dict) -> None:
         f"## 澄清记录\n\n{_clarification_lines(product.get('clarifications', []))}\n\n"
         f"## 待决问题\n\n{questions}\n"
     )
+    if product.get("nature") == "base" and state.get("base_proposal_sha256"):
+        source = Path(project) / ".storyloop/base-proposals" / f"{state['change_id']}.json"
+        if source.is_file():
+            reference = load_json(source).get("reference")
+            if isinstance(reference, dict) and isinstance(reference.get("path"), str):
+                proposal += f"\n## 原变更参考\n\n`{reference['path']}`（仅供参考，不进入合同或实现）。\n"
     _write_text(root / "proposal.md", proposal)
     capability = capability_of(product, state["change_id"])
     main_path = Path(project).resolve() / "openspec" / "specs" / capability / "spec.md"
     main_spec = main_path.read_text(encoding="utf-8") if main_path.is_file() else None
     _write_text(root / "specs" / capability / "spec.md",
                 render_delta_spec(product, state["change_id"], main_spec))
-    _write_text(root / "checklist.md", render_checklist(evaluate_checklist(product, project)))
+    _write_text(root / "checklist.md", render_checklist(evaluate_checklist(
+        product, project, require_entries=state.get("verification_entries_required") is True)))
 
 
 def _question_line(item: dict) -> str:

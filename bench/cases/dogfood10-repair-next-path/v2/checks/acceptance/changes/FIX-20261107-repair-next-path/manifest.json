@@ -1,0 +1,70 @@
+{
+  "tests": [
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261107-repair-next-path/bench_repair_next_path.py"
+      ],
+      "criteria": [
+        "S1-C1"
+      ],
+      "entry_ids": [
+        "VE-REPAIR-RESULT"
+      ],
+      "id": "repair-next-path",
+      "tier": "fast",
+      "timeout_seconds": 400
+    },
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261107-repair-next-path/bench_repair_next_cli.py"
+      ],
+      "criteria": [
+        "S1-C2"
+      ],
+      "entry_ids": [
+        "VE-REPAIR-RESULT"
+      ],
+      "id": "repair-next-cli",
+      "tier": "fast",
+      "timeout_seconds": 240
+    },
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261107-repair-next-path/bench_repair_next_regression.py"
+      ],
+      "criteria": [
+        "S1-C3",
+        "S1-C4"
+      ],
+      "entry_ids": [
+        "VE-REPAIR-RESULT"
+      ],
+      "id": "repair-next-regression",
+      "tier": "fast",
+      "timeout_seconds": 240
+    },
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261107-repair-next-path/bench_repair_next_stop.py"
+      ],
+      "criteria": [
+        "S1-C5"
+      ],
+      "entry_ids": [
+        "VE-REPAIR-RESULT"
+      ],
+      "id": "repair-next-stop",
+      "tier": "fast",
+      "timeout_seconds": 240
+    }
+  ],
+  "version": 1
+}

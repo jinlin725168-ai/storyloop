@@ -40,6 +40,7 @@ class WorkspaceSnapshot:
 
     root: Path
     entries: tuple[tuple[str, FileFingerprint], ...]
+    skipped_scratch: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,7 @@ def capture_snapshot(root: Path, max_files: int = _DEFAULT_MAX_FILES,
     first = _scan_once(resolved, max_files, ignored, include_control, allowed, scratch, exclude_git)
     second = _scan_once(resolved, max_files, ignored, include_control, allowed, scratch, exclude_git)
     require(first == second, "Workspace changed while capturing snapshot")
-    return WorkspaceSnapshot(resolved, first)
+    return WorkspaceSnapshot(resolved, first[0], first[1])
 
 
 def _reject_linked_git_control(root: Path) -> None:
@@ -102,18 +103,27 @@ def _scan_once(root: Path, max_files: int, ignored: set[str],
                track_directories: bool,
                allowed: frozenset[str] = frozenset(),
                scratch: frozenset[str] = frozenset(),
-               exclude_root_git: bool = False) -> tuple[tuple[str, FileFingerprint], ...]:
+               exclude_root_git: bool = False) -> tuple[tuple[tuple[str, FileFingerprint], ...], frozenset[str]]:
     entries: list[tuple[str, FileFingerprint]] = []
+    skipped_scratch: set[str] = set()
     for directory, names, files in os.walk(root, followlinks=False):
         current = Path(directory)
         require(not _is_link(current), "Links are not allowed in project snapshots")
         if scratch:
             base = "" if current == root else current.relative_to(root).as_posix() + "/"
-            # Pending memory drafts are control state even when a scratch name matches.
-            names[:] = [name for name in names
-                        if (track_directories and (base + name in {'.storyloop', '.storyloop/drafts'}
-                            or (base + name).startswith('.storyloop/drafts/')))
-                        or (name not in scratch and base + name not in scratch)]
+            # Control state stays visible even when a scratch name matches a nested directory.
+            visible = []
+            for name in names:
+                relative = base + name
+                protected = track_directories and (relative == '.storyloop'
+                                                   or relative.startswith('.storyloop/'))
+                matches = any(("/" not in item and _scratch_name_matches(name, item))
+                              or relative == item for item in scratch)
+                if matches and not protected:
+                    skipped_scratch.add(relative + "/")
+                else:
+                    visible.append(name)
+            names[:] = visible
         _reject_links(current, [*names, *files])
         if current == root and exclude_root_git:
             names[:] = [name for name in names if name.casefold() != ".git"]
@@ -136,7 +146,7 @@ def _scan_once(root: Path, max_files: int, ignored: set[str],
             relative = path.relative_to(root).as_posix()
             entries.append((relative, _fingerprint(path)))
     entries.sort(key=lambda item: item[0])
-    return tuple(entries)
+    return tuple(entries), frozenset(skipped_scratch)
 
 
 def snapshot_changes(before: WorkspaceSnapshot, after: WorkspaceSnapshot) -> list[FileChange]:
@@ -213,6 +223,24 @@ def _scratch_skip(root: Path) -> frozenset[str]:
         return frozenset()
     values = profile.get("scratch_paths", []) if isinstance(profile, dict) else []
     return frozenset(item.rstrip("/") for item in values if isinstance(item, str) and item)
+
+
+def _scratch_name_matches(name: str, pattern: str) -> bool:
+    """Match one path segment; only * has wildcard meaning."""
+    if "/" in name:
+        return False
+    parts = pattern.split("*")
+    if not name.startswith(parts[0]):
+        return False
+    position = len(parts[0])
+    for part in parts[1:-1]:
+        found = name.find(part, position)
+        if found < 0:
+            return False
+        position = found + len(part)
+    suffix = parts[-1]
+    return (name.endswith(suffix) and position <= len(name) - len(suffix)
+            if len(parts) > 1 else position == len(name))
 
 
 def _reject_sensitive(path: Path) -> None:

@@ -1,10 +1,12 @@
 """Explicit human design and split decisions on current run bindings."""
 from copy import deepcopy
+from dataclasses import replace
 import unittest
 from unittest.mock import patch
 
 from storyloop import design_approval as approvals
 from storyloop.models import StoryLoopError
+from storyloop.intervention_events import summarize_interventions
 from storyloop.project_loop import LoopServices, load_run_state, run_change
 from storyloop.project_loop_support import save_run
 from tests import test_routing_state
@@ -31,6 +33,35 @@ class BindingTests(unittest.TestCase):
 class DesignApprovalTests(unittest.TestCase):
     setUp = test_routing_state.RunRoutingTests.setUp
 
+    def test_invalid_design_evidence_stops_for_replan_and_replan_recovers(self):
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            response = answer()
+            if len(requests) <= 2:
+                response['options'][0]['symbols'] = [
+                    {'path': 'app/service.py', 'symbol': 'absent_at_contract_commit'}]
+            return response
+
+        services = LoopServices(lambda p, c: smoke_payload(self.identifier),
+                                lambda p, c: self.fail('implementation must not start'),
+                                passing_review, design=design)
+        stopped = run_change(self.root, self.identifier, services)
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(stopped['status'], 'DESIGN_REVISION_REQUIRED')
+        self.assertIn('Declared symbol is absent at the contract commit',
+                      stopped['stop']['blocker'])
+        self.assertIn('storyloop replan', stopped['next'])
+        self.assertEqual(load_run_state(self.root, self.identifier)['status'],
+                         'DESIGN_REVISION_REQUIRED')
+        replanned = approvals.replan(self.root, self.identifier, 'Correct the plan evidence')
+        self.assertEqual(replanned['status'], 'DESIGN_REVISION_REQUIRED')
+        self.assertEqual(replanned['intervention_events'][-1]['kind'], 'replan')
+        self.assertEqual(run_change(self.root, self.identifier, services)['status'],
+                         'DESIGN_APPROVAL_REQUIRED')
+        self.assertEqual(len(requests), 3)
+
     def start(self, response=None):
         self.calls = []
         def forbidden(*args):
@@ -48,6 +79,27 @@ class DesignApprovalTests(unittest.TestCase):
     def approve(self, option=None):
         return approvals.approve_design(self.root, self.identifier, self.plan['id'], option_id=option)
 
+    def test_approval_gate_retries_incomplete_plan_evidence_once(self):
+        from storyloop.baseline import load_project_config
+        from storyloop.planning import assess_plan
+        self.start()
+        complete = assess_plan(self.root, self.change, self.state, self.plan)
+        incomplete = deepcopy(complete)
+        incomplete['decision']['unresolved'] = ['max_references', 'complete']
+        requests = []
+
+        def design(project, request):
+            requests.append(request)
+            return answer()
+
+        services = replace(self.services, design=design)
+        with patch('storyloop.design_approval.assess_plan', side_effect=[incomplete, complete]):
+            result = approvals.ensure_design_approval(
+                self.root, self.change, self.state, load_project_config(self.root), services)
+        self.assertEqual(result['status'], 'DESIGN_APPROVAL_REQUIRED')
+        self.assertEqual(len(requests), 1)
+        self.assertIn('max_references', requests[0]['missing_plan_evidence'])
+
     def test_explicit_replan_invalidates_candidate_and_review_evidence(self):
         self.start()
         state = load_run_state(self.root, self.identifier)
@@ -60,11 +112,21 @@ class DesignApprovalTests(unittest.TestCase):
                 approvals.replan(self.root, self.identifier, 'Reconsider candidate and plan')
         self.assertEqual(load_run_state(self.root, self.identifier), state)
         replanned = approvals.replan(self.root, self.identifier, 'Reconsider candidate and plan')
+        self.assertEqual(replanned['intervention_events'][-1]['kind'], 'replan')
         self.assertEqual(replanned['attempt'], state['attempt'])
         for key in ('cost_candidate', 'pending_review', 'review_disposition'):
             self.assertNotIn(key, replanned)
             self.assertNotIn(key, load_run_state(self.root, self.identifier))
         self.assertEqual(replanned['planning']['history'][-1]['plan'], self.plan)
+
+    def test_no_progress_can_replan_through_public_recovery_entry(self):
+        self.start()
+        state = load_run_state(self.root, self.identifier)
+        state['status'] = 'NO_PROGRESS'
+        save_run(self.root, state)
+        replanned = approvals.replan(self.root, self.identifier, 'Review failed attempt')
+        self.assertEqual(replanned['status'], 'DESIGN_REVISION_REQUIRED')
+        self.assertEqual(replanned['intervention_events'][-1]['stop'], 'NO_PROGRESS')
 
     def test_run_and_resume_do_not_approve_or_spend_attempt(self):
         self.start()
@@ -77,9 +139,42 @@ class DesignApprovalTests(unittest.TestCase):
         self.start()
         first = self.approve()
         self.assertEqual(first, self.approve())
+        self.assertEqual(len(load_run_state(self.root, self.identifier)['intervention_events']), 1)
         self.assertEqual(first['actor'], 'user')
         self.assertEqual(first['option_id'], 'main')
         self.assertEqual(self.calls, [])
+
+    def test_replan_followed_by_design_approval_counts_one_correction(self):
+        self.start()
+        self.approve()
+        approvals.replan(self.root, self.identifier, 'Reconsider plan')
+        result = run_change(self.root, self.identifier, self.services)
+        self.assertEqual(result['status'], 'DESIGN_APPROVAL_REQUIRED')
+        self.plan = load_run_state(self.root, self.identifier)['planning']['plan']
+        self.approve()
+
+        events = load_run_state(self.root, self.identifier)['intervention_events']
+        row = summarize_interventions([{'change_id': self.identifier,
+                                        'intervention_events': events}])['by_change'][self.identifier]
+        self.assertEqual((row['routine'], row['nonroutine']), (2, 1))
+        self.assertEqual(row['nonroutine_types'], {'replan': 1})
+        self.assertEqual(events[-1].get('follows'), 'replan')
+
+    def test_second_design_approval_without_correction_is_nonroutine(self):
+        response = answer()
+        option = deepcopy(response['options'][0])
+        option.update(id='alternate', creates=['app/extra.py'])
+        response['options'].append(option)
+        self.start(response)
+        self.approve()
+        self.approve('alternate')
+
+        events = load_run_state(self.root, self.identifier)['intervention_events']
+        row = summarize_interventions([{'change_id': self.identifier,
+                                        'intervention_events': events}])['by_change'][self.identifier]
+        self.assertEqual((row['routine'], row['nonroutine']), (1, 1))
+        self.assertEqual(row['nonroutine_types'], {'design_approval': 1})
+        self.assertTrue(events[-1]['repeated'])
 
     def test_changed_selection_remeasures_and_clears_prior_checks(self):
         response = answer()
@@ -278,13 +373,16 @@ class DesignApprovalTests(unittest.TestCase):
         def characterize(project, context):
             seen.append(context['design']['id'])
             expected = 'wrong' if len(seen) == 1 else 'ok'
-            (project / 'tests/test_lock.py').write_text(
+            name = 'tests/test_lock.py' if len(seen) == 1 else 'tests/test_lock_2.py'
+            (project / name).write_text(
                 'import unittest\nfrom app.service import serve\n'
                 'class Lock(unittest.TestCase):\n'
                 '    def test_behavior(self):\n'
                 f'        self.assertEqual(serve(), {expected!r})\n')
             return {'summary': 'Lock serve', 'touched': ['app/service.py'],
-                    'tests': ['tests/test_lock.py'], 'questions': []}
+                    'tests': [name], 'questions': [], 'claims': [
+                        {'test': name, 'behavior': 'serve keeps old invariant',
+                         'symbols': [], 'criterion_ids': []}]}
         services = LoopServices(lambda p, c: smoke_payload(self.identifier),
                                 lambda p, c: {'summary': 'Reached implement', 'questions': ['Stop here']},
                                 passing_review, characterize=characterize, design=lambda p, c: response)
@@ -300,10 +398,13 @@ class DesignApprovalTests(unittest.TestCase):
         self.assertEqual(state['routing']['limit'], 4)
         for key in ('pending_characterization', 'stop', 'unit', 'error', 'next'):
             self.assertNotIn(key, state)
+        failed = self.root / 'tests/test_lock.py'
+        self.assertFalse(failed.exists(), 'retired red characterization test must be removed')
         self.assertEqual(run_change(self.root, self.identifier, services)['status'], 'NEEDS_INPUT')
         state = load_run_state(self.root, self.identifier)
         self.assertEqual(seen, ['main', option])
         self.assertEqual(state['characterization']['status'], 'GREEN')
+        self.assertIn('tests/test_lock.py', state['retired_characterization_tests'])
         self.assertEqual(set(state['characterization']['locks']), {'app/service.py'})
         self.assertEqual(state['attempt'], 1)
 

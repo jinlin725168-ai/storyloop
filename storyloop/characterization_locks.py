@@ -65,6 +65,29 @@ def capture_locks(project: Path, config: dict, pending: dict) -> dict:
     return locks
 
 
+def validate_behavior_claims(response: dict, changing_ids: set[str]) -> None:
+    """Check explicit lock declarations against the approved behavior being changed."""
+    tests = response['tests']
+    claims = response.get('claims')
+    require(isinstance(claims, list), 'Characterization must declare behavior for every test')
+    names = []
+    for claim in claims:
+        require(isinstance(claim, dict) and isinstance(claim.get('test'), str)
+                and isinstance(claim.get('behavior'), str) and claim['behavior'].strip()
+                and isinstance(claim.get('criterion_ids'), list)
+                and all(isinstance(item, str) for item in claim['criterion_ids'])
+                and isinstance(claim.get('symbols'), list)
+                and all(isinstance(item, dict) and isinstance(item.get('path'), str)
+                        and isinstance(item.get('symbol'), str) for item in claim['symbols']),
+                'Characterization behavior claim is invalid')
+        names.append(claim['test'])
+        overlapping_ids = changing_ids & set(claim['criterion_ids'])
+        require(not overlapping_ids,
+                'Characterization locks changed acceptance condition: ' + ', '.join(sorted(overlapping_ids)))
+    require(set(names) <= set(tests), 'Characterization claim names an undeclared test file')
+    require(set(tests) <= set(names), 'Characterization must declare behavior for every test file')
+
+
 def require_saved_coverage(project: Path, state: dict, config: dict, required: list[str]) -> None:
     """A cached GREEN result does not exempt newly required paths from evidence checks."""
     require(set(required) <= set(verified_locks(project, state, config)),

@@ -24,6 +24,7 @@ from .routing_cli import dispatch_routing, BLOCKED
 from .ci_command import run_ci_command
 from .memory_cli import add_memory_arguments, dispatch_memory
 from .cli_output import display
+from .bench_cli import add_bench_arguments, dispatch_bench
 
 
 def parser() -> argparse.ArgumentParser:
@@ -41,7 +42,6 @@ def parser() -> argparse.ArgumentParser:
         "report": "定位某次变更的验收报告",
         "base-propose": "为计划中的底座改动开一个 BASE 提案（无需先触发功能变更）",
         "base-build-config": "为旧项目具名确认底座构建命令，不改已冻结的 config.json",
-        "base-design-approve": "具名批准代理提出的 base 实施方案",
         "base-update": "兼容旧 BASE 提案：待批准提案导入变更草案，历史回执继续恢复",
         "base-review": "由独立的人对已提交的底座候选记录具名审查",
         "answer": "回答代理在 NEEDS_INPUT 停点提出的问题（--answer 可重复，按问题顺序）",
@@ -56,6 +56,8 @@ def parser() -> argparse.ArgumentParser:
         "skills": "把引擎自带的技能（foundation-survey 等）安装或刷新到项目的 .claude/skills 与 .codex/skills；已初始化的项目会自动开 BASE 提案",
         "survey": "底座摸底：生成 openspec/foundation/ 候选与 BASE 草案；批准后走人工 base 通道",
         "lessons": "列出、确认或退休仓库经验", "lessons-propose": "复盘已结束的变更并提议经验草案",
+        "knowledge-propose": "PASSED 后提议经代码证实的底座知识精确 diff",
+        "authorize-knowledge": "人批准知识提案中的精确 foundation 路径；空路径表示拒绝",
         "drafts": "列出或驳回待批草案",
         "metrics": "跨变更汇总指标与调整建议（只读）",
     }
@@ -71,6 +73,7 @@ def parser() -> argparse.ArgumentParser:
     check = adapter_sub.add_parser("check", help="握手并校验角色档次映射")
     check.add_argument("project", type=Path)
     check.add_argument("--json", action="store_true", help="输出完整 JSON")
+    add_bench_arguments(sub)
     return root
 
 
@@ -117,10 +120,6 @@ def _product_arguments(child, command):
         child.add_argument("--change", dest="change_id", required=True)
         child.add_argument("--verdict", choices=("pass", "fail"), required=True)
         child.add_argument("--note", required=True)
-        child.add_argument("--human-review", metavar="REASON")
-    elif command == "base-design-approve":
-        child.add_argument("--change", dest="change_id", required=True)
-        child.add_argument("--plan-id", required=True)
     elif command == "base-build-config":
         child.add_argument("--commands-json", required=True,
                            help="构建命令 argv 数组的 JSON；[] 明确表示无构建步骤")
@@ -156,8 +155,8 @@ def _maintenance_arguments(child, command):
         child.add_argument("--replan", action="store_true")
         child.add_argument("--reason")
         child.add_argument("--change", dest="change_id", required=True)
-        child.add_argument("--implementer", choices=("agent", "human"),
-                           help="base 实现者；默认人工，agent 为预览模式（CI 禁止）")
+        child.add_argument("--implementer", choices=("human",),
+                           help="base 实现者；仅支持人工通道（默认）")
         child.add_argument("--confirm-oracle-skills", action="store_true",
                            help="明确确认本次 base 候选对生效 Oracle 技能的修改")
         child.add_argument("--overrule", help="不同意审查对 ORACLE_DEFECT / NEEDS_SPEC_FIX 的判定：写明理由")
@@ -180,6 +179,8 @@ def _since_date(value: str) -> date:
 
 
 def dispatch(args) -> dict:
+    if args.command == "bench":
+        return dispatch_bench(args)
     project = args.project.resolve()
     if args.command == "adapters":
         from .adapter_capabilities import check
@@ -211,11 +212,7 @@ def dispatch(args) -> dict:
         return confirmed_upgrade(project, args.proposal, args.confirm_oracle_skills)
     if args.command == "base-review":
         from .base_execution import record_base_review
-        return record_base_review(project, args.change_id, args.verdict, args.note,
-                                  args.human_review)
-    if args.command == "base-design-approve":
-        from .base_design import approve_base_design
-        return approve_base_design(project, args.change_id, args.plan_id)
+        return record_base_review(project, args.change_id, args.verdict, args.note)
     if args.command == "skills":
         if args.view is not None:
             require(bool(args.view), "Skill view name must not be empty")
@@ -230,7 +227,8 @@ def dispatch(args) -> dict:
     if args.command == "survey":
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return survey_foundation(project, args.reason, from_file=args.from_file)
-    if args.command in {"lessons", "drafts", "lessons-propose"}:
+    if args.command in {"lessons", "drafts", "lessons-propose", "knowledge-propose",
+                        "authorize-knowledge"}:
         require(_is_product_project(project), "Run storyloop init on this Git project first")
         return dispatch_memory(project, args)
     if args.command == "ci":
@@ -331,12 +329,17 @@ def _is_product_project(project: Path) -> bool:
 
 def _error_stop(args, exc: StoryLoopError) -> dict | None:
     """Best-effort stop context; a damaged run must not mask the original error."""
+    if args.command == "bench":
+        return None
+    if exc.code == "BASE_AGENT_REMOVED":
+        return None
     change_id = getattr(args, "change_id", None)
     if exc.code in BLOCKED or exc.code == "NEEDS_INPUT":
         if not change_id or not (args.project.resolve() / ".storyloop/state/runs" / f"{change_id}.json").exists():
             return build_entry_stop(args.project.resolve(), exc.code,
                                     {**(exc.details or {}), **({"change_id": change_id} if change_id else {})})
-    if not change_id or getattr(args, "command", None) not in {"run", "approve"}:
+    command = getattr(args, "command", None)
+    if not change_id or command not in {"run", "approve", "acceptance-repair", "smoke-repair"}:
         return None
     project = args.project.resolve()
     path = project / ".storyloop/state/runs" / f"{change_id}.json"
@@ -344,8 +347,10 @@ def _error_stop(args, exc: StoryLoopError) -> dict | None:
         return None
     try:
         run = load_run_state(project, change_id)
-        return stop_of(project, run) or build_stop(
-            project, run, exc.code, {"error": redact(str(exc))})
+        existing = stop_of(project, run) if command in {"run", "approve"} else None
+        return existing or build_stop(
+            project, run, exc.code, {"error": redact(str(exc)),
+                                    "acceptance": exc.details if (exc.details or {}).get("results") else {}})
     except (OSError, ValueError, TypeError, KeyError, StoryLoopError):
         return None
 
@@ -380,7 +385,8 @@ def main(argv: list[str] | None = None) -> int:
         stop = _error_stop(args, exc)
         if stop is not None:
             error["stop"] = stop
-        hint = stop["resume"] if stop else next_step(exc.code, change_id, args.project.resolve(), exc.details)
+        hint = stop["resume"] if stop else (None if args.command == "bench" else
+                                            next_step(exc.code, change_id, args.project.resolve(), exc.details))
         if hint:
             error["next"] = hint
         print(json.dumps(_redact_value(error), ensure_ascii=False), file=sys.stderr)

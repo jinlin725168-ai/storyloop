@@ -43,6 +43,8 @@ init 和后续 BASE 均校验完整性、版本、真实实现函数和保护范
 
 最终 JSON 记录由可信 launcher 发出，不能用业务 stdout、自写计数 JSON 或 `os._exit(0)` 证明通过。仅内置按文件运行 unittest 的可信裁判；其他 runner 必须由受保护适配器解释真实执行数、断言失败和环境错误，未知结果返回 2，不能硬编码 Result 假绿。
 
+目标项目以可编辑模式安装时，解释器的 `.pth` 或 setuptools finder 可能把候选路径加入导入搜索。launcher 在加载受信 helper 前隔离这些候选入口；若候选 `storyloop` 已预载或 finder 无法安全识别，会以 `case_id=launcher` 的受限诊断明确报错。RED 若遇环境错误，运行持久化为 `NEEDS_INPUT` 停点，并在 `acceptance-red.json` 保存实际结果与诊断；修复解释器或安装环境后按停点给出的 `storyloop run` 命令重试 RED。
+
 ## 可信 case 与业务子进程
 
 helper 和可信 case 都不能把候选放入自己的 sys.path，也不能直接 `import app`。业务依赖在独立子进程里加载；可信 case 检查协议后断言业务行为。下面是一个无需第三方包的例子：

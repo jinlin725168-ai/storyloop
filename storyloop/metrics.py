@@ -8,7 +8,6 @@ from pathlib import Path
 from .ci_results import load_ci_results
 from .metrics_collect import collect
 from .metrics_compute import (
-    base_human_review_substitutions,
     attempts,
     contract_ratio,
     escapes,
@@ -23,6 +22,7 @@ from .metrics_compute import (
     upgrades,
 )
 from .metrics_cost import cost
+from .intervention_events import summarize_interventions
 from .metrics_rules import MANUAL_DEFERRED, deferred_signals, suggest, thresholds
 from .models import StoryLoopError, require
 from .path_security import safe_absolute_target
@@ -73,7 +73,7 @@ def _compute_metrics(
         stuck(records), escapes(records), local_green_ci_red(ci_values, records),
         forced_heavy(records), overrule_rate(records), contract_ratio(root, records),
         interventions(records), cost(records), lessons(root, records),
-        base_human_review_substitutions(records),
+        summarize_interventions(records),
     )
     return {value["id"]: value for value in values}
 

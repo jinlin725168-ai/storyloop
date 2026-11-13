@@ -30,10 +30,23 @@ def _unittest(text: str) -> dict | None:
         return None
     tail = _last(r"^(?:OK|FAILED)\b(.*)$", text)
     extra = tail.group(1) if tail else ""
-    failed = sum(int(n) for n in re.findall(r"(?:failures|errors)=(\d+)", extra))
+    failures = re.search(r"failures=(\d+)", extra)
+    errors = re.search(r"errors=(\d+)", extra)
     skipped = re.search(r"skipped=(\d+)", extra)
     skip = int(skipped.group(1)) if skipped else 0
-    return {"executed": int(ran.group(1)) - skip, "failed": failed, "skipped": skip}
+    failure_count = int(failures.group(1)) if failures else 0
+    error_count = int(errors.group(1)) if errors else 0
+    # Complete unittest failure headings identify methods even when subTests multiply entries.
+    headings = re.findall(r"^(FAIL|ERROR): .+? \(([^()\n]+)\)(?: \(.+\))?$", text, re.M)
+    if len(headings) == failure_count + error_count and headings:
+        errored = {method for kind, method in headings if kind == "ERROR"}
+        failed = {method for kind, method in headings if kind == "FAIL"} - errored
+        failure_count, error_count = len(failed), len(errored)
+    result = {"executed": int(ran.group(1)) - skip,
+              "failed": failure_count, "skipped": skip}
+    if error_count:
+        result["errors"] = error_count
+    return result
 
 
 def _pytest(text: str) -> dict | None:

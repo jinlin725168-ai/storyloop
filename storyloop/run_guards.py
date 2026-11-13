@@ -16,6 +16,16 @@ from .smoke import RESULT_EVIDENCE, smoke_digests
 from .smoke_runner import candidate_digest, implementation_digest
 
 
+def review_passes(review: dict) -> bool:
+    """A pass may retain tracked advisories; legacy findings still block."""
+    required = ("id", "criterion_id", "target", "location", "evidence", "message", "required_change")
+    return (review.get("verdict") == "pass" and not review.get("questions")
+            and all(isinstance(item, dict) and item.get("disposition") == "ADVISORY"
+                    and item.get("blocking") is False
+                    and all(isinstance(item.get(key), str) and item[key].strip() for key in required)
+                    for item in review.get("findings") or []))
+
+
 def guard_updates(value: dict) -> None:
     """A caller or delivery effect cannot smuggle a second status assignment."""
     require(isinstance(value, dict) and "status" not in value,
@@ -42,7 +52,16 @@ def guard_g1(project: Path, state: dict, context: dict) -> None:
         return
     require(bool(set(floor) & {"acceptance_red", "defect_reproduction_red", "structural_red"}),
             "Change type lacks a supported RED floor")
-    read_red_evidence(project, state["change_id"])
+    red = read_red_evidence(project, state["change_id"])
+    if state.get("blocked_by"):
+        head = _git(project, "rev-parse", "HEAD").strip()
+        lock_commit = (state.get("characterization") or {}).get("status") == "GREEN"
+        require((head == state["contract_commit"] or
+                 (lock_commit and _git(project, "merge-base", head,
+                                       state["contract_commit"]).strip() == state["contract_commit"]))
+                and red.get("head_commit") == state["contract_commit"]
+                and red["evidence_sha256"] == state.get("red_evidence_sha256"),
+                "Blocking base requires fresh RED evidence on the merged contract")
 
 
 def _guard_base_green(project: Path, state: dict) -> None:
@@ -165,8 +184,7 @@ def guard_g2(project: Path, change: dict, state: dict, context: dict) -> None:
     for name in ("unit", "integration", "checks"):
         require(not layer_commands(profile, name) or layers[name]["status"] == "PASSED",
                 f"Configured {name} layer cannot be skipped")
-    require(review.get("verdict") == "pass" and not review.get("findings") and not review.get("questions"),
-            "Independent review did not pass")
+    require(review_passes(review), "Independent review did not pass")
     identifier = change["change_id"]
     boundary = _without_engine_outputs(context.get("boundary") or {}, identifier)
     final = _without_engine_outputs(audit_project_changes(
@@ -221,22 +239,6 @@ def _guard_base_g2(project: Path, change: dict, state: dict, context: dict) -> N
             and review.get("candidate_commit") == state.get("candidate_commit")
             and review.get("reviewer") not in base_candidate_authors(project, state),
             "Independent base review is missing")
-    if state.get("implementer", "human") == "agent":
-        require(review.get("mode") in {"agent", "human_substitute"}
-                and review.get("plan_id") == state["base_design"]["plan_id"]
-                and review.get("design_sha256") == state["base_design_sha256"]
-                and review.get("contract_digest") == state["contract_digest"]
-                and str(review.get("implement_vendor", "")).strip().casefold()
-                == str(state.get("agent_vendor", "")).strip().casefold()
-                and review.get("candidate_tree_oid") == _git(
-                    project, "rev-parse", f"{state['candidate_commit']}^{{tree}}").strip(),
-                "Base agent review binding is stale")
-        if review["mode"] == "agent":
-            require(review.get("review_vendor") and review["review_vendor"]
-                    != review["implement_vendor"], "Base review vendor is not independent")
-        else:
-            require(len(str(review.get("human_review_reason", "")).strip()) >= 12,
-                    "Human review substitute reason is missing")
     require(trusted_base_acceptance(project, state),
             "Base manual acceptance does not match the saved digest")
     require(not pending_manual_criteria(change, _manual_records(project, change_id), digest),

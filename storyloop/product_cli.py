@@ -47,7 +47,8 @@ def change(project: Path, args, product_answer, revise_with_agent,
         from .requirement_checklist import blocking_items, evaluate_checklist
         from .next_steps import draft_next
         pending = state["product"]["questions"] or blocking_items(
-            evaluate_checklist(state["product"], project))
+            evaluate_checklist(state["product"], project,
+                               require_entries=state.get("verification_entries_required") is True))
         return draft_result(project, state, draft_next(project, state) if pending else created["next"])
     require(not args.reason, "--reason is only valid with --supersede")
     if args.idea:
@@ -61,7 +62,8 @@ def change(project: Path, args, product_answer, revise_with_agent,
         prefix = definition_for(nature_of(product)).id_prefix
         slug = choose_slug(args, product.get("slug"), interactive and sys.stdin.isatty(),
                            prefix=prefix)
-        created = create_change(project, args.idea, product, slug=slug)
+        created = create_change(project, args.idea, product, slug=slug,
+                                require_verification_entries=True)
         adopt_pending(project, created["change_id"])
         state = clarify_interactively(project, created["change_id"], revise_with_agent, interactive)
         return draft_result(project, state)
@@ -103,6 +105,15 @@ def dispatch(project: Path, args, run_with_answers, draft_result, load_run_state
         return run_with_answers(project, change_id, interactive=not args.no_interactive)
     if args.command == "run":
         require(change_id, "Product execution needs --change")
+        change = load_change(project, change_id)
+        intake = change.get('intake') or {}
+        unresolved = (intake.get('decision') or {}).get('unresolved') or []
+        if (change['status'] == 'DRAFT' and change.get('routing_version') == 1
+                and intake.get('status') == 'NEEDS_INPUT'
+                and any(field.startswith('risks.') for field in unresolved)):
+            from .readiness import require_readiness
+            require_readiness(project)
+            raise StoryLoopError('NEEDS_INPUT', code='NEEDS_INPUT', details={'intake': intake})
         return run_with_answers(project, change_id, interactive=not args.no_interactive,
                                 overrule=getattr(args, "overrule", None))
     if args.command == "answer":
@@ -143,7 +154,9 @@ def dispatch(project: Path, args, run_with_answers, draft_result, load_run_state
 
 def draft_result(project: Path, state: dict, next_action=None) -> dict:
     stop = draft_stop(project, state)
-    pending = state["product"].get("questions") or blocking_items(evaluate_checklist(state["product"], project))
+    pending = state["product"].get("questions") or blocking_items(evaluate_checklist(
+        state["product"], project,
+        require_entries=state.get("verification_entries_required") is True))
     hint = draft_next(project, state) if pending else (stop["resume"] if stop else next_action)
     return {**state, "stop": stop,
             "next": supersede_revision_next(project, state) or hint or draft_next(project, state)}
@@ -168,14 +181,26 @@ def product_answer(project: Path, payload: dict, call, invoke_project_agent) -> 
     from .baseline import _git
     payload = {**payload, "routing_version": 1,
                "source_commit": _git(project, "rev-parse", "HEAD").strip()}
+    from .intake import project_intake
+    source = "product"
+
     def validate(value):
+        nonlocal source
+        source = "product"
         if isinstance(value, dict) and "current_product" not in payload and "slug" in value:
             if not isinstance(value["slug"], str) or not SLUG.fullmatch(value["slug"]):
                 value.pop("slug")
         validate_product(value)
         require(isinstance(value.get("assessment"), dict), "Product assessment is required")
+        source = "intake"
+        project_intake(project, value)
+
+    def repairable(exc):
+        return source == "product" or exc.details.get("repairable") is True
+
     operation = lambda: answer_with_repair(
-        call or (lambda request: invoke_project_agent(project, "product", request)), payload, validate)
+        call or (lambda request: invoke_project_agent(project, "product", request)),
+        payload, validate, repairable=repairable)
     return read_only_call(project, payload.get("change_id", "pending"), operation)
 
 

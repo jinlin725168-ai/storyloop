@@ -192,7 +192,9 @@ class L3IntegrationTests(unittest.TestCase):
                 'class Lock(unittest.TestCase):\n'
                 '    def test_serve(self): self.assertEqual(serve(), "ok")\n')
             return {'summary': 'lock', 'touched': ['app/service.py'],
-                    'tests': ['tests/test_lock.py'], 'questions': []}
+                    'tests': ['tests/test_lock.py'], 'questions': [], 'claims': [
+                        {'test': 'tests/test_lock.py', 'behavior': 'serve keeps old invariant',
+                         'symbols': [], 'criterion_ids': []}]}
         services = self.services()
         first = run_change(self.root, self.identifier, services)
         services = replace(services, characterize=characterize)

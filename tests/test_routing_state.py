@@ -126,7 +126,9 @@ class RunRoutingTests(unittest.TestCase):
                 '    def test_behavior(self):\n'
                 '        self.assertEqual(serve(), "ok")\n')
             return {'summary': 'Lock serve', 'touched': ['app/service.py'],
-                    'tests': ['tests/test_lock.py'], 'questions': []}
+                    'tests': ['tests/test_lock.py'], 'questions': [], 'claims': [
+                        {'test': 'tests/test_lock.py', 'behavior': 'serve keeps old invariant',
+                         'symbols': [], 'criterion_ids': []}]}
         services = LoopServices(lambda p, c: smoke_payload(self.identifier),
                                 run_implement, passing_review, characterize=characterize,
                                 design=design)

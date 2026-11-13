@@ -172,6 +172,6 @@ class CostResumeTests(unittest.TestCase):
                  patch('storyloop.project_loop.uncharacterized_paths', return_value=['modules/existing.py']), \
                  patch('storyloop.project_loop._git') as git:
                 with self.assertRaises(StoryLoopError) as caught:
-                    _judge_attempt(root, {'change_id': 'FEAT-1'}, state, services, config, response, [])
+                    _judge_attempt(root, {'change_id': 'FEAT-1'}, state, services, config, response, [], set())
             self.assertEqual(caught.exception.code, 'COST_LIMIT_REACHED')
             git.assert_not_called()

@@ -14,13 +14,14 @@ def answer_with_repair(
     call: Callable[[dict], object],
     request: dict,
     validate: Callable[[object], None],
+    repairable: Callable[[StoryLoopError], bool] | None = None,
 ) -> object:
     """Return a valid answer, making at most one new call after a semantic failure."""
     answer = call(request)
     try:
         validate(answer)
     except StoryLoopError as exc:
-        if exc.code not in REPAIRABLE_CODES:
+        if exc.code not in REPAIRABLE_CODES or (repairable is not None and not repairable(exc)):
             raise
         retry_request = {
             **request,

@@ -22,6 +22,11 @@ def add_drafts_arguments(child) -> None:
 def add_memory_arguments(child, command: str) -> None:
     if command == "lessons-propose":
         child.add_argument("--change", required=True, help="需要复盘的变更 ID")
+    elif command == "knowledge-propose":
+        child.add_argument("--change", required=True, help="已 PASSED 的变更 ID")
+    elif command == "authorize-knowledge":
+        child.add_argument("--proposal", required=True, help="知识提案 ID")
+        child.add_argument("--paths", nargs="*", required=True, help="批准的精确路径；空列表表示拒绝")
     elif command == "lessons":
         add_lessons_arguments(child)
     elif command == "drafts":
@@ -37,6 +42,12 @@ def dispatch_drafts(project, args):
 
 
 def dispatch_memory(project, args):
+    if args.command == "knowledge-propose":
+        from .knowledge_delta import propose_knowledge
+        return propose_knowledge(project, args.change)
+    if args.command == "authorize-knowledge":
+        from .knowledge_delta import authorize_knowledge
+        return authorize_knowledge(project, args.proposal, args.paths)
     if args.command == "lessons-propose":
         from .retrospective import retrospect
         result = retrospect(project, args.change, manual=True)

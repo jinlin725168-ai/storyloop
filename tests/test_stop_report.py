@@ -1,6 +1,7 @@
 """Stopping is represented by one evidence-backed, shell-safe report (2a section 6)."""
 
 from pathlib import Path
+from copy import deepcopy
 import shlex
 import unittest
 from unittest.mock import patch
@@ -9,6 +10,7 @@ from storyloop.cli import parser
 from storyloop.run_stops import pause, pause_for_boundary
 from storyloop.run_recovery import reset_run
 from storyloop.stop_report import STOP_STATUSES, build_stop, failure_view, render_stop, stop_of
+from storyloop.run_hints import next_step
 
 
 KEYS = {
@@ -26,31 +28,108 @@ def state_for(status: str, **extra) -> dict:
 
 
 class StopReportTests(unittest.TestCase):
+    def test_project_not_ready_shows_each_failing_check_in_json_and_text(self):
+        from storyloop.stop_report import build_entry_stop
+        details = {'layers': {'checks': {'status': 'FAILED', 'results': [
+            {'id': 'REGRESSION-001', 'status': 'FAIL', 'output_tail': {'stderr': 'last line'}},
+            {'id': 'REGRESSION-002', 'status': 'ERROR',
+             'output_tail': {'message': '无可用输出'}}]}}}
+        stop = build_entry_stop(Path('/project'), 'PROJECT_NOT_READY', details)
+        evidence = str(stop['evidence'])
+        view = '\n'.join(render_stop(stop))
+        for expected in ('REGRESSION-001', 'REGRESSION-002', 'last line',
+                         '无可用输出', 'ERROR'):
+            self.assertIn(expected, evidence)
+            self.assertIn(expected, view)
+        other = build_entry_stop(Path('/project'), 'READINESS_APPROVAL_REQUIRED', details)
+        self.assertEqual(other['evidence'], details['layers'])
+
+    def test_characterization_oracle_stop_routes_to_supersede(self):
+        state = state_for("ORACLE_DEFECT", characterization={
+            "status": "GREEN", "tests": ["tests/test_lock.py"], "commits": ["abc"]},
+            routed={"source": "review", "target": "oracle", "findings": [{
+                "location": "tests/test_lock.py:4", "message": "locks changed behavior"}]})
+        stop = build_stop("/p", state, "ORACLE_DEFECT", {})
+        self.assertIn("change /p --supersede FEAT-1 --reason", stop["resume"])
+        self.assertIn("change /p --supersede FEAT-1 --reason", stop["options"][0]["command"])
+        self.assertNotIn("acceptance-repair", str(stop))
+
+    def test_saved_oracle_stop_from_old_engine_shows_supersede(self):
+        state = state_for("ORACLE_DEFECT", characterization={
+            "status": "GREEN", "tests": ["tests/test_lock.py"], "commits": ["abc"]},
+            routed={"source": "review", "target": "oracle", "findings": [{
+                "location": "tests/test_lock.py:4", "message": "locks changed behavior"}]})
+        state["stop"] = build_stop("/p", state, "ORACLE_DEFECT", {})
+        state["stop"]["options"][0]["command"] = "storyloop acceptance-repair /p --change FEAT-1 --reason old"
+        state["stop"]["resume"] = "storyloop run /p --change FEAT-1"
+        self.assertIn("change /p --supersede FEAT-1 --reason", stop_of("/p", state)["resume"])
+
+    def test_feature_design_stop_shows_selected_option_and_complete_plan_location(self):
+        option = {"id": "main", "summary": "更新提示", "touched": ["storyloop/run_hints.py"],
+                  "risks": {"compatibility": {"value": "yes", "reason": "旧调用方"}}}
+        state = state_for("DESIGN_APPROVAL_REQUIRED", planning={"plan": {
+            "status": "DONE", "id": "plan-id", "main_option": "main", "options": [option],
+            "design": "## Decisions\n保留错误码\n## Risks\n旧调用方"}})
+        stop = build_stop("/p", state, "DESIGN_APPROVAL_REQUIRED", {})
+        view = "\n".join(render_stop(stop))
+        for expected in ("更新提示", "Decisions", "storyloop/run_hints.py", "Risks",
+                         ".storyloop/state/runs/FEAT-1.json"):
+            self.assertIn(expected, view)
+
+    def test_design_summary_marks_truncation_and_total(self):
+        option = {"id": "main", "summary": "short", "touched": [f"app/{i}.py" for i in range(10)],
+                  "risks": {f"r{i}": {"reason": "risk"} for i in range(10)}}
+        state = state_for("DESIGN_APPROVAL_REQUIRED", planning={"plan": {
+            "status": "DONE", "id": "plan-id", "main_option": "main", "options": [option],
+            "design": "## Decisions\n" + "choice " * 100}})
+        rendered = "\n".join(render_stop(build_stop("/p", state, "DESIGN_APPROVAL_REQUIRED", {})))
+        self.assertIn("共 10 项", rendered)
+        self.assertIn("完整内容见 .storyloop/state/runs/FEAT-1.json", rendered)
+
+    def test_linked_base_with_legacy_paths_shows_stash_before_base_and_resume(self):
+        state = state_for("BASE_CHANGE_REQUIRED", blocked_by="BASE-1")
+        details = {"blocked_by": "BASE-1", "legacy_paths": ["modules/orders/service.py"],
+                   "source_branch": "main", "feature_branch": "feature/one"}
+        stop = build_stop("/p", state, "BASE_CHANGE_REQUIRED", details)
+        option = stop["options"][0]
+        self.assertEqual(option["command"], "storyloop approve /p --change BASE-1")
+        self.assertIn("git -C /p --literal-pathspecs stash push -u -- modules/orders/service.py", option["action"])
+        self.assertEqual(option["action"], next_step("BASE_CHANGE_REQUIRED", "FEAT-1", "/p", details))
+        self.assertLess(option["action"].index("先 storyloop run"),
+                        option["action"].index("取回或丢弃暂存"))
+
+    def test_linked_base_stop_keeps_parseable_approval_command(self):
+        stop = build_stop("/p", state_for("BASE_CHANGE_REQUIRED", blocked_by="BASE-1"),
+                          "BASE_CHANGE_REQUIRED", {"blocked_by": "BASE-1"})
+        self.assertIn({
+            "action": "批准已生成的底座草案",
+            "command": "storyloop approve /p --change BASE-1",
+        }, stop["options"])
+        args = parser().parse_args(shlex.split(stop["options"][0]["command"])[1:])
+        self.assertEqual(args.change_id, "BASE-1")
+
+    def test_saved_base_stop_refreshes_action_without_changing_state(self):
+        details = {"blocked_by": "BASE-1", "legacy_paths": ["[ab].py"],
+                   "source_branch": "main", "feature_branch": "feature/one"}
+        run = state_for("BASE_CHANGE_REQUIRED", **details)
+        run["stop"] = build_stop("/p", run, "BASE_CHANGE_REQUIRED", details)
+        run["stop"]["options"][0]["action"] = "先用 git stash push -u -- '[ab].py' 保存遗留业务改动"
+        saved = deepcopy(run)
+        shown = stop_of("/p", run)
+        action = shown["options"][0]["action"]
+        self.assertIn("git -C /p --literal-pathspecs stash push -u -- '[ab].py'", action)
+        self.assertIn("git -C /p status --short", action)
+        self.assertIn("git -C /p switch main", action)
+        self.assertIn("git -C /p switch feature/one", action)
+        self.assertEqual(run, saved)
+        self.assertIsNot(shown, run["stop"])
+
     def test_e1_human_base_review_keeps_named_human_command(self):
         stop = build_stop("/project", state_for("BASE_REVIEW_REQUIRED", implementer="human"),
                           "BASE_REVIEW_REQUIRED", {})
         self.assertIn("base-review", stop["options"][0]["command"])
         self.assertIn("--verdict pass", stop["options"][0]["command"])
         self.assertNotIn("--human-review", stop["options"][0]["command"])
-
-    def test_base_design_summary_is_bounded_and_single_line(self):
-        plan = {"plan_id": "p", "goal": "目标\n" + "长" * 500,
-                "change_id": "BASE-1", "summary": "代理方案摘要",
-                "paths": ["a.txt"] * 20, "steps": ["步骤\n说明"] * 20,
-                "risks": ["风险"] * 20, "rollback": "回退\n说明"}
-        stop = build_stop("/project", state_for("DESIGN_APPROVAL_REQUIRED", change_id="BASE-1",
-                                                implementer="agent", base_design=plan),
-                          "DESIGN_APPROVAL_REQUIRED", {})
-        summary = stop["plan_summary"]
-        self.assertLessEqual(len(summary["goal"]), 240)
-        self.assertFalse(any("\n" in value for value in
-                             [summary["goal"], summary["rollback"], *summary["steps"]]))
-        self.assertLessEqual(len(summary["paths"]), 8)
-        self.assertLessEqual(len(summary["steps"]), 5)
-        self.assertEqual(summary["summary"], "代理方案摘要")
-        rendered = "\n".join(render_stop(stop))
-        self.assertIn("共 20 项", rendered)
-        self.assertIn(".storyloop/state/base-designs/BASE-1.json", rendered)
 
     def test_feature_design_stop_does_not_use_base_approval_or_stale_next(self):
         state = state_for("DESIGN_APPROVAL_REQUIRED", nature="feature",
@@ -59,13 +138,6 @@ class StopReportTests(unittest.TestCase):
         self.assertNotIn("底座方案", str(stop))
         self.assertNotIn("accept", stop["resume"])
         self.assertIn("approve", stop["resume"])
-
-    def test_review_mode_field_drives_stop_even_if_hint_text_is_misleading(self):
-        state = state_for("BASE_REVIEW_REQUIRED", implementer="agent",
-                          base_review_mode="distinct", next="storyloop adapters check <project>")
-        stop = build_stop("/p", state, "BASE_REVIEW_REQUIRED", {})
-        self.assertIn("跨厂商", stop["blocker"])
-        self.assertEqual(stop["options"][0]["action"], "触发跨厂商代理审查")
 
     def test_post_l3_ready_does_not_override_current_execution_phase(self):
         state = state_for('MANUAL_ACCEPTANCE_REQUIRED',
@@ -81,7 +153,8 @@ class StopReportTests(unittest.TestCase):
         cli = parser()
         for status in STOP_STATUSES:
             stop = build_stop("/tmp/project with space", state_for(status), status, {})
-            self.assertEqual(set(stop), KEYS, status)
+            expected = KEYS | ({"review_findings"} if status == "DESIGN_REVISION_REQUIRED" else set())
+            self.assertEqual(set(stop), expected, status)
             self.assertTrue(stop["blocker"], status)
             if "--supersede" not in stop["resume"] and "--overrule" not in stop["resume"]:
                 cli.parse_args(shlex.split(stop["resume"])[1:])

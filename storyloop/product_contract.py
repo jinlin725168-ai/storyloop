@@ -11,6 +11,7 @@ from .state_format import LOCATION, ORACLE_CLASSES, ROW_TYPES, criterion_expects
 
 
 PRIORITIES = {"P1", "P2", "P3"}
+ENTRY_KINDS = {"cli", "public_function", "stop_json", "http", "other"}
 NATURES = tuple(change_types.CHANGE_TYPES)
 SLUG = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$")
 
@@ -48,7 +49,7 @@ def _acceptance(value: object, seen: set, consumers: set) -> None:
     require(isinstance(value, list) and bool(value), "Story needs acceptance criteria")
     for criterion in value:
         fields(criterion, {"id", "given", "when", "then", "kind"},
-               {"row_type", "oracle_class", "consumers", "reproduces_defect"})
+               {"row_type", "oracle_class", "consumers", "reproduces_defect", "entry_ids"})
         key = identifier(criterion["id"], "criterion id")
         require(key not in seen, "Duplicate acceptance id")
         seen.add(key)
@@ -59,6 +60,10 @@ def _acceptance(value: object, seen: set, consumers: set) -> None:
 
 
 def _criterion_extras(criterion: dict, consumers: set) -> None:
+    if "entry_ids" in criterion:
+        entry_ids = strings(criterion["entry_ids"], "criterion entry_ids")
+        require(bool(entry_ids) and len(entry_ids) == len(set(entry_ids)),
+                "Criterion entry_ids must be nonempty and unique")
     require(criterion.get("row_type", "positive") in ROW_TYPES, "Invalid acceptance row_type")
     if "oracle_class" in criterion:
         require(criterion["oracle_class"] in ORACLE_CLASSES, "Invalid acceptance oracle_class")
@@ -97,9 +102,10 @@ def validate_product(value: object) -> dict:
     _exemptions(value.get("coverage_exemptions", []))
     _removals(value.get("test_removals", []))
     require(isinstance(value["stories"], list), "stories must be a list")
-    seen, criteria = set(), set()
+    seen, criteria, entries = set(), set(), set()
+    new_format = any("verification_entries" in story for story in value["stories"])
     for story in value["stories"]:
-        _story(story, seen, criteria, consumers)
+        _story(story, seen, criteria, consumers, entries, new_format)
     if "assessment" in value:
         from .assessment import validate_assessment
         validate_assessment(value["assessment"], value)
@@ -209,9 +215,10 @@ def _removals(value: object) -> None:
         text(item["reason"], "removal reason")
 
 
-def _story(story: dict, seen: set, criteria: set, consumers: set) -> None:
+def _story(story: dict, seen: set, criteria: set, consumers: set,
+           entries: set, new_format: bool) -> None:
     fields(story, {"id", "title", "as_a", "want", "so_that", "rules", "out_of_scope", "depends_on", "acceptance"},
-           {"priority", "independent_test"})
+           {"priority", "independent_test", "verification_entries"})
     key = identifier(story["id"], "story id")
     if "priority" in story:
         require(story["priority"] in PRIORITIES, "priority must be P1, P2 or P3")
@@ -224,5 +231,16 @@ def _story(story: dict, seen: set, criteria: set, consumers: set) -> None:
         strings(story[field], field)
     require(set(story["depends_on"]) <= seen, "Dependencies must precede their story")
     require(len(set(story["depends_on"])) == len(story["depends_on"]), "Duplicate dependency")
+    if new_format:
+        require(isinstance(story.get("verification_entries"), list)
+                and bool(story["verification_entries"]), "Story needs verification_entries")
+        for entry in story["verification_entries"]:
+            fields(entry, {"id", "kind", "locator", "observable", "reason"})
+            entry_id = identifier(entry["id"], "verification entry id")
+            require(entry_id not in entries, "Duplicate verification entry id")
+            entries.add(entry_id)
+            require(entry["kind"] in ENTRY_KINDS, "Invalid verification entry kind")
+            for field in ("locator", "observable", "reason"):
+                text(entry[field], f"verification entry {field}")
     _acceptance(story["acceptance"], criteria, consumers)
     seen.add(key)

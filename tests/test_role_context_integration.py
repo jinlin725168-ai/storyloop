@@ -50,7 +50,8 @@ class RoleContextIntegrationTests(unittest.TestCase):
 
         def capture(*args):
             snapshot = original(*args)
-            path.write_text('---\nversion: 0\n---\nmutated body', encoding='utf-8')
+            if args[1].name == 'oracle-craft':
+                path.write_text('---\nversion: 0\n---\nmutated body', encoding='utf-8')
             return snapshot
 
         with patch.object(skills, '_snapshot', side_effect=capture):
@@ -58,11 +59,13 @@ class RoleContextIntegrationTests(unittest.TestCase):
         self.assertIn('frozen body', request['instructions'])
         self.assertNotIn('mutated body', request['instructions'])
         expected = hashlib.sha256(body.encode()).hexdigest()
-        self.assertEqual(request['role_profile']['skills'][0]['sha256'], expected)
+        self.assertEqual(next(item for item in request['role_profile']['skills']
+                              if item['name'] == 'oracle-craft')['sha256'], expected)
         entry = ledger_entries(self.root, 'FEAT-9')[-1]
-        self.assertEqual(entry['skills'][0]['sha256'], expected)
+        self.assertEqual(next(item for item in entry['skills']
+                              if item['name'] == 'oracle-craft')['sha256'], expected)
         meta = load_json(self.root / '.storyloop/state/telemetry/calls' / entry['call'] / 'meta.json')
-        self.assertEqual(meta['context']['skills'][0]['sha256'], expected)
+        self.assertIn(expected, [item['sha256'] for item in meta['context']['skills']])
         self.assertNotIn('frozen body', json.dumps(meta['context']))
         self.assertIn('sequential analysis', request['instructions'])
 

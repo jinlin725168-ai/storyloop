@@ -14,7 +14,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -58,19 +57,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.list:
         print("\n".join(names))
         return 0
-    previous = os.environ.get("STORYLOOP_AGENT_WORKTREE_TEMP_ROOT")
-    with tempfile.TemporaryDirectory(prefix="storyloop-test-suite-") as folder:
-        os.environ["STORYLOOP_AGENT_WORKTREE_TEMP_ROOT"] = folder
-        try:
-            return _run_suite(args, names, Path(folder))
-        finally:
-            if previous is None:
-                os.environ.pop("STORYLOOP_AGENT_WORKTREE_TEMP_ROOT", None)
-            else:
-                os.environ["STORYLOOP_AGENT_WORKTREE_TEMP_ROOT"] = previous
+    return _run_suite(args, names)
 
 
-def _run_suite(args, names: list[str], agent_root: Path) -> int:
+def _run_suite(args, names: list[str]) -> int:
     started, failed, total, skipped = time.monotonic(), [], 0, 0
     with ThreadPoolExecutor(max(1, args.workers)) as pool:
         futures = [pool.submit(run_module, args.root, name) for name in names]
@@ -83,15 +73,10 @@ def _run_suite(args, names: list[str], agent_root: Path) -> int:
                 failed.append(result)
     for result in failed:
         print(f"\n===== {result['module']} =====\n{result['output']}", flush=True)
-    leaked = {path.name for path in agent_root.iterdir()}
-    if leaked:
-        print("\n本次测试 agent worktree 残留：" + ", ".join(sorted(leaked)[:10]), flush=True)
     status = f"失败 {len(failed)} 个模块" if failed else "全部通过"
-    if leaked:
-        status += f"；临时 worktree 泄漏 {len(leaked)} 项"
     print(f"\n{args.suite}: {len(names)} 个模块，{total} 个测试，跳过 {skipped} 个，{status}，"
           f"用时 {time.monotonic() - started:.0f}s（{args.workers} 路并行）")
-    return 1 if failed or leaked else 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

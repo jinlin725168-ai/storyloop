@@ -1,8 +1,10 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from storyloop.changes import load_change
 from storyloop.approvals import approve_change
@@ -10,12 +12,103 @@ from storyloop.baseline import bootstrap_project
 from tests.routing_support import legacy_create_change as create_change
 from storyloop.models import StoryLoopError
 from storyloop.smoke import install_smoke_suite, load_smoke_manifest
-from storyloop.smoke_runner import run_smoke_isolated
+from storyloop.smoke_runner import _judge_red, _red_failure_classification, _run_test, run_smoke_isolated
+from storyloop.processutil import redact
 from tests.support import product
 from tests.test_baseline_behavior import repository
 
 
 NOW = datetime(2026, 9, 16, tzinfo=timezone.utc)
+
+
+class RedFailureClassificationTests(unittest.TestCase):
+    def judge(self, result):
+        manifest = {"tests": [{"id": result["id"], "tier": "fast"}]}
+        change = {"product": {"stories": [{"acceptance": [{"id": "AC-1"}]}]}}
+        with self.assertRaises(StoryLoopError) as caught:
+            _judge_red([result], manifest, change)
+        return caught.exception
+
+    def row(self, diagnostics, *, executed=1, failed=0, errors=1, returncode=2,
+            timed_out=False):
+        return {"id": "SMOKE-1", "criteria": ["AC-1"], "status": "ERROR",
+                "returncode": returncode, "timed_out": timed_out,
+                "counts": {"executed": executed, "failed": failed, "errors": errors,
+                           "diagnostics": diagnostics}, "stdout": "", "stderr": ""}
+
+    def test_case_traceback_and_mixed_failures_are_fixture_defects(self):
+        for name, message in (("dogfood3", "Business subprocess failed"),
+                              ("dogfood9", "AssertionError: 'UNEXPECTED' != 'PASSED'")):
+            with self.subTest(case=name):
+                diagnostic = {"case_id": "storyloop_protected_case.Case.test_path",
+                              "kind": "error", "message": message,
+                              "traceback_tail": "acceptance/changes/X/test_red.py:20 in test_path"}
+                row = self.row([diagnostic], executed=3, failed=1, errors=1)
+                self.assertEqual(_red_failure_classification([row]), "oracle")
+                error = self.judge(row)
+                self.assertEqual(error.code, "ORACLE_DEFECT")
+                self.assertTrue(error.details["fixture_repairable"])
+
+    def test_declared_case_root_violation_is_fixture_defect(self):
+        diagnostic = {"case_id": "launcher", "kind": "error",
+                      "message": "StoryLoopError: Case is outside declared roots",
+                      "traceback_tail": ""}
+        row = self.row(["launch", diagnostic], executed=0)
+        self.assertEqual(_red_failure_classification([row]), "oracle")
+        error = self.judge(row)
+        self.assertEqual(error.code, "ORACLE_DEFECT")
+        self.assertTrue(error.details["fixture_repairable"])
+
+    def test_timeout_missing_command_and_import_isolation_remain_environment_errors(self):
+        isolation = {"case_id": "launcher", "kind": "error",
+                     "message": "ImportIsolationError: Untrusted helper installation",
+                     "traceback_tail": ""}
+        cases = [self.row(["runner"], timed_out=True),
+                 self.row(["runner"], returncode=None),
+                 self.row(["launch", isolation], executed=0)]
+        resource = self.row(["runner"])
+        resource["truncated"] = True
+        cases.append(resource)
+        for row in cases:
+            with self.subTest(row=row):
+                self.assertEqual(_red_failure_classification([row]), "environment")
+                error = self.judge(row)
+                self.assertEqual(error.code, "BLOCKED")
+                self.assertNotIn("fixture_repairable", error.details)
+
+
+class SmokeOutputLimitTests(unittest.TestCase):
+    def test_redaction_receives_only_the_persisted_output_prefix(self):
+        seen = []
+
+        def bounded_redact(value):
+            seen.append(len(value))
+            return redact(value)
+
+        outcome = {"stdout": "x" * 200_000, "stderr": "y" * 200_000,
+                   "contained": True, "timed_out": False, "truncated": False,
+                   "error": "", "returncode": 0}
+        test = {"id": "SMOKE-1", "criteria": [], "command": [sys.executable, "-V"],
+                "timeout_seconds": 5}
+        with patch("storyloop.smoke_runner.run_process", return_value=outcome), \
+                patch("storyloop.smoke_runner.count_tests", return_value={}), \
+                patch("storyloop.smoke_runner.redact", side_effect=bounded_redact):
+            result = _run_test(Path.cwd(), test, [])
+        self.assertEqual(seen, [100_000, 100_000])
+        self.assertEqual(result["stdout"], "x" * 100_000)
+        self.assertEqual(result["stderr"], "y" * 100_000)
+
+    def test_truncated_url_userinfo_is_not_published_without_its_at_sign(self):
+        prefix = "x" * 99_970
+        outcome = {"stdout": prefix + " http://alice:synthetic-secret@example.test",
+                   "stderr": "", "contained": True, "timed_out": False,
+                   "truncated": False, "error": "", "returncode": 0}
+        test = {"id": "SMOKE-1", "criteria": [], "command": [sys.executable, "-V"],
+                "timeout_seconds": 5}
+        with patch("storyloop.smoke_runner.run_process", return_value=outcome), \
+                patch("storyloop.smoke_runner.count_tests", return_value={}):
+            result = _run_test(Path.cwd(), test, [])
+        self.assertNotIn("alice:synthetic", result["stdout"])
 
 
 class SmokeSuiteTests(unittest.TestCase):
@@ -111,6 +204,96 @@ class SmokeSuiteTests(unittest.TestCase):
 
         with self.assertRaisesRegex(StoryLoopError, "modified its isolated candidate"):
             run_smoke_isolated(self.root, load_change(self.root, self.change_id))
+
+    def test_self_candidate_rejects_shadowed_old_helper_before_red(self):
+        old_helper = self.root / "storyloop/testing/smoke_harness/v1.py"
+        old_helper.parent.mkdir(parents=True)
+        old_helper.write_text("def precondition(ok, message):\n    if not ok: raise RuntimeError(message)\n",
+                              encoding="utf-8")
+        script = ("import unittest\n"
+                  "from storyloop.testing.smoke_harness.v1 import precondition\n"
+                  "class Case(unittest.TestCase):\n"
+                  "    def test_fixture(self): precondition(False, 'missing fixture')\n"
+                  "if __name__ == '__main__': unittest.main()\n")
+        self._install_case(script)
+
+        with self.assertRaises(StoryLoopError) as caught:
+            run_smoke_isolated(self.root, load_change(self.root, self.change_id), expect_red=True)
+        self.assertEqual(caught.exception.code, "ORACLE_DEFECT")
+        self.assertEqual(caught.exception.details["reason"], "HARNESS_SHADOWED")
+        self.assertTrue(caught.exception.details["fixture_repairable"])
+        self.assertIn("test_smoke.py", str(caught.exception.details["failure_evidence"]))
+        self.assertIn("{storyloop_harness}", str(caught.exception))
+        self.assertIn("test_smoke.py", str(caught.exception.details))
+        with self.assertRaises(StoryLoopError) as acceptance_error:
+            run_smoke_isolated(self.root, load_change(self.root, self.change_id), expect_red=False)
+        self.assertNotIn("fixture_repairable", acceptance_error.exception.details)
+
+    def test_ordinary_project_still_runs_its_smoke_suite(self):
+        script = ("import unittest\n"
+                  "class Case(unittest.TestCase):\n"
+                  "    def test_red(self): self.fail('new behavior absent')\n"
+                  "if __name__ == '__main__': unittest.main()\n")
+        self._install_case(script)
+        result = run_smoke_isolated(self.root, load_change(self.root, self.change_id), expect_red=True)
+        self.assertEqual(result["status"], "RED")
+
+    def test_self_candidate_rejects_inline_helper_import(self):
+        helper = self.root / "storyloop/testing/__init__.py"
+        helper.parent.mkdir(parents=True)
+        helper.write_text("", encoding="utf-8")
+        manifest = {"version": 1, "tests": [{"id": "SMOKE-1", "criteria": ["AC-1"],
+                    "command": ["{python}", "-c", "import storyloop.testing.smoke_harness.v1"],
+                    "timeout_seconds": 10}]}
+        install_smoke_suite(self.root, load_change(self.root, self.change_id),
+                            [{"path": "test_smoke.py", "content": "pass\n"}], manifest)
+        with self.assertRaises(StoryLoopError) as caught:
+            run_smoke_isolated(self.root, load_change(self.root, self.change_id), expect_red=True)
+        self.assertEqual(caught.exception.details["reason"], "HARNESS_SHADOWED")
+
+    def test_shadowed_helper_during_acceptance_becomes_actionable_stop(self):
+        from storyloop.project_loop import _verify_attempt
+        state = {"version": 1, "change_id": self.change_id, "status": "IMPLEMENTING",
+                 "attempt": 1, "failures": []}
+        error = StoryLoopError("改用 {storyloop_harness}", code="ORACLE_DEFECT",
+                               details={"reason": "HARNESS_SHADOWED",
+                                        "files": ["acceptance/changes/C/test.py"]})
+        with patch("storyloop.project_loop._run_checks_safely", side_effect=error):
+            result = _verify_attempt(self.root, load_change(self.root, self.change_id),
+                                     state, None, {}, {})
+        self.assertEqual(result["status"], "ORACLE_DEFECT")
+        self.assertIn("HARNESS_SHADOWED", str(result["stop"]))
+        self.assertIn("{storyloop_harness}", str(result["stop"]))
+
+    def test_self_candidate_rejects_literal_importlib_helper_import(self):
+        helper = self.root / "storyloop/testing/__init__.py"
+        helper.parent.mkdir(parents=True)
+        helper.write_text("", encoding="utf-8")
+        manifest = {"version": 1, "tests": [{"id": "SMOKE-1", "criteria": ["AC-1"],
+                    "command": ["{python}", "-c",
+                                "import importlib; importlib.import_module('storyloop.testing.smoke_harness.v1')"],
+                    "timeout_seconds": 10}]}
+        install_smoke_suite(self.root, load_change(self.root, self.change_id),
+                            [{"path": "test_smoke.py", "content": "pass\n"}], manifest)
+        with self.assertRaises(StoryLoopError) as caught:
+            run_smoke_isolated(self.root, load_change(self.root, self.change_id), expect_red=True)
+        self.assertEqual(caught.exception.details["reason"], "HARNESS_SHADOWED")
+
+    def test_self_candidate_accepts_engine_harness_command(self):
+        from storyloop.self_harness_preflight import preflight_self_harness
+        helper = self.root / "storyloop/testing/__init__.py"
+        helper.parent.mkdir(parents=True)
+        helper.write_text("", encoding="utf-8")
+        manifest = {"version": 1, "tests": [{"id": "SMOKE-1", "criteria": ["AC-1"],
+                    "command": ["{storyloop_harness}", "--help"], "timeout_seconds": 10}]}
+        preflight_self_harness(self.root, self.change_id, manifest)
+
+    def _install_case(self, script):
+        manifest = {"version": 1, "tests": [{"id": "SMOKE-1", "criteria": ["AC-1"],
+                    "command": ["{python}", f"acceptance/changes/{self.change_id}/test_smoke.py"],
+                    "timeout_seconds": 10}]}
+        install_smoke_suite(self.root, load_change(self.root, self.change_id),
+                            [{"path": "test_smoke.py", "content": script}], manifest)
 
 
 if __name__ == "__main__":

@@ -154,12 +154,17 @@ def _collect_layer(project: Path, binding: dict, config: dict, name: str) -> dic
     if not commands:
         return _summarize({'status': 'MISSING', 'results': []}, commands, name)
     try:
-        outcome = (run_system_smoke_isolated(project) if name == 'smoke' else run_commands_at_commit(
-            project, binding['source_commit'], commands, config['check_timeout_seconds']))
+        outcome = (run_system_smoke_isolated(project, capture_output_tail=True) if name == 'smoke'
+                   else run_commands_at_commit(project, binding['source_commit'], commands,
+                                               config['check_timeout_seconds'],
+                                               capture_output_tail=True))
     except StoryLoopError as exc:
         if exc.code == 'WORKSPACE_TAINTED':
             raise
-        outcome = {'status': 'ERROR', 'results': [], 'error_code': exc.code}
+        outcome = {'status': 'ERROR', 'results': [
+            {'id': f'{name}-{index:03d}', 'status': 'ERROR', 'command': command,
+             'output_tail': {'message': '无可用输出'}}
+            for index, command in enumerate(commands, 1)], 'error_code': exc.code}
     return _summarize(outcome, commands, name)
 
 
@@ -184,9 +189,13 @@ def _summarize(outcome: dict, commands: list, name: str) -> dict:
 
 
 def _result(item: dict) -> dict:
-    # Keep only diagnostic metadata: arbitrary stdout/stderr never enters readiness state.
     keys = ('id', 'status', 'returncode', 'timed_out', 'counts')
-    return {key: item.get(key) for key in keys}
+    result = {key: item.get(key) for key in keys if key in item}
+    if item.get('status') != 'PASS':
+        if item.get('command'):
+            result['command'] = [redact(str(part)) for part in item['command']]
+        result['output_tail'] = item.get('output_tail') or {'message': '无可用输出'}
+    return result
 
 
 def require_readiness(project: Path) -> dict:

@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "tests": [
+    {
+      "id": "repair-next-path",
+      "criteria": [
+        "S1-C1"
+      ],
+      "command": [
+        "{python}",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "acceptance/changes/FIX-20261107-repair-next-path",
+        "-p",
+        "test_repair_next.py",
+        "-k",
+        "test_next_uses_real_path"
+      ],
+      "timeout_seconds": 400,
+      "tier": "fast"
+    },
+    {
+      "id": "repair-next-cli",
+      "criteria": [
+        "S1-C2"
+      ],
+      "command": [
+        "{python}",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "acceptance/changes/FIX-20261107-repair-next-path",
+        "-p",
+        "test_repair_next.py",
+        "-k",
+        "test_text_and_json_next_match"
+      ],
+      "timeout_seconds": 240,
+      "tier": "fast"
+    },
+    {
+      "id": "repair-next-regression",
+      "criteria": [
+        "S1-C3",
+        "S1-C4"
+      ],
+      "command": [
+        "{python}",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "acceptance/changes/FIX-20261107-repair-next-path",
+        "-p",
+        "test_repair_next.py",
+        "-k",
+        "test_success_fields_and_saved_state"
+      ],
+      "timeout_seconds": 240,
+      "tier": "fast"
+    },
+    {
+      "id": "repair-next-stop",
+      "criteria": [
+        "S1-C5"
+      ],
+      "command": [
+        "{python}",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "acceptance/changes/FIX-20261107-repair-next-path",
+        "-p",
+        "test_repair_next.py",
+        "-k",
+        "test_unproven_repair_keeps_stop"
+      ],
+      "timeout_seconds": 240,
+      "tier": "fast"
+    }
+  ]
+}

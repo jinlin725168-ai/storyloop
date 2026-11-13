@@ -34,6 +34,8 @@ REQUIRED_DOCUMENTS = (
 )
 MAX_DOCUMENTS = 40
 MAX_DOCUMENT_BYTES = 512_000
+SOURCE_MARKER = re.compile(r"\bsource:\s*([^\s|`]+)")
+SOURCE_LOCATION = re.compile(r"(.+):([1-9][0-9]*)(?:#([A-Za-z0-9_.-]+))?$")
 LAST_RESPONSE = ".storyloop/state/foundation/last-survey.json"
 # Configuration files whose sensitive values must never be copied into the knowledge base.
 CONFIG_FILE = re.compile(r"(^|/)(application|bootstrap|config|settings|secrets?)[^/]*\.(ya?ml|properties|toml|ini|json)$"
@@ -94,6 +96,7 @@ def install_foundation_documents(project: Path, response: object) -> list[str]:
         leaked = URL_WITH_CREDENTIALS.search(content) or any(_contains_value(content, v) for v in secrets)
         require(not leaked, f"Survey document {path} copies a configured secret; describe configuration "
                             "by key and location, never by value")
+        _validate_source_locations(project, path, content)
         target = safe_target(project, f"{FOUNDATION_ROOT}/{path}", "foundation document path")
         require(target.is_relative_to(project / FOUNDATION_ROOT), "Foundation document escapes its root")
         planned.append((target, target.relative_to(project).as_posix(), content))
@@ -105,6 +108,16 @@ def install_foundation_documents(project: Path, response: object) -> list[str]:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
     return sorted(rel for _, rel, _ in planned)
+
+
+def _validate_source_locations(project: Path, document: str, content: str) -> None:
+    """Check source syntax and repository path safety without reading the referenced file."""
+    for marker in SOURCE_MARKER.finditer(content):
+        location = marker.group(1).rstrip(".,;)")
+        match = SOURCE_LOCATION.fullmatch(location)
+        require(match is not None, f"Survey document {document} has invalid source: {location}")
+        target = safe_target(project, match.group(1), "survey source")
+        require(target.is_file(), f"Survey document {document} references a missing source: {location}")
 
 
 def _configured_secret_values(project: Path) -> set[str]:

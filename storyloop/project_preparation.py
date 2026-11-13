@@ -1,6 +1,7 @@
 """Contract materialization and immutable pre-implementation evidence."""
 from __future__ import annotations
 from pathlib import Path
+import shlex
 from typing import TYPE_CHECKING
 from .approvals import materialize_approved_change
 from .baseline import _git
@@ -16,8 +17,13 @@ from .run_stops import pause
 from .oracle_counts import ensure_baseline
 from .semantic_repair import answer_with_repair
 from .smoke import (RED_EVIDENCE, install_smoke_suite, load_smoke_manifest, protection_path,
-                    validate_suite, without_manifest_echo, suite_root as acceptance_suite_root)
+                    RESULT_EVIDENCE, validate_suite, without_manifest_echo,
+                    suite_root as acceptance_suite_root)
 from .smoke_runner import run_commands_at_commit, run_smoke_isolated
+from .storage import load_json, write_bytes_atomic
+from .verification_entries import check_entry_use
+from .oracle_strength_precheck import assess as strength_assess, stamp_red
+from .baseline import load_project_config
 if TYPE_CHECKING:
     from .run_services import LoopServices
 
@@ -54,12 +60,41 @@ def _prepare_acceptance(
                       **_lesson_snapshot(project, contract_commit)})
         save_run(project, state)
     try:
+        precheck = strength_assess(project, change, state, services,
+                                   load_smoke_manifest(project, change), load_project_config(project))
+        if precheck is not None:
+            state["oracle_strength_precheck"] = precheck
+            save_run(project, state)
         red = _ensure_red_evidence(project, change, state["contract_commit"])
+        if precheck is not None:
+            red = stamp_red(project, change_id, precheck)
     except StoryLoopError as exc:
+        if exc.code == "NEEDS_INPUT" and exc.details.get("precheck"):
+            return pause(project, state, "NEEDS_INPUT", error=str(exc),
+                         acceptance={"status": "NEEDS_INPUT", **exc.details},
+                         questions=exc.details["precheck"].get("questions") or [],
+                         next=f"修订合同入口或判据后重新运行：storyloop run {shlex.quote(str(project))} --change {change_id}")
+        if exc.code == "BLOCKED" and exc.details.get("results"):
+            command = shlex.join(["storyloop", "run", str(project), "--change", change_id])
+            return pause(project, state, "NEEDS_INPUT", error=str(exc),
+                         acceptance={"status": "ERROR", "reason": "RED_ENVIRONMENT_ERROR",
+                                     **exc.details},
+                         next=f"修复 RED 执行环境后重试：{command}")
         if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
             raise
-        return pause(project, state, exc.code, error=str(exc),
-                     acceptance={"status": exc.code, **exc.details})
+        stopped = pause(project, state, exc.code, error=str(exc),
+                        acceptance={"status": exc.code, **exc.details})
+        if exc.details.get("fixture_repairable") is True:
+            from .acceptance_repair import retry_fixture_red
+            from .project_loop_support import run_path
+            from .storage import load_json
+            result = retry_fixture_red(project, change_id, services, stopped)
+            if result["status"] == "ACCEPTANCE_REPAIRED":
+                state.clear()
+                state.update(load_json(run_path(project, change_id)))
+                return None
+            return result
+        return stopped
     ensure_baseline(project, state, change["product"], run_commands_at_commit)
     for key in ("acceptance", "error", "next"):
         state.pop(key, None)
@@ -96,15 +131,70 @@ def _ensure_contract_commit(project: Path, state: dict, paths: list[str]) -> str
     return head
 
 
-def _ensure_red_evidence(project: Path, change: dict, contract_commit: str) -> dict:
+def _ensure_red_evidence(project: Path, change: dict, contract_commit: str,
+                         *, refresh: bool = False) -> dict:
     """RED is proven on the contract commit plus the current suite: never on the workspace, which after a
     stop may already hold implementation edits that would make the new behaviour look present."""
     change_id = change["change_id"]
+    check_entry_use(project, change, load_smoke_manifest(project, change))
     path = project / ".storyloop/evidence" / change_id / RED_EVIDENCE
-    if path.exists():
+    if path.exists() and not refresh and load_json(path).get("status") == "RED":
         return read_red_evidence(project, change_id)
     return read_only_call(
         project, change_id,
         lambda: run_smoke_isolated(project, change, expect_red=True, at_commit=contract_commit),
         allowed_evidence=RED_EVIDENCE,
     )
+
+
+def reprove_after_base(project: Path, change: dict, state: dict) -> dict | None:
+    """Rebind the locked contract to the accepted merge and prove RED there."""
+    head = _git(project, "rev-parse", "HEAD").strip()
+    if state["contract_commit"] != head:
+        parents = _git(project, "rev-list", "--parents", "-n", "1", head).split()
+        from .base_follow import engine_feature_tail
+        require(len(parents) == 3 and parents[2] == state["source_head"]
+                and engine_feature_tail(project, state, parents[1]),
+                "New base must be merged onto the locked feature contract")
+        load_smoke_manifest(project, change)
+        _archive_old_evidence(project, state)
+        try:
+            red = _ensure_red_evidence(project, change, head, refresh=True)
+        except StoryLoopError as exc:
+            if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
+                raise
+            return pause(project, state, "BASE_CHANGE_REQUIRED", error=str(exc),
+                         acceptance={"status": exc.code, **exc.details},
+                         next=f"新底座的 RED 判据需修正：storyloop acceptance-repair <project> "
+                              f"--change {state['change_id']} --reason <原因>")
+        for key in ("oracle", "characterization", "design_plan", "verified", "review", "report",
+                    "report_commit", "report_sha256", "acceptance_evidence_sha256",
+                    "acceptance", "error", "next", "stop", "cost_candidate", "violations"):
+            state.pop(key, None)
+        state["contract_commit"] = head
+        state["red_evidence_sha256"] = red["evidence_sha256"]
+        state["base_upgrades"][-1]["voided_attempts"] = state["attempt"]
+        state["attempt"] = 0
+        if state.get("planning"):
+            from .routing_upgrade import invalidate_planning
+            invalidate_planning(state, "Base upgrade changed plan inputs")
+            state["planning"] = {"history": state["planning"]["history"]}
+        save_run(project, state)
+    ensure_baseline(project, state, change["product"], run_commands_at_commit)
+    save_run(project, state)
+    return None
+
+
+def _archive_old_evidence(project: Path, state: dict) -> None:
+    root = project / ".storyloop/evidence" / state["change_id"]
+    old_head = state["contract_commit"][:12]
+    for name in (RED_EVIDENCE, RESULT_EVIDENCE):
+        current = root / name
+        if not current.is_file():
+            continue
+        archive = root / "history" / f"{old_head}-{name}"
+        data = current.read_bytes()
+        if archive.exists():
+            require(archive.read_bytes() == data, "Previous acceptance evidence changed")
+        else:
+            write_bytes_atomic(archive, data)

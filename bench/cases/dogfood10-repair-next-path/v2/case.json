@@ -1,0 +1,59 @@
+{
+  "allowed": {
+    "adapters": [
+      "codex",
+      "claude",
+      "test"
+    ],
+    "max_calls": 100,
+    "max_cost_usd": null,
+    "models": [
+      "configured"
+    ]
+  },
+  "base_commit": "ad63fd8d3a08ac62c67ff34acf6e2e9315ae3f22",
+  "case_id": "dogfood10-repair-next-path",
+  "case_revision": "2.1",
+  "case_version": 2,
+  "contract_sha256": "bb34887db3b4a02e0d62efb4f8e5abf577fb3ebc45c7bc9db7da0dafd667a9d9",
+  "gold_sha256": "1a8c6784faf3137745024389b65f4523d26208b81b8233c0d69c61e974d61a06",
+  "legacy_seam": false,
+  "python": {
+    "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
+    "version": "3.11"
+  },
+  "repository_id": "storyloop-dogfood6",
+  "schema_version": 1,
+  "solution_commit": "5e53c751876fe9459f8f5b0ad2db1bf4e132406a",
+  "suite_files": [
+    {
+      "path": "checks/acceptance/changes/FIX-20261107-repair-next-path/bench_repair_next_cli.py",
+      "sha256": "943a08d376f826f8003968be4b9807d3661c0eb850cbd1a05ca5f3678a6546cd"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261107-repair-next-path/bench_repair_next_path.py",
+      "sha256": "89d5807546e4d4e05b545de2aee8ef2e9c43b729a5e67a76124e3f837b74fad8"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261107-repair-next-path/bench_repair_next_regression.py",
+      "sha256": "c8dd5fc24ebf884bef0ae58818c4e6e5a21878af8b14e177681860ba7cb49d50"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261107-repair-next-path/bench_repair_next_stop.py",
+      "sha256": "26ac12508f53e79616fa85cc3e32d751d76baacc2373c81a786c0b131a92da6d"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261107-repair-next-path/manifest.json",
+      "sha256": "36ab7114f9e39414a3e5a94d18a1765fe97c9010e41a4590cd763cd9f18421b5"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261107-repair-next-path/test_repair_next.py",
+      "sha256": "9e139edc0576b398ed226e026e454622309f6750af1a0a751269809199dccea6"
+    },
+    {
+      "path": "checks/tests/test_smoke_repair.py",
+      "sha256": "639586980494ecef87945f2da6e54ff31f24615c1fd447088a19855b683b512d"
+    }
+  ],
+  "suite_sha256": "6270e84942c4b56a5dad5376426cfabff426d652988884629f6c943d0d8e6607"
+}

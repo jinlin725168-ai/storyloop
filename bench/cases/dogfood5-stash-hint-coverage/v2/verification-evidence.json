@@ -1,0 +1,200 @@
+{
+  "VE-BASE-STOP": {
+    "chain": [
+      {
+        "line": 252,
+        "path": "storyloop/cli.py",
+        "quote": "return _product_dispatch(project, args)"
+      },
+      {
+        "line": 110,
+        "path": "storyloop/product_cli.py",
+        "quote": "if args.command == \"status\":"
+      },
+      {
+        "line": 117,
+        "path": "storyloop/product_cli.py",
+        "quote": "\"stop\": stop_of(project, run) if run else draft_stop(project, change),"
+      },
+      {
+        "line": 327,
+        "path": "storyloop/project_loop.py",
+        "quote": "return record_failure(project, state, {\"attempt\": state[\"attempt\"], **layers},"
+      },
+      {
+        "line": 24,
+        "path": "storyloop/project_loop_failures.py",
+        "quote": "def _failure(state: dict, entry: dict, attribution: str) -> dict:"
+      },
+      {
+        "line": 56,
+        "path": "storyloop/project_loop_failures.py",
+        "quote": "if item[\"category\"] in {\"FEATURE\", \"TEST\"}"
+      },
+      {
+        "line": 284,
+        "path": "storyloop/stop_report.py",
+        "quote": "def stop_of(project: Path | str, run: dict | None) -> dict | None:"
+      },
+      {
+        "line": 117,
+        "path": "storyloop/product_cli.py",
+        "quote": "\"stop\": stop_of(project, run) if run else draft_stop(project, change),"
+      }
+    ],
+    "criterion_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "AC-4",
+      "AC-5",
+      "AC-6",
+      "AC-7"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-1",
+      "F2P-reference",
+      "P2P-acceptance-2"
+    ],
+    "manifest_test_ids": [
+      "linked-base-paths-red",
+      "linked-base-existing-green"
+    ]
+  },
+  "VE-LOG": {
+    "chain": [
+      {
+        "line": 302,
+        "path": "storyloop/cli.py",
+        "quote": "return dispatch(project, args, run_with_answers, _draft_result, load_run_state)"
+      },
+      {
+        "line": 124,
+        "path": "storyloop/product_cli.py",
+        "quote": "if args.command == \"log\":"
+      },
+      {
+        "line": 19,
+        "path": "storyloop/change_log.py",
+        "quote": "def change_log(project: Path, change_id: str) -> dict:"
+      },
+      {
+        "line": 284,
+        "path": "storyloop/stop_report.py",
+        "quote": "def stop_of(project: Path | str, run: dict | None) -> dict | None:"
+      },
+      {
+        "line": 296,
+        "path": "storyloop/stop_report.py",
+        "quote": "if run[\"status\"] == \"BASE_CHANGE_REQUIRED\" and run.get(\"legacy_paths\"):"
+      }
+    ],
+    "criterion_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "AC-4",
+      "AC-5",
+      "AC-6",
+      "AC-7"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-1",
+      "F2P-reference",
+      "P2P-acceptance-2"
+    ],
+    "manifest_test_ids": [
+      "linked-base-paths-red",
+      "linked-base-existing-green"
+    ]
+  },
+  "VE-REPORT": {
+    "chain": [
+      {
+        "line": 302,
+        "path": "storyloop/cli.py",
+        "quote": "return dispatch(project, args, run_with_answers, _draft_result, load_run_state)"
+      },
+      {
+        "line": 136,
+        "path": "storyloop/product_cli.py",
+        "quote": "if args.command == \"report\":"
+      },
+      {
+        "line": 284,
+        "path": "storyloop/stop_report.py",
+        "quote": "def stop_of(project: Path | str, run: dict | None) -> dict | None:"
+      },
+      {
+        "line": 296,
+        "path": "storyloop/stop_report.py",
+        "quote": "if run[\"status\"] == \"BASE_CHANGE_REQUIRED\" and run.get(\"legacy_paths\"):"
+      }
+    ],
+    "criterion_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "AC-4",
+      "AC-5",
+      "AC-6",
+      "AC-7"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-1",
+      "F2P-reference",
+      "P2P-acceptance-2"
+    ],
+    "manifest_test_ids": [
+      "linked-base-paths-red",
+      "linked-base-existing-green"
+    ]
+  },
+  "VE-RUN-STOP": {
+    "chain": [
+      {
+        "line": 302,
+        "path": "storyloop/cli.py",
+        "quote": "return dispatch(project, args, run_with_answers, _draft_result, load_run_state)"
+      },
+      {
+        "line": 103,
+        "path": "storyloop/product_cli.py",
+        "quote": "return run_with_answers(project, change_id, interactive=not args.no_interactive)"
+      },
+      {
+        "line": 152,
+        "path": "storyloop/project_loop.py",
+        "quote": "if state[\"status\"] == \"BASE_CHANGE_REQUIRED\" and state.get(\"blocked_by\"):"
+      },
+      {
+        "line": 156,
+        "path": "storyloop/project_loop.py",
+        "quote": "return pause(project, state, \"BASE_CHANGE_REQUIRED\", blocked_by=state[\"blocked_by\"],"
+      },
+      {
+        "line": 208,
+        "path": "storyloop/stop_report.py",
+        "quote": "def base_legacy_action(project: Path | str, change_id: str, details: dict) -> str:"
+      }
+    ],
+    "criterion_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "AC-4",
+      "AC-5",
+      "AC-6",
+      "AC-7"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-1",
+      "F2P-reference",
+      "P2P-acceptance-2"
+    ],
+    "manifest_test_ids": [
+      "linked-base-paths-red",
+      "linked-base-existing-green"
+    ]
+  }
+}

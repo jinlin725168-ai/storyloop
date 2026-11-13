@@ -1,17 +1,40 @@
 """Real isolated gates across routed tiers; mocks observe roles, never replace gates."""
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import Mock
 
 from storyloop.design_approval import approve_design, replan
 from storyloop.models import StoryLoopError
-from storyloop.project_loop import run_change, load_run_state
+from storyloop.project_loop import LoopServices, run_change, load_run_state
+from storyloop.approvals import approve_change
+from storyloop.base_execution import record_base_review
+from storyloop.baseline import load_baseline
+from storyloop.manual_acceptance import record_manual_acceptance
+from storyloop.onboarding_cli import bootstrap_with_project_checks
+from storyloop.smoke import RED_EVIDENCE
+from storyloop.storage import load_json
 from tests.routing_support import routed_case
+from tests.routing_support import legacy_create_change
+from tests.support import product
+from tests.test_baseline_behavior import git, repository
+from tests.test_project_loop import smoke_payload
 
 
 class RoutedEndToEndTests(unittest.TestCase):
+    def test_characterization_context_only_names_changed_behavior(self):
+        from storyloop.project_loop_gates import _changing_behaviors
+        change = {'product': {'stories': [{'acceptance': [
+            {'id': 'AC-1', 'row_type': 'positive', 'then': 'new'},
+            {'id': 'AC-2', 'row_type': 'regression', 'then': 'kept'},
+            {'id': 'AC-3', 'row_type': 'state_preservation', 'then': 'kept'},
+            {'id': 'AC-4', 'row_type': 'non_goal', 'then': 'kept'},
+        ]}]}}
+        self.assertEqual([item['id'] for item in _changing_behaviors(change)], ['AC-1'])
+
     def case(self, tier):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
@@ -22,6 +45,18 @@ class RoutedEndToEndTests(unittest.TestCase):
                            characterize=Mock(wraps=services.characterize),
                            review=Mock(wraps=services.review))
         return root, change['change_id'], observed
+
+    def test_design_summary_is_visible_in_status_and_log(self):
+        from storyloop.change_log import change_log
+        from storyloop.cli import dispatch, parser
+        root, identifier, services = self.case('heavy')
+        paused = run_change(root, identifier, services)
+        self.assertEqual(paused['status'], 'DESIGN_APPROVAL_REQUIRED')
+        status = dispatch(parser().parse_args(['status', str(root), '--change', identifier]))
+        log = change_log(root, identifier)
+        for result in (paused, status, log):
+            self.assertIn('Implement the approved contract', str(result['stop']))
+            self.assertIn('Decisions', str(result['stop']))
 
     def test_light_standard_heavy_real_gates_and_call_counts(self):
         for tier, design_calls, lock_calls in [('light', 0, 0), ('standard', 1, 0), ('heavy', 1, 1)]:
@@ -75,7 +110,7 @@ class RoutedEndToEndTests(unittest.TestCase):
     def test_empty_lock_response_is_rejected_before_implementation(self):
         root, identifier, services = self.case('heavy')
         services = replace(services, characterize=Mock(return_value={
-            'summary': 'No locks', 'touched': [], 'tests': [], 'questions': []}))
+            'summary': 'No locks', 'touched': [], 'tests': [], 'questions': [], 'claims': []}))
         pause = run_change(root, identifier, services)
         approve_design(root, identifier, pause['plan_id'])
         with self.assertRaisesRegex(StoryLoopError, 'coverage|artifact'):
@@ -246,7 +281,7 @@ class RoutedEndToEndTests(unittest.TestCase):
         self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
         self.assertEqual(events, ['characterize', 'implement'])
 
-    def test_oracle_repair_reproves_red_and_requires_new_approval(self):
+    def test_oracle_repair_reproves_red_and_keeps_approved_plan(self):
         from storyloop.acceptance_repair import repair_smoke
         from tests.test_consistency import coherent, finding
         from tests.routing_support import routed_acceptance
@@ -260,6 +295,8 @@ class RoutedEndToEndTests(unittest.TestCase):
         with self.assertRaisesRegex(StoryLoopError, 'repair'):
             replan(root, identifier, 'Cannot evade defective oracle')
         services.implement.assert_not_called()
+        previous = load_run_state(root, identifier)['planning']['plan']
+        design_calls = services.design.call_count
         def repaired(project, context):
             payload = routed_acceptance(identifier)
             payload['files'][0]['content'] += '\n# corrected oracle obligation\n'
@@ -269,11 +306,46 @@ class RoutedEndToEndTests(unittest.TestCase):
         state = load_run_state(root, identifier)
         self.assertEqual(state['attempt'], 0)
         self.assertTrue(state['red_evidence_sha256'])
-        self.assertNotIn('plan', state['planning'])
-        pause = run_change(root, identifier, services)
-        self.assertEqual(pause['status'], 'DESIGN_APPROVAL_REQUIRED')
-        approve_design(root, identifier, pause['plan_id'])
+        self.assertEqual(len(state['repairs']), 1)
+        current = state['planning']['plan']
+        self.assertEqual(current['options'], previous['options'])
+        self.assertEqual(current['approval']['actor'], previous['approval']['actor'])
+        self.assertEqual(current['approval']['time'], previous['approval']['time'])
+        self.assertEqual(current['approval']['option_id'], previous['approval']['option_id'])
+        self.assertNotEqual(current['id'], previous['id'])
+        self.assertNotEqual(current['binding']['suite_digest'], previous['binding']['suite_digest'])
+        self.assertEqual(current['approval']['binding'], current['binding'])
         self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
+        self.assertEqual(services.design.call_count, design_calls)
+        modes = [call.args[1].get('mode') for call in services.review.call_args_list]
+        self.assertEqual(modes.count('consistency'), 1)
+
+    def test_reviewed_characterization_defect_restarts_l3_without_budget_cost(self):
+        from tests.test_structured_output import passing_review
+        root, identifier, services = self.case('heavy')
+        paused = run_change(root, identifier, services)
+        approve_design(root, identifier, paused['plan_id'])
+
+        reviewed = []
+        def defective_review(project, context):
+            if context.get('mode') == 'consistency':
+                return passing_review(project, context)
+            reviewed.append(context)
+            if len(reviewed) > 1:
+                return passing_review(project, context)
+            return {'verdict': 'fail', 'summary': 'lock conflicts with contract',
+                    'findings': [{'target': 'oracle', 'criterion_id': 'AC-1',
+                                  'location': 'tests/test_lock.py:4',
+                                  'message': 'characterization locks a behavior the contract changes'}],
+                    'questions': []}
+
+        result = run_change(root, identifier, replace(services, review=defective_review))
+        self.assertNotEqual(result['status'], 'ORACLE_DEFECT', result)
+        if result['status'] == 'DESIGN_APPROVAL_REQUIRED':
+            approve_design(root, identifier, result['plan_id'])
+            result = run_change(root, identifier, replace(services, review=defective_review))
+        self.assertEqual(result['status'], 'PASSED', result)
+        self.assertEqual(load_run_state(root, identifier)['attempt'], 1)
 
     def test_base_upgrade_invalidates_plan_then_replan_completes(self):
         from storyloop.base_upgrade import upgrade_baseline
@@ -287,6 +359,10 @@ class RoutedEndToEndTests(unittest.TestCase):
         pause = run_change(root, identifier, replace(services, implement=touch_base))
         self.assertEqual(pause['status'], 'BASE_CHANGE_REQUIRED')
         state = load_run_state(root, identifier)
+        # Exercise the historical unlinked receipt path, which E3 leaves unchanged.
+        from storyloop.project_loop_support import save_run
+        state.pop('blocked_by', None)
+        save_run(root, state)
         proposal = Path(pause['base_proposal']).stem
         self.assertEqual(upgrade_baseline(root, proposal)['status'], 'APPROVAL_REQUIRED')
         git(root, 'checkout', '--', 'core.py')
@@ -327,3 +403,74 @@ class RoutedEndToEndTests(unittest.TestCase):
         self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
         self.assertEqual(services.characterize.call_count, 1)
         self.assertEqual(load_run_state(root, identifier)['attempt'], 2)
+
+class E3EndToEndTests(unittest.TestCase):
+    def test_human_base_then_original_feature_both_pass_with_new_red(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            smoke = root / "acceptance/smoke"
+            smoke.mkdir(parents=True)
+            (smoke / "check.py").write_text("print('smoke green')\n", encoding="utf-8")
+            (smoke / "manifest.json").write_text(
+                '{"version":1,"tests":[{"id":"check","description":"check",'
+                '"command":["{python}","acceptance/smoke/check.py"],"timeout_seconds":30}]}',
+                encoding="utf-8")
+            git(root, "add", ".")
+            git(root, "commit", "-q", "-m", "smoke")
+            bootstrap_with_project_checks(root, {
+                "unit_commands": [[sys.executable, "-c", "print('unit green')"]],
+                "integration_commands": [], "check_commands": [], "base_build_commands": [],
+            })
+            feature = legacy_create_change(root, "orders", product(),
+                                           now=lambda: datetime(2026, 10, 28, tzinfo=timezone.utc))
+            feature_id = feature["change_id"]
+            approve_change(root, feature_id)
+
+            def collide(project, context):
+                (project / "pom.xml").write_text("<project><dependency>needed</dependency></project>\n",
+                                                  encoding="utf-8")
+                return {"summary": "dependency required", "questions": []}
+
+            review = lambda project, context: {"verdict": "pass", "summary": "verified",
+                                               "findings": [], "questions": []}
+            first = run_change(root, feature_id, LoopServices(
+                generate_smoke=lambda project, change: smoke_payload(feature_id),
+                implement=collide, review=review))
+            self.assertEqual(first["status"], "BASE_CHANGE_REQUIRED")
+            base_id = first["blocked_by"]
+            old_red = load_json(root / ".storyloop/evidence" / feature_id / RED_EVIDENCE)
+            feature_branch = git(root, "branch", "--show-current")
+            git(root, "switch", load_baseline(root)["source_branch"])
+            approve_change(root, base_id)
+            self.assertEqual(run_change(root, base_id, implementer="human")["status"],
+                             "HUMAN_IMPLEMENTATION_REQUIRED")
+            (root / "pom.xml").write_text("<project><dependency>accepted</dependency></project>\n",
+                                            encoding="utf-8")
+            git(root, "add", "pom.xml")
+            git(root, "commit", "-q", "-m", "base dependency")
+            self.assertEqual(run_change(root, base_id)["status"], "BASE_REVIEW_REQUIRED")
+            git(root, "config", "user.name", "Independent Reviewer")
+            record_base_review(root, base_id, "pass", "已核对依赖")
+            self.assertEqual(run_change(root, base_id)["status"], "MANUAL_ACCEPTANCE_REQUIRED")
+            record_manual_acceptance(root, base_id, ["BASE-ACCEPT"], "依赖满足需求")
+            self.assertEqual(run_change(root, base_id)["status"], "FINALIZING")
+            self.assertEqual(run_change(root, base_id)["status"], "PASSED")
+            git(root, "switch", feature_branch)
+
+            def implement(project, context):
+                target = project / "modules/orders/service.py"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("VALUE = 1\n", encoding="utf-8")
+                return {"summary": "feature on new base", "questions": []}
+
+            second = run_change(root, feature_id, LoopServices(
+                generate_smoke=lambda project, change: self.fail("locked suite must be reused"),
+                implement=implement, review=review))
+            self.assertEqual(second["status"], "PASSED")
+            state = load_run_state(root, feature_id)
+            new_red = load_json(root / ".storyloop/evidence" / feature_id / RED_EVIDENCE)
+            self.assertNotEqual(new_red["head_commit"], old_red["head_commit"])
+            self.assertEqual(new_red["head_commit"], state["contract_commit"])
+            self.assertEqual(load_json(root / ".storyloop/state/changes" / f"{base_id}.json")["status"],
+                             "PASSED")
