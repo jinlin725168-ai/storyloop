@@ -31,9 +31,12 @@ def two_row_product() -> dict:
     return value
 
 
-def approved(root: Path, value: dict) -> str:
+def approved(root: Path, value: dict, *, fixture_retry_limit: int | None = None) -> str:
     repository(root)
-    bootstrap_project(root, {"test_commands": []})
+    settings = {"test_commands": []}
+    if fixture_retry_limit is not None:
+        settings["acceptance_fixture_retry_limit"] = fixture_retry_limit
+    bootstrap_project(root, settings)
     change_id = create_change(root, "rooms", value, now=lambda: NOW)["change_id"]
     approve_change(root, change_id, now=lambda: NOW)
     return change_id
@@ -145,15 +148,17 @@ class RedByRowTypeTests(unittest.TestCase):
 
     def test_a_failure_with_zero_executed_tests_is_not_red(self):
         root, change_id = self._prove(1, 0, "Ran 0 tests in 0.000s")
-        with self.assertRaisesRegex(StoryLoopError, "environment error"):
+        with self.assertRaises(StoryLoopError) as raised:
             run_smoke(root, load_change(root, change_id), expect_red=True)
+        self.assertEqual(raised.exception.code, "ORACLE_DEFECT")
+        self.assertTrue(raised.exception.details["fixture_repairable"])
 
 
 class OracleDefectLoopTests(unittest.TestCase):
     def test_the_run_stops_at_oracle_defect_and_acceptance_repair_resumes_it(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            change_id = approved(root, two_row_product())
+            change_id = approved(root, two_row_product(), fixture_retry_limit=0)
 
             def implement(project, context):
                 (project / "modules/orders").mkdir(parents=True, exist_ok=True)
@@ -232,7 +237,7 @@ class FailedRepairTests(unittest.TestCase):
     def test_a_failed_repair_is_a_recorded_stop_and_red_is_re_proven_at_the_contract_commit(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            change_id = approved(root, two_row_product())
+            change_id = approved(root, two_row_product(), fixture_retry_limit=0)
             calls = []
 
             def implement(project, context):
