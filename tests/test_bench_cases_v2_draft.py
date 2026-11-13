@@ -111,6 +111,8 @@ class BenchV2DraftTests(unittest.TestCase):
                                       if owners[entry] in {criteria[item] for item in test["criteria"]}})
                 suite = hashlib.sha256()
                 for item in case["suite_files"]:
+                    self.assertNotIn("__pycache__", Path(item["path"]).parts)
+                    self.assertNotEqual(Path(item["path"]).suffix, ".pyc")
                     content = (draft / item["path"]).read_bytes()
                     self.assertEqual(hashlib.sha256(content).hexdigest(), item["sha256"])
                     suite.update(item["path"].encode() + b"\0" + content)

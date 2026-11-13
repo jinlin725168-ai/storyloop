@@ -27,10 +27,6 @@
   "solution_commit": "691fb42da3e29454ee0d824b8c7855effb3f8831",
   "suite_files": [
     {
-      "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/__pycache__/test_findings.cpython-311.pyc",
-      "sha256": "360d8c6f4bca74a3762a8905cf3504af50e817fe3f440ee865d24a4a77e3f43e"
-    },
-    {
       "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/bench_design_revision_existing.py",
       "sha256": "7f6dc578ce5555e639eee0aff49551f251c4e86c3096b233356fcdc1985268b0"
     },
@@ -51,5 +47,5 @@
       "sha256": "e624c0aa686d6f618e158da907678cf5d4934be2b7da0d7358588a74b36ae7ea"
     }
   ],
-  "suite_sha256": "505e82670e86c0a7e4d05ba96411d63345a7473654f22c763c9c34f6579fd045"
+  "suite_sha256": "a1d75ec6db8aa5c53841b5a5ee2ccf3e0951e5e0aefae77b92a40e397a0ed833"
 }
