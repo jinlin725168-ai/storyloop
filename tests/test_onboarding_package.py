@@ -1,11 +1,13 @@
 """Offline wheel/isolated installation check; uses only the already-installed build backend."""
 import importlib.util
+from importlib.metadata import version
 import json
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 
 from tests.onboarding_support import repository
@@ -17,6 +19,9 @@ class OnboardingPackageTests(unittest.TestCase):
         if importlib.util.find_spec("setuptools") is None:
             self.skipTest("build backend is not installed; no network installation performed")
         source = Path(__file__).resolve().parents[1]
+        required = tomllib.loads((source / "pyproject.toml").read_text(encoding="utf-8"))["build-system"]["requires"]
+        self.assertIn(f"setuptools=={version('setuptools')}", required,
+                      "The offline wheel test needs the build backend pinned by pyproject.toml")
         with tempfile.TemporaryDirectory(prefix="installed 引擎 ") as folder:
             base = Path(folder)
             build, wheels, installed = base / "source", base / "wheels", base / "installed"

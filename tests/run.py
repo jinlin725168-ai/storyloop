@@ -71,8 +71,8 @@ def _run_suite(args, names: list[str]) -> int:
             print(f"{'ok  ' if result['ok'] else 'FAIL'} {result['seconds']:7.1f}s  {result['module']}", flush=True)
             if not result["ok"]:
                 failed.append(result)
-    for result in failed:
-        print(f"\n===== {result['module']} =====\n{result['output']}", flush=True)
+                # Preserve the failure detail even when a later module reaches the job deadline.
+                print(f"\n===== {result['module']} =====\n{result['output']}", flush=True)
     status = f"失败 {len(failed)} 个模块" if failed else "全部通过"
     print(f"\n{args.suite}: {len(names)} 个模块，{total} 个测试，跳过 {skipped} 个，{status}，"
           f"用时 {time.monotonic() - started:.0f}s（{args.workers} 路并行）")
