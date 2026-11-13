@@ -1,10 +1,12 @@
 """Failed attempts go to whoever has to fix them (subproject 2a §3)."""
 
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 import hashlib
 import json
 import shlex
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -85,16 +87,22 @@ class EvidenceLocationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             repository(root)
-            outside = root.parent / f"{root.name}-outside.py"
-            outside.write_text("one\ntwo\n", encoding="utf-8")
+            outside = root.parent / f"{root.name}-outside"
+            outside.mkdir()
+            (outside / "secret.py").write_text("one\ntwo\n", encoding="utf-8")
             try:
-                (root / "linked.py").symlink_to(outside)
-                self.assertFalse(evidence_location_exists(root, "linked.py:1", None))
+                link = root / "linked"
+                if os.name == "nt":
+                    subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(outside)],
+                                   check=True, capture_output=True)
+                else:
+                    link.symlink_to(outside, target_is_directory=True)
+                self.assertFalse(evidence_location_exists(root, "linked/secret.py:1", None))
                 (root / "plain.py").write_text("one\n", encoding="utf-8")
                 self.assertTrue(evidence_location_exists(root, "plain.py:1", None))
                 self.assertFalse(evidence_location_exists(root, "plain.py:2", None))
             finally:
-                outside.unlink(missing_ok=True)
+                shutil.rmtree(outside)
 
     def test_contract_commit_location_rejects_a_symlink_object(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -103,8 +111,10 @@ class EvidenceLocationTests(unittest.TestCase):
             (root / "target.py").write_text("one\n", encoding="utf-8")
             (root / "folder").mkdir()
             (root / "folder/inside.py").write_text("one\n", encoding="utf-8")
-            (root / "linked.py").symlink_to("target.py")
-            git(root, "add", "target.py", "linked.py", "folder/inside.py")
+            (root / "linked.py").write_text("target.py", encoding="utf-8")
+            blob = git(root, "hash-object", "-w", "linked.py")
+            git(root, "add", "target.py", "folder/inside.py")
+            git(root, "update-index", "--add", "--cacheinfo", f"120000,{blob},linked.py")
             git(root, "commit", "-m", "evidence")
             commit = git(root, "rev-parse", "HEAD")
             (root / "linked.py").unlink()
@@ -119,7 +129,9 @@ class ReviewRoutingTests(unittest.TestCase):
             root = Path(folder) / "project with space"
             root.mkdir()
             repository(root)
-            listed = ["ordinary.py", "[ab].py", ":(exclude)other.py"]
+            listed = ["ordinary.py", "[ab].py"]
+            if os.name != "nt":
+                listed.append(":(exclude)other.py")
             (root / "unlisted.py").write_text("original", encoding="utf-8")
             git(root, "add", "unlisted.py")
             git(root, "commit", "-m", "tracked unlisted file")
@@ -131,9 +143,10 @@ class ReviewRoutingTests(unittest.TestCase):
                 "source_branch": "main", "feature_branch": "feature/one",
             })
             command = hint.split("先用 ", 1)[1].split(" 保存遗留", 1)[0]
-            self.assertEqual(shlex.split(command)[:7], [
-                "git", "-C", str(root), "--literal-pathspecs", "stash", "push", "-u"])
-            subprocess.run(command, cwd=folder, shell=True, check=True, capture_output=True, text=True)
+            tokens = shlex.split(command)
+            self.assertEqual(tokens[:7], [
+                "git", "-C", str(root.resolve()), "--literal-pathspecs", "stash", "push", "-u"])
+            subprocess.run(tokens, cwd=folder, check=True, capture_output=True, text=True)
             stashed = set(git(root, "stash", "show", "-u", "--name-only", "stash@{0}").splitlines())
             self.assertEqual(stashed, set(listed))
             for name in ("a.py", "other.py", "unlisted.py"):
@@ -141,20 +154,22 @@ class ReviewRoutingTests(unittest.TestCase):
             self.assertEqual((root / "unlisted.py").read_text(encoding="utf-8"), "modified")
             for name in listed:
                 self.assertFalse((root / name).exists(), name)
-            self.assertIn(f"git -C {shlex.quote(str(root))} status --short", hint)
-            self.assertIn(f"git -C {shlex.quote(str(root))} switch main", hint)
-            self.assertIn(f"git -C {shlex.quote(str(root))} switch feature/one", hint)
+            git_at = shlex.join(["git", "-C", str(root.resolve())])
+            self.assertIn(f"{git_at} status --short", hint)
+            self.assertIn(f"{git_at} switch main", hint)
+            self.assertIn(f"{git_at} switch feature/one", hint)
 
     def test_linked_base_hint_without_legacy_paths_keeps_original_wording(self):
+        git_at = shlex.join(["git", "-C", str(Path("/p").resolve())])
         self.assertEqual(
             next_step("BASE_CHANGE_REQUIRED", "FEAT-1", "/p", {
                 "blocked_by": "BASE-1", "source_branch": "main",
                 "feature_branch": "feature/one",
             }),
-            "底座草案 BASE-1 已生成：git -C /p switch main；"
+            f"底座草案 BASE-1 已生成：{git_at} switch main；"
             "storyloop approve /p --change BASE-1；"
             "storyloop run /p --change BASE-1 --implementer human；"
-            "base 通过后 git -C /p switch feature/one，再 storyloop run /p "
+            f"base 通过后 {git_at} switch feature/one，再 storyloop run /p "
             "--change FEAT-1 自动合并并重证",
         )
 
@@ -292,8 +307,8 @@ class BoundaryAttributionTests(unittest.TestCase):
                     implement=implement, review=failing_review()))
                 self.assertEqual(result["status"], "BASE_CHANGE_REQUIRED")
                 self.assertEqual((root / name).read_bytes(), before)
-                proposal = json.loads(Path(result["base_proposal"]).read_text())
-                reference = json.loads((root / proposal["reference"]["path"]).read_text())
+                proposal = json.loads(Path(result["base_proposal"]).read_text(encoding="utf-8"))
+                reference = json.loads((root / proposal["reference"]["path"]).read_text(encoding="utf-8"))
                 entry = next(item for item in reference["changes"] if item["path"] == name)
                 self.assertFalse(entry["content_saved"])
                 self.assertEqual(entry["after_size"], len(after))
@@ -372,7 +387,8 @@ class BoundaryAttributionTests(unittest.TestCase):
             self.assertEqual(git(root, "stash", "list"), before_collision["stash"])
             self.assertEqual(load_run_state(root, change_id)["blocked_by"],
                              Path(result["base_proposal"]).stem)
-            self.assertIn(f"git -C {root} --literal-pathspecs stash push -u -- modules/orders/service.py",
+            git_at = shlex.join(["git", "-C", str(root.resolve())])
+            self.assertIn(f"{git_at} --literal-pathspecs stash push -u -- modules/orders/service.py",
                           result["next"])
             self.assertLess(result["next"].index("先 storyloop run"),
                             result["next"].index("取回或丢弃暂存"))
