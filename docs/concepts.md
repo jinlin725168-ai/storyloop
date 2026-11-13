@@ -38,6 +38,14 @@ StoryLoop 把三件事强制分开，用一个放在仓库外面的 Loop 串起�
 
 **行类型（row_type）**：验收条件按行类型组织：`positive`、`degradation`、`unknown_state`、`form_parity` 断言新的或改变的行为，实现前必须红；`regression`、`state_preservation`、`non_goal` 断言保持不变的行为，实现前必须已经绿。feature 和 fix 的七个行类型要么有条件，要么写明豁免理由。
 
+**验证入口（verification_entries）**：合同里每个故事声明的公共验证入口（`cli`、`stop_json`、`public_function` 等），写明调用定位 `locator`、可观察结果 `observable` 和选择理由，由人确认。每条自动验收条件用 `entry_ids` 绑定本故事的入口，批准时校验覆盖。验收用例分"准备 / 执行 / 观察"三段：准备可以直接构造仓库和状态，执行与观察必须经过声明入口；方案的 `entry_paths` 说明入口如何到达改动文件（保持性条件只需到达被观察的行为）。入口不够用时回到合同澄清，不在验收或实现阶段自造入口。
+
+**判据强度预审**：验收套件提交后、RED 证明前，review 角色以 oracle-strength 视角审一次：每个前置与分支是否都执行、断言是否比较完整可观察结果、有无超出合同的断言、夹具是否越权。MUST_FIX 自动退回 acceptance，DECISION_NEEDED 停给人，ADVISORY 只记录。
+
+**自动退回（例行）与非例行介入**：可确定性判定的验收缺陷（保持性条件实现前就失败、用例或清单越界、测试未经声明入口）和预审的 MUST_FIX，由引擎自动退回 acceptance 重写，与夹具自动修复共用 `acceptance_fixture_retry_limit`（默认 2），记为例行事件 `automatic=true`。只有需要人判断的停点（凭判断的判据质量、合同歧义、底座冲突等）才算非例行介入；评测门槛按非例行介入次数计。
+
+**已有测试受控更新（regression_updates）**：合同改变既有行为、旧快照或断言随之失效时，design 在方案里声明要改的已有测试文件并绑定验收条件；实现只能改声明过的已有测试，审查按条件逐处核对。实现阶段才发现的未声明冲突停到 `DESIGN_REVISION_REQUIRED` 并附冲突证据，replan 时补声明。
+
 **判据自证**：判据要证明自己真的运行过。引擎从测试工具的输出里统计执行数（unittest、pytest、Maven、Gradle、Jest、Vitest、Go，settings 可补自定义规则），实现前在旧代码上采一次基线；某层执行数为 0，或低于基线而合同的 `test_removals` 没有声明，判这一层失败。统计不出来的命令标"未能统计"，不设门。
 
 **验收条件的两种 kind**：`automated` 必须被变更验收套件的某个用例覆盖；`manual` 是机器判断不了的（体验、业务裁决），会让运行停在 `MANUAL_ACCEPTANCE_REQUIRED` 等人确认。
