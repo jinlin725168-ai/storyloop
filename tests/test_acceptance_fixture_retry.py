@@ -44,6 +44,20 @@ def precondition_error(change_id: str) -> dict:
     return payload
 
 
+def precondition_marker_error(change_id: str) -> dict:
+    """Exercise RED's public marker protocol without depending on an installed package."""
+    payload = smoke_payload(change_id)
+    payload["files"][0]["content"] = (
+        "import sys, unittest\n"
+        "class Case(unittest.TestCase):\n"
+        "    def test_fixture(self):\n"
+        "        print('STORYLOOP_PRECONDITION_FAILED: missing fixture', file=sys.stderr)\n"
+        "        raise RuntimeError('missing fixture')\n"
+        "unittest.main()\n"
+    )
+    return payload
+
+
 class AcceptanceFixtureRetryTests(unittest.TestCase):
     def approved(self, root: Path, overrides: dict | None = None,
                  contract: dict | None = None) -> str:
@@ -218,7 +232,7 @@ class AcceptanceFixtureRetryTests(unittest.TestCase):
 
             def generate(project, request):
                 calls.append(request)
-                return precondition_error(change_id) if len(calls) == 1 else smoke_payload(change_id)
+                return precondition_marker_error(change_id) if len(calls) == 1 else smoke_payload(change_id)
 
             result = run_change(root, change_id, services(change_id, generate))
             self.assertEqual(result["status"], "PASSED", result)

@@ -285,7 +285,8 @@ Path(sys.argv[2]).write_text(json.dumps({'status': 'PASSED', 'engine_import': OR
                 "--base-engine-commit", "a" * 40, "--engine-repository", str(repository),
                 "--engine-python", sys.executable,
                 "--repository", f"fixture={repository}", "--cases-root", str(source.parent.parent),
-                "--i-accept-cost"], input="", capture_output=True, text=True)
+                "--i-accept-cost"], input="", capture_output=True, text=True,
+                encoding="utf-8", errors="replace")
             self.assertEqual(result.returncode, 2)
             self.assertIn("--yes", result.stderr)
             self.assertIn("2 次", result.stderr)
@@ -301,7 +302,8 @@ Path(sys.argv[2]).write_text(json.dumps({'status': 'PASSED', 'engine_import': OR
                 "--base-engine-commit", "a" * 40, "--engine-repository", str(repository),
                 "--engine-python", sys.executable,
                 "--repository", f"fixture={repository}", "--cases-root", str(source.parent.parent)],
-                input="", capture_output=True, text=True)
+                input="", capture_output=True, text=True,
+                encoding="utf-8", errors="replace")
             self.assertEqual(result.returncode, 2)
             self.assertIn("真实评测默认关闭", result.stderr)
             self.assertIn("2 次，约 1.3～2.2 小时", result.stderr)

@@ -73,12 +73,13 @@ def calibrate_case(source: Path, repository: Path, output_root: Path,
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     record = records / f"{manifest['case_id']}-v{manifest['case_version']}-{stamp}.json"
     result["record_path"] = str(record)
-    record.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
+    record.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return result
 
 
 def _snapshot(repository: Path, commit: str, destination: Path) -> None:
     destination.mkdir(parents=True)
+    snapshot_root = destination.resolve()
     with tempfile.TemporaryFile() as archive:
         completed = subprocess.run(["git", "archive", "--format=tar", commit], cwd=repository,
                                    stdout=archive, stderr=subprocess.PIPE, check=False)
@@ -92,7 +93,7 @@ def _snapshot(repository: Path, commit: str, destination: Path) -> None:
                 require(member.isdir() or member.isfile(),
                         "Source archive contains a link or special file")
                 target = destination.joinpath(*relative.parts)
-                require(target.resolve().is_relative_to(destination), "Source archive escapes snapshot")
+                require(target.resolve().is_relative_to(snapshot_root), "Source archive escapes snapshot")
                 if member.isdir():
                     target.mkdir(parents=True, exist_ok=True)
                 else:
@@ -102,10 +103,11 @@ def _snapshot(repository: Path, commit: str, destination: Path) -> None:
 
 
 def _overlay(case: dict, destination: Path) -> None:
+    snapshot_root = destination.resolve()
     for item in case["manifest"]["suite_files"]:
         relative = PurePosixPath(item["path"])
         target = destination.joinpath(*relative.parts[1:])
-        require(target.resolve().is_relative_to(destination), "Suite overlay escapes snapshot")
+        require(target.resolve().is_relative_to(snapshot_root), "Suite overlay escapes snapshot")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes((case["source"] / item["path"]).read_bytes())
 

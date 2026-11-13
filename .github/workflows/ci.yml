@@ -76,7 +76,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       SUITE: ${{ github.event_name == 'schedule' && 'full' || github.event_name == 'workflow_dispatch' && inputs.suite || github.event_name == 'pull_request' && matrix.os == 'windows-latest' && 'platform' || 'core' }}
-    timeout-minutes: 90
+    # Windows full takes longer than 90 minutes (204/210 modules had finished at cancellation).
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'full')) && 120 || 90 }}
     strategy:
       fail-fast: false
       matrix:
@@ -94,7 +95,11 @@ jobs:
       - name: 编译检查
         run: python -m compileall -q storyloop examples/claude-code
       - name: 安装（确认打包配置与技能包数据完整）
-        run: python -m pip install --quiet .
+        # The offline wheel test calls build_meta directly, so its ambient backend must
+        # match pyproject.toml instead of the runner image's older setuptools.
+        run: |
+          python -m pip install --quiet setuptools==84.0.0
+          python -m pip install --quiet .
       - name: 测试（${{ env.SUITE }}）
         run: python tests/run.py --suite ${{ env.SUITE }} --workers 4
 

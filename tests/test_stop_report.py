@@ -92,8 +92,9 @@ class StopReportTests(unittest.TestCase):
                    "source_branch": "main", "feature_branch": "feature/one"}
         stop = build_stop("/p", state, "BASE_CHANGE_REQUIRED", details)
         option = stop["options"][0]
+        git_at = shlex.join(["git", "-C", str(Path("/p").resolve())])
         self.assertEqual(option["command"], "storyloop approve /p --change BASE-1")
-        self.assertIn("git -C /p --literal-pathspecs stash push -u -- modules/orders/service.py", option["action"])
+        self.assertIn(f"{git_at} --literal-pathspecs stash push -u -- modules/orders/service.py", option["action"])
         self.assertEqual(option["action"], next_step("BASE_CHANGE_REQUIRED", "FEAT-1", "/p", details))
         self.assertLess(option["action"].index("先 storyloop run"),
                         option["action"].index("取回或丢弃暂存"))
@@ -117,10 +118,11 @@ class StopReportTests(unittest.TestCase):
         saved = deepcopy(run)
         shown = stop_of("/p", run)
         action = shown["options"][0]["action"]
-        self.assertIn("git -C /p --literal-pathspecs stash push -u -- '[ab].py'", action)
-        self.assertIn("git -C /p status --short", action)
-        self.assertIn("git -C /p switch main", action)
-        self.assertIn("git -C /p switch feature/one", action)
+        git_at = shlex.join(["git", "-C", str(Path("/p").resolve())])
+        self.assertIn(f"{git_at} --literal-pathspecs stash push -u -- '[ab].py'", action)
+        self.assertIn(f"{git_at} status --short", action)
+        self.assertIn(f"{git_at} switch main", action)
+        self.assertIn(f"{git_at} switch feature/one", action)
         self.assertEqual(run, saved)
         self.assertIsNot(shown, run["stop"])
 

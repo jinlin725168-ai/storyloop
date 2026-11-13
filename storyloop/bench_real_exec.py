@@ -133,7 +133,7 @@ def _worker(tree: Path, engine_tree: Path, case: dict, adapter: str, model: str,
               "suite_source": suite_source}
     request = tree.parent / "request.json"
     response = tree.parent / "response.json"
-    request.write_text(json.dumps(config, ensure_ascii=False))
+    request.write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
     script = Path(__file__).with_name("bench_worker.py")
     limit = budget.get("max_wall_seconds", 14_400)
     require(type(limit) is int and limit > 0, "Invalid wall time budget")
@@ -148,7 +148,7 @@ def _worker(tree: Path, engine_tree: Path, case: dict, adapter: str, model: str,
                 "calls": None, "agent_ms": None, "known_cost_usd": None, "cost_coverage": None}
     if not response.is_file():
         raise StoryLoopError(f"Bench engine worker failed (exit {completed['returncode']})")
-    outcome = json.loads(response.read_text())
+    outcome = json.loads(response.read_text(encoding="utf-8"))
     require(isinstance(outcome, dict), "Invalid bench worker response")
     outcome["engine_python"] = str(python.absolute())
     outcome["attempt_python"] = str(attempt_python.absolute())
@@ -167,7 +167,8 @@ def _attempt_python(engine_python: Path, tree: Path) -> tuple[Path, list[str]]:
     for site in set(attempt_paths):
         Path(site).joinpath("storyloop-bench-attempt.pth").write_text(
             "\n".join([*dict.fromkeys(engine_paths),
-                       f"import sys; sys.path.insert(0, {str(tree)!r})"]) + "\n")
+                       f"import sys; sys.path.insert(0, {str(tree)!r})"]) + "\n",
+            encoding="utf-8")
     for tool in engine_python.parent.iterdir():
         if not tool.is_file() or tool.name.lower().startswith(("python", "activate", "pip")):
             continue
@@ -215,7 +216,8 @@ def _copy_json_evidence(source_root: Path, source: Path, target_root: Path, targ
     require(destination.resolve().is_relative_to(target_root.resolve()),
             "Bench evidence target is outside output root")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(_redact_json(json.loads(original.read_text())), ensure_ascii=False))
+    destination.write_text(json.dumps(_redact_json(json.loads(original.read_text(encoding="utf-8"))),
+                                      ensure_ascii=False), encoding="utf-8")
 
 
 def _redact_json(value):
