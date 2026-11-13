@@ -71,6 +71,7 @@
 |  | `requirement_checklist` | 可变区 | 确定性检查需求质量 | `blocking_items`、`evaluate_checklist`、`render_checklist` |
 |  | `supersede` | 可变区 | 作废已停运行，以新变更 ID 重开修订合同 | `supersede_change` |
 | 判据 | `acceptance_repair` | 可变区 | 修复单次变更验收套件缺陷的唯一命令通道 | `repair_smoke` |
+|  | `oracle_strength_precheck` | 可变区 | RED 前复核新格式合同的验收判据强度 | `assess`、`stamp_red` |
 |  | `oracle_skill_approval` | 可变区 | 为修改验收判据技能提供显式 CLI 授权 | `confirmed_upgrade`、`require_confirmation` |
 |  | `system_smoke` | 可变区 | 管理每个变更必须保持通过的项目级系统冒烟层 | `adopt_system_smoke`、`apply_smoke_update`、`is_system_smoke_path`、`load_system_smoke`、`preflight_system_smoke`、`propose_smoke_update`、`run_system_smoke_isolated`、`system_smoke_digests`、`validate_manifest` |
 | 实现 | `characterization_baseline` | 可变区 | 在已提交旧代码及声明锁定产物上证明特征化判据 | `run_characterization_baseline` |

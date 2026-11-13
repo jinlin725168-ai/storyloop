@@ -196,6 +196,7 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 | `agent_command` | `[]` | `adapter` 为 `command` 时的 argv，支持 `{python}`、`{project}`；不能是 `.cmd/.bat/.ps1` |
 | `max_attempts` | `3` | 唯一的质量预算 |
 | `acceptance_fixture_retry_limit` | `2` | RED 中夹具/前提错误的自动验收修复次数；整数 0–5，0 表示关闭；用尽仍停 `ORACLE_DEFECT` |
+| `oracle_strength_precheck` | `true` | 新格式合同在 RED 前由 review 审查判据强度；standard/heavy 始终开启，light 可设为 `false`。MUST_FIX 使用上述同一自动修复预算。 |
 | `agent_timeout_seconds` | `14400` | 代理进程挂死保护 |
 | `check_timeout_seconds` | `300` | 单元、集成、静态检查与特征化回归的单条命令上限 |
 | `design_min_stories` | `2` | 故事数少于它时跳过 design；必须是 ≥1 的整数 |

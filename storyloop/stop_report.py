@@ -192,6 +192,11 @@ def _evidence(state: dict, details: dict) -> list[str]:
     violations = details.get("violations") or state.get("violations") or []
     evidence += [item.get("path", "") for item in violations if isinstance(item, dict)]
     acceptance = details.get("acceptance") or state.get("acceptance") or {}
+    precheck = acceptance.get("precheck") or {}
+    if precheck:
+        evidence.append("判据强度预审: " + redact(str(precheck.get("summary") or ""))[:500])
+        evidence.extend(redact(str(item.get("message") or ""))[:500]
+                        for item in precheck.get("findings") or [] if isinstance(item, dict))
     if acceptance.get("reason") == "HARNESS_SHADOWED":
         evidence += [f"HARNESS_SHADOWED: {str(path)[:300]}"
                      for path in (acceptance.get("files") or [])[:10]]
