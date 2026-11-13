@@ -1,6 +1,5 @@
 """Independent acceptance checks for linked base collision hints."""
 import json
-import os
 import shlex
 import subprocess
 import sys

@@ -28,11 +28,11 @@
   "suite_files": [
     {
       "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/bench_linked_base_existing_green.py",
-      "sha256": "ca967e039c18db076a6c5fe179553f6982408654504b58f33c4eb7a7408f3d87"
+      "sha256": "50bdbd8c387d2f000117dc036192db789c39a37126161efa011371df2d8bb628"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/bench_linked_base_paths_red.py",
-      "sha256": "16f09a9ff9f9ae514d55ab8da3508660ccbc5788e99f5175427b5527bf207872"
+      "sha256": "26e54ae03518a51dc576da80eabd9b1417357ff68f1f76107c498e5daf506a0f"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/manifest.json",
@@ -40,12 +40,12 @@
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/test_core.py",
-      "sha256": "3a54903c2ddc44e3a0b9271d35a9a07cd3d18a1838d6f07fd9d5c52fe9ff8a4a"
+      "sha256": "cdfa73ea1a491ef6088ab24b6900f5a84ed29b7202c82b8358af988b5316ad9c"
     },
     {
       "path": "checks/tests/test_failure_routing.py",
       "sha256": "1a9e21071d52afd0b427cedc5a3816dde543e58d5fe86c542fdb82860a83d385"
     }
   ],
-  "suite_sha256": "b1c718e37ede28b06200392cf7eda0bb1aecdd8ba0cbe861ac555cbcf31df789"
+  "suite_sha256": "6d284615d18ebdaa5859449e1681d3b679b4b3284d6a8f78ee815ab6bf4f8c25"
 }
