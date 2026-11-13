@@ -4,7 +4,6 @@ import ast
 import hashlib
 import json
 from pathlib import Path
-import subprocess
 import tempfile
 import unittest
 
@@ -21,12 +20,11 @@ CASES = Path(__file__).resolve().parents[1] / "bench/cases"
 
 class BenchV2DraftTests(unittest.TestCase):
     def test_frozen_case_bytes_are_not_rewritten_by_checkout(self):
-        source = CASES / "dogfood3-stash-git-safe/v2/case.json"
-        result = subprocess.run(
-            ["git", "check-attr", "text", "--", str(source)],
-            cwd=CASES.parents[1], capture_output=True, text=True, check=True,
-        )
-        self.assertIn("text: unset", result.stdout)
+        attributes = (CASES.parents[1] / ".gitattributes").read_text(encoding="utf-8")
+        rules = (line.split() for line in attributes.splitlines()
+                 if line.strip() and not line.lstrip().startswith("#"))
+        self.assertTrue(any(rule[0] == "bench/cases/**" and "-text" in rule[1:]
+                            for rule in rules), "bench Case bytes must be excluded from text conversion")
 
     def test_derived_cases_keep_source_interval_and_gold_commands(self):
         for original in sorted(CASES.glob("*/v1")):
