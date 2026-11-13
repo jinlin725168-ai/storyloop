@@ -50,12 +50,12 @@
     {
       "evidence_id": "derived-contract",
       "path": "contract.json",
-      "sha256": "09fc4cbb30565b1f672f9ccd880d319d3704b650086f2e0435353193b092d6fd"
+      "sha256": "0a4c6db41aab5f088f35270783cb4bab64e733180897c262476419e68f6dfaa6"
     },
     {
       "evidence_id": "frozen-suite",
       "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/manifest.json",
-      "sha256": "57ea276dbc733e116f3a7d59ece3493cd7dfd2ae67e4e2de4794b23f3dab20db"
+      "sha256": "aaf82d6fd3fea7aba8a7681a14d7fbc38c0909e09bbffe648d09c2f847020a4e"
     },
     {
       "evidence_id": "reference-test",
@@ -65,7 +65,7 @@
     {
       "evidence_id": "verification-entry-chain",
       "path": "verification-evidence.json",
-      "sha256": "277a8e480085a9cdab2393aa10482307c9919f6b4b93f4f0c1a3a7b0b8e5b439"
+      "sha256": "cb607d554cb79197092dce6ea120ec0b6b191678f60722a97b91d211c982aa9a"
     }
   ],
   "requirements": [

@@ -129,6 +129,7 @@ def _worker(tree: Path, engine_tree: Path, case: dict, adapter: str, model: str,
               "budget": budget, "agent_command": agent_command,
               "engine_sites": engine_sites,
               "case_version": case["manifest"]["case_version"],
+              "case_revision": case["manifest"].get("case_revision"),
               "suite_source": suite_source}
     request = tree.parent / "request.json"
     response = tree.parent / "response.json"

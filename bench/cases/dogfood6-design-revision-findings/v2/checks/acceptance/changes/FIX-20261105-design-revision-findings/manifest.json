@@ -12,7 +12,8 @@
         "AC-5"
       ],
       "entry_ids": [
-        "VE-DESIGN-STOP"
+        "VE-DESIGN-STOP",
+        "VE-LOG"
       ],
       "id": "design-revision-red",
       "tier": "fast",

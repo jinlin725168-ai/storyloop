@@ -4,7 +4,7 @@ from pathlib import Path
 import types
 
 SOURCE = 'test_core.py'
-SHA256 = '0eb7eeb245995ca10130c5397163e9cf6c1425bef1d71c6a2a831e1323f80e6d'
+SHA256 = 'cdfa73ea1a491ef6088ab24b6900f5a84ed29b7202c82b8358af988b5316ad9c'
 SELECTOR = 'ExistingBehavior'
 
 

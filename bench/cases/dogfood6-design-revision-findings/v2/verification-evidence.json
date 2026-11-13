@@ -58,5 +58,46 @@
       "design-revision-red",
       "design-revision-existing"
     ]
+  },
+  "VE-LOG": {
+    "chain": [
+      {
+        "line": 302,
+        "path": "storyloop/cli.py",
+        "quote": "return dispatch(project, args, run_with_answers, _draft_result, load_run_state)"
+      },
+      {
+        "line": 124,
+        "path": "storyloop/product_cli.py",
+        "quote": "if args.command == \"log\":"
+      },
+      {
+        "line": 19,
+        "path": "storyloop/change_log.py",
+        "quote": "def change_log(project: Path, change_id: str) -> dict:"
+      },
+      {
+        "line": 314,
+        "path": "storyloop/stop_report.py",
+        "quote": "def stop_of(project: Path | str, run: dict | None) -> dict | None:"
+      },
+      {
+        "line": 326,
+        "path": "storyloop/stop_report.py",
+        "quote": "if run[\"status\"] == \"DESIGN_REVISION_REQUIRED\" and \"review_findings\" not in saved:"
+      }
+    ],
+    "criterion_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-5"
+    ],
+    "gold_check_ids": [
+      "F2P-acceptance-1",
+      "F2P-reference"
+    ],
+    "manifest_test_ids": [
+      "design-revision-red"
+    ]
   }
 }

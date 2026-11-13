@@ -17,11 +17,8 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 
-from storyloop.change_log import change_log
-from storyloop.cli import parser
-from storyloop.product_cli import dispatch
+from storyloop.baseline import bootstrap_project
 from storyloop.run_hints import next_step
 from storyloop.run_stops import pause
 from storyloop.stop_report import stop_of
@@ -42,6 +39,14 @@ def commands(text):
     return [match.group() for match in re.finditer(
         r'git .*?(?= 保存| 检查|；|，|$)', text)]
 
+def public(command, root, change_id):
+    child = subprocess.run([sys.executable, '-m', 'storyloop', command, str(root),
+                            '--change', change_id, '--json'], cwd=Path.cwd(),
+                           capture_output=True, text=True, timeout=20)
+    if not child.stdout.strip():
+        raise RuntimeError(command + ' CLI failed: ' + child.stderr[-1000:])
+    return json.loads(child.stdout)
+
 with tempfile.TemporaryDirectory() as folder:
     root = Path(folder, 'project with space')
     root.mkdir()
@@ -49,6 +54,9 @@ with tempfile.TemporaryDirectory() as folder:
     git(root, 'config', 'user.name', 'Acceptance')
     git(root, 'config', 'user.email', 'acceptance@example.invalid')
     (root / '.gitignore').write_text('.storyloop/\n', encoding='utf-8')
+    git(root, 'add', '.gitignore')
+    git(root, 'commit', '-qm', 'base fixture')
+    bootstrap_project(root, {'test_commands': []})
     for name in all_paths:
         (root / name).write_text('before:' + name + '\n', encoding='utf-8')
     git(root, '--literal-pathspecs', 'add', '--', '.gitignore', *all_paths)
@@ -87,18 +95,20 @@ with tempfile.TemporaryDirectory() as folder:
             '用 git status --short 检查并另行保存其他改动；'
             'git switch main；base 通过后 git switch feature/FEAT-1')
         run_path.write_text(json.dumps(saved), encoding='utf-8')
+    report_path = root / 'reports/storyloop' / change_id / 'report.md'
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(stop_of(root, json.loads(run_path.read_text(encoding='utf-8'))
+                            )['options'][0]['action'], encoding='utf-8')
     saved_before = run_path.read_bytes().hex()
     work_before = git(root, 'status', '--porcelain', '--untracked-files=all')
     stash_before = git(root, 'stash', 'list')
-    status = dispatch(root, SimpleNamespace(command='status', change_id=change_id),
-                      None, lambda *_: {},
-                      lambda project, selected: json.loads(run_path.read_text(encoding='utf-8')))
-    log = change_log(root, change_id)
+    status = public('status', root, change_id)
+    log = public('log', root, change_id)
+    report = public('report', root, change_id)
     saved_after = run_path.read_bytes().hex()
     work_after = git(root, 'status', '--porcelain', '--untracked-files=all')
     stash_after = git(root, 'stash', 'list')
-    report_action = stop_of(root, json.loads(run_path.read_text(encoding='utf-8'))
-                            )['options'][0]['action']
+    report_action = Path(report['report']).read_text(encoding='utf-8')
     result = {'root': str(root), 'paths': paths, 'run_next': run['next'],
               'run_action': run['stop']['options'][0]['action'],
               'status_next': status['next'],

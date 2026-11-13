@@ -13,9 +13,10 @@
   },
   "base_commit": "535c5e95ff04ba4456b9646e664207db538e6280",
   "case_id": "dogfood3-stash-git-safe",
+  "case_revision": "2.1",
   "case_version": 2,
-  "contract_sha256": "37caf5ed7e4033c8b5da1a917866296c2fe79035bfa9503efe8e2c9e1b5172bc",
-  "gold_sha256": "cae54bcdfc1582f69400e3d74ac34db4b42cfb6ee2af158e3b40eefaf0e3b5be",
+  "contract_sha256": "e637407a67257017b65affcb4894638ca6271cce63798b02324502784ae31d43",
+  "gold_sha256": "04bbdd1865396d347e144f4b5d775289f752724af32eabf94ae21cfa4ac9427d",
   "legacy_seam": false,
   "python": {
     "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
@@ -27,40 +28,52 @@
   "suite_files": [
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_ac1_literal_stash.py",
-      "sha256": "30f3fc466dd4410c68ded9efe4ac2c936e02a605222843d65d4fb4690910441c"
+      "sha256": "3bb322aa57c563ac652e61a0a19493ec857474b4f58544459a069bf967d1a6cb"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_ac2_view_parity.py",
-      "sha256": "a2f6e43b57eac137f80373bf53ccf2c0e35424b59b1e9f34d4cc70064331d64e"
+      "sha256": "ad678a01d0725509bb7ec50e97cb0e126b7699fbdd7f423d28efb612354a1e61"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_ac3_no_legacy_paths.py",
-      "sha256": "a675058dca22779ae841b843061254dbd742df5992c82f1c522ad89056d88367"
+      "sha256": "f29a31c3fb0bc4bdd0598c7ca94ae47d1d5faf52bff3705273509617919934b7"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_ac4_approval_order.py",
-      "sha256": "d2f639302e0151bba5fe8b092984a45fb0c4c1c1d452b44eba95d6ca33439f0c"
+      "sha256": "64e05279f652b6ab1f56b2a5b632dba8d2a03579179a7d7cb49058615c770b2a"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_ac5_read_preserves_state.py",
-      "sha256": "aebe3731ef5c28d38d75e5209198b51129726a63f51c8a4cc6f588cffc4c6d91"
+      "sha256": "690141b5e79be58a95ef507be5334aef7306810b5c2b3b9bd7d1db15836147ba"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_ac6_no_automatic_stash.py",
-      "sha256": "ce34248c4230b1376e4bced97e41d755f701511ed858f8703cd91a51d8385882"
+      "sha256": "35f1ca7dd810e1bb381820fe9d8d8868699dab09df5280933c408c2186672785"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_public_green.py",
+      "sha256": "0788b8b573265c09e04f63c6041dd6df17ab9353093b721d4d5f7f39c1cfba57"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_public_red.py",
+      "sha256": "8bb1e8dce87549f4b5f4b8369cc98171dcd9ce389c7047deca6b8964816527f8"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/manifest.json",
-      "sha256": "f9aee5729f761624e45c680d4e69d2892482f0c7041b4353bd7aa8b031cc91b8"
+      "sha256": "91a49980154b502c7040b43175519fb8c6ed182d80e9241ec039b4dda3025284"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
-      "sha256": "459699ebaa52487c3f650372b54638f9f3a3f4883a9d83ae770b88a77c6bcf31"
+      "sha256": "ee398361f808c0eb347ca44e9a652ad0c4a2bbb30926be373fb291ce8f92aea9"
+    },
+    {
+      "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_public_run.py",
+      "sha256": "f5d49df9fb5edc717ce84251b7536d3f441f150b13d11d2a7b18deb8bd042059"
     },
     {
       "path": "checks/tests/test_failure_routing.py",
       "sha256": "578520460f2ca139c83818b6352c05eaad9e489677c81fbe8dc477921dcc12c9"
     }
   ],
-  "suite_sha256": "a19809213374dae67654eb32a52f643602af91bf98be212fa3562600638fd506"
+  "suite_sha256": "89d265c1c29feb9073541102ea4390294ad4ea85542c843ef72cb251163c1eac"
 }

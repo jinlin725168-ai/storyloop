@@ -4,7 +4,7 @@ from pathlib import Path
 import types
 
 SOURCE = 'test_core.py'
-SHA256 = '459699ebaa52487c3f650372b54638f9f3a3f4883a9d83ae770b88a77c6bcf31'
+SHA256 = 'ee398361f808c0eb347ca44e9a652ad0c4a2bbb30926be373fb291ce8f92aea9'
 SELECTOR = 'NewBehavior.test_ac1_stash_is_repo_bound_and_literal'
 
 

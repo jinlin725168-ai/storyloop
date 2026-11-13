@@ -1,10 +1,4 @@
 {
-  "approval": {
-    "approved_at": "2026-11-09",
-    "approved_by": "jinlin725168-ai",
-    "contract_sha256": "c4975748268866763a5ee49ba01201dc39d18c463af7d9fb7108d7a66a059c51",
-    "note": "人经监工确认的入口方案批准（含 stop_json locator 调整与 dogfood9 ST-2 改 CLI）"
-  },
   "change_id": "FIX-20261105-design-revision-findings",
   "product": {
     "assessment": {
@@ -470,6 +464,9 @@
               "run",
               "stop_report"
             ],
+            "entry_ids": [
+              "VE-DESIGN-STOP"
+            ],
             "given": "一致性审查包含两条阻塞方案意见",
             "id": "AC-1",
             "kind": "automated",
@@ -483,6 +480,10 @@
             "consumers": [
               "status",
               "log"
+            ],
+            "entry_ids": [
+              "VE-DESIGN-STOP",
+              "VE-LOG"
             ],
             "given": "同一 DESIGN_REVISION_REQUIRED 停点已经保存",
             "id": "AC-2",
@@ -499,6 +500,9 @@
               "log",
               "stop_report"
             ],
+            "entry_ids": [
+              "VE-DESIGN-STOP"
+            ],
             "given": "已保存的审查结果同时包含阻塞与非阻塞意见",
             "id": "AC-3",
             "kind": "automated",
@@ -511,6 +515,9 @@
           {
             "consumers": [
               "stop_report"
+            ],
+            "entry_ids": [
+              "VE-DESIGN-STOP"
             ],
             "given": "停点状态是 DESIGN_APPROVAL_REQUIRED 或 NO_PROGRESS",
             "id": "AC-4",
@@ -527,6 +534,9 @@
               "status",
               "log",
               "stop_report"
+            ],
+            "entry_ids": [
+              "VE-DESIGN-STOP"
             ],
             "given": "阻塞方案意见包含凭证形式文本、带用户信息的 URL 和超长内容",
             "id": "AC-5",
@@ -565,6 +575,13 @@
             "locator": "storyloop status <project> --change <id> --json 输出的 DESIGN_REVISION_REQUIRED 停点 JSON 中的 stop.review_findings",
             "observable": "停点 JSON 和文本包含有界且脱敏的阻断方案意见",
             "reason": "公开 status 命令经 product_cli.dispatch 与 stop_report.stop_of 暴露审查意见；用例实际直接调用 product_cli.dispatch，并构造 run 结果核对停点 JSON 与文本。"
+          },
+          {
+            "id": "VE-LOG",
+            "kind": "cli",
+            "locator": "storyloop log <project> --change <id> --json",
+            "observable": "日志中展示的 DESIGN_REVISION_REQUIRED 停点审查意见",
+            "reason": "公开日志视图；VE-RUN-STOP 实测会再次调用设计代理，故不可行"
           }
         ],
         "want": "在停点处直接看到每条安全、简短的阻塞意见"

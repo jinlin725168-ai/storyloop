@@ -5,6 +5,10 @@
 提交、合同及套件哈希。`--repository` 是本机只读来源仓库路径，不属于 Case 身份。
 v2 目录显式派生自 v1，合同包含 verification_entries，验收 manifest 的测试引用
 entry_ids。v2 草案可在批准前校准 Gold；`bench run` 仍要求 v2 合同批准。
+同一 v2 目录可声明 `case_revision: "2.1"`：Run 与报告保留该修订号，
+v2.1 要求每条自动 AC 的 `entry_ids` 覆盖本故事入口；原 v2 不追加此约束。
+不同修订的 Run 不可互比。合同内容变更后须重新取得绑定当前内容哈希的批准记录，
+再校准最终冻结字节。
 
 校准只执行确定性 Gold 检查，不调用代理：
 

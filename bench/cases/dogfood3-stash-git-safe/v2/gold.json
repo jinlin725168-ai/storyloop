@@ -70,18 +70,38 @@
       "check_id": "F2P-reference",
       "kind": "F2P",
       "timeout_seconds": 400
+    },
+    {
+      "argv": [
+        "{python}",
+        "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_public_run.py",
+        "PublicRunStop.test_repeat_base_stop_without_agent"
+      ],
+      "check_id": "P2P-public-run-stop",
+      "kind": "P2P",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "{python}",
+        "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_public_run.py",
+        "PublicRunStop.test_ac2_public_views"
+      ],
+      "check_id": "F2P-public-views",
+      "kind": "F2P",
+      "timeout_seconds": 120
     }
   ],
   "evidence": [
     {
       "evidence_id": "derived-contract",
       "path": "contract.json",
-      "sha256": "37caf5ed7e4033c8b5da1a917866296c2fe79035bfa9503efe8e2c9e1b5172bc"
+      "sha256": "e637407a67257017b65affcb4894638ca6271cce63798b02324502784ae31d43"
     },
     {
       "evidence_id": "frozen-suite",
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/manifest.json",
-      "sha256": "f9aee5729f761624e45c680d4e69d2892482f0c7041b4353bd7aa8b031cc91b8"
+      "sha256": "91a49980154b502c7040b43175519fb8c6ed182d80e9241ec039b4dda3025284"
     },
     {
       "evidence_id": "reference-test",
@@ -91,7 +111,7 @@
     {
       "evidence_id": "verification-entry-chain",
       "path": "verification-evidence.json",
-      "sha256": "5a68da5f55c94e98b9afe94197457900231e527d87810140c8abca8d5519fbc5"
+      "sha256": "b8fcfee594bb6111d1faca9c83802fb21c4df5097334076e7e2e51bfc5bc0995"
     }
   ],
   "requirements": [
@@ -110,7 +130,9 @@
     },
     {
       "check_ids": [
-        "F2P-acceptance-2"
+        "F2P-acceptance-2",
+        "P2P-public-run-stop",
+        "F2P-public-views"
       ],
       "evidence_ids": [
         "derived-contract",
@@ -146,7 +168,8 @@
     },
     {
       "check_ids": [
-        "P2P-acceptance-5"
+        "P2P-acceptance-5",
+        "P2P-public-run-stop"
       ],
       "evidence_ids": [
         "derived-contract",

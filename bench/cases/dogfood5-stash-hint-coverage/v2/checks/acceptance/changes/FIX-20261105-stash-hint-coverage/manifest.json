@@ -11,7 +11,10 @@
         "AC-7"
       ],
       "entry_ids": [
-        "VE-BASE-STOP"
+        "VE-BASE-STOP",
+        "VE-RUN-STOP",
+        "VE-LOG",
+        "VE-REPORT"
       ],
       "id": "linked-base-paths-red",
       "tier": "heavy",
@@ -31,7 +34,10 @@
         "AC-6"
       ],
       "entry_ids": [
-        "VE-BASE-STOP"
+        "VE-BASE-STOP",
+        "VE-RUN-STOP",
+        "VE-LOG",
+        "VE-REPORT"
       ],
       "id": "linked-base-existing-green",
       "tier": "fast",

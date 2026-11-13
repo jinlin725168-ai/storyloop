@@ -61,6 +61,7 @@ def v2_case_fixture(source: Path, *, approved: bool = False) -> Path:
     contract["product"]["stories"][0]["verification_entries"] = [
         {"id": "VE-1", "kind": "public_function", "locator": "feature.value",
          "observable": "The value is 2", "reason": "Deterministic public seam"}]
+    contract["product"]["stories"][0]["acceptance"][0]["entry_ids"] = ["VE-1"]
     if approved:
         contract["approval"]["contract_digest"] = contract_digest(contract["product"])
         contract["approval"]["contract_sha256"] = contract_digest(contract["product"])
