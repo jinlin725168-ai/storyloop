@@ -19,6 +19,10 @@ on:
         type: choice
         options: [full, core]
         default: full
+      modules:
+        description: 临时诊断模块（逗号分隔）
+        type: string
+        default: ""
 
 # PR 上新推送会取消旧运行；main 与手动触发按提交分组，每次都跑完，留下完整记录。
 # （同一组最多保留一个排队中的运行，按分支分组会让新合并挤掉排队中的旧合并。）
@@ -95,7 +99,26 @@ jobs:
         run: python -m compileall -q storyloop examples/claude-code
       - name: 安装（确认打包配置与技能包数据完整）
         run: python -m pip install --quiet .
+      - name: 指定模块诊断
+        if: github.event_name == 'workflow_dispatch' && inputs.modules != ''
+        shell: bash
+        env:
+          TEST_MODULES: ${{ inputs.modules }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          import sys
+          import unittest
+          names = os.environ['TEST_MODULES'].split(',')
+          if not all(re.fullmatch(r'tests\.test_[A-Za-z0-9_]+', name) for name in names):
+              raise SystemExit('Invalid module name')
+          suite = unittest.defaultTestLoader.loadTestsFromNames(names)
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          sys.exit(not result.wasSuccessful())
+          PY
       - name: 测试（${{ env.SUITE }}）
+        if: github.event_name != 'workflow_dispatch' || inputs.modules == ''
         run: python tests/run.py --suite ${{ env.SUITE }} --workers 4
 
   lint:
