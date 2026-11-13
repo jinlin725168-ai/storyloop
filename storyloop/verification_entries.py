@@ -8,6 +8,7 @@ from .models import StoryLoopError, fields, identifier, require, text
 from .path_security import repository_relative
 from .processutil import redact
 from .smoke import suite_root
+from .state_format import criterion_expects_red
 
 
 def new_format(product: dict) -> bool:
@@ -18,6 +19,24 @@ def new_format(product: dict) -> bool:
 def entry_owners(product: dict) -> dict[str, str]:
     return {entry["id"]: story["id"] for story in product["stories"]
             for entry in story.get("verification_entries", [])}
+
+
+def validate_criterion_entry_ids(product: dict) -> None:
+    """Bind every automatic AC to an approved entry of its own story before approval."""
+    if not new_format(product):
+        return
+    for story in product["stories"]:
+        owned = {entry["id"] for entry in story["verification_entries"]}
+        for criterion in story["acceptance"]:
+            if criterion["kind"] != "automated":
+                continue
+            entry_ids = criterion.get("entry_ids")
+            require(isinstance(entry_ids, list) and bool(entry_ids)
+                    and all(isinstance(item, str) for item in entry_ids)
+                    and len(entry_ids) == len(set(entry_ids)),
+                    f"Automatic AC {criterion['id']} needs nonempty unique entry_ids")
+            require(set(entry_ids) <= owned,
+                    f"Automatic AC {criterion['id']} entry_ids must belong to the same story")
 
 
 def check_entry_use(project: Path, change: dict, manifest: dict) -> None:
@@ -192,10 +211,13 @@ def validate_entry_paths(option: dict, product: dict, manifest: dict) -> None:
     owners = entry_owners(product)
     criterion_stories = {criterion["id"]: story["id"] for story in product["stories"]
                          for criterion in story["acceptance"] if criterion["kind"] == "automated"}
+    red_criteria = {criterion["id"] for story in product["stories"]
+                    for criterion in story["acceptance"] if criterion["kind"] == "automated"
+                    and criterion_expects_red(criterion)}
     paths = set(option["touched"] + option["creates"])
     rows = option.get("entry_paths")
     require(isinstance(rows, list) and bool(rows), "Selected option needs entry_paths")
-    covered = set()
+    covered, changed_coverage = set(), set()
     for row in rows:
         fields(row, {"entry_id", "criterion_ids", "path", "via"})
         entry_id = identifier(row["entry_id"], "entry path id")
@@ -207,9 +229,11 @@ def validate_entry_paths(option: dict, product: dict, manifest: dict) -> None:
         for criterion_id in criteria:
             require(criterion_id in criterion_stories and criterion_stories[criterion_id] == owners[entry_id],
                     "Plan entry_paths references a cross-story or manual criterion")
-            covered.add((criterion_id, entry_id))
         path = repository_relative(row["path"], "entry path")
-        require(path in paths, "Plan entry path is outside touched/creates")
+        for criterion_id in criteria:
+            covered.add((criterion_id, entry_id))
+            if path in paths:
+                changed_coverage.add((criterion_id, entry_id))
         text(row["via"], "entry path via")
     required = set()
     for test in manifest["tests"]:
@@ -220,3 +244,5 @@ def validate_entry_paths(option: dict, product: dict, manifest: dict) -> None:
                 if owners[entry_id] == criterion_stories[criterion_id]:
                     required.add((criterion_id, entry_id))
     require(required <= covered, "Plan entry_paths does not cover every oracle-used entry and AC")
+    require({pair for pair in required if pair[0] in red_criteria} <= changed_coverage,
+            "Expect-red entry_paths must reach a touched/creates file")

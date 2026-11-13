@@ -33,6 +33,9 @@ class ProductCliTests(unittest.TestCase):
             approved_product["stories"][0]["verification_entries"] = [{
                 "id": "VE-BOOK", "kind": "http", "locator": "POST /bookings",
                 "observable": "booking response", "reason": "public endpoint"}]
+            for criterion in approved_product["stories"][0]["acceptance"]:
+                if criterion["kind"] == "automated":
+                    criterion["entry_ids"] = ["VE-BOOK"]
             with patch("storyloop.cli.invoke_project_agent", return_value=approved_product):
                 created = dispatch(args)
             self.assertEqual(created["status"], "DRAFT")

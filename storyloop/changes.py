@@ -23,6 +23,7 @@ def create_change(
     project: Path, idea: str, product: dict, now: Clock | None = None,
     supersedes: dict | None = None, slug: str | None = None,
     *, require_verification_entries: bool = False,
+    require_entry_coverage: bool | None = None,
 ) -> dict:
     """Create a local ignored draft from one short product idea."""
     project = Path(project).resolve()
@@ -52,6 +53,10 @@ def create_change(
     }
     if require_verification_entries:
         state["verification_entries_required"] = True
+    coverage_required = (require_verification_entries if require_entry_coverage is None
+                         else require_entry_coverage)
+    if coverage_required:
+        state["entry_coverage_required"] = True
     if supersedes is not None:
         state["supersedes"] = _supersedes(supersedes)
     from .intake import project_intake
@@ -74,7 +79,7 @@ def load_change(project: Path, change_id: str) -> dict:
     from .models import require
     optional = {"supersedes", "superseded_by", "routing_version", "intake",
                 "base_proposal_sha256", "blocked_by", "intervention_events",
-                "verification_entries_required"}
+                "verification_entries_required", "entry_coverage_required"}
     require(required <= set(value) <= required | optional and value["version"] == 1,
             "Invalid change state")
     require(value["change_id"] == change_id, "Change state identity mismatch")
@@ -82,6 +87,8 @@ def load_change(project: Path, change_id: str) -> dict:
         require(isinstance(value["intervention_events"], list), "Invalid intervention events")
     if "verification_entries_required" in value:
         require(value["verification_entries_required"] is True, "Invalid verification entry requirement")
+    if "entry_coverage_required" in value:
+        require(value["entry_coverage_required"] is True, "Invalid entry coverage requirement")
     if "base_proposal_sha256" in value:
         require(nature_of(value["product"]) == "base"
                 and isinstance(value["base_proposal_sha256"], str)

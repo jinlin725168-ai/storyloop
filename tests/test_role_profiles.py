@@ -6,6 +6,13 @@ from storyloop.role_instructions import INSTRUCTIONS
 
 
 class RoleProfileTests(unittest.TestCase):
+    def test_product_and_design_bind_observation_to_ac_before_planning(self):
+        self.assertIn('entry_ids', INSTRUCTIONS['product'])
+        prompt = INSTRUCTIONS['design']
+        for phrase in ('must-hold', 'expect-red', 'missing AC', 'observable',
+                       'suggested entry'):
+            self.assertIn(phrase, prompt)
+
     def test_design_lists_existing_assertions_and_snapshots_of_changed_behavior(self):
         prompt = INSTRUCTIONS['design']
         for phrase in ('test_roots', 'fixtures', 'assertions', 'golden', 'snapshot',
