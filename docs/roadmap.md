@@ -1,6 +1,6 @@
 # 路线图
 
-更新：2026-11-13（以 `origin/main` `416b13e` 为准）。历史计划在 `docs/plans/`，当前演进计划在 `docs/superpowers/`。
+更新：2026-11-13（以 `origin/main` `769bfc0` 为准）。历史计划在 `docs/plans/`，当前演进计划在 `docs/superpowers/`。
 
 ## 已完成
 
@@ -34,7 +34,7 @@
 - **设计已批准**：[链路骨架](superpowers/specs/2026-10-23-链路骨架-design.md)（PR #30）、需求共创技能（PR #32）。
 - **链路骨架 ①（[计划 PR #33](https://github.com/jinlin725168-ai/storyloop/pull/33)、[实现 PR #37](https://github.com/jinlin725168-ai/storyloop/pull/37)）**：功能短名 ID、调用执行画像和批准时版本快照已合入；旧序号 ID 继续有效。见[第 1 批计划](superpowers/plans/2026-10-24-链路骨架-第1批.md)。
 - **spec-craft 第 1 批（[PR #34](https://github.com/jinlin725168-ai/storyloop/pull/34)、[设计修正 PR #35](https://github.com/jinlin725168-ai/storyloop/pull/35)）**：对话入口技能已安装验证，反例与行类型按旧代码红绿分别判定；[一次真实模型试用](validation/2026-10-24-spec-craft-第1批试用.md)只验证了提问与草稿，临时样本在 readiness 门停下，未验证正式合同或真实产品判断。
-- **CI 调整（[PR #36](https://github.com/jinlin725168-ai/storyloop/pull/36)、[PR #39](https://github.com/jinlin725168-ai/storyloop/pull/39)）**：只改中文文件名文档时正确跳过测试；PR 的 Linux 跑 core、Windows 跑 platform，main 推送两平台仍跑 core；加入仅检查 F/E9 的 ruff 与 CodeQL。
+- **CI 调整（[PR #36](https://github.com/jinlin725168-ai/storyloop/pull/36)、[PR #39](https://github.com/jinlin725168-ai/storyloop/pull/39)）**：只改中文文件名文档时正确跳过测试；main 推送两平台跑 core；加入仅检查 F/E9 的 ruff 与 CodeQL。PR 上 Windows 改跑 core 见本次 CI 修复。
 - **spec-craft 第 2 批（[计划 PR #41](https://github.com/jinlin725168-ai/storyloop/pull/41)、[实现 PR #42](https://github.com/jinlin725168-ai/storyloop/pull/42)）**：团队/个人定制、受保护路径与控制面视图已合入；[一次真实试用](validation/2026-10-24-spec-craft-第2批试用.md)发现行类型、表外假设和问句计数问题。**[PR #44](https://github.com/jinlin725168-ai/storyloop/pull/44)** 已修订技能和测试，未重跑真实试用，不能据此宣称实际模型输出已验证。
 - **架构收敛 E1（[计划 PR #38](https://github.com/jinlin725168-ai/storyloop/pull/38)、[评审修订 PR #40](https://github.com/jinlin725168-ai/storyloop/pull/40)、[实现 PR #43](https://github.com/jinlin725168-ai/storyloop/pull/43)）**：base 合同、旧底座绿证据、人工实现与具名人审、回归验收和幂等版本推进已交付并在独立样本实跑，见[验证记录](validation/2026-10-24-架构收敛-阶段E1-验证.md)。评审中人决定：旧项目使用人工确认的补充配置声明构建命令；合并前中断一律作废本次尝试、保留人的候选后重验。E1 不含代理实现、跨厂商审查或判据注入跑红，也未完成 I13。
 - **架构收敛 E2a：已取消并移除代码（[计划 PR #46](https://github.com/jinlin725168-ai/storyloop/pull/46)、[实现 PR #47](https://github.com/jinlin725168-ai/storyloop/pull/47)、[移除 PR #59](https://github.com/jinlin725168-ai/storyloop/pull/59)）**：曾以预览交付代理实现、跨厂商审查，并有[一次真实试用](validation/2026-10-27-E2a-真实试用.md)走通；试用发现 6 个问题。2026-10-29 的[决策 0018](decisions/0018-base-human-only.md)改为 base 只由人实现；E2b [PR #57](https://github.com/jinlin725168-ai/storyloop/pull/57) 已关闭。
@@ -62,8 +62,8 @@
 
 ## 已知问题
 
-- **main 推送 CI 长期为红**：PR 阶段 Windows 只跑 `platform` 子集，main 推送才在 Windows 跑 core、定时任务跑 full，因此自 #119 前起 main 每次推送都失败而未被发现（Windows 路径短名/引号、bench 路径判定、`test_late_characterization`）。修复进行中（分支 `fix/main-ci`）；防复发方案由人决定。
-- 本机 WSL 上 `tests.test_acceptance_fixture_retry.test_approve_repairs_precondition_failure` 稳定失败（CI ubuntu 通过），根因在 `fix/main-ci` 中排查；查清前不跑门槛 4。
+- **main 推送 CI 长期为红（已修复）**：[#131](https://github.com/jinlin725168-ai/storyloop/pull/131) 修复 Windows 路径、编码与测试夹具等根因，main 推送 CI 已全绿；PR 上 Windows 也改跑 `core`，防止同类失败到 main 才暴露。
+- 本机 WSL 的 `tests.test_acceptance_fixture_retry.test_approve_repairs_precondition_failure` 环境依赖已由 [#131](https://github.com/jinlin725168-ai/storyloop/pull/131) 修复。
 - 此前偶发 Git 可见性保护错误仍待捕获具体触发路径，诊断已增强，保护规则未放宽。I13 声明仍为 `pending`；E3 试用的限制见[验证记录](validation/2026-10-28-架构收敛E3-真实试用.md)。
 
 新发现的代码与文档不一致记在这里，修复后移到"已完成"。
@@ -72,7 +72,7 @@
 
 路线仍按 2026-11-08 批准的 **①a → ①b → ①c → 门 → ② → ③**；①a～①c 已交付，当前停在**门**。依据是 [HelixHarness 调研](research/2026-11-08-HelixHarness调研.md)（[上游源码](https://github.com/didi/helixharness)，借鉴点与落地见[研究来源](references.md#helixharness2026-11-08)）与[验证入口及评测底座设计](superpowers/specs/2026-11-08-验证入口与评测底座-design.md)。审查角色继续使用 Codex（[#65](https://github.com/jinlin725168-ai/storyloop/issues/65)）；base 人工通道不变（[决策 0018](decisions/0018-base-human-only.md)）。
 
-1. **修复 main CI**（进行中）：全部根因修复、Windows core 与 full 跑绿后再继续。
+1. **修复 main CI**（已完成）：[#131](https://github.com/jinlin725168-ai/storyloop/pull/131) 的 Windows core 与 full 已跑绿；PR 上 Windows core 纳入必过矩阵。
 2. **门槛 4**：引擎含 #123/#124，Case 用 v2.1（已批准、已校准）。v2.1 基准与门槛 1～3 不可直接对比，报告单列。达标条件不变：5 Case 中至少 4 个两次均 `PASSED`（含 Gold 通过），每次非例行停点不超过 1；不可比较不算通过。模拟人的纠正理由固定、不读 Gold，结果比真实使用偏保守。
 3. **门槛未过时**：按停机证据归类，只修确定性可判定或有证据的根因；能确定性检测的验收缺陷进入自动退回（例行），只有凭判断的质量问题计非例行。每轮修复后再跑门槛，不在单个 Case 上调优。
 4. **② 扩面**（门槛通过后）：RuoYi 多故事功能变更、真实模型撞底座，并补 L3 真实项目观察。RuoYi 依赖的 Docker Desktop 本机故障，人已决定延后。
@@ -83,7 +83,7 @@ flowchart LR
     A["①a L1 分类 + L2 bench ✅"] --> B["①b 验证入口 + 审查收敛 ✅"]
     B --> C["①c 技能融合 + 知识增量 ✅"]
     C --> P["试跑 1～5 + 门槛 1～3<br/>修复 #114～#126 ✅"]
-    P --> CI["修复 main CI ⏳"]
+    P --> CI["修复 main CI ✅"]
     CI --> G{"门槛 4（Case v2.1）<br/>5 Case ≥4 两次 PASSED<br/>每次 ≤1 非例行停点"}
     G -->|未过| F["按证据修根因"] --> G
     G -->|通过| X["② RuoYi 多故事 + 真实模型 + L3"]

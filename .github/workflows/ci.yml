@@ -1,6 +1,6 @@
 name: CI
 
-# StoryLoop 引擎自己的 CI：Linux PR 跑 core，Windows PR 跑 platform；push 到 main 跑 core。
+# StoryLoop 引擎自己的 CI：PR 与 push 到 main 在 Linux、Windows 都跑 core。
 # 每天定时跑 full，手动触发按输入选择；套件由 tests/run.py 按测试项并行执行。
 # 测试同时检查字节码与打包；Python 统一用最低支持的 3.11。
 # 只改文档时跳过测试与 lint，密钥扫描照常运行；CodeQL 在独立工作流观察，不加入必过汇总。
@@ -75,7 +75,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     env:
-      SUITE: ${{ github.event_name == 'schedule' && 'full' || github.event_name == 'workflow_dispatch' && inputs.suite || github.event_name == 'pull_request' && matrix.os == 'windows-latest' && 'platform' || 'core' }}
+      SUITE: ${{ github.event_name == 'schedule' && 'full' || github.event_name == 'workflow_dispatch' && inputs.suite || 'core' }}
     # Windows full takes longer than 90 minutes (204/210 modules had finished at cancellation).
     timeout-minutes: ${{ matrix.os == 'windows-latest' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'full')) && 120 || 90 }}
     strategy:
