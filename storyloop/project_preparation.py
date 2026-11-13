@@ -22,6 +22,8 @@ from .smoke import (RED_EVIDENCE, install_smoke_suite, load_smoke_manifest, prot
 from .smoke_runner import run_commands_at_commit, run_smoke_isolated
 from .storage import load_json, write_bytes_atomic
 from .verification_entries import check_entry_use
+from .oracle_strength_precheck import assess as strength_assess, stamp_red
+from .baseline import load_project_config
 if TYPE_CHECKING:
     from .run_services import LoopServices
 
@@ -58,8 +60,20 @@ def _prepare_acceptance(
                       **_lesson_snapshot(project, contract_commit)})
         save_run(project, state)
     try:
+        precheck = strength_assess(project, change, state, services,
+                                   load_smoke_manifest(project, change), load_project_config(project))
+        if precheck is not None:
+            state["oracle_strength_precheck"] = precheck
+            save_run(project, state)
         red = _ensure_red_evidence(project, change, state["contract_commit"])
+        if precheck is not None:
+            red = stamp_red(project, change_id, precheck)
     except StoryLoopError as exc:
+        if exc.code == "NEEDS_INPUT" and exc.details.get("precheck"):
+            return pause(project, state, "NEEDS_INPUT", error=str(exc),
+                         acceptance={"status": "NEEDS_INPUT", **exc.details},
+                         questions=exc.details["precheck"].get("questions") or [],
+                         next=f"修订合同入口或判据后重新运行：storyloop run {shlex.quote(str(project))} --change {change_id}")
         if exc.code == "BLOCKED" and exc.details.get("results"):
             command = shlex.join(["storyloop", "run", str(project), "--change", change_id])
             return pause(project, state, "NEEDS_INPUT", error=str(exc),
