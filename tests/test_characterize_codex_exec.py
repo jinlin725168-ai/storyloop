@@ -30,9 +30,11 @@ class CodexExecCharacterization(unittest.TestCase):
                     "change_id": "FEAT-CHAR-1", "routing_tier": "light"})
 
             argv = fake.calls[0][0]
-            self.assertEqual(argv[:12], ["codex", "exec", "--sandbox", "workspace-write",
-                                          "-C", str(root), "--ignore-user-config", "--color",
-                                          "never", "--json", "-m", "mapped-standard"])
+            # Windows may spell the same temp directory with an 8.3 short name; compare identity.
+            self.assertEqual(argv[:5], ["codex", "exec", "--sandbox", "workspace-write", "-C"])
+            self.assertTrue(Path(argv[5]).samefile(root))
+            self.assertEqual(argv[6:12], ["--ignore-user-config", "--color", "never", "--json",
+                                          "-m", "mapped-standard"])
             self.assertIn("--output-schema", argv)
             self.assertIn("--output-last-message", argv)
             self.assertNotIn("resume", argv)
