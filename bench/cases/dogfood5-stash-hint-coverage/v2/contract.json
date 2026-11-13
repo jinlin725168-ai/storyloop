@@ -1,10 +1,4 @@
 {
-  "approval": {
-    "approved_at": "2026-11-09",
-    "approved_by": "jinlin725168-ai",
-    "contract_sha256": "24d48ba1c77738aa3a0fd7737ee00925a9733ab9c06ba859fedc6cc47720f503",
-    "note": "人经监工确认的入口方案批准（含 stop_json locator 调整与 dogfood9 ST-2 改 CLI）"
-  },
   "change_id": "FIX-20261105-stash-hint-coverage",
   "product": {
     "assessment": {
@@ -549,6 +543,9 @@
             "consumers": [
               "C-run"
             ],
+            "entry_ids": [
+              "VE-BASE-STOP"
+            ],
             "given": "项目仓库有列出的遗留文件，其中包含 [ab].py 和 :(exclude)other.py，另有未列出的已修改文件，当前目录在仓库外",
             "id": "AC-1",
             "kind": "automated",
@@ -565,6 +562,12 @@
               "C-log",
               "C-stop"
             ],
+            "entry_ids": [
+              "VE-BASE-STOP",
+              "VE-RUN-STOP",
+              "VE-LOG",
+              "VE-REPORT"
+            ],
             "given": "带前轮功能改动及 test_roots 测试改动的关联底座冲突已有运行结果及保存的停点报告",
             "id": "AC-2",
             "kind": "automated",
@@ -578,6 +581,9 @@
             "consumers": [
               "C-status"
             ],
+            "entry_ids": [
+              "VE-BASE-STOP"
+            ],
             "given": "底座冲突已关联草案且没有遗留文件",
             "id": "AC-3",
             "kind": "automated",
@@ -590,6 +596,9 @@
           {
             "consumers": [
               "C-stop"
+            ],
+            "entry_ids": [
+              "VE-BASE-STOP"
             ],
             "given": "底座冲突已关联草案和遗留文件",
             "id": "AC-4",
@@ -606,6 +615,12 @@
               "C-log",
               "C-stop"
             ],
+            "entry_ids": [
+              "VE-BASE-STOP",
+              "VE-RUN-STOP",
+              "VE-LOG",
+              "VE-REPORT"
+            ],
             "given": "底座冲突的运行状态和仓库状态已保存",
             "id": "AC-5",
             "kind": "automated",
@@ -620,6 +635,9 @@
               "C-run",
               "C-stop"
             ],
+            "entry_ids": [
+              "VE-BASE-STOP"
+            ],
             "given": "底座冲突发生前仓库没有新增 stash",
             "id": "AC-6",
             "kind": "automated",
@@ -633,6 +651,9 @@
             "consumers": [
               "C-run",
               "C-resume"
+            ],
+            "entry_ids": [
+              "VE-BASE-STOP"
             ],
             "given": "关联底座冲突停点存在前轮留下的功能文件改动、test_roots 下已修改的测试文件和已删除的已跟踪测试文件",
             "id": "AC-7",
@@ -672,6 +693,27 @@
             "locator": "storyloop status <project> --change <id> --json 输出的 BASE_CHANGE_REQUIRED 停点 JSON 中的 stop.options[].action",
             "observable": "关联底座停点的每个适用路径均提供同一仓库作用域的 git 提示",
             "reason": "公开 status 命令经 product_cli.dispatch 与 stop_report.stop_of 暴露失败路由；用例实际直接调用这两个公开函数，检查关联底座路径的停点提示。"
+          },
+          {
+            "id": "VE-RUN-STOP",
+            "kind": "cli",
+            "locator": "storyloop run <project> --change <id>（在已停的 BASE_CHANGE_REQUIRED 停点上再次执行）",
+            "observable": "原样返回 BASE_CHANGE_REQUIRED 停点与下一步提示，不调用代理",
+            "reason": "公开恢复命令的停点幂等行为"
+          },
+          {
+            "id": "VE-LOG",
+            "kind": "cli",
+            "locator": "storyloop log <project> --change <id> --json",
+            "observable": "日志中展示的停点动作",
+            "reason": "公开诊断日志的停点视图"
+          },
+          {
+            "id": "VE-REPORT",
+            "kind": "cli",
+            "locator": "storyloop report <project> --change <id>",
+            "observable": "定位到的报告文件中的停点提示",
+            "reason": "公开报告定位入口"
           }
         ],
         "want": "获得列全需保存功能与测试改动的遗留路径清单"

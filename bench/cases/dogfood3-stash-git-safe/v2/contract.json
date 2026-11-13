@@ -1,10 +1,4 @@
 {
-  "approval": {
-    "approved_at": "2026-11-09",
-    "approved_by": "jinlin725168-ai",
-    "contract_sha256": "9d8f1511a6361084db4fea49bf697f7d85d66cca8d739acb2c4342738025be79",
-    "note": "人经监工确认的入口方案批准（含 stop_json locator 调整与 dogfood9 ST-2 改 CLI）"
-  },
   "change_id": "FIX-20261104-stash-git-safe",
   "product": {
     "assessment": {
@@ -497,6 +491,9 @@
               "C1",
               "C4"
             ],
+            "entry_ids": [
+              "VE-BASE-STOP"
+            ],
             "given": "项目仓库有列出的遗留文件，其中包含 [ab].py 和 :(exclude)other.py，另有未列出的已修改文件，当前目录在仓库外",
             "id": "AC-1",
             "kind": "automated",
@@ -513,6 +510,12 @@
               "C3",
               "C4"
             ],
+            "entry_ids": [
+              "VE-BASE-STOP",
+              "VE-RUN-STOP",
+              "VE-LOG",
+              "VE-REPORT"
+            ],
             "given": "带遗留文件的底座冲突已有运行结果及保存的停点报告",
             "id": "AC-2",
             "kind": "automated",
@@ -528,6 +531,9 @@
               "C2",
               "C3"
             ],
+            "entry_ids": [
+              "VE-BASE-STOP"
+            ],
             "given": "底座冲突已关联草案且没有遗留文件",
             "id": "AC-3",
             "kind": "automated",
@@ -541,6 +547,9 @@
             "consumers": [
               "C1",
               "C4"
+            ],
+            "entry_ids": [
+              "VE-BASE-STOP"
             ],
             "given": "底座冲突已关联草案和遗留文件",
             "id": "AC-4",
@@ -557,6 +566,12 @@
               "C3",
               "C4"
             ],
+            "entry_ids": [
+              "VE-BASE-STOP",
+              "VE-RUN-STOP",
+              "VE-LOG",
+              "VE-REPORT"
+            ],
             "given": "底座冲突的运行状态和仓库状态已保存",
             "id": "AC-5",
             "kind": "automated",
@@ -570,6 +585,9 @@
             "consumers": [
               "C1",
               "C4"
+            ],
+            "entry_ids": [
+              "VE-BASE-STOP"
             ],
             "given": "底座冲突发生前仓库没有新增 stash",
             "id": "AC-6",
@@ -606,6 +624,27 @@
             "locator": "storyloop status <project> --change <id> --json 输出的 BASE_CHANGE_REQUIRED 停点 JSON 中的 stop.options[].action",
             "observable": "停点、保存状态与下一步提示展示限定在当前仓库的字面 git -C 命令及路径",
             "reason": "公开 status 命令经 product_cli.dispatch 与 stop_report.stop_of 生成停点；用例实际直接调用这两个公开函数，并核对 run/status/log 的停点动作。"
+          },
+          {
+            "id": "VE-RUN-STOP",
+            "kind": "cli",
+            "locator": "storyloop run <project> --change <id>（在已停的 BASE_CHANGE_REQUIRED 停点上再次执行）",
+            "observable": "原样返回 BASE_CHANGE_REQUIRED 停点与下一步提示，不调用代理",
+            "reason": "公开恢复命令的停点幂等行为"
+          },
+          {
+            "id": "VE-LOG",
+            "kind": "cli",
+            "locator": "storyloop log <project> --change <id> --json",
+            "observable": "日志中展示的停点动作",
+            "reason": "公开诊断日志的停点视图"
+          },
+          {
+            "id": "VE-REPORT",
+            "kind": "cli",
+            "locator": "storyloop report <project> --change <id>",
+            "observable": "定位到的报告文件中的停点提示",
+            "reason": "公开报告定位入口"
           }
         ],
         "want": "从任意目录安全地使用停点给出的 Git 命令"

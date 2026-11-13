@@ -31,7 +31,7 @@ def load_case(source: Path, *, allow_unapproved_v2: bool = False) -> dict:
     gold = _json(gold_bytes, "gold.json")
     approved, approval_stale = _contract(contract, manifest["case_version"], allow_unapproved_v2)
     if manifest["case_version"] == 2:
-        _v2_contract_and_suite(source, contract)
+        _v2_contract_and_suite(source, contract, manifest.get("case_revision"))
     suite_hash = hashlib.sha256()
     paths = []
     for item in manifest["suite_files"]:
@@ -56,10 +56,14 @@ def _manifest(value: dict, source: Path) -> None:
     fields = {"schema_version", "case_id", "case_version", "repository_id", "base_commit",
               "solution_commit", "contract_sha256", "suite_sha256", "gold_sha256",
               "suite_files", "allowed", "legacy_seam", "python"}
-    require(set(value) == fields, "case.json fields are missing or unknown")
+    require(set(value) in (fields, fields | {"case_revision"}),
+            "case.json fields are missing or unknown")
     require(value["schema_version"] == 1 and value["case_version"] in {1, 2},
             "Only v1/v2 Cases are supported")
     version = value["case_version"]
+    if "case_revision" in value:
+        require(version == 2 and value["case_revision"] == "2.1",
+                "Unsupported Case revision")
     require(isinstance(value["case_id"], str) and ID.fullmatch(value["case_id"])
             and source.parent.name == value["case_id"] and source.name == f"v{version}",
             "Invalid Case identity")
@@ -121,13 +125,16 @@ def _approval_matches(approval: object, expected: str, version: int) -> bool:
                if key in approval)
 
 
-def _v2_contract_and_suite(source: Path, contract: dict) -> None:
+def _v2_contract_and_suite(source: Path, contract: dict, revision: str | None = None) -> None:
     from .product_contract import validate_product
     from .smoke import _validate_manifest
 
     product = validate_product(contract["product"])
     require(all(story.get("verification_entries") for story in product["stories"]),
             "v2 Case requires story verification_entries")
+    if revision == "2.1":
+        from .verification_entries import validate_criterion_entry_ids
+        validate_criterion_entry_ids(product)
     change_id = identifier(contract["change_id"], "change id")
     path = f"checks/acceptance/changes/{change_id}/manifest.json"
     manifest = _json(_file(source, path), path)

@@ -1,10 +1,4 @@
 {
-  "approval": {
-    "approved_at": "2026-11-09",
-    "approved_by": "jinlin725168-ai",
-    "contract_sha256": "9cafe3db23ffae9f74e17057c3381df56a6cf8793c488ba5ff98a1658894b3df",
-    "note": "人经监工确认的入口方案批准（含 stop_json locator 调整与 dogfood9 ST-2 改 CLI）"
-  },
   "change_id": "FIX-20261107-scratch-glob",
   "product": {
     "assessment": {
@@ -556,6 +550,9 @@
               "C1",
               "C3"
             ],
+            "entry_ids": [
+              "VE-SCRATCH-GUARD"
+            ],
             "given": "项目声明 *.egg-info 为 scratch，项目根和嵌套目录均可生成被 Git 忽略的 egg-info 目录",
             "id": "AC-1",
             "kind": "automated",
@@ -569,6 +566,9 @@
             "consumers": [
               "C2",
               "C3"
+            ],
+            "entry_ids": [
+              "VE-SCRATCH-GUARD"
             ],
             "given": "项目声明 *.egg-info 为 scratch",
             "id": "AC-2",
@@ -584,6 +584,9 @@
               "C1",
               "C3"
             ],
+            "entry_ids": [
+              "VE-SCRATCH-GUARD"
+            ],
             "given": "项目已将精确名字 target 声明为 scratch",
             "id": "AC-3",
             "kind": "automated",
@@ -597,19 +600,25 @@
             "consumers": [
               "C1"
             ],
+            "entry_ids": [
+              "VE-SCRATCH-GUARD"
+            ],
             "given": "项目没有声明新生成的忽略产物",
             "id": "AC-4",
             "kind": "automated",
             "oracle_class": "auto-fast",
             "reproduces_defect": false,
             "row_type": "regression",
-            "then": "运行报告 WORKSPACE_TAINTED",
+            "then": "调用结果把该未声明产物保留在变更列表中，并报告 WORKSPACE_TAINTED",
             "when": "实现代理生成该产物"
           },
           {
             "consumers": [
               "C2",
               "C3"
+            ],
+            "entry_ids": [
+              "VE-SCRATCH-GUARD"
             ],
             "given": "scratch 配置可匹配 .storyloop/ 内的路径名",
             "id": "AC-5",
@@ -624,6 +633,9 @@
             "consumers": [
               "C1",
               "C2"
+            ],
+            "entry_ids": [
+              "VE-SCRATCH-GUARD"
             ],
             "given": "项目已有持久化的 scratch_paths 配置",
             "id": "AC-6",
@@ -670,6 +682,9 @@
             "consumers": [
               "C4"
             ],
+            "entry_ids": [
+              "VE-ONBOARDING-DRAFT"
+            ],
             "given": "新项目选择 Python 接入栈",
             "id": "AC-7",
             "kind": "automated",
@@ -682,6 +697,9 @@
           {
             "consumers": [
               "C4"
+            ],
+            "entry_ids": [
+              "VE-ONBOARDING-DRAFT"
             ],
             "given": "新项目未选择 Python 接入栈",
             "id": "AC-8",

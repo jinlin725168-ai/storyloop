@@ -13,9 +13,10 @@
   },
   "base_commit": "72f2b51b21df3eb84e3b43f2146fd07912f1dfb4",
   "case_id": "dogfood6-design-revision-findings",
+  "case_revision": "2.1",
   "case_version": 2,
-  "contract_sha256": "09fc4cbb30565b1f672f9ccd880d319d3704b650086f2e0435353193b092d6fd",
-  "gold_sha256": "22acf2c9493b7a4d7c15c40441feb0ceed13d269511d95a8fb872df118d02283",
+  "contract_sha256": "0a4c6db41aab5f088f35270783cb4bab64e733180897c262476419e68f6dfaa6",
+  "gold_sha256": "50d275622f59ee08d049ebb832be514c6ef66506bba1eb215f52afe0b4ee9f29",
   "legacy_seam": false,
   "python": {
     "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
@@ -26,25 +27,29 @@
   "solution_commit": "691fb42da3e29454ee0d824b8c7855effb3f8831",
   "suite_files": [
     {
+      "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/__pycache__/test_findings.cpython-311.pyc",
+      "sha256": "360d8c6f4bca74a3762a8905cf3504af50e817fe3f440ee865d24a4a77e3f43e"
+    },
+    {
       "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/bench_design_revision_existing.py",
-      "sha256": "f3634858f0463c197b5d3d05e5460526577f2b109bf1908e39a68ef6cf9ee12a"
+      "sha256": "7f6dc578ce5555e639eee0aff49551f251c4e86c3096b233356fcdc1985268b0"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/bench_design_revision_red.py",
-      "sha256": "10012752c83e6d9027cf1d6f80094900c6c5f3392cac9463d3bcebdcac134b8e"
+      "sha256": "6464732c74ba49ff338ff2320a2efa5477daec28be5281cbaa4ea9208e67e34c"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/manifest.json",
-      "sha256": "57ea276dbc733e116f3a7d59ece3493cd7dfd2ae67e4e2de4794b23f3dab20db"
+      "sha256": "aaf82d6fd3fea7aba8a7681a14d7fbc38c0909e09bbffe648d09c2f847020a4e"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/test_findings.py",
-      "sha256": "52fab6c4ad01bd669af129aca12985f6e3f83ff0221b9bffff9b04a93906ae04"
+      "sha256": "ac96f07279a56f2cce281717076b6e0210f896bb19cac3a7a3d020ceec30c1e5"
     },
     {
       "path": "checks/tests/test_design_revision_findings.py",
       "sha256": "e624c0aa686d6f618e158da907678cf5d4934be2b7da0d7358588a74b36ae7ea"
     }
   ],
-  "suite_sha256": "006c9c1684ffc2689d53d74e815525f38a8e446b07f5a9ebbd00390815165e8a"
+  "suite_sha256": "505e82670e86c0a7e4d05ba96411d63345a7473654f22c763c9c34f6579fd045"
 }

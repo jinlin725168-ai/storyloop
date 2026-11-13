@@ -9,7 +9,6 @@ import unittest
 
 from storyloop.testing.smoke_harness.python_runner import python_cases
 from storyloop.bench_case import _check_inventory, _gold, load_case
-from storyloop.changes import contract_digest
 from storyloop.product_contract import validate_product
 from storyloop.requirement_checklist import evaluate_checklist
 from storyloop.smoke import _validate_manifest
@@ -33,25 +32,27 @@ class BenchV2DraftTests(unittest.TestCase):
                 self.assertFalse(case["legacy_seam"])
                 for key in ("case_id", "repository_id", "base_commit", "solution_commit"):
                     self.assertEqual(case[key], old_case[key])
-                self.assertEqual(contract["approval"], {
-                    "approved_by": "jinlin725168-ai", "approved_at": "2026-11-09",
-                    "contract_sha256": contract_digest(contract["product"]),
-                    "note": "人经监工确认的入口方案批准（含 stop_json locator 调整与 dogfood9 ST-2 改 CLI）",
-                })
+                self.assertEqual(case["case_revision"], "2.1")
+                self.assertNotIn("approval", contract)
                 prior = old_contract["product"]
                 derived = json.loads(json.dumps(contract["product"]))
                 for story in derived["stories"]:
                     del story["verification_entries"]
+                    for criterion in story["acceptance"]:
+                        del criterion["entry_ids"]
+                        if (original.parent.name == "dogfood9-scratch-glob"
+                                and criterion["id"] == "AC-4"):
+                            criterion["then"] = next(item["then"] for old_story in prior["stories"]
+                                                     for item in old_story["acceptance"]
+                                                     if item["id"] == "AC-4")
                 self.assertEqual(derived, prior)
-                self.assertEqual(gold["checks"], old_gold["checks"])
-                for source in original.glob("checks/acceptance/changes/*/test_*.py"):
-                    self.assertEqual((draft / source.relative_to(original)).read_bytes(),
-                                     source.read_bytes())
+                self.assertTrue({item["check_id"] for item in old_gold["checks"]}
+                                <= {item["check_id"] for item in gold["checks"]})
                 self.assertEqual(hashlib.sha256((draft / "contract.json").read_bytes()).hexdigest(),
                                  case["contract_sha256"])
                 self.assertEqual(hashlib.sha256((draft / "gold.json").read_bytes()).hexdigest(),
                                  case["gold_sha256"])
-                self.assertTrue(load_case(draft)["contract_approved"])
+                self.assertFalse(load_case(draft, allow_unapproved_v2=True)["contract_approved"])
 
     def test_approved_entry_locators_name_the_public_commands(self):
         expected = {

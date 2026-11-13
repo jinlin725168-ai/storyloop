@@ -1,10 +1,4 @@
 {
-  "approval": {
-    "approved_at": "2026-11-09",
-    "approved_by": "jinlin725168-ai",
-    "contract_sha256": "2f3f66b6217ecd3b3d9a897358c00aa40292f28f0e93f35d9be39bbe588f19b0",
-    "note": "人经监工确认的入口方案批准（含 stop_json locator 调整与 dogfood9 ST-2 改 CLI）"
-  },
   "change_id": "FIX-20261107-repair-next-path",
   "product": {
     "assessment": {
@@ -435,6 +429,9 @@
             "consumers": [
               "C1"
             ],
+            "entry_ids": [
+              "VE-REPAIR-RESULT"
+            ],
             "given": "一个已完成 RED 重证的变更，其项目路径分别为普通绝对路径和含空格的绝对路径",
             "id": "S1-C1",
             "kind": "automated",
@@ -449,6 +446,9 @@
               "C2",
               "C3"
             ],
+            "entry_ids": [
+              "VE-REPAIR-RESULT"
+            ],
             "given": "含空格的项目路径已产生一次成功的 acceptance-repair 结果",
             "id": "S1-C2",
             "kind": "automated",
@@ -461,6 +461,9 @@
           {
             "consumers": [
               "C1"
+            ],
+            "entry_ids": [
+              "VE-REPAIR-RESULT"
             ],
             "given": "一个可成功完成验收修复的变更",
             "id": "S1-C3",
@@ -475,6 +478,9 @@
             "consumers": [
               "C1"
             ],
+            "entry_ids": [
+              "VE-REPAIR-RESULT"
+            ],
             "given": "一个可成功完成 RED 重证的验收修复",
             "id": "S1-C4",
             "kind": "automated",
@@ -487,6 +493,9 @@
           {
             "consumers": [
               "C1"
+            ],
+            "entry_ids": [
+              "VE-REPAIR-RESULT"
             ],
             "given": "修复后的验收套件仍无法证明 RED",
             "id": "S1-C5",

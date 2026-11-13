@@ -1,5 +1,6 @@
 """Independent acceptance checks for linked base collision hints."""
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -11,21 +12,31 @@ from storyloop.testing.smoke_harness.v1 import HarnessError
 
 RED_PROBE = r'''
 import json
+import os
 import shlex
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 
 from tests.test_failure_routing import (NOW, approve_change, create_change, product,
                                         repository, write_json)
 from tests.test_project_loop import smoke_payload
 from tests.test_baseline_behavior import git
 from storyloop.baseline import bootstrap_project, load_project_config
-from storyloop.change_log import change_log
-from storyloop.product_cli import dispatch
 from storyloop.project_loop import LoopServices, load_run_state, run_change
 from storyloop.stop_report import stop_of
+
+def public(command, root, change_id, env=None):
+    child = subprocess.run([sys.executable, '-m', 'storyloop', command, str(root),
+                            '--change', change_id, '--json', '--no-interactive']
+                           if command == 'run' else
+                           [sys.executable, '-m', 'storyloop', command, str(root),
+                            '--change', change_id, '--json'],
+                           cwd=Path.cwd(), env=env, capture_output=True, text=True, timeout=30)
+    if not child.stdout.strip():
+        raise RuntimeError(command + ' CLI failed: ' + child.stderr[-1000:])
+    return json.loads(child.stdout)
 
 with tempfile.TemporaryDirectory() as folder:
     root = Path(folder, 'project with space')
@@ -70,10 +81,23 @@ with tempfile.TemporaryDirectory() as folder:
             'findings': [], 'questions': [],
         }))
     state = load_run_state(root, change_id)
-    status = dispatch(root, SimpleNamespace(command='status', change_id=change_id),
-                      None, lambda *_: {}, load_run_state)
-    log = change_log(root, change_id)
-    report = stop_of(root, state)
+    report_file = root / 'reports/storyloop' / change_id / 'report.md'
+    report_file.parent.mkdir(parents=True, exist_ok=True)
+    report_file.write_text(stop_of(root, state)['options'][0]['action'], encoding='utf-8')
+    status = public('status', root, change_id)
+    log = public('log', root, change_id)
+    report = public('report', root, change_id)
+    report_action = Path(report['report']).read_text(encoding='utf-8')
+    report_file.unlink()
+    stub_dir = Path(folder, 'agent-stubs')
+    stub_dir.mkdir()
+    marker = stub_dir / 'called'
+    for name in ('codex', 'claude'):
+        stub = stub_dir / name
+        stub.write_text('#!/bin/sh\necho called > ' + shlex.quote(str(marker)) + '\nexit 91\n')
+        stub.chmod(0o755)
+    rerun = public('run', root, change_id,
+                   env={**os.environ, 'PATH': str(stub_dir) + os.pathsep + os.environ.get('PATH', '')})
     before = git(root, 'status', '--porcelain=v1', '--untracked-files=all')
     segment = result['next'].split('先用 ', 1)[1].split(' 保存', 1)[0] if '先用 ' in result['next'] else ''
     tokens = shlex.split(segment) if segment else []
@@ -84,12 +108,15 @@ with tempfile.TemporaryDirectory() as folder:
                    if executed is not None and executed.returncode == 0 else [])
     print(json.dumps({
         'root': str(root), 'calls': calls, 'status': result['status'],
+        'rerun_status': rerun['status'], 'rerun_next': rerun.get('next'),
+        'rerun_action': rerun.get('stop', {}).get('options', [{}])[0].get('action'),
+        'agent_stub_called': marker.exists(),
         'expected': expected, 'legacy_paths': state.get('legacy_paths', []),
         'run_legacy_paths': result.get('legacy_paths', []),
         'surfaces': [result['next'], result['stop']['options'][0]['action'],
                      status['next'], status['stop']['options'][0]['action'],
                      log['next'], log['stop']['options'][0]['action'],
-                     report['options'][0]['action']],
+                     report_action],
         'stash_tokens': tokens, 'stash_exit': executed.returncode if executed else None,
         'stash_paths': stash_paths, 'before': before, 'after': after,
     }, ensure_ascii=False))
@@ -99,12 +126,11 @@ GREEN_PROBE = r'''
 import json
 import shlex
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 
-from storyloop.change_log import change_log
-from storyloop.product_cli import dispatch
+from storyloop.baseline import bootstrap_project
 from storyloop.run_hints import next_step
 from storyloop.run_stops import pause
 from storyloop.stop_report import stop_of
@@ -117,6 +143,14 @@ def git(root, *args):
         raise RuntimeError('Git fixture failed: ' + result.stderr)
     return result.stdout
 
+def public(command, root, change_id):
+    child = subprocess.run([sys.executable, '-m', 'storyloop', command, str(root),
+                            '--change', change_id, '--json'], cwd=Path.cwd(),
+                           capture_output=True, text=True, timeout=20)
+    if not child.stdout.strip():
+        raise RuntimeError(command + ' CLI failed: ' + child.stderr[-1000:])
+    return json.loads(child.stdout)
+
 with tempfile.TemporaryDirectory() as folder:
     root = Path(folder, 'project with space')
     root.mkdir()
@@ -124,6 +158,9 @@ with tempfile.TemporaryDirectory() as folder:
     git(root, 'config', 'user.name', 'Acceptance')
     git(root, 'config', 'user.email', 'acceptance@example.invalid')
     (root / '.gitignore').write_text('.storyloop/\n', encoding='utf-8')
+    git(root, 'add', '.gitignore')
+    git(root, 'commit', '-qm', 'base fixture')
+    bootstrap_project(root, {'test_commands': []})
     listed = ['ordinary.py', '[ab].py', ':(exclude)other.py']
     unlisted = ['a.py', 'other.py', 'unlisted.py']
     for name in listed + unlisted:
@@ -156,14 +193,16 @@ with tempfile.TemporaryDirectory() as folder:
     change_path.parent.mkdir(parents=True, exist_ok=True)
     change_path.write_text(json.dumps(change), encoding='utf-8')
     run_path = root / '.storyloop/state/runs/FEAT-1.json'
+    report_file = root / 'reports/storyloop/FEAT-1/report.md'
+    report_file.parent.mkdir(parents=True, exist_ok=True)
+    report_file.write_text(stop_of(root, json.loads(run_path.read_text(encoding='utf-8'))
+                                )['options'][0]['action'], encoding='utf-8')
     saved_before = run_path.read_bytes().hex()
     work_before = git(root, 'status', '--porcelain=v1', '--untracked-files=all')
     stash_before = git(root, 'stash', 'list')
-    status = dispatch(root, SimpleNamespace(command='status', change_id='FEAT-1'),
-                      None, lambda *_: {},
-                      lambda project, selected: json.loads(run_path.read_text(encoding='utf-8')))
-    log = change_log(root, 'FEAT-1')
-    report = stop_of(root, json.loads(run_path.read_text(encoding='utf-8')))
+    status = public('status', root, 'FEAT-1')
+    log = public('log', root, 'FEAT-1')
+    report = public('report', root, 'FEAT-1')
     saved_after = run_path.read_bytes().hex()
     work_after = git(root, 'status', '--porcelain=v1', '--untracked-files=all')
     stash_after = git(root, 'stash', 'list')
@@ -182,7 +221,7 @@ with tempfile.TemporaryDirectory() as folder:
         'empty_hint': next_step('BASE_CHANGE_REQUIRED', 'FEAT-1', root,
                                 {**details, 'legacy_paths': []}),
         'status_next': status['next'], 'log_next': log['next'],
-        'report_action': report['options'][0]['action'],
+        'report_action': Path(report['report']).read_text(encoding='utf-8'),
         'saved_before': saved_before, 'saved_after': saved_after,
         'work_before': work_before, 'work_after': work_after,
         'stash_before': stash_before, 'stash_after': stash_after,
@@ -210,7 +249,8 @@ def probe(source):
         raise HarnessError('Business subprocess/protocol unavailable') from error
     required = ({'expected', 'legacy_paths', 'run_legacy_paths', 'surfaces',
                  'stash_tokens', 'stash_exit', 'stash_paths', 'before', 'after',
-                 'root', 'calls', 'status'} if source == RED_PROBE else
+                 'root', 'calls', 'status', 'rerun_status', 'rerun_next',
+                 'rerun_action', 'agent_stub_called'} if source == RED_PROBE else
                 {'root', 'listed', 'run_next', 'run_action', 'approval', 'empty_hint',
                  'status_next', 'log_next', 'report_action', 'saved_before',
                  'saved_after', 'work_before', 'work_after', 'stash_before',
@@ -254,6 +294,13 @@ class DefectReproduction(unittest.TestCase):
 
 
 class ExistingBehavior(unittest.TestCase):
+    def test_run_at_base_stop_repeats_stop_without_agent(self):
+        value = probe(RED_PROBE)
+        self.assertEqual(value['rerun_status'], 'BASE_CHANGE_REQUIRED')
+        self.assertEqual(value['rerun_action'], value['surfaces'][1])
+        self.assertEqual(value['rerun_next'], value['surfaces'][0])
+        self.assertFalse(value['agent_stub_called'])
+
     def test_ac1_stash_uses_literal_paths_in_project_from_outside(self):
         value = probe(GREEN_PROBE)
         self.assertEqual(value['stash_tokens'],

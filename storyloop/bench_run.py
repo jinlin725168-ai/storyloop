@@ -68,14 +68,18 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
         require(budget["max_calls"] <= allowed["max_calls"], "Budget exceeds Case policy")
     versions = {case["manifest"]["case_version"] for case in cases}
     require(len(versions) == 1, "v1 and v2 Cases cannot be mixed")
+    revisions = {case["manifest"].get("case_revision") for case in cases}
+    require(len(revisions) == 1, "Case revisions cannot be mixed")
     result = {"run_id": uuid.uuid4().hex, "created_at": datetime.now(timezone.utc).isoformat(),
-              "case_version": versions.pop(), "scope": scope, "suite_source": suite_source,
+              "case_version": versions.pop(), "case_revision": revisions.pop(),
+              "scope": scope, "suite_source": suite_source,
               "base_engine_commit": base_engine_commit,
               "candidate_engine_commit": candidate_engine_commit, "adapter": adapter_name,
               "model": model, "budget": budget, "gold_python": interpreter,
               "scoring_contract": SCORE_CONTRACT, "cases": []}
     for case in cases:
         row = {"case_id": case["manifest"]["case_id"], "case_version": case["manifest"]["case_version"],
+               "case_revision": case["manifest"].get("case_revision"),
                "suite_source": suite_source,
                "case_hash": case["case_hash"], "contract_sha256": case["manifest"]["contract_sha256"],
                "suite_sha256": case["manifest"]["suite_sha256"],
@@ -201,7 +205,7 @@ def _comparison(attempts: list[dict]) -> dict:
 
 def compare_runs(base: dict, candidate: dict) -> dict:
     """Reject comparisons across versions, frozen inputs, or execution settings."""
-    fields = ("case_version", "scope", "suite_source", "adapter", "model", "budget", "gold_python",
+    fields = ("case_version", "case_revision", "scope", "suite_source", "adapter", "model", "budget", "gold_python",
               "scoring_contract")
     reasons = [field for field in fields if base.get(field) != candidate.get(field)]
     old = [(row.get("case_id"), row.get("case_hash")) for row in base.get("cases", [])]

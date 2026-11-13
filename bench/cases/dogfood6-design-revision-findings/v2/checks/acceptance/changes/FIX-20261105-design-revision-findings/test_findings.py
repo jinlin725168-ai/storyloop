@@ -15,6 +15,8 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 import sys
+import subprocess
+from storyloop.baseline import bootstrap_project
 from storyloop.change_log import change_log, render_log
 from storyloop.cli_output import display
 from storyloop.product_cli import dispatch
@@ -26,6 +28,13 @@ request = json.loads(sys.stdin.read())
 findings = request['findings']
 with tempfile.TemporaryDirectory() as folder:
     project = Path(folder)
+    subprocess.run(['git', 'init', '-q', str(project)], check=True, capture_output=True)
+    for key, value in [('user.name', 'Acceptance'), ('user.email', 'acceptance@example.invalid')]:
+        subprocess.run(['git', '-C', str(project), 'config', key, value], check=True, capture_output=True)
+    (project / '.gitignore').write_text('.storyloop/\n', encoding='utf-8')
+    subprocess.run(['git', '-C', str(project), 'add', '.gitignore'], check=True, capture_output=True)
+    subprocess.run(['git', '-C', str(project), 'commit', '-qm', 'fixture'], check=True, capture_output=True)
+    bootstrap_project(project, {'test_commands': []})
     change_id = 'FEAT-fixture'
     product = {'version': 1, 'goal': '核对停点意见', 'non_goals': [], 'questions': [],
                'stories': [{'id': 'ST-1', 'title': '核对停点', 'as_a': '用户',
@@ -50,7 +59,12 @@ with tempfile.TemporaryDirectory() as folder:
     args = SimpleNamespace(command='status', change_id=change_id)
     status = dispatch(project, args, None, lambda *a: None,
                       lambda p, c: load_json(run_path))
-    log = change_log(project, change_id)
+    log_call = subprocess.run([sys.executable, '-m', 'storyloop', 'log', str(project),
+                               '--change', change_id, '--json'], cwd=Path.cwd(),
+                              capture_output=True, text=True, timeout=20)
+    if not log_call.stdout.strip():
+        raise RuntimeError('log CLI failed: ' + log_call.stderr[-1000:])
+    log = json.loads(log_call.stdout)
     after = load_json(run_path)
     texts = {}
     for name, result in [('run', run), ('status', status)]:

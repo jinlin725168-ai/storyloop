@@ -53,7 +53,8 @@ def main(request_path: str, response_path: str) -> None:
         else:
             outcome.update(_execute_change(
                 project, contract, request["case_source"], request["case_version"],
-                request.get("suite_source", "generated"), create_change=create_change,
+                request.get("suite_source", "generated"),
+                case_revision=request.get("case_revision"), create_change=create_change,
                 approve_change=approve_change, load_change=load_change,
                 install_smoke_suite=install_smoke_suite, run_change=run_change,
                 approve_design=approve_design, load_run_state=load_run_state,
@@ -112,6 +113,7 @@ def _readiness_failure(project: Path, ready: dict) -> dict:
 def _execute_change(project: Path, contract: dict, source: str, version: int,
                     suite_source: str, *, create_change, approve_change, load_change,
                     install_smoke_suite, run_change, approve_design, load_run_state,
+                    case_revision: str | None = None,
                     stop_capture_root: Path | None = None) -> dict:
     """Follow approve's execution path; only the explicit isolation mode installs a suite."""
     if suite_source not in {"generated", "frozen"}:
@@ -122,7 +124,7 @@ def _execute_change(project: Path, contract: dict, source: str, version: int,
     created = create_change(project, "Frozen bench Case", contract["product"],
                             now=lambda: stamp, slug=slug,
                             require_verification_entries=version == 2,
-                            require_entry_coverage=False)
+                            require_entry_coverage=case_revision == "2.1")
     if created["change_id"] != change_id:
         raise ValueError("Frozen change ID does not match the product contract")
     approve_change(project, change_id, approved_by="bench-frozen-contract")

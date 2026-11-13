@@ -26,7 +26,9 @@
         "AC-2"
       ],
       "entry_ids": [
-        "VE-BASE-STOP"
+        "VE-BASE-STOP",
+        "VE-LOG",
+        "VE-REPORT"
       ],
       "id": "ac2-view-parity",
       "tier": "fast",
@@ -74,7 +76,9 @@
         "AC-5"
       ],
       "entry_ids": [
-        "VE-BASE-STOP"
+        "VE-BASE-STOP",
+        "VE-LOG",
+        "VE-REPORT"
       ],
       "id": "ac5-read-preserves-state",
       "tier": "fast",
@@ -95,6 +99,40 @@
       "id": "ac6-no-automatic-stash",
       "tier": "fast",
       "timeout_seconds": 60
+    },
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261104-stash-git-safe/bench_public_red.py"
+      ],
+      "criteria": [
+        "AC-2"
+      ],
+      "entry_ids": [
+        "VE-RUN-STOP",
+        "VE-LOG",
+        "VE-REPORT"
+      ],
+      "id": "ac2-public-views",
+      "timeout_seconds": 120
+    },
+    {
+      "command": [
+        "{storyloop_harness}",
+        "acceptance/tools/python_smoke.py",
+        "acceptance/changes/FIX-20261104-stash-git-safe/bench_public_green.py"
+      ],
+      "criteria": [
+        "AC-5"
+      ],
+      "entry_ids": [
+        "VE-RUN-STOP",
+        "VE-LOG",
+        "VE-REPORT"
+      ],
+      "id": "ac5-public-run-stop",
+      "timeout_seconds": 120
     }
   ],
   "version": 1
