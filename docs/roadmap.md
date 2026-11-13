@@ -97,4 +97,4 @@ flowchart LR
 - 不做 CI 系统、部署、push。
 - 不做操作系统级沙箱；需要强隔离时用容器。
 - 不让引擎自动修改规格迁就代码。
-- 暂不处理 [#80](https://github.com/jinlin725168-ai/storyloop/issues/80) 与 [#56](https://github.com/jinlin725168-ai/storyloop/issues/56) 的底座合并后边界恢复（以底座向后兼容为前提）；E2a/E2b 已取消，[PR #50](https://github.com/jinlin725168-ai/storyloop/pull/50) 的脱敏整体设计搁置。
+- 暂不处理 [#80](https://github.com/jinlin725168-ai/storyloop/issues/80) 与 [#56](https://github.com/jinlin725168-ai/storyloop/issues/56) 的底座合并后边界恢复（以底座向后兼容为前提）；E2a/E2b 已取消，[PR #50](https://github.com/jinlin725168-ai/storyloop/pull/50) 的敏感输出处理设计已由人于 2026-11-13 合入为设计文档，是否及何时实施待后续评估。
