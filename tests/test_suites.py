@@ -74,6 +74,14 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("tests.test_b", result.stdout)
         self.assertIn("AssertionError: 1 != 2", result.stdout)
 
+    def test_summary_line_names_failing_modules(self):
+        # Callers that keep only the output tail (readiness) must still see which module failed.
+        root = self._project({"test_a": "pass", "test_b": "self.assertEqual(1, 2)",
+                              "test_c": "self.assertEqual(1, 2)"})
+        result = _run("--suite", "full", "--workers", "2", root=root)
+        summary = result.stdout.strip().splitlines()[-1]
+        self.assertIn("失败 2 个模块（tests.test_b、tests.test_c）", summary)
+
     def test_a_module_that_cannot_import_fails_the_run(self):
         root = self._project({"test_a": "pass"})
         (root / "tests" / "test_broken.py").write_text("import does_not_exist\n", encoding="utf-8")
