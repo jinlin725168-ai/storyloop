@@ -1,4 +1,10 @@
 {
+  "approval": {
+    "approved_at": "2026-11-13",
+    "approved_by": "jinlin725168-ai",
+    "contract_sha256": "dde2a02e35a90dbdd8831068110dfd1fca9008a03f4d9796ddf1d1a8e5af6906",
+    "note": "人确认 Case v2.1 验证入口与判据覆盖"
+  },
   "change_id": "FIX-20261107-repair-next-path",
   "product": {
     "assessment": {

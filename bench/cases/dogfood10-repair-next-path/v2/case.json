@@ -15,8 +15,8 @@
   "case_id": "dogfood10-repair-next-path",
   "case_revision": "2.1",
   "case_version": 2,
-  "contract_sha256": "1e87a897cc3f7b9bd9f46e9a4a5259b6ad17d20f3bbcae3a254dd91d8c6513f9",
-  "gold_sha256": "72ecea142c5283a66e166d79c405b18131b4041628139e8d613d6d42a5895c56",
+  "contract_sha256": "bb34887db3b4a02e0d62efb4f8e5abf577fb3ebc45c7bc9db7da0dafd667a9d9",
+  "gold_sha256": "1a8c6784faf3137745024389b65f4523d26208b81b8233c0d69c61e974d61a06",
   "legacy_seam": false,
   "python": {
     "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",

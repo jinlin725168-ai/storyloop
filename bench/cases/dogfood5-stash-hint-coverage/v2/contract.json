@@ -1,4 +1,10 @@
 {
+  "approval": {
+    "approved_at": "2026-11-13",
+    "approved_by": "jinlin725168-ai",
+    "contract_sha256": "b7b4a8ca945cd533cbd994f735839a30e148a235a52e496707c8290e7964742f",
+    "note": "人确认 Case v2.1 验证入口与判据覆盖"
+  },
   "change_id": "FIX-20261105-stash-hint-coverage",
   "product": {
     "assessment": {

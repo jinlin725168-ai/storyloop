@@ -1,4 +1,10 @@
 {
+  "approval": {
+    "approved_at": "2026-11-13",
+    "approved_by": "jinlin725168-ai",
+    "contract_sha256": "950f59aba2cab9c8e85f3fb91614abead6177bf2d9e4772a5421283022b8b9f3",
+    "note": "人确认 Case v2.1 验证入口与判据覆盖"
+  },
   "change_id": "FIX-20261107-scratch-glob",
   "product": {
     "assessment": {
