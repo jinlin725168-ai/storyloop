@@ -13,7 +13,8 @@
 | 日常使用者 | [product-iteration-guide.md](product-iteration-guide.md) | [faq.md](faq.md)（按停点组织） |
 | 写适配器或接 CI | [api.md](api.md) | [roles.md](roles.md) |
 | 改引擎的人或代理 | [modules.md](modules.md) | [extension.md](extension.md)、[building-blocks.md](building-blocks.md)、[testing.md](testing.md)、[contributing.md](contributing.md) |
-| 想知道为什么这样设计 | [decisions/](decisions/README.md) | [references.md](references.md) |
+| 想知道为什么这样设计 | [concepts.md](concepts.md) 的设计理由、[验证入口及评测底座设计](superpowers/specs/2026-11-08-验证入口与评测底座-design.md) | [decisions/](decisions/README.md)、[references.md](references.md)、[HelixHarness 调研](research/2026-11-08-HelixHarness调研.md) |
+| 想知道现在做到哪、效果如何 | [roadmap.md](roadmap.md) | [bench.md](bench.md) |
 
 ## 文档索引
 
