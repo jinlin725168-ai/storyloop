@@ -15,7 +15,7 @@ CORRECTIONS = frozenset({"replan", "overrule", "reset", "supersede"})
 def append_event(state: dict, kind: str, *, source: str, stop: str | None = None,
                  at: str | None = None, criterion_id: str | None = None,
                  automatic: bool = False, repeated: bool = False,
-                 follows: str | None = None) -> None:
+                 follows: str | None = None, defect_category: str | None = None) -> None:
     """Attach a known successful action to the state saved by its command."""
     if kind not in KINDS:
         raise ValueError(f"Unknown intervention kind: {kind}")
@@ -30,6 +30,8 @@ def append_event(state: dict, kind: str, *, source: str, stop: str | None = None
         event["repeated"] = True
     if follows is not None:
         event["follows"] = follows
+    if defect_category is not None:
+        event["defect_category"] = defect_category
     state.setdefault("intervention_events", []).append(event)
 
 

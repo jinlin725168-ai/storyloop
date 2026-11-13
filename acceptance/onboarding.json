@@ -27,6 +27,7 @@
         "storyloop/__main__.py",
         "storyloop/acceptance_defects.py",
         "storyloop/acceptance_repair.py",
+        "storyloop/oracle_strength_precheck.py",
         "storyloop/adapter_capabilities.py",
         "storyloop/adapter_profiles.py",
         "storyloop/agent_transport.py",

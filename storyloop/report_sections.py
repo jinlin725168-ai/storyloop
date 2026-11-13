@@ -81,6 +81,10 @@ def proof(report, evidence):
               item('skills', skills if ledger is not None and ledger_available else None),
               item('skills_legacy', oracle.get('skills_used'), reason='STALE_POSSIBLE'),
               item('ci', reason='NO_AUTHORITATIVE_EXTERNAL_CI_RECORD')]
+    precheck = (evidence.get('run') or {}).get('oracle_strength_precheck')
+    if precheck is not None:
+        result.append(item('oracle_strength_precheck', precheck, 'agent_code',
+                           'AGENT_REVIEW_NOT_MACHINE_VERIFIED'))
     result.extend(protection_items(evidence))
     result.extend(item(key, oracle.get(key)) for key in ('baseline', 'executed', 'uncounted'))
     return result

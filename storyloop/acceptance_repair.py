@@ -100,15 +100,19 @@ def _repair_once(project: Path, change_id: str, reason: str, services: LoopServi
              "voided_attempts": int(state.get("attempt", 0))}
     if automatic:
         entry["automatic"] = True
+        category = (state.get("acceptance") or {}).get("defect_category")
+        if category:
+            entry["defect_category"] = category
     state.setdefault("repairs", []).append(entry)
     if not automatic:
         from .review_convergence import record_repair
         record_repair(state)
     from .intervention_events import append_event
     append_event(state, "acceptance_repair", source="engine" if automatic else "acceptance-repair",
-                 stop=state.get("status"), at=moment, automatic=automatic)
+                 stop=state.get("status"), at=moment, automatic=automatic,
+                 defect_category=entry.get("defect_category"))
     try:
-        return _prove_repaired_suite(project, change, state, commit, reuse)
+        return _prove_repaired_suite(project, change, state, commit, reuse, services)
     except Exception:
         from .consistency import invalidate_consistency
         invalidate_consistency(state, replan=True)
@@ -138,18 +142,27 @@ def _repair_state(project: Path, change_id: str) -> tuple[dict, dict]:
 
 
 def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict,
-                          reuse: dict | None = None) -> dict:
+                          reuse: dict | None = None, services: LoopServices | None = None) -> dict:
     change_id = change["change_id"]
     try:
         from .smoke import load_smoke_manifest
-        check_entry_use(project, change, load_smoke_manifest(project, change))
+        manifest = load_smoke_manifest(project, change)
+        check_entry_use(project, change, manifest)
+        from .oracle_strength_precheck import assess as strength_assess
+        precheck = strength_assess(project, change, state, services, manifest,
+                                   load_project_config(project))
+        if precheck is not None:
+            state["oracle_strength_precheck"] = precheck
         red = read_only_call(
             project, change_id,
             lambda: run_smoke_isolated(project, change, expect_red=True, at_commit=state["contract_commit"]),
             allowed_evidence=RED_EVIDENCE,
         )
+        if precheck is not None:
+            from .oracle_strength_precheck import stamp_red
+            red = stamp_red(project, change_id, precheck)
     except StoryLoopError as exc:
-        if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
+        if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_INPUT"}:
             raise
         from .consistency import invalidate_consistency
         invalidate_consistency(state, replan=True)
@@ -205,8 +218,10 @@ def _unproven_suite(project: Path, state: dict, error: StoryLoopError) -> dict:
     state["attempt"] = 0
     for key in ("questions", "pending", "next", "routed", "stop", "mode"):
         state.pop(key, None)
-    return pause(project, state, error.code, error=str(error),
-                 acceptance={"status": error.code, **error.details})
+    details = {"error": str(error), "acceptance": {"status": error.code, **error.details}}
+    if error.code == "NEEDS_INPUT":
+        details["questions"] = (error.details.get("precheck") or {}).get("questions") or []
+    return pause(project, state, error.code, **details)
 
 
 def _last_smoke_evidence(project: Path, change_id: str, state: dict) -> dict:
