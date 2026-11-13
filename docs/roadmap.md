@@ -1,6 +1,6 @@
 # 路线图
 
-更新：2026-11-08（以 `origin/main` `c5783aa` 为准）。历史计划在 `docs/plans/`，当前演进计划在 `docs/superpowers/`。
+更新：2026-11-13（以 `origin/main` `416b13e` 为准）。历史计划在 `docs/plans/`，当前演进计划在 `docs/superpowers/`。
 
 ## 已完成
 
@@ -44,34 +44,50 @@
 - **StoryLoop 自身 dogfood 1～6**：六次尝试中四次到 `PASSED`；dogfood6 全 Codex（实现与审查）54 分钟到 `PASSED`，验收修复 1 次、实现一轮、审查一次通过。实现与审查同厂商，独立性较弱；2026-11-05 人决定长期使用 Codex，避免占用 Claude 额度（见 [#65](https://github.com/jinlin725168-ai/storyloop/issues/65)）。数据来自共享工作区未入库的 `storyloop-dogfood-findings.md` 和 `storyloop-dogfood3-findings.md` 第 34 条；dogfood6 代码并回另见 [PR #87](https://github.com/jinlin725168-ai/storyloop/pull/87)，不计入本页 main 基线。
 - **自举纠偏 PR [#89](https://github.com/jinlin725168-ai/storyloop/pull/89)、[#93](https://github.com/jinlin725168-ai/storyloop/pull/93)、[#94](https://github.com/jinlin725168-ai/storyloop/pull/94)、[#95](https://github.com/jinlin725168-ai/storyloop/pull/95)、[#96](https://github.com/jinlin725168-ai/storyloop/pull/96)、[#97](https://github.com/jinlin725168-ai/storyloop/pull/97)、[#98](https://github.com/jinlin725168-ai/storyloop/pull/98)、[#99](https://github.com/jinlin725168-ai/storyloop/pull/99)、[#100](https://github.com/jinlin725168-ai/storyloop/pull/100)**：补全 heavy RED 与命令式前提错误证据；验收修复后沿用有效方案、自动修复夹具并重证 RED；修正 intake 下一步、临时目录规则、方案证据与审查噪声、验收修复路径和 readiness 失败摘要。
 - **dogfood7～11**：7/8 在验收夹具与方案审查中反复返工，止损改由直接实现；9 到 `PASSED`，但有 3 次非例行介入；10 在 39 分钟内以**零非例行介入**到 `PASSED`；11 对同一 AC 连续逐层追问，约 5 次非例行介入后止损改由直接实现。共性根因是验证入口未进合同：验收用例选的入口与方案修改路径不一致。证据见共享工作区 `storyloop-dogfood3-findings.md:89-146`。
+- **①a 最小评测底座（PR [#103](https://github.com/jinlin725168-ai/storyloop/pull/103)、[#104](https://github.com/jinlin725168-ai/storyloop/pull/104)、[#105](https://github.com/jinlin725168-ai/storyloop/pull/105)、[#113](https://github.com/jinlin725168-ai/storyloop/pull/113)）**：L1 把人工介入记为例行/非例行事件；`storyloop bench` 冻结五个 Case（Base、合同、参考 Solution、隐藏 Gold），校准只跑 Gold；真实执行按 `--scope base-only|paired`、默认 `--suite-source generated`（验收由引擎正常生成，冻结套件只作隐藏 Gold）。用法见 [bench.md](bench.md)。
+- **①b 验证入口与审查收敛（PR [#106](https://github.com/jinlin725168-ai/storyloop/pull/106)、[#107](https://github.com/jinlin725168-ai/storyloop/pull/107)、[#108](https://github.com/jinlin725168-ai/storyloop/pull/108)、[#109](https://github.com/jinlin725168-ai/storyloop/pull/109)）**：新变更必填 `verification_entries`；manifest `entry_ids`、方案 `entry_paths` 与审查三方核对；审查意见稳定 ID 与 MUST_FIX/DECISION_NEEDED/ADVISORY 三级，同一 AC 连续判强度不足按 `ORACLE_DEFECT` 收敛；v2 Case 批准绑定合同哈希。
+- **①c 技能融合与知识维护（PR [#110](https://github.com/jinlin725168-ai/storyloop/pull/110)、[#111](https://github.com/jinlin725168-ai/storyloop/pull/111)、[#112](https://github.com/jinlin725168-ai/storyloop/pull/112)）**：新增 `tdd`、`impact-analysis`、`systematic-debugging`、`foundation-use` 技能，扩展 spec-craft/oracle-craft/review/foundation-survey；`knowledge-propose` / `authorize-knowledge` 提供 PASSED 后的 foundation 精确 diff 增量通道。
+- **试跑与门槛暴露问题的修复（PR [#114](https://github.com/jinlin725168-ai/storyloop/pull/114)～[#126](https://github.com/jinlin725168-ai/storyloop/pull/126)）**：
+  - bench 工具链：每次 attempt 独立 venv、readiness 与停机证据留存、缺美元成本不阻断判定（[#114](https://github.com/jinlin725168-ai/storyloop/pull/114)）；模拟人每次 attempt 纠正一次并继续（[#115](https://github.com/jinlin725168-ai/storyloop/pull/115)）；停机状态以 run state 为准（[#116](https://github.com/jinlin725168-ai/storyloop/pull/116)）。
+  - 引擎证据：harness 用例级诊断（[#116](https://github.com/jinlin725168-ai/storyloop/pull/116)）、可编辑安装不再使 harness 启动失败并保留 RED 环境错误证据（[#118](https://github.com/jinlin725168-ai/storyloop/pull/118)）、subTest 按测试方法计数（[#119](https://github.com/jinlin725168-ai/storyloop/pull/119)）、RED 只按具体执行信号判环境错误（[#120](https://github.com/jinlin725168-ai/storyloop/pull/120)）。
+  - 判据质量：已有测试/快照与合同冲突时由方案声明 `regression_updates` 受控修改（[#117](https://github.com/jinlin725168-ai/storyloop/pull/117)）；三类确定性验收缺陷（保持性行实现前失败、用例越界、未经声明入口）自动退回 acceptance、计为例行（[#121](https://github.com/jinlin725168-ai/storyloop/pull/121)）；oracle-craft 明确"准备 / 执行 / 观察"，设计证据重试耗尽停 `DESIGN_REVISION_REQUIRED`（[#122](https://github.com/jinlin725168-ai/storyloop/pull/122)）；保持性 AC 的 `entry_paths` 不必经过改动文件、合同批准时校验入口覆盖（[#123](https://github.com/jinlin725168-ai/storyloop/pull/123)）；RED 前判据强度预审（[#124](https://github.com/jinlin725168-ai/storyloop/pull/124)）。
+  - Case v2.1：dogfood3/5/6 补公开入口、dogfood9 AC-4 改在守卫入口观察，人重新批准并重新校准（[#125](https://github.com/jinlin725168-ai/storyloop/pull/125)、[#126](https://github.com/jinlin725168-ai/storyloop/pull/126)）。
+- **门槛运行 1～3（v2，base-only，generated，Codex `gpt-6-sol`）**：均未达标，但瓶颈逐次后移。记录在 bench 输出目录 `.storyloop/bench/runs/`。
+
+  | 运行 | 引擎 | PASSED（10 次） | 两次均过的 Case | 主要阻断 |
+  |---|---|---|---|---|
+  | 门槛 1 | `910bb3a` | 1 | 0 | RED 误判环境错误 4 次；验收质量 5 次 |
+  | 门槛 2 | `d7da1e1` | 1 | 0 | 验收绕过声明入口 7 次；断言强度约 6 次 |
+  | 门槛 3 | `4ddf964` | 3 | 1（dogfood10） | 合同入口覆盖不足致 design 提问 5 次；断言强度约 5 次；1 次假通过（dogfood9 漏测嵌套路径，Gold 失败） |
 
 ## 已知问题
 
-此前偶发 Git 可见性保护错误仍待捕获具体触发路径，诊断已增强，保护规则未放宽。I13 声明仍为 `pending`；E3 试用的限制见[验证记录](validation/2026-10-28-架构收敛E3-真实试用.md)。
+- **main 推送 CI 长期为红**：PR 阶段 Windows 只跑 `platform` 子集，main 推送才在 Windows 跑 core、定时任务跑 full，因此自 #119 前起 main 每次推送都失败而未被发现（Windows 路径短名/引号、bench 路径判定、`test_late_characterization`）。修复进行中（分支 `fix/main-ci`）；防复发方案由人决定。
+- 本机 WSL 上 `tests.test_acceptance_fixture_retry.test_approve_repairs_precondition_failure` 稳定失败（CI ubuntu 通过），根因在 `fix/main-ci` 中排查；查清前不跑门槛 4。
+- 此前偶发 Git 可见性保护错误仍待捕获具体触发路径，诊断已增强，保护规则未放宽。I13 声明仍为 `pending`；E3 试用的限制见[验证记录](validation/2026-10-28-架构收敛E3-真实试用.md)。
 
 新发现的代码与文档不一致记在这里，修复后移到"已完成"。
 
 ## 下一步
 
-2026-11-08 人批准按 **①a → ①b → ①c → 门 → ② → ③** 推进，先建立最小评测底座，再修验证入口与审查收敛，最后融合技能和知识维护。依据是共享工作区 `storyloop/research_notes/HelixHarness调研.md`（[上游源码](https://github.com/didi/helixharness)）与[验证入口及评测底座设计 PR #101](https://github.com/jinlin725168-ai/storyloop/pull/101/files)。审查角色继续使用 Codex（[#65](https://github.com/jinlin725168-ai/storyloop/issues/65)）；base 人工通道不变（[决策 0018](decisions/0018-base-human-only.md)）。
+路线仍按 2026-11-08 批准的 **①a → ①b → ①c → 门 → ② → ③**；①a～①c 已交付，当前停在**门**。依据是 [HelixHarness 调研](research/2026-11-08-HelixHarness调研.md)（[上游源码](https://github.com/didi/helixharness)，借鉴点与落地见[研究来源](references.md#helixharness2026-11-08)）与[验证入口及评测底座设计](superpowers/specs/2026-11-08-验证入口与评测底座-design.md)。审查角色继续使用 Codex（[#65](https://github.com/jinlin725168-ai/storyloop/issues/65)）；base 人工通道不变（[决策 0018](decisions/0018-base-human-only.md)）。
 
-1. **①a 最小评测底座**：L1 在现有 M1～M10 上自动分类例行/非例行人工介入，并记录耗时与成本覆盖率；L2 建 `storyloop bench`，冻结 dogfood3/5/6/9/10 五个 Case 的 Base、合同、参考 Solution、验收与隐藏检查，固定适配器/模型/预算，只换引擎版本。模拟人自动通过例行批准，遇非例行停点记“需要人”并结束；每 Case 每侧跑 2 次，缺证据标不可比较。**此时只设计和后续实现，暂时不跑五个真实 Case。**
-2. **①b 验证入口与审查收敛**：每个故事声明公共验证入口；验收 manifest 测试引用入口；方案说明入口到改动路径；一致性审查核对三方。同一 AC 连续两轮被判判据强度不足时，下一轮必须给完整判据规格，仍不收敛就停给人一次；意见用稳定 ID 和 MUST_FIX/DECISION_NEEDED/ADVISORY 三级。
-3. **①c 技能融合与知识维护**：`spec-craft` 加需求决策树，`oracle-craft` 加 seam 选择，新增 TDD、review、影响分析、系统化排错技能，`foundation-survey` 加分领域证据扫描。PASSED 后增量提议 foundation 精确 diff，人一条命令批准路径，引擎防漂移并提交；角色用 foundation 前核实当前代码，事实与规范分节并给全局约束摘要。保留经验/失败记忆及复发统计、活规格和 BASE 保护；按需加载索引延至②。
-4. **门**：冻结集 5 Case 中至少 4 个 `PASSED`，且每个通过的 Case 两次尝试均不超过 1 次非例行停点；不可比较不算通过。完成 ①a～①c 后才校准并运行该门。
-5. **② 扩面**：RuoYi 多故事功能变更、真实模型撞底座，并补 L3 真实项目观察。
-6. **③ 需求与充分性**：spec-craft 剩余批次按决策树技能重新核对范围，再推进链路骨架 ② 和测试充分性。[#64](https://github.com/jinlin725168-ai/storyloop/issues/64) 报告瘦身仍不做。
+1. **修复 main CI**（进行中）：全部根因修复、Windows core 与 full 跑绿后再继续。
+2. **门槛 4**：引擎含 #123/#124，Case 用 v2.1（已批准、已校准）。v2.1 基准与门槛 1～3 不可直接对比，报告单列。达标条件不变：5 Case 中至少 4 个两次均 `PASSED`（含 Gold 通过），每次非例行停点不超过 1；不可比较不算通过。模拟人的纠正理由固定、不读 Gold，结果比真实使用偏保守。
+3. **门槛未过时**：按停机证据归类，只修确定性可判定或有证据的根因；能确定性检测的验收缺陷进入自动退回（例行），只有凭判断的质量问题计非例行。每轮修复后再跑门槛，不在单个 Case 上调优。
+4. **② 扩面**（门槛通过后）：RuoYi 多故事功能变更、真实模型撞底座，并补 L3 真实项目观察。RuoYi 依赖的 Docker Desktop 本机故障，人已决定延后。
+5. **③ 需求与充分性**：spec-craft 剩余批次按决策树复核范围，再推进链路骨架 ② 和测试充分性。[#64](https://github.com/jinlin725168-ai/storyloop/issues/64) 报告瘦身仍不做；按需加载知识索引延至②之后。
 
 ```mermaid
 flowchart LR
-    E3["架构收敛 E3 ✅"] --> A["①a L1 分类 + L2 冻结 bench"]
-    A --> B["①b 公共验证入口 + 审查收敛"]
-    B --> C["①c 技能融合 + 知识增量"]
-    C --> G{"5 Case ≥4 PASSED<br/>每个 ≤1 非例行停点"}
-    G --> X["② RuoYi 多故事 + 真实模型 + L3"]
+    A["①a L1 分类 + L2 bench ✅"] --> B["①b 验证入口 + 审查收敛 ✅"]
+    B --> C["①c 技能融合 + 知识增量 ✅"]
+    C --> P["试跑 1～5 + 门槛 1～3<br/>修复 #114～#126 ✅"]
+    P --> CI["修复 main CI ⏳"]
+    CI --> G{"门槛 4（Case v2.1）<br/>5 Case ≥4 两次 PASSED<br/>每次 ≤1 非例行停点"}
+    G -->|未过| F["按证据修根因"] --> G
+    G -->|通过| X["② RuoYi 多故事 + 真实模型 + L3"]
     X --> Y["③ 需求决策树复核 + 骨架② + 充分性"]
-    S["spec-craft 第 1、2 批 ✅"] --> C
-    E3 --> X
 ```
 
 阶段③的 spec-craft 仍须验证正式负责人判断与引擎交接；老仓库迁移、上游同步自动化、多变更并行和 Windows 真实产品闭环按实际需求启动。
@@ -81,4 +97,4 @@ flowchart LR
 - 不做 CI 系统、部署、push。
 - 不做操作系统级沙箱；需要强隔离时用容器。
 - 不让引擎自动修改规格迁就代码。
-- 暂不处理 [#80](https://github.com/jinlin725168-ai/storyloop/issues/80) 与 [#56](https://github.com/jinlin725168-ai/storyloop/issues/56) 的底座合并后边界恢复（以底座向后兼容为前提）；E2a/E2b 已取消，[PR #50](https://github.com/jinlin725168-ai/storyloop/pull/50) 的脱敏整体设计搁置。
+- 暂不处理 [#80](https://github.com/jinlin725168-ai/storyloop/issues/80) 与 [#56](https://github.com/jinlin725168-ai/storyloop/issues/56) 的底座合并后边界恢复（以底座向后兼容为前提）；E2a/E2b 已取消，[PR #50](https://github.com/jinlin725168-ai/storyloop/pull/50) 的敏感输出处理设计已由人于 2026-11-13 合入为设计文档，是否及何时实施待后续评估。

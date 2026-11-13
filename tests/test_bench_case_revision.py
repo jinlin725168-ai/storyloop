@@ -12,13 +12,13 @@ from tests.test_bench_case import case_fixture, v2_case_fixture
 
 
 class BenchCaseRevisionTests(unittest.TestCase):
-    def test_five_draft_cases_cover_each_automatic_criterion(self):
+    def test_five_approved_cases_cover_each_automatic_criterion(self):
         cases_root = Path(__file__).resolve().parents[1] / "bench/cases"
         for source in sorted(cases_root.glob("*/v2")):
             with self.subTest(case=source.parent.name):
-                case = load_case(source, allow_unapproved_v2=True)
+                case = load_case(source)
                 self.assertEqual(case["manifest"]["case_revision"], "2.1")
-                self.assertFalse(case["contract_approved"])
+                self.assertTrue(case["contract_approved"])
                 for story in case["contract"]["product"]["stories"]:
                     entry_ids = {entry["id"] for entry in story["verification_entries"]}
                     for criterion in story["acceptance"]:

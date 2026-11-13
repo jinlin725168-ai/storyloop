@@ -47,6 +47,11 @@
 | 判据自证：执行数统计、旧代码基线、零执行与下降判失败 | 每轮验证 | `oracle_counts` | — | `test_oracle_counts`、`test_oracle_baseline` |
 | 判据分级：快判据每轮，重判据在快判据全绿后 | 每轮验证 | `smoke_runner._run_tiered` | — | `test_oracle_tiers` |
 | 技能包 `oracle-craft` 嵌入判据相关角色；技能包目录不能成为可变区 | 每次调用 | `skills.ROLE_SKILLS`、`project_profile` | — | `test_skills`、`test_oracle_protection` |
+| 验证入口：故事必填 `verification_entries`，自动条件 `entry_ids` 批准时校验覆盖；manifest、方案 `entry_paths` 与审查三方核对；CLI/函数入口静态核对测试实际调用 | `change`、`approve`、RED 前 | `verification_entries`、`planning_validation` | — | `test_verification_entries` |
+| 确定性验收缺陷自动退回 acceptance（保持性条件实现前失败、越界、未经入口），与夹具修复共用预算、记为例行 | RED 证明 | `acceptance_defects`、`acceptance_repair`、`smoke_runner._judge_red` | — | `test_acceptance_fixture_retry` |
+| RED 前判据强度预审：MUST_FIX 自动退回、DECISION_NEEDED 停给人、ADVISORY 记录 | RED 证明前 | `oracle_strength_precheck` | — | `test_oracle_strength_precheck` |
+| 已有测试受控更新：方案声明 `regression_updates`，未声明的已有测试改动判越界，冲突转 `DESIGN_REVISION_REQUIRED` | 方案、实现、审查 | `regression_updates`、`project_loop_failures` | — | `test_regression_updates` |
+| 审查收敛：稳定意见 ID、MUST_FIX/DECISION_NEEDED/ADVISORY 三级，同一条件连续判强度不足按 `ORACLE_DEFECT` 收敛 | 每次审查 | `review_disposition`、`finding_disposition`、`review_convergence` | — | `test_finding_disposition`、`test_review_convergence` |
 
 ## 四、证据与可观测性
 
@@ -56,6 +61,9 @@
 | design.md、decisions.md、活规格并入与取代记录；事后补生成 | 完成时、`document` | `openspec_docs` | [0007](decisions/0007-change-dir-never-archived.md) | `test_openspec_docs` |
 | 调用账本（墙钟、轮数、token、费用）与每次调用的诊断目录 | `status`、`log` | `telemetry`、`call_log`、`change_log` | — | `test_telemetry`、`test_call_diagnostics` |
 | 每个停点与报错附带下一步命令 | 所有命令 | `next_steps` | — | `test_call_diagnostics` |
+| 人工介入事件：每次批准、回答、纠正记为例行/非例行（自动退回带 `automatic=true`） | 运行全程 | `intervention_events` | — | `test_intervention_events` |
+| 知识增量：PASSED 后提议 foundation 精确 diff，人批准路径后重验并原子写入 | `knowledge-propose`、`authorize-knowledge` | `knowledge_delta` | — | `test_knowledge_delta` |
+| 冻结 Case 评测底座：只跑 Gold 的校准、隔离真实参测、模拟人一次纠正、阶段门槛判定 | `bench calibrate`、`bench run`、`bench report`（见 [bench.md](bench.md)） | `bench_case`、`bench_calibrate`、`bench_run`、`bench_real_exec`、`bench_worker` | — | `test_bench_*` |
 
 ## 五、系统冒烟与 CI
 

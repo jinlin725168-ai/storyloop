@@ -10,6 +10,7 @@ import unittest
 
 from storyloop.testing.smoke_harness.python_runner import python_cases
 from storyloop.bench_case import _check_inventory, _gold, load_case
+from storyloop.changes import contract_digest
 from storyloop.product_contract import validate_product
 from storyloop.requirement_checklist import evaluate_checklist
 from storyloop.smoke import _validate_manifest
@@ -42,7 +43,8 @@ class BenchV2DraftTests(unittest.TestCase):
                 for key in ("case_id", "repository_id", "base_commit", "solution_commit"):
                     self.assertEqual(case[key], old_case[key])
                 self.assertEqual(case["case_revision"], "2.1")
-                self.assertNotIn("approval", contract)
+                self.assertEqual(contract["approval"]["contract_sha256"],
+                                 contract_digest(contract["product"]))
                 prior = old_contract["product"]
                 derived = json.loads(json.dumps(contract["product"]))
                 for story in derived["stories"]:
@@ -61,7 +63,7 @@ class BenchV2DraftTests(unittest.TestCase):
                                  case["contract_sha256"])
                 self.assertEqual(hashlib.sha256((draft / "gold.json").read_bytes()).hexdigest(),
                                  case["gold_sha256"])
-                self.assertFalse(load_case(draft, allow_unapproved_v2=True)["contract_approved"])
+                self.assertTrue(load_case(draft)["contract_approved"])
 
     def test_approved_entry_locators_name_the_public_commands(self):
         expected = {
