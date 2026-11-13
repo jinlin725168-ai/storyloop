@@ -43,6 +43,27 @@ class FakeCodex:
                 "truncated": False, "error": "", "contained": True}
 
 
+class StrictResumeCodex(FakeCodex):
+    """Reject options outside the Codex 0.167 resume interface at the CLI boundary."""
+
+    def __call__(self, command, cwd, timeout, input_text=None, **kwargs):
+        if command[1:3] == ["exec", "resume"]:
+            allowed_values = {"--output-schema", "--output-last-message", "-m"}
+            allowed_flags = {"--ignore-user-config", "--json"}
+            index = 4  # executable, exec, resume, session ID
+            while index < len(command):
+                option = command[index]
+                if option in allowed_values:
+                    index += 2
+                elif option in allowed_flags or option == "-":
+                    index += 1
+                else:
+                    self.calls.append((list(command), input_text))
+                    return {"returncode": 2, "stdout": "", "stderr": f"unexpected argument '{option}'",
+                            "timed_out": False, "truncated": False, "error": "", "contained": True}
+        return super().__call__(command, cwd, timeout, input_text=input_text, **kwargs)
+
+
 def project(root: Path) -> None:
     repository(root)
     bootstrap_project(root)  # default adapter is codex
@@ -79,8 +100,8 @@ class CodexAdapterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             project(root)
-            fake = FakeCodex(["I finished the work, here is a summary in prose.",
-                              '{"summary": "done", "questions": []}'])
+            fake = StrictResumeCodex(["I finished the work, here is a summary in prose.",
+                                      '{"summary": "done", "questions": []}'])
             with patch("storyloop.agent_transport.run_process", fake), \
                     patch("storyloop.agent_transport._codex_executable", return_value=["codex"]):
                 result = invoke_project_agent(root, "implement", {"change": {"change_id": "FEAT-2"}})
@@ -91,6 +112,18 @@ class CodexAdapterTests(unittest.TestCase):
             self.assertEqual(resume[3], THREAD)
             self.assertIn("JSON", fake.calls[1][1])
             self.assertEqual(summarize(root, "FEAT-2")["by_role"]["implement"]["turns"], 2)
+
+    def test_schema_mismatch_is_repaired_by_resuming_the_thread(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            project(root)
+            fake = StrictResumeCodex(['{"questions": []}', '{"summary": "done", "questions": []}'])
+            with patch("storyloop.agent_transport.run_process", fake), \
+                    patch("storyloop.agent_transport._codex_executable", return_value=["codex"]):
+                result = invoke_project_agent(root, "implement", {"change": {"change_id": "FEAT-4"}})
+            self.assertEqual(result["summary"], "done")
+            self.assertEqual(fake.calls[1][0][1:4], ["exec", "resume", THREAD])
+            self.assertIn("summary", fake.calls[1][1])
 
     def test_repair_is_bounded(self):
         with tempfile.TemporaryDirectory() as folder:

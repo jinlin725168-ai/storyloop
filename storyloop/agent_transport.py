@@ -129,7 +129,8 @@ def _codex(project: Path, request: dict, config: dict, schema: dict, trace: dict
                 argv = _codex_executable() + ["exec", "--sandbox", sandbox, "-C", str(project),
                                               *common, *output_schema]
             else:
-                argv = _codex_executable() + ["exec", "resume", thread, *common, *output_schema]
+                resume_options = ["--ignore-user-config", "--json"] + (["-m", model] if model else [])
+                argv = _codex_executable() + ["exec", "resume", thread, *resume_options, *output_schema]
             trace["repairs"] = repair
             content = _codex_once(project, argv, next_prompt, config["agent_timeout_seconds"], telemetry, trace)
             thread = telemetry.pop("thread", None) or thread
