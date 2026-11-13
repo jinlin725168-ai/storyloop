@@ -1,6 +1,6 @@
 # StoryLoop 知识库
 
-对应引擎版本：0.1.0（`storyloop/__init__.py`），最近一次对照代码全面核对：2026-10-11。
+对应引擎版本：0.1.0（`storyloop/__init__.py`），最近一次对照代码全面核对：2026-10-11；2026-11-13 同步验证入口、判据质量与评测底座。
 
 这里是 StoryLoop 关于自己的全部事实。结构与引擎给目标仓库生成的底座知识库（`openspec/foundation/`）相同：使用文档回答"怎么用"，工程文档回答"它是什么、怎么改"。
 
@@ -28,6 +28,7 @@
 | [smoke-harness.md](smoke-harness.md) | 两阶段草案、可信 case/业务子进程、严格计数与 helper API |
 | [onboarding-a-repository.md](onboarding-a-repository.md) | 接入新仓库：settings、冒烟执行器、代理规范、CI、自检清单 |
 | [faq.md](faq.md) | 按停点和现象组织的排障 |
+| [bench.md](bench.md) | 冻结 Case 评测底座：校准、真实参测、模拟人与阶段门槛 |
 | [case-studies.md](case-studies.md) | RuoYi 底座上的真实成本与教训（历史数据） |
 
 **工程文档（知识库八份）**

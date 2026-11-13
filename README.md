@@ -59,6 +59,11 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 - 需求质量门：合同采用 spec-kit 结构（优先级、独立验证方式、EARS 规则、Gherkin 验收条件），澄清问题以选择题形式逐条回答并入合同；批准前有确定性 checklist 把关。
 - OpenSpec 管理：批准合同、增量规格、实现方案（design.md）和人为决策（decisions.md）进入 `openspec/changes/<change-id>/`，完成时并入 `openspec/specs/<capability>/spec.md` 活规格；装了 `openspec` CLI 时结构校验是门。
 - 测试分层：变更验收套件（`acceptance/changes/<id>/`，acceptance 角色盲写、先红、受保护）、项目级系统冒烟（`acceptance/smoke/`，跨变更累积、只能经人批准更新）、实现前的特征化测试门（锁定将被修改路径的现有行为，在旧代码上跑绿才开工，机器验证）、单元与集成分开的回归命令、静态检查。每层各自出结论，任何一层红都不能过。用例缺陷走 `acceptance-repair` 通道并从合同提交重新证明 RED。
+- 验证入口：新变更的每个故事必须声明公共验证入口（`verification_entries`），每条自动验收条件绑定入口（`entry_ids`），批准时校验覆盖。验收用例的执行与观察必须经过声明入口（准备阶段可直接构造状态），方案的 `entry_paths` 说明入口如何到达改动文件，审查核对三方一致。
+- 判据质量自动把关：RED 证明前，review 角色以判据强度视角预审验收套件（每个前置与分支都执行、断言完整可观察结果、不超出合同）；保持性条件实现前就失败、用例越界、未经声明入口这三类可确定性判定的缺陷，以及预审的 MUST_FIX，自动退回 acceptance 角色重写（共用 `acceptance_fixture_retry_limit`，默认 2 次），记为例行；超出预算或需人判断才停 `ORACLE_DEFECT` / `NEEDS_INPUT`。
+- 已有测试受控更新：合同改变既有行为、旧快照或断言随之失效时，design 在方案的 `regression_updates` 中声明要改的已有测试并绑定验收条件；实现只能改声明过的已有测试，审查逐处核对；未声明的冲突停到 `DESIGN_REVISION_REQUIRED` 并附冲突证据。
+- 审查收敛：审查意见有稳定 ID，分 MUST_FIX / DECISION_NEEDED / ADVISORY 三级；同一验收条件连续被判判据强度不足时，下一轮必须给完整判据规格，仍不收敛就停给人一次。
+- 知识增量：变更 PASSED 后，`knowledge-propose` 提议经代码证实的 foundation 精确 diff；人用 `authorize-knowledge` 批准具体路径，引擎重验哈希后原子写入并推进底座版本。
 - 人工验收：合同里的 `manual` 条件停在 `MANUAL_ACCEPTANCE_REQUIRED`，人用 `accept` 逐条留痕，记录与实现指纹绑定。
 - 单仓库底座：初始化提交和文件摘要构成逻辑底座；业务改动只进入可变区 `module_roots`（默认 `modules/`、`features/`），测试改动进入 `test_roots`。
 - 底座独立演进：普通功能触碰底座会暂停并产生 `BASE-*` 提案。
@@ -73,8 +78,10 @@ flowchart TD
     B --> R[readiness 与缺口处理]
     R --> C[产品故事与验收条件共创]
     C --> D{用户批准}
-    D --> E[变更验收套件盲写并证明 RED]
-    E --> E1[L2 方案量测<br/>heavy 须明确方案批准]
+    D --> E[变更验收套件盲写<br/>经声明验证入口]
+    E --> EP[判据强度预审<br/>确定性缺陷自动退回]
+    EP --> ER[证明 RED]
+    ER --> E1[L2 方案量测<br/>heavy 须明确方案批准]
     E1 --> E2[特征化测试锁定将改动的现有行为]
     E2 --> F[AI 实现：TDD 先红后绿]
     F --> G[单元 + 集成 + 变更验收 + 系统冒烟 + 静态检查 + 独立审查]
@@ -135,7 +142,7 @@ my-project/
 | `change PATH --change ID --message TEXT` | 与 AI 继续修订同一变更 |
 | `approve PATH --change ID [--no-interactive]` | 批准变更；base 批准后由人显式运行 |
 | `approve PATH --draft KIND/ID` | 审批 `lesson` 或 `errata` 草案；与 `--change` 互斥 |
-| `run PATH --change ID [--implementer human] [--no-interactive]` | 继续已批准变更；E1 的 base 必须首次指定 `--implementer human` |
+| `run PATH --change ID [--implementer human] [--replan --reason TEXT] [--no-interactive]` | 继续已批准变更；E1 的 base 必须首次指定 `--implementer human`；`--replan` 在方案类停点（如 `DESIGN_REVISION_REQUIRED`、`NO_PROGRESS`）重新规划 |
 | `status PATH --change ID --json` | 查看合同和外部 Loop 状态，含下一步命令 `next` |
 | `log PATH --change ID [--json]` | 排障视图：每次代理调用的结果、耗时、费用、会话 ID 与调用记录目录，每轮失败原因，下一步命令 |
 | `ci PATH --change ID` | CI 入口：隔离运行该变更的验收套件和项目级系统冒烟 |
@@ -155,6 +162,9 @@ my-project/
 | `adapters check PATH [--json]` | 检查角色适配器能力与档次映射 |
 | `skills PATH` | 把引擎自带的技能包（`foundation-survey`）安装或刷新到项目的 `.claude/skills/` 与 `.codex/skills/`，Claude Code 与 Codex 都能直接用；已初始化的项目自动开 BASE 提案 |
 | `survey PATH [--reason TEXT] [--from FILE]` | 底座摸底：生成 `openspec/foundation/` 候选和 BASE 草案；批准后由人工 base 通道提交并验证。产物校验失败时原始回答保存在 `.storyloop/state/foundation/last-survey.json`，人工修正后用 `--from` 安装 |
+| `knowledge-propose PATH --change ID` | 变更 PASSED 后，提议经代码证实的 foundation 知识精确 diff（只读，不改正文）；无稳定知识返回 `NO_KNOWLEDGE_DELTA` |
+| `authorize-knowledge PATH --proposal ID --paths [PATH …]` | 人批准知识提案中的精确 foundation 路径，引擎重验后原子写入并推进底座版本；空 `--paths` 表示拒绝 |
+| `bench calibrate\|run\|report …` | 冻结 Case 评测底座：校准只跑 Gold、真实参测需明确接受成本，见 [bench.md](docs/bench.md) |
 | `document PATH --change ID [--design FILE] [--capability NAME]` | 为已 PASSED 的变更补生成 design.md、decisions.md 和活规格（配合 `base-propose`/`base-update` 提交） |
 
 退出码 `0` 表示命令正常结束，其中包括停在 `MANUAL_ACCEPTANCE_REQUIRED`：自动验收已全部通过，只是在等人逐条确认，不算失败；`2` 表示失败、受阻或等人回答（如 `NEEDS_INPUT`、`WORKSPACE_TAINTED`、`BUDGET_EXHAUSTED`、`BASE_CHANGE_REQUIRED`、`BOUNDARY_VIOLATION`、`CHARACTERIZATION_FAILED`、`EXISTING_GREEN`、`smoke-apply` 的 `SMOKE_UPDATE_FAILED`）；`130` 表示中断。报错时 stderr 输出 `{status, message, next}` JSON。脚本判断停点请读输出里的 `status` 与 `next`（加 `--json`），不要只看退出码。
@@ -168,7 +178,8 @@ my-project/
 - 代理写入未授权路径或修改保护文件。
 - 达到尝试预算。
 - 存在必须由人实际判断的手工验收条件：自动验收、回归和审查通过后停在 `MANUAL_ACCEPTANCE_REQUIRED`，用 `storyloop accept` 逐条记录后 `storyloop run` 继续；人工证据与实现指纹绑定并写入验收报告。
-- 变更验收用例本身有缺陷（定位器、时序、数据准备）：由人判断后执行 `storyloop acceptance-repair`，实现代理永远不能改验收用例。
+- 变更验收用例本身有缺陷（定位器、时序、数据准备）：能确定性判定的缺陷与判据强度预审的 MUST_FIX 先自动退回 acceptance 角色（默认至多 2 次，例行）；仍不合格时停 `ORACLE_DEFECT`，由人判断后执行 `storyloop acceptance-repair`。实现代理永远不能改验收用例。
+- 合同改变既有行为、已有测试或快照锁定旧行为而方案未声明 `regression_updates`：停 `DESIGN_REVISION_REQUIRED`，用 `storyloop run PATH --change ID --replan --reason TEXT` 重新规划时补声明。
 - 特征化测试在旧代码上不绿（`CHARACTERIZATION_FAILED`）：锁定现有行为的测试写错了。就地修正 `test_roots` 里的这些测试（不用提交）后 `run`：引擎不再调用代理，重跑整个单元层，绿了才提交这些测试并继续。
 
 完成阶段（实现提交、报告、文档归档与活规格并入、no-ff 合并、回执）是幂等的：中途崩溃后再次 `storyloop run` 会采纳已存在的实现提交、丢弃上次留下的引擎产物并重新生成，不会重复调用实现代理。
