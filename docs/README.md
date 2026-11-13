@@ -28,6 +28,7 @@
 | [smoke-harness.md](smoke-harness.md) | 两阶段草案、可信 case/业务子进程、严格计数与 helper API |
 | [onboarding-a-repository.md](onboarding-a-repository.md) | 接入新仓库：settings、冒烟执行器、代理规范、CI、自检清单 |
 | [faq.md](faq.md) | 按停点和现象组织的排障 |
+| [research/](research/2026-11-08-HelixHarness调研.md) | 外部项目调研：HelixHarness 对照与补充分析 |
 | [bench.md](bench.md) | 冻结 Case 评测底座：校准、真实参测、模拟人与阶段门槛 |
 | [case-studies.md](case-studies.md) | RuoYi 底座上的真实成本与教训（历史数据） |
 

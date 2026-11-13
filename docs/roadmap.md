@@ -70,7 +70,7 @@
 
 ## 下一步
 
-路线仍按 2026-11-08 批准的 **①a → ①b → ①c → 门 → ② → ③**；①a～①c 已交付，当前停在**门**。依据见[验证入口及评测底座设计](superpowers/specs/2026-11-08-验证入口与评测底座-design.md)。审查角色继续使用 Codex（[#65](https://github.com/jinlin725168-ai/storyloop/issues/65)）；base 人工通道不变（[决策 0018](decisions/0018-base-human-only.md)）。
+路线仍按 2026-11-08 批准的 **①a → ①b → ①c → 门 → ② → ③**；①a～①c 已交付，当前停在**门**。依据是 [HelixHarness 调研](research/2026-11-08-HelixHarness调研.md)（[上游源码](https://github.com/didi/helixharness)，借鉴点与落地见[研究来源](references.md#helixharness2026-11-08)）与[验证入口及评测底座设计](superpowers/specs/2026-11-08-验证入口与评测底座-design.md)。审查角色继续使用 Codex（[#65](https://github.com/jinlin725168-ai/storyloop/issues/65)）；base 人工通道不变（[决策 0018](decisions/0018-base-human-only.md)）。
 
 1. **修复 main CI**（进行中）：全部根因修复、Windows core 与 full 跑绿后再继续。
 2. **门槛 4**：引擎含 #123/#124，Case 用 v2.1（已批准、已校准）。v2.1 基准与门槛 1～3 不可直接对比，报告单列。达标条件不变：5 Case 中至少 4 个两次均 `PASSED`（含 Gold 通过），每次非例行停点不超过 1；不可比较不算通过。模拟人的纠正理由固定、不读 Gold，结果比真实使用偏保守。
