@@ -148,6 +148,65 @@ class OracleStrengthPrecheckTests(unittest.TestCase):
                        {"routing": {"effective_tier": "standard"}}, service, {"tests": []}, {})
         self.assertEqual(caught.exception.code, "NEEDS_INPUT")
 
+    def test_answered_decision_rechecks_and_proves_red_before_planning(self):
+        # Self-iteration FIX-20261114-entry-feasibility: after answering a precheck decision,
+        # run skipped the precheck and RED and went straight to planning.
+        import tempfile
+        from storyloop.answers import record_answers
+        from storyloop.approvals import approve_change
+        from storyloop.baseline import bootstrap_project
+        from storyloop.project_loop import run_change
+        from storyloop.run_services import LoopServices
+        from storyloop.smoke import RED_EVIDENCE
+        from storyloop.storage import load_json
+        from tests.routing_support import legacy_create_change as create_change
+        from tests.support import product
+        from tests.test_baseline_behavior import repository
+        from tests.test_project_loop import smoke_payload
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root, {"test_commands": []})
+            contract = product()
+            contract["stories"][0]["verification_entries"] = CHANGE["product"]["stories"][0]["verification_entries"]
+            contract["stories"][0]["acceptance"][0]["entry_ids"] = ["VE-1"]
+            change_id = create_change(root, "orders", contract)["change_id"]
+            approve_change(root, change_id)
+            contexts = []
+
+            def generate(project, request):
+                answer = smoke_payload(change_id)
+                answer["manifest"]["tests"][0]["entry_ids"] = ["VE-1"]
+                return answer
+
+            def review(project, context):
+                if context.get("mode") == "oracle-strength":
+                    contexts.append(context)
+                    if len(contexts) == 1:
+                        return {"verdict": "needs_input", "summary": "row type disputed",
+                                "findings": [finding("DECISION_NEEDED")], "questions": ["Split AC-1?"]}
+                return {"verdict": "pass", "summary": "ok", "findings": [], "questions": []}
+
+            def implement(project, context):
+                path = project / "modules/orders/service.py"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("VALUE = 1\n", encoding="utf-8")
+                return {"summary": "done", "questions": []}
+
+            service = LoopServices(generate_smoke=generate, implement=implement, review=review)
+            with patch("storyloop.project_preparation.check_entry_use"):
+                first = run_change(root, change_id, service)
+                self.assertEqual(first["status"], "NEEDS_INPUT", first)
+                record_answers(root, change_id, ["Yes, split it"])
+                result = run_change(root, change_id, service)
+            self.assertEqual(len(contexts), 2, "answered decision must re-run the precheck")
+            self.assertIn("Yes, split it", str(contexts[1].get("answers")))
+            self.assertTrue((root / ".storyloop/evidence" / change_id / RED_EVIDENCE).is_file())
+            red = load_json(root / ".storyloop/evidence" / change_id / RED_EVIDENCE)
+            self.assertEqual(red["oracle_strength_precheck"]["verdict"], "pass")
+            self.assertEqual(result["status"], "PASSED", result)
+
     def test_light_can_disable_but_standard_cannot(self):
         self.assertFalse(enabled({"routing": {"effective_tier": "light"}},
                                  {"oracle_strength_precheck": False}))

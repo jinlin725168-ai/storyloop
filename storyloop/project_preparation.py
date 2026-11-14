@@ -28,6 +28,12 @@ if TYPE_CHECKING:
     from .run_services import LoopServices
 
 
+def answered_precheck(state: dict) -> bool:
+    """An answered precheck decision resumes acceptance preparation, never planning: RED is unproven."""
+    return (state.get("status") == "NEEDS_INPUT"
+            and (state.get("acceptance") or {}).get("status") == "NEEDS_INPUT")
+
+
 def _prepare_acceptance(
     project: Path, change: dict, services: LoopServices, state: dict,
 ) -> dict | None:

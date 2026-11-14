@@ -68,7 +68,7 @@ TRANSITIONS = {
     "passed": frozenset({("FINALIZING", "PASSED")}),
     "start": frozenset({(None, "PREPARING")}),
     "red_ready": frozenset((source, "IMPLEMENTING") for source in {
-        "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}),
+        "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_INPUT"}),
     "base_green_ready": frozenset({("CONTRACT_COMMITTED", "IMPLEMENTING")}),
     "human_candidate_ready": frozenset({("HUMAN_IMPLEMENTATION_REQUIRED", "IMPLEMENTING")}),
     # Pre-merge interruptions discard the entire attempt; only human commits survive.
