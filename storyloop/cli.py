@@ -385,8 +385,17 @@ def main(argv: list[str] | None = None) -> int:
         stop = _error_stop(args, exc)
         if stop is not None:
             error["stop"] = stop
+        hint_details = dict(exc.details or {})
+        if args.command == "init":
+            init_failures = {
+                "storyloop init needs an existing Git repository (git init first)": "not_git",
+                "Git worktree must be clean before initialization": "dirty_worktree",
+            }
+            reason = init_failures.get(str(exc))
+            if reason:
+                hint_details["init_failure_reason"] = reason
         hint = stop["resume"] if stop else (None if args.command == "bench" else
-                                            next_step(exc.code, change_id, args.project.resolve(), exc.details))
+                                            next_step(exc.code, change_id, args.project.resolve(), hint_details))
         if hint:
             error["next"] = hint
         print(json.dumps(_redact_value(error), ensure_ascii=False), file=sys.stderr)

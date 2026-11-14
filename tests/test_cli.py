@@ -1,6 +1,7 @@
 import importlib
 import json
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -57,12 +58,58 @@ class CliTests(unittest.TestCase):
 
     def test_init_needs_a_git_repository_and_says_so(self):
         with tempfile.TemporaryDirectory() as folder:
-            project = Path(folder) / "project"
+            project = Path(folder) / "project with spaces"
             project.mkdir()
             result = storyloop("init", str(project))
+            payload = json.loads(result.stderr)
+            quoted = shlex.quote(str(project.resolve()))
             self.assertEqual(result.returncode, 2)
-            self.assertIn("Git repository", json.loads(result.stderr)["message"])
+            self.assertEqual(payload["message"],
+                             "storyloop init needs an existing Git repository (git init first)")
+            self.assertIn(f"git init {quoted}", payload["next"])
+            self.assertIn("首次提交", payload["next"])
+            self.assertIn(f"storyloop init {quoted}", payload["next"])
             self.assertFalse((project / ".storyloop").exists())
+
+    def test_init_dirty_worktree_suggests_status_and_user_choice(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = Path(folder) / "project with spaces"
+            project.mkdir()
+            for command in (("init", "-q"), ("config", "user.name", "Test"),
+                            ("config", "user.email", "test@example.invalid")):
+                subprocess.run(["git", "-C", str(project), *command], check=True,
+                               capture_output=True)
+            (project / "README.md").write_text("initial\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(project), "add", "README.md"],
+                           check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(project), "commit", "-qm", "initial"],
+                           check=True, capture_output=True)
+            (project / "uncommitted.txt").write_text("dirty\n", encoding="utf-8")
+
+            result = storyloop("init", str(project))
+            payload = json.loads(result.stderr)
+            quoted = shlex.quote(str(project.resolve()))
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(payload["message"],
+                             "Git worktree must be clean before initialization")
+            self.assertIn(f"git -C {quoted} status", payload["next"])
+            self.assertIn("查看改动后", payload["next"])
+            self.assertIn("提交或暂存", payload["next"])
+            self.assertIn(f"storyloop init {quoted}", payload["next"])
+
+    def test_init_existing_baseline_keeps_generic_hint(self):
+        repo = git_repo()
+        self.addCleanup(cleanup_repo, repo)
+        baseline = repo / ".storyloop/baseline.json"
+        baseline.parent.mkdir(parents=True, exist_ok=True)
+        baseline.write_text("{}\n", encoding="utf-8")
+
+        result = storyloop("init", str(repo))
+        payload = json.loads(result.stderr)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(payload["message"], "StoryLoop baseline already exists")
+        self.assertEqual(payload["next"],
+                         "检查错误并重试原命令；此时尚未创建变更，无可查看的 change id")
 
     def test_commands_on_an_uninitialized_project_point_to_init(self):
         with tempfile.TemporaryDirectory() as folder:

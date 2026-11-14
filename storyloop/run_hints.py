@@ -36,6 +36,13 @@ def next_step(status: str | None, change_id: str | None, project: Path | str = "
     if options:
         return options[0]["command"]
     if not change_id:
+        quoted_project = shlex.quote(str(project))
+        retry = f"storyloop init {quoted_project}"
+        if details.get("init_failure_reason") == "not_git":
+            return (f"先执行 git init {quoted_project}，完成首次提交后再执行 {retry}")
+        if details.get("init_failure_reason") == "dirty_worktree":
+            return (f"先执行 git -C {quoted_project} status 查看改动后自行提交或暂存，"
+                    f"再执行 {retry}")
         return ("检查错误并重试原命令；此时尚未创建变更，无可查看的 change id"
                 if status else None)
     project_path = project
