@@ -53,7 +53,8 @@ def check_entry_use(project: Path, change: dict, manifest: dict) -> None:
                     "message": redact(item["message"])[:2000],
                     "traceback_tail": f"{item['path']}:{item['line']}"}
                    for item in findings[:20]]
-    entry_use = [{"test_id": item["test_id"], "path": item["path"],
+    entry_use = [{"test_id": item["test_id"], "criterion_ids": item["criterion_ids"],
+                  "path": item["path"],
                   "line": item["line"], "entry_id": item["entry"]["id"],
                   "entry_kind": item["entry"]["kind"],
                   "entry_locator": item["entry"]["locator"],
@@ -101,7 +102,8 @@ def entry_use_findings(product: dict, manifest: dict, sources: dict[str, str]) -
                 continue
             path = next(iter(selected), "manifest.json")
             tree = selected.get(path)
-            findings.append({"test_id": test["id"], "entry": entry,
+            findings.append({"test_id": test["id"], "criterion_ids": test["criteria"],
+                             "entry": entry,
                              "path": path, "line": _test_line(tree),
                              "category": "UNVERIFIED_ENTRY_USE",
                              "required_call": _required_call(entry),

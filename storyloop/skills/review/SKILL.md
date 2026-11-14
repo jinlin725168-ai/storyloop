@@ -11,6 +11,8 @@ description: 审查分级、稳定意见 ID 与同一判据的收敛规则。
 
 一次审查列出当前已发现的全部意见。每条新格式意见写 `id`、`criterion_id`、`target`、`disposition`、`blocking`、`location`、`evidence`、`message`、`required_change`。同一变更中同一判据、归属与位置的根因重审沿用 ID；新根因使用新 ID。建议格式为 `ORACLE-AC-4-01`，不得每轮重新编号。
 
+`oracle-strength` 预审一次列出套件中全部阻断意见；修复后对最新整套验收重新审查，参照 `previous_findings` 给未解决的根因沿用 ID。意见减少或新增时如实报告，不能只复核上轮清单。
+
 `id` 用于追溯，不是措辞锁：重审后位置行号或 `required_change` 改写时沿用同一 ID 并说明差异；同轮不同意见不得共用 ID。不要因表述漂移把运行判为失败，收敛仍按 AC 与 oracle 阻断归一。
 
 - `MUST_FIX`：证据已足以确认交付缺陷，`blocking: true`。测试假通过、错误断言、无效 mock/夹具、跳过公共入口或违反测试硬规范都属此类，不能降为建议。

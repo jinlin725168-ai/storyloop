@@ -26,6 +26,8 @@ from .smoke import suite_relative, suite_root as acceptance_suite_root
 from .smoke_runner import run_commands_at_commit, run_smoke_isolated
 from .storage import load_json
 from .verification_entries import check_entry_use
+from .acceptance_progress import (DEFAULT_AUTO_RETRY_ROUND_LIMIT, PROGRESS_CATEGORIES,
+                                  remember_round)
 
 if TYPE_CHECKING:  # the loop imports this module; the services type is only an annotation
     from .run_services import LoopServices
@@ -50,18 +52,55 @@ def repair_smoke(project: Path, change_id: str, reason: str, services: LoopServi
 
 def retry_fixture_red(project: Path, change_id: str, services: LoopServices | None,
                       result: dict) -> dict:
-    """Retry only a RED fixture defect, up to the project-configured run limit."""
+    """Retry fixture defects by budget and deterministic defects while evidence improves."""
     project = Path(project).resolve()
-    limit = load_project_config(project).get("acceptance_fixture_retry_limit", DEFAULT_FIXTURE_RETRY_LIMIT)
-    require(type(limit) is int and 0 <= limit <= 5, "Invalid acceptance_fixture_retry_limit")
+    config = load_project_config(project)
+    fixture_limit = config.get("acceptance_fixture_retry_limit", DEFAULT_FIXTURE_RETRY_LIMIT)
+    round_limit = config.get("acceptance_auto_retry_round_limit", DEFAULT_AUTO_RETRY_ROUND_LIMIT)
+    require(type(fixture_limit) is int and 0 <= fixture_limit <= 5,
+            "Invalid acceptance_fixture_retry_limit")
+    require(type(round_limit) is int and 0 <= round_limit <= 50,
+            "Invalid acceptance_auto_retry_round_limit")
     state = load_json(run_path(project, change_id))
-    used = sum(item.get("automatic") is True for item in state.get("repairs", []))
-    while (result.get("status") == "ORACLE_DEFECT"
-           and (state.get("acceptance") or {}).get("fixture_repairable") is True and used < limit):
+    while result.get("status") == "ORACLE_DEFECT":
+        acceptance = state.get("acceptance") or {}
+        if acceptance.get("fixture_repairable") is not True:
+            break
+        category = acceptance.get("defect_category")
+        progressive = category in PROGRESS_CATEGORIES
+        progress = state.get("acceptance_retry") or {}
+        repairs = state.get("repairs") or []
+        if (progress.get("exhausted") and repairs and repairs[-1].get("automatic") is not True
+                and len(repairs) > (progress.get("rounds") or [{}])[-1].get("repair_count", -1)):
+            progress.pop("exhausted", None)  # a human submitted a new suite after the stop
+        if state.get("acceptance_retry", {}).get("exhausted"):
+            break
+        reason, finding_ids = remember_round(state, acceptance) if progressive else (None, [])
+        automatic = [item for item in state.get("repairs") or [] if item.get("automatic") is True]
+        used = len(automatic)
+        fixture_used = sum(item.get("defect_category") not in PROGRESS_CATEGORIES for item in automatic)
+        if progressive and reason == "no_progress":
+            return _retry_stop(project, state, acceptance, reason, finding_ids, round_limit)
+        if used >= round_limit:
+            return _retry_stop(project, state, acceptance, "round_limit", finding_ids, round_limit)
+        if not progressive and fixture_used >= fixture_limit:
+            save_run(project, state)
+            break
+        save_run(project, state)
         result = _repair_once(project, change_id, AUTO_REASON, services, automatic=True)
         state = load_json(run_path(project, change_id))
-        used += 1
     return result
+
+
+def _retry_stop(project: Path, state: dict, acceptance: dict, reason: str,
+                finding_ids: list[str], round_limit: int) -> dict:
+    detail = {"reason": reason, "finding_ids": finding_ids, "round_limit": round_limit}
+    state.setdefault("acceptance_retry", {"version": 1, "rounds": []}).update(
+        exhausted=True, stop=detail, round_limit=round_limit)
+    acceptance = {**acceptance, "retry_stop": detail}
+    message = ("验收意见连续两轮无进展" if reason == "no_progress" else
+               f"验收自动修复达到总轮次上限 {round_limit}")
+    return pause(project, state, "ORACLE_DEFECT", error=message, acceptance=acceptance)
 
 
 def _repair_once(project: Path, change_id: str, reason: str, services: LoopServices | None = None,

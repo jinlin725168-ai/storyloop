@@ -35,6 +35,7 @@ def assess(project: Path, change: dict, state: dict, services, manifest: dict,
     context = {"mode": "oracle-strength", "change": change, "manifest": manifest,
                "suite_files": files, "criteria": [criterion for story in change["product"]["stories"]
                                                   for criterion in story["acceptance"]],
+               "previous_findings": ((state.get("acceptance") or {}).get("precheck") or {}).get("findings") or [],
                "verification_entries": [entry for story in change["product"]["stories"]
                                         for entry in story.get("verification_entries") or []],
                "checklist": ["每条 AC 的全部前置和分支均执行", "比较完整可观察结果",

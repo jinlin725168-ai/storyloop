@@ -195,8 +195,9 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 | `adapter` | `"codex"` | `codex`、`command` 或 `manual` |
 | `agent_command` | `[]` | `adapter` 为 `command` 时的 argv，支持 `{python}`、`{project}`；不能是 `.cmd/.bat/.ps1` |
 | `max_attempts` | `3` | 唯一的质量预算 |
-| `acceptance_fixture_retry_limit` | `2` | RED 中夹具/前提错误的自动验收修复次数；整数 0–5，0 表示关闭；用尽仍停 `ORACLE_DEFECT` |
-| `oracle_strength_precheck` | `true` | 新格式合同在 RED 前由 review 审查判据强度；standard/heavy 始终开启，light 可设为 `false`。MUST_FIX 使用上述同一自动修复预算。 |
+| `acceptance_fixture_retry_limit` | `2` | RED 中普通夹具/前提错误的自动验收修复次数；整数 0–5，0 表示关闭；用尽仍停 `ORACLE_DEFECT` |
+| `acceptance_auto_retry_round_limit` | `10` | 每变更验收自动修复总轮次上限；整数 0–50。保持性条件实现前失败、用例/清单越界、未调用声明入口及判据强度预审 `MUST_FIX` 按阻断签名的进展继续，不受夹具预算限制；相邻两轮签名相同停 `no_progress`，达到总上限停 `round_limit`，均保留 `ORACLE_DEFECT` 与可追溯证据。旧配置缺键时按默认 10 处理。 |
+| `oracle_strength_precheck` | `true` | 新格式合同在 RED 前由 review 审查判据强度；standard/heavy 始终开启，light 可设为 `false`。`MUST_FIX` 按进展自动退回；`DECISION_NEEDED` 仍停 `NEEDS_INPUT`。 |
 | `agent_timeout_seconds` | `14400` | 代理进程挂死保护 |
 | `check_timeout_seconds` | `300` | 单元、集成、静态检查与特征化回归的单条命令上限 |
 | `design_min_stories` | `2` | 故事数少于它时跳过 design；必须是 ≥1 的整数 |

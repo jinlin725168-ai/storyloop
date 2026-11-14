@@ -43,6 +43,8 @@ Run 记录分别保留 `engine_python` 与 `attempt_python`。`--repository ID=P
 套件只用于 PASSED 后的隐藏 Gold。可显式选 `--suite-source frozen`，在临时树预装
 Case 套件，仅隔离评测设计/实现/审查链路。Run 记录包含模式，两种模式不可互比。
 
+generated 模式下，引擎对确定性的验收缺陷与预审 `MUST_FIX` 按阻断意见进展自动退回 acceptance；同一阻断签名连续两轮不变或达到项目配置的总轮次上限才停 `ORACLE_DEFECT`。普通夹具/前提错误仍受 `acceptance_fixture_retry_limit` 限制。自动退回事件记为例行，不占 bench 模拟人的一次非例行纠正额度。
+
 真实参测需要 `--i-accept-cost`，随后输入 `yes` 或给 `--yes` 再次确认。开始前会
 显示次数、适配器、模型和预计累计耗时，按 Case 数 × 每侧两次 × 单次 40～65 分钟
 估算。例如单 Case base-only 为 2 次、约 1.3～2.2 小时。Claude 须另给包含 `{model}`
