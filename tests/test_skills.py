@@ -108,7 +108,7 @@ class SurveyUsesSkillTests(unittest.TestCase):
 class OracleCraftTests(unittest.TestCase):
     def test_spec_craft_requires_entry_coverage_self_check(self):
         skill = packaged_skills()['spec-craft']
-        self.assertEqual(skill['version'], '1.4.2')
+        self.assertEqual(skill['version'], '1.4.3')
         content = (skill['root'] / 'SKILL.md').read_text(encoding='utf-8')
         self.assertIn('入口覆盖自检', content)
         self.assertIn('observable', content)

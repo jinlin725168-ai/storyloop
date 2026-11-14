@@ -133,7 +133,8 @@ def draft_next(project: Path | str, change: dict) -> str:
     questions = len(change["product"].get("questions") or [])
     blocking = len(blocking_items(evaluate_checklist(
         change["product"], Path(project),
-        require_entries=change.get("verification_entries_required") is True)))
+        require_entries=change.get("verification_entries_required") is True,
+        require_observation=change.get("observation_required") is True)))
     if not questions and not blocking:
         return next_step("DRAFT", change_id, project)
     drafts = f".storyloop/drafts/{change_id}"

@@ -24,7 +24,7 @@ def _questions(value: object) -> None:
     require(isinstance(value, list), "questions must be a list")
     seen = set()
     for item in value:
-        fields(item, {"id", "text", "options"}, {"recommended", "why"})
+        fields(item, {"id", "text", "options"}, {"recommended", "why", "criterion_id"})
         key = identifier(item["id"], "question id")
         require(key not in seen, "Duplicate question id")
         seen.add(key)
@@ -35,6 +35,8 @@ def _questions(value: object) -> None:
                     "recommended must be one of the question's options")
         if "why" in item:
             text(item["why"], "why")
+        if "criterion_id" in item:
+            identifier(item["criterion_id"], "question criterion_id")
 
 
 def _clarifications(value: object) -> None:
@@ -49,7 +51,8 @@ def _acceptance(value: object, seen: set, consumers: set) -> None:
     require(isinstance(value, list) and bool(value), "Story needs acceptance criteria")
     for criterion in value:
         fields(criterion, {"id", "given", "when", "then", "kind"},
-               {"row_type", "oracle_class", "consumers", "reproduces_defect", "entry_ids"})
+               {"row_type", "oracle_class", "consumers", "reproduces_defect", "entry_ids",
+                "observation"})
         key = identifier(criterion["id"], "criterion id")
         require(key not in seen, "Duplicate acceptance id")
         seen.add(key)
@@ -64,6 +67,8 @@ def _criterion_extras(criterion: dict, consumers: set) -> None:
         entry_ids = strings(criterion["entry_ids"], "criterion entry_ids")
         require(bool(entry_ids) and len(entry_ids) == len(set(entry_ids)),
                 "Criterion entry_ids must be nonempty and unique")
+    if "observation" in criterion:
+        text(criterion["observation"], "criterion observation")
     require(criterion.get("row_type", "positive") in ROW_TYPES, "Invalid acceptance row_type")
     if "oracle_class" in criterion:
         require(criterion["oracle_class"] in ORACLE_CLASSES, "Invalid acceptance oracle_class")

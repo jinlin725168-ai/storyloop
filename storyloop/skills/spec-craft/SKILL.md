@@ -1,6 +1,6 @@
 ---
 name: spec-craft
-version: 1.4.2
+version: 1.4.3
 roles: [product]
 description: 与人共创需求和规格，产出需求文档和规格文档交给 StoryLoop；适用于“写需求”“需求共创”“帮我把这个想法写成规格”、write a spec、co-create requirements。AI 只引导和起草，值不值得做及例子的预期结果由人拍板。
 ---
@@ -33,6 +33,8 @@ description: 与人共创需求和规格，产出需求文档和规格文档交�
 新合同的每个非 BASE 故事须写 `verification_entries`（`id`、`kind`、`locator`、`observable`、`reason`）。从现有最高层公共入口选择，说明哪些 AC 经该入口可观察；把入口交给人确认后才能批准合同。若没有可信入口或人有异议，留在规格澄清，不让验收或实现阶段另选入口。旧合同无此字段时沿用原流程。
 
 入口覆盖自检：对每条自动 AC 写非空 `entry_ids`，只引用同故事入口；逐条核对 `given/when/then` 的结果能否在所引入口的 `observable` 上看见。看不见就补充公共入口或修订 AC，并把选择交人确认；不能把入口缺口留给 design 阶段猜测。
+
+每条自动 AC 再写非空 `observation`：明确在 `given` 状态下，经绑定入口执行 `when` 后，从哪里观察 `then`。无法说明时，就该 AC 提出带 `criterion_id` 的待决问题，不猜测。若观察依赖本次才新增的输出、字段或命令，须标为实现前应红的 `positive/degradation/unknown_state/form_parity`，不能标为 `regression/state_preservation/non_goal`；后三类只描述实现前已成立的行为。
 
 ### 需求决策树
 

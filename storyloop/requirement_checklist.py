@@ -22,7 +22,8 @@ EARS_MARKERS = ("SHALL", "MUST", "应", "必须", "须")
 
 
 def evaluate_checklist(product: dict, project: Path | None = None,
-                       *, require_entries: bool = False) -> list[dict]:
+                       *, require_entries: bool = False,
+                       require_observation: bool = False) -> list[dict]:
     """Return checklist items: {id, dimension, level: ok|warning|error, text}."""
     items: list[dict] = []
     add = _adder(items)
@@ -57,6 +58,16 @@ def evaluate_checklist(product: dict, project: Path | None = None,
         automated = [c["id"] for c in story.get("acceptance") or [] if c.get("kind") == "automated"]
         add("Coverage", "warning" if manual and not automated else "ok",
             f"{sid} has at least one automated criterion" + (f" (only manual: {', '.join(manual)})" if manual and not automated else ""))
+        if new_format and require_observation:
+            questioned = {q.get("criterion_id") for q in product.get("questions") or []}
+            for criterion in story.get("acceptance") or []:
+                if criterion.get("kind") != "automated":
+                    continue
+                criterion_id = criterion["id"]
+                if not criterion.get("observation") and criterion_id not in questioned:
+                    add("Measurability", "error",
+                        f"{criterion_id} lacks observation through its declared entry in the given state",
+                        criterion_id=criterion_id)
     _nature_items(add, product, project)
     return items
 
@@ -160,8 +171,12 @@ def blocking_items(items: list[dict]) -> list[dict]:
 
 
 def _adder(items: list[dict]):
-    def add(dimension: str, level: str, text: str) -> None:
-        items.append({"id": f"CHK{len(items) + 1:03d}", "dimension": dimension, "level": level, "text": text})
+    def add(dimension: str, level: str, text: str, *, criterion_id: str | None = None) -> None:
+        item = {"id": f"CHK{len(items) + 1:03d}", "dimension": dimension,
+                "level": level, "text": text}
+        if criterion_id is not None:
+            item["criterion_id"] = criterion_id
+        items.append(item)
     return add
 
 
