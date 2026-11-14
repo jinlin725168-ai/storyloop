@@ -48,7 +48,8 @@ def _approve_locked(project, change_id, approved_by, now, tier) -> dict:
         blocking = blocking_items(evaluate_checklist(
             product, project, require_entries=state.get("verification_entries_required") is True,
             require_observation=state.get("observation_required") is True,
-            require_output_contract=state.get("output_contract_required") is True))
+            require_output_contract=state.get("output_contract_required") is True,
+            inherited_constraints=state.get("inherited_constraints")))
         require(not blocking, "Requirement checklist has blocking items; revise the contract: "
                 + "; ".join(item["text"] for item in blocking[:3]))
     approved_by = text(approved_by, "approver")

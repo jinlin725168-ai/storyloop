@@ -6,13 +6,15 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Callable
 
-from .changes import _save, contract_digest, create_change, load_change, write_change_preview
+from .changes import (_save, contract_digest, create_change, load_change, redacted_copy,
+                      supersede_view, write_change_preview)
 from .run_transitions import transition, set_change_status, SUPERSEDABLE
 from .models import identifier, require, text
 from .guarded_calls import read_only_call
 from .project_loop_support import run_path, save_run
 from .stop_report import stop_of
 from .storage import load_json, locked
+from .processutil import redact
 
 
 
@@ -45,8 +47,9 @@ def _supersede_locked(project: Path, old_id: str, message: str,
     if existing is not None:
         return existing
     link, request = _revision_context(project, old, run, message, checked_reason)
-    product = read_only_call(project, old_id, lambda: reviser(request))
+    product = redacted_copy(read_only_call(project, old_id, lambda: reviser(request)))
     new = create_change(project, old["idea"], product, supersedes=link,
+                        inherited_constraints=request["supersede"]["inherited_constraints"],
                         require_verification_entries=old.get("verification_entries_required") is True,
                         require_observation=old.get("observation_required") is True,
                         require_entry_feasibility=old.get("entry_feasibility_required") is True,
@@ -85,10 +88,32 @@ def _revision_context(project: Path, old: dict, run: dict, message: str,
         "design_summary": plan.get("summary"),
     }
     context = {**link, "facts": deepcopy(run.get("facts") or []),
-               "evidence": deepcopy(stop.get("evidence") or [])}
+               "inherited_constraints": inherited_constraints(project, old, run)}
     request = {"idea": old["idea"], "message": message,
                "current_product": deepcopy(old["product"]), "supersede": context}
     return link, request
+
+
+def inherited_constraints(project: Path, old: dict, run: dict) -> list[dict]:
+    """Copy only explicit human decisions, with stable ordering and redacted text."""
+    from .answers import load_answers
+
+    sources = (
+        ("clarification", [item.get("answer") for item in
+                           old["product"].get("clarifications") or []]),
+        ("answer", [item.get("answer") for item in load_answers(project, old["change_id"])]),
+        ("replan", [item.get("reason") for item in
+                    (run.get("planning") or {}).get("history") or []]),
+        ("overrule", [item.get("reason") for item in run.get("overrules") or []]),
+    )
+    result = []
+    for source, texts in sources:
+        for value in texts:
+            if isinstance(value, str) and value.strip():
+                result.append({"id": f"K-{len(result) + 1}", "source": source,
+                               "text": redact(value).replace("\n", " "),
+                               "origin_change_id": old["change_id"]})
+    return result
 
 
 def _finish_link(project: Path, old: dict, run: dict, new_id: str) -> None:
@@ -146,7 +171,7 @@ def _linked_child(project: Path, old: dict, message: str, reason: str | None) ->
 
 def _result(project: Path, new: dict, old_run: dict) -> dict:
     from .run_hints import draft_next, next_step
-    result = deepcopy(new)
+    result = {**deepcopy(new), **supersede_view(project, new)}
     result["next"] = (draft_next(project, new) if new['status'] == 'DRAFT'
                       else next_step(new['status'], new['change_id'], project))
     return result

@@ -47,6 +47,23 @@ def _clarifications(value: object) -> None:
             text(item[key], key)
 
 
+def _constraint_resolutions(value: object) -> None:
+    require(isinstance(value, list), "constraint_resolutions must be a list")
+    seen = set()
+    for item in value:
+        fields(item, {"constraint_id", "resolution"}, {"question_id"})
+        key = identifier(item["constraint_id"], "constraint_id")
+        require(key not in seen, "Duplicate constraint resolution")
+        seen.add(key)
+        require(isinstance(item["resolution"], str)
+                and item["resolution"] in {"keep", "conflict"},
+                "Invalid constraint resolution")
+        if item["resolution"] == "conflict":
+            identifier(item.get("question_id"), "constraint question_id")
+        else:
+            require(item.get("question_id") is None, "Kept constraint needs no question")
+
+
 def _acceptance(value: object, seen: set, consumers: set) -> None:
     require(isinstance(value, list) and bool(value), "Story needs acceptance criteria")
     for criterion in value:
@@ -93,7 +110,8 @@ def validate_product(value: object) -> dict:
     """Validate stories, business outcomes, global IDs, ordered dependencies and the nature blocks."""
     fields(value, {"version", "goal", "non_goals", "questions", "stories"},
            {"capability", "clarifications", "nature", "defect", "refactor", "base", "consumers",
-            "coverage_exemptions", "test_removals", "assessment", "lessons_used", "errata", "slug"})
+            "coverage_exemptions", "test_removals", "assessment", "lessons_used", "errata", "slug",
+            "constraint_resolutions"})
     require(value["version"] == 1, "Unsupported product version")
     text(value["goal"], "goal")
     strings(value["non_goals"], "non_goals")
@@ -105,6 +123,8 @@ def validate_product(value: object) -> dict:
                 "Invalid feature slug")
     if "clarifications" in value:
         _clarifications(value["clarifications"])
+    if "constraint_resolutions" in value:
+        _constraint_resolutions(value["constraint_resolutions"])
     _nature_blocks(value)
     if nature_of(value) == "base":
         require(value["stories"] == [], "A base contract has no user stories")

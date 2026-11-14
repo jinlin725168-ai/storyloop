@@ -50,7 +50,8 @@ def change(project: Path, args, product_answer, revise_with_agent,
             evaluate_checklist(state["product"], project,
                                require_entries=state.get("verification_entries_required") is True,
                                require_observation=state.get("observation_required") is True,
-                               require_output_contract=state.get("output_contract_required") is True))
+                               require_output_contract=state.get("output_contract_required") is True,
+                               inherited_constraints=state.get("inherited_constraints")))
         return draft_result(project, state, draft_next(project, state) if pending else created["next"])
     require(not args.reason, "--reason is only valid with --supersede")
     if args.idea:
@@ -161,12 +162,15 @@ def draft_result(project: Path, state: dict, next_action=None) -> dict:
         state["product"], project,
         require_entries=state.get("verification_entries_required") is True,
         require_observation=state.get("observation_required") is True,
-        require_output_contract=state.get("output_contract_required") is True))
+        require_output_contract=state.get("output_contract_required") is True,
+        inherited_constraints=state.get("inherited_constraints")))
     pending = state["product"].get("questions") or blockers
     hint = draft_next(project, state) if pending else (stop["resume"] if stop else next_action)
     details = ({"blocking_items": blockers} if state.get("observation_required") is True
-               or state.get("output_contract_required") is True else {})
-    return {**state, **details, "stop": stop,
+               or state.get("output_contract_required") is True
+               or "inherited_constraints" in state else {})
+    from .changes import supersede_view
+    return {**state, **supersede_view(project, state), **details, "stop": stop,
             "next": supersede_revision_next(project, state) or hint or draft_next(project, state)}
 
 
@@ -174,12 +178,15 @@ def revise_with_agent(project: Path, change_id: str, message: str, answers: list
                       product_answer) -> dict:
     """One product revision: the agent rewrites the contract, the engine records the answers."""
     current = load_change(project, change_id)
-    product = product_answer(project, {
+    request = {
         "change_id": change_id, "message": message,
         "answers": [{"question_id": a["question_id"], "question": a["question"], "answer": a["answer"]}
                     for a in answers],
         "current_product": current["product"],
-    })
+    }
+    if "inherited_constraints" in current:
+        request["inherited_constraints"] = current["inherited_constraints"]
+    product = product_answer(project, request)
     return revise_change(project, change_id, product, message,
                          clarifications=[{"question": a["question"], "answer": a["answer"]} for a in answers])
 
