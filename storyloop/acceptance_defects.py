@@ -1,5 +1,7 @@
 """Bounded, deterministic RED defect evidence and entry-use checks."""
 
+import re
+
 from .processutil import redact
 
 
@@ -33,7 +35,37 @@ def red_defect_context(manifest: dict, change: dict, rows: list[dict], category:
         }])
     return {"defect_category": category, "test_ids": sorted(ids),
             "entries": [references[key] for key in sorted(entry_ids) if key in references],
-            "diagnostics": diagnostics[:20]}
+            "diagnostics": diagnostics[:20], "blockers": _blockers(manifest, rows, category)}
+
+
+def _blockers(manifest: dict, rows: list[dict], category: str) -> list[dict]:
+    tests = {item["id"]: item for item in manifest["tests"]}
+    found = []
+    for row in rows:
+        test = tests.get(row["id"], {})
+        criteria = row.get("criteria") or test.get("criteria") or [""]
+        paths = test.get("source_files") or [""]
+        diagnostics = [item for item in (row.get("counts") or {}).get("diagnostics", [])
+                       if isinstance(item, dict)]
+        mechanisms = _mechanisms(row, diagnostics, category)
+        for criterion in criteria:
+            for path in paths:
+                for mechanism in mechanisms:
+                    found.append({"criterion_id": criterion, "path": path,
+                                  "mechanism": mechanism, "test_id": row["id"]})
+                    if len(found) == 20:
+                        return found
+    return found
+
+
+def _mechanisms(row: dict, diagnostics: list[dict], category: str) -> list[str]:
+    messages = [str(item.get("message") or "") for item in diagnostics]
+    specific = [item for item in messages if item and item != f"{category}: {row['status']}"]
+    if specific:
+        return [redact(item)[:500] for item in specific]
+    output = str(row.get("stderr") or row.get("stdout") or "")
+    exceptions = re.findall(r"(?m)^([A-Za-z_]\w*(?:Error|Exception):[^\n]*)$", output)
+    return [redact(item)[:500] for item in exceptions[-3:]] or [category]
 
 
 def red_failure_classification(judged: list[dict]) -> str | None:

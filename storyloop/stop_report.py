@@ -197,6 +197,12 @@ def _evidence(state: dict, details: dict) -> list[str]:
         evidence.append("判据强度预审: " + redact(str(precheck.get("summary") or ""))[:500])
         evidence.extend(redact(str(item.get("message") or ""))[:500]
                         for item in precheck.get("findings") or [] if isinstance(item, dict))
+    retry_stop = acceptance.get("retry_stop") or {}
+    if retry_stop:
+        evidence.append(f"验收自动修复停止: {retry_stop.get('reason')}")
+        evidence.extend(f"重复阻断意见 ID: {item}" for item in retry_stop.get("finding_ids") or [])
+        if retry_stop.get("reason") == "round_limit":
+            evidence.append(f"验收自动修复总轮次上限: {retry_stop.get('round_limit')}")
     if acceptance.get("reason") == "HARNESS_SHADOWED":
         evidence += [f"HARNESS_SHADOWED: {str(path)[:300]}"
                      for path in (acceptance.get("files") or [])[:10]]

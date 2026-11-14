@@ -220,7 +220,9 @@ INSTRUCTIONS = {
     "review": (
         "When payload.mode is oracle-strength, review only the acceptance suite before RED. "
         "Check every AC precondition and branch, complete observable assertions, contract scope, "
-        "and fixture authority. Return the normal review shape with classified findings; "
+        "and fixture authority. Report all blocking findings in one pass; on recheck review the "
+        "entire latest suite and reuse previous_findings IDs for unresolved root causes. "
+        "Return the normal review shape with classified findings; "
         "MUST_FIX names a repairable oracle defect, DECISION_NEEDED names a human question, "
         "and ADVISORY does not block. Do not inspect or infer hidden Gold checks. "
         "Follow review for full-scope, stable-ID findings and oracle-craft for test validity. "

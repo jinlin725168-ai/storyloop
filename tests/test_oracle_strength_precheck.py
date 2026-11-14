@@ -88,23 +88,29 @@ class OracleStrengthPrecheckTests(unittest.TestCase):
         self.assertFalse(nonroutine)
         self.assertEqual(unknown, 0)
 
-    def test_third_strength_block_uses_existing_retry_limit(self):
+    def test_repeated_strength_block_stops_on_no_progress(self):
         from storyloop.acceptance_repair import retry_fixture_red
 
-        state = {"repairs": [], "acceptance": {"fixture_repairable": True}}
+        state = {"change_id": "C", "repairs": [], "acceptance": {
+            "fixture_repairable": True, "defect_category": "ORACLE_STRENGTH_PRECHECK",
+            "precheck": {"findings": [finding("MUST_FIX")]}}}
         stopped = {"status": "ORACLE_DEFECT", "acceptance": {
-            "fixture_repairable": True, "defect_category": "ORACLE_STRENGTH_PRECHECK"}}
+            **state["acceptance"]}}
         def repair(*args, **kwargs):
-            state["repairs"].append({"automatic": True})
+            state["repairs"].append({"automatic": True, "defect_category": "ORACLE_STRENGTH_PRECHECK"})
             return stopped
 
         with patch("storyloop.acceptance_repair.load_project_config", return_value={
                  "acceptance_fixture_retry_limit": 2}), \
              patch("storyloop.acceptance_repair.load_json", return_value=state), \
+             patch("storyloop.acceptance_repair.save_run"), \
+             patch("storyloop.acceptance_repair.pause", side_effect=lambda p, s, status, **d:
+                   {"status": status, **d}), \
              patch("storyloop.acceptance_repair._repair_once", side_effect=repair) as call:
             result = retry_fixture_red(Path("/tmp"), "C", None, stopped)
         self.assertEqual(result["status"], "ORACLE_DEFECT")
-        self.assertEqual(call.call_count, 2)
+        self.assertEqual(result["acceptance"]["retry_stop"]["reason"], "no_progress")
+        self.assertEqual(call.call_count, 1)
 
     def test_must_fix_returns_repairable_oracle_defect(self):
         answer = {"verdict": "fail", "summary": "nested missing", "findings": [finding("MUST_FIX")],
@@ -118,6 +124,18 @@ class OracleStrengthPrecheckTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "ORACLE_DEFECT")
         self.assertTrue(caught.exception.details["fixture_repairable"])
         self.assertEqual(caught.exception.details["defect_category"], "ORACLE_STRENGTH_PRECHECK")
+
+    def test_recheck_receives_previous_blocking_ids_for_stable_reuse(self):
+        requests = []
+        answer = {"verdict": "pass", "summary": "ok", "findings": [], "questions": []}
+        service = SimpleNamespace(review=lambda project, context:
+                                  requests.append(context) or answer)
+        state = {"routing": {"effective_tier": "standard"},
+                 "acceptance": {"precheck": {"findings": [finding("MUST_FIX")]}}}
+        with patch("storyloop.smoke.smoke_digests", return_value={}), \
+             patch("storyloop.oracle_strength_precheck.read_only_call", side_effect=lambda p, c, fn: fn()):
+            assess(Path("/tmp"), CHANGE, state, service, {"tests": []}, {})
+        self.assertEqual(requests[0]["previous_findings"][0]["id"], "ORACLE-A01")
 
     def test_decision_needed_stops_without_auto_repair(self):
         answer = {"verdict": "needs_input", "summary": "disputed", "findings": [finding("DECISION_NEEDED")],

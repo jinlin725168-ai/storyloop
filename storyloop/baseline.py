@@ -116,6 +116,10 @@ def _bootstrap_settings(overrides: dict | None) -> tuple[dict, dict, dict]:
         value = settings.pop('acceptance_fixture_retry_limit')
         require(type(value) is int and 0 <= value <= 5, 'Invalid acceptance_fixture_retry_limit')
         budget['acceptance_fixture_retry_limit'] = value
+    if 'acceptance_auto_retry_round_limit' in settings:
+        value = settings.pop('acceptance_auto_retry_round_limit')
+        require(type(value) is int and 0 <= value <= 50, 'Invalid acceptance_auto_retry_round_limit')
+        budget['acceptance_auto_retry_round_limit'] = value
     if 'oracle_strength_precheck' in settings:
         value = settings.pop('oracle_strength_precheck')
         require(type(value) is bool, 'Invalid oracle_strength_precheck')

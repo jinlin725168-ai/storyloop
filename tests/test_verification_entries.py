@@ -136,6 +136,7 @@ class ManifestEntryTests(unittest.TestCase):
         self.assertEqual(caught.exception.details["test_ids"], ["T-1"])
         finding = caught.exception.details["entry_use_findings"][0]
         self.assertEqual(finding["path"], "case.py")
+        self.assertEqual(finding["criterion_ids"], ["AC-1"])
         self.assertEqual(finding["line"], 2)
         self.assertEqual(finding["entry_kind"], "cli")
         self.assertEqual(finding["entry_locator"], "storyloop run <project>")

@@ -25,7 +25,7 @@ def fixture_error(change_id: str, marker: str) -> dict:
         "import unittest\n"
         "class Case(unittest.TestCase):\n"
         "    def test_fixture(self):\n"
-        f"        raise ModuleNotFoundError({marker!r})\n"
+        f"        raise ImportError({marker!r})\n"
         "unittest.main()\n"
     )
     return payload
@@ -93,7 +93,7 @@ class AcceptanceFixtureRetryTests(unittest.TestCase):
                              "SMOKE-1")
             self.assertEqual(state["intervention_events"][-1]["automatic"], True)
 
-    def test_third_must_hold_red_stops_after_two_automatic_rewrites(self):
+    def test_identical_must_hold_red_stops_when_no_progress(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             contract = product()
@@ -110,8 +110,10 @@ class AcceptanceFixtureRetryTests(unittest.TestCase):
             result = run_change(root, change_id, services(change_id, generate))
             self.assertEqual(result["status"], "ORACLE_DEFECT", result)
             state = load_run_state(root, change_id)
-            self.assertEqual(len(calls), 3)
-            self.assertEqual(sum(r.get("automatic") is True for r in state["repairs"]), 2)
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(sum(r.get("automatic") is True for r in state["repairs"]), 1)
+            self.assertEqual(result["acceptance"]["retry_stop"]["reason"], "no_progress")
+            self.assertIn("no_progress", "\n".join(result["stop"]["evidence"]))
             self.assertTrue(all(event.get("automatic") is True for event in
                                 state["intervention_events"] if event["kind"] == "acceptance_repair"))
 
