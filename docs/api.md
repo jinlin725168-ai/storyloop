@@ -134,6 +134,9 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 | `run.mode` | 普通轮为 null，根因调查轮为 `root_cause` |
 | `run.failures[]` 新字段 | `attribution`（`implement/oracle/contract/base/environment`）、`epoch`（判据修复次数）、`mode`、`signature`；功能红层记录同时含各层结果与校验后的 `review`。连续性要求同一 epoch 的实际 `attempt` 相邻，且紧邻将调用的轮次；红层 review 的 `NEEDS_INPUT` 保留该轮证据但打断连续性，交还的轮次不打断，不另存 `progress` 计数 |
 | 变更 `supersedes` | `{change_id, message, reason, blocker, source_branch, design_summary}`，指向旧变更 |
+| 替代草案 `inherited_constraints` | `[{id:"K-n", source:"clarification"|"answer"|"replan"|"overrule", text, origin_change_id}]`；人工文本经 `redact` 脱敏，按来源顺序编号，旧状态可没有此字段 |
+| 替代草案 `criteria_diff` | `{added:[AC-ID], removed:[AC-ID], changed:[AC-ID]}`；始终比较被替代合同与当前草案，修订后重新计算 |
+| 产品合同 `constraint_resolutions` | 可选 `[{constraint_id, resolution:"keep"|"conflict", question_id?}]`；替代草案须逐条处理沿用约束，冲突问题须在正文引用对应 `K-n` |
 | 变更与旧运行 `superseded_by` | 新变更 ID；旧变更和运行状态均为 `SUPERSEDED` |
 | `run.lessons_digest` | 合同提交上的 `openspec/lessons/` 树摘要，类型固定为字符串或 `null`；旧运行续跑时补算 |
 | `run.lessons` | 复盘状态对象：`retrospective`、`signals`、`drafts`、`upgrade_suggested`、`error`；无信号、失败或成本上限均不改变 `PASSED` |
@@ -142,6 +145,7 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 `run --overrule` 必须给非空理由。审查判定的 `ORACLE_DEFECT` 或 `NEEDS_SPEC_FIX` 会重算归属；混合发现中剩余的判据问题仍会停下。判据强度预审的 `MUST_FIX` 也可人工推翻，包括 `no_progress` / `round_limit` 停止；裁定记录发现 ID、理由、时间和套件摘要，只对当前套件生效，随后照常证明 RED。套件变化后必须重审。实现前 RED 的确定性错误（入口调用、路径越界、保持性条件失败等）不可驳回。
 
 `change --supersede` 与 `--idea`、`--change` 互斥，必须有非空 `--message`。除 `NEEDS_SPEC_FIX` 外必须有 `--reason`；`--reason` 只用于 supersede。允许的旧运行状态为 `NEEDS_SPEC_FIX`、`BUDGET_EXHAUSTED`、`NO_PROGRESS`、`ORACLE_DEFECT`、`EXISTING_GREEN`、`NEEDS_INPUT`、`IMPLEMENTING`、`BOUNDARY_VIOLATION`、`CHARACTERIZATION_FAILED`。已合并的变更不允许作废。重复同一修订请求返回已有新草案，不重复创建；新运行必须从旧运行的当前源分支启动，不能从旧功能分支继续。
+替代草案的 `proposal.md` 展示“沿用的已确认约束”和“与被替代合同的条件差异”两节；未处理的约束使 `change --json` 的 `blocking_items` 逐条带 `constraint_id` 并阻止批准。旧运行的证据原文与调用记录不写入草案或公开 JSON。
 
 `acceptance-repair` 要求已有合同提交，允许的运行状态为 `CONTRACT_COMMITTED`、`IMPLEMENTING`、`BUDGET_EXHAUSTED`、`NEEDS_INPUT`、`EXISTING_GREEN`、`ORACLE_DEFECT`、`NO_PROGRESS`。其中 `CONTRACT_COMMITTED` 用于套件已提交、证明 RED 时因套件写入候选副本等副作用报 `BLOCKED` 的恢复；`PREPARING` 与 `PASSED` 仍禁止修复。修复套件提交后，引擎仍从合同提交重建候选副本并重新证明 RED，不跳过判据门。
 特征化只能创建 `test_roots` 下的专用新测试文件，并逐个声明锁定的行为、符号与验收条件。与合同中将改变的符号或条件重叠时，引擎要求角色当场重写；审查发现特征化冲突时整批作废锁与候选并重试，不计该实现轮次。项目原有测试和金样本不进入特征化锁，实现者可按需求更新并接受审查。`acceptance-repair` 仍只修验收套件。
@@ -258,7 +262,7 @@ review finding 可选 `target: implementation|oracle|contract`（缺省 implemen
 
 分层验证存在功能失败时，引擎仍调用受只读保护的 review，并把原始层结果与校验后的 review 一并写入失败记录。review 返回 `needs_input` 时先保留该轮证据再暂停；没有有效 finding 或提问时，停止摘要显示实际失败层。
 
-design、implement、review 可选返回 `facts: [{statement, location}]`（缺省空）；statement 最长 500 字符，location 必须定位真实安全源码行。引擎附角色与轮次后传给后续调用。supersede 的 product 请求包含 `{idea, message, current_product, supersede}`，其中 supersede 含旧变更 ID、理由、阻塞点、源分支、方案摘要、facts 与 evidence。新设计可收到 `prior_design` 与 `prior_facts`，明确标注旧变更来源，仅供参考。
+design、implement、review 可选返回 `facts: [{statement, location}]`（缺省空）；statement 最长 500 字符，location 必须定位真实安全源码行。引擎附角色与轮次后传给后续调用。supersede 的 product 请求包含 `{idea, message, current_product, supersede}`，其中 supersede 含旧变更 ID、理由、阻塞点、源分支、方案摘要、facts 与脱敏后的 `inherited_constraints`；旧证据原文与调用记录不复制到新草案。新设计可收到 `prior_design` 与 `prior_facts`，明确标注旧变更来源，仅供参考。
 
 产品、验收套件和设计方案通过 schema 却违反语义约束时，引擎最多另调同一角色一次，payload 增加 `previous_response`（原回答）和 `validation_errors`（错误文本列表）。第二次仍失败就停止；进程故障、安全错误不走此通道。诊断 `meta.json` 的 `semantic_repair` 标识该调用，和适配器的 JSON/schema 修复次数分开记录。
 

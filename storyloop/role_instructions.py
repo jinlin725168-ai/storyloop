@@ -89,7 +89,8 @@ INSTRUCTIONS = {
         "'dependency-swap',scope:[string],invariants:[string],structural_goals:[string],"
         "migration_map?:[{from,to,assertion}]}, consumers?:[{id,consumer,trigger,path,in_scope:boolean,"
         "verification}], coverage_exemptions?:[{row_type,reason}], test_removals?:[{path,reason}], "
-        "clarifications?:[{session,question,answer}], questions:[{id,text,options:[string],"
+        "clarifications?:[{session,question,answer}], constraint_resolutions?:[{constraint_id,"
+        "resolution:'keep'|'conflict',question_id?:string}], questions:[{id,text,options:[string],"
         "recommended?:string,why?:string,criterion_id?:string}], stories:[{id,title,priority:'P1'|'P2'|'P3',"
         "independent_test:string,as_a,want,so_that,rules:[string],out_of_scope:[string],"
         "depends_on:[string],verification_entries?:[{id,kind:'cli'|'public_function'|'stop_json'|'http'|'other',"
@@ -107,8 +108,11 @@ INSTRUCTIONS = {
         "If openspec/specs/<capability>/spec.md exists, it is the current behavior: a story that changes an "
         "existing requirement must reuse that requirement's title, restate every existing scenario with its "
         "original criterion id (updating steps where behavior changes), and add new ids only for new scenarios."
-        " When payload.supersede is present, an approved contract failed: it contains the blocker, evidence "
-        "and attributed facts from the old run. Revise payload.current_product per payload.message so the "
+        " When payload.supersede is present, an approved contract failed: it contains the blocker, "
+        "attributed facts and inherited_constraints from human clarifications, answers, replans and "
+        "overrules. Preserve each K-n constraint. Return one constraint_resolutions entry per K-n: "
+        "keep if retained, or conflict with a question_id whose question text names that K-n. "
+        "Never silently discard one. Revise payload.current_product per payload.message so the "
         "contradiction is gone, while keeping every unaffected story and criterion id unchanged."
     ),
     "acceptance": (

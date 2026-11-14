@@ -24,7 +24,8 @@ EARS_MARKERS = ("SHALL", "MUST", "应", "必须", "须")
 def evaluate_checklist(product: dict, project: Path | None = None,
                        *, require_entries: bool = False,
                        require_observation: bool = False,
-                       require_output_contract: bool = False) -> list[dict]:
+                       require_output_contract: bool = False,
+                       inherited_constraints: list[dict] | None = None) -> list[dict]:
     """Return checklist items: {id, dimension, level: ok|warning|error, text}."""
     items: list[dict] = []
     add = _adder(items)
@@ -77,6 +78,24 @@ def evaluate_checklist(product: dict, project: Path | None = None,
                     add("Measurability", "error", f"{criterion['id']} output_contract {problem}",
                         criterion_id=criterion["id"])
     _nature_items(add, product, project)
+    if inherited_constraints is not None:
+        resolutions = {item["constraint_id"]: item for item in
+                       product.get("constraint_resolutions") or []}
+        questions = {item["id"]: item for item in product.get("questions") or []}
+        for constraint in inherited_constraints:
+            key = constraint["id"]
+            resolution = resolutions.get(key)
+            valid = resolution is not None
+            if valid and resolution["resolution"] == "conflict":
+                question_id = resolution["question_id"]
+                valid = question_id in questions and key in questions[question_id]["text"]
+            add("Traceability", "ok" if valid else "error",
+                f"{key} inherited constraint has a keep decision or a referenced conflict question",
+                constraint_id=key)
+        known = {item["id"] for item in inherited_constraints}
+        for key in sorted(resolutions.keys() - known):
+            add("Traceability", "error", f"Unknown inherited constraint {key}",
+                constraint_id=key)
     return items
 
 
@@ -212,11 +231,14 @@ def blocking_items(items: list[dict]) -> list[dict]:
 
 
 def _adder(items: list[dict]):
-    def add(dimension: str, level: str, text: str, *, criterion_id: str | None = None) -> None:
+    def add(dimension: str, level: str, text: str, *, criterion_id: str | None = None,
+            constraint_id: str | None = None) -> None:
         item = {"id": f"CHK{len(items) + 1:03d}", "dimension": dimension,
                 "level": level, "text": text}
         if criterion_id is not None:
             item["criterion_id"] = criterion_id
+        if constraint_id is not None:
+            item["constraint_id"] = constraint_id
         items.append(item)
     return add
 

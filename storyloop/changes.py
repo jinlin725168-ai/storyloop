@@ -15,6 +15,7 @@ from .product_contract import SLUG, nature_of, validate_product
 from .openspec_docs import capability_of, render_delta_spec
 from .requirement_checklist import evaluate_checklist, render_checklist
 from .storage import load_json, write_json, write_text_atomic
+from .processutil import redact
 
 Clock = Callable[[], datetime]
 
@@ -27,6 +28,7 @@ def create_change(
     require_observation: bool = False,
     require_entry_feasibility: bool = False,
     require_output_contract: bool = False,
+    inherited_constraints: list[dict] | None = None,
 ) -> dict:
     """Create a local ignored draft from one short product idea."""
     project = Path(project).resolve()
@@ -68,6 +70,8 @@ def create_change(
         state["output_contract_required"] = True
     if supersedes is not None:
         state["supersedes"] = _supersedes(supersedes)
+    if inherited_constraints is not None:
+        state["inherited_constraints"] = deepcopy(inherited_constraints)
     from .intake import project_intake
     state["intake"] = project_intake(project, canonical)
     _save(project, state)
@@ -89,7 +93,7 @@ def load_change(project: Path, change_id: str) -> dict:
     optional = {"supersedes", "superseded_by", "routing_version", "intake",
                 "base_proposal_sha256", "blocked_by", "intervention_events",
                 "verification_entries_required", "entry_coverage_required", "observation_required",
-                "entry_feasibility_required", "output_contract_required"}
+                "entry_feasibility_required", "output_contract_required", "inherited_constraints"}
     require(required <= set(value) <= required | optional and value["version"] == 1,
             "Invalid change state")
     require(value["change_id"] == change_id, "Change state identity mismatch")
@@ -129,6 +133,17 @@ def load_change(project: Path, change_id: str) -> dict:
     require(isinstance(value["history"], list), "Invalid change history")
     if "supersedes" in value:
         _supersedes(value["supersedes"])
+    if "inherited_constraints" in value:
+        require("supersedes" in value and isinstance(value["inherited_constraints"], list),
+                "Invalid inherited constraints")
+        for index, item in enumerate(value["inherited_constraints"], 1):
+            require(isinstance(item, dict) and set(item) ==
+                    {"id", "source", "text", "origin_change_id"}, "Invalid inherited constraint")
+            require(item["id"] == f"K-{index}" and item["source"] in
+                    {"clarification", "answer", "replan", "overrule"}, "Invalid inherited constraint")
+            text(item["text"], "inherited constraint")
+            require(item["origin_change_id"] == value["supersedes"]["change_id"],
+                    "Invalid inherited constraint origin")
     if "superseded_by" in value:
         identifier(value["superseded_by"], "superseding change id")
     return value
@@ -162,6 +177,8 @@ def revise_change(
     run_path = project / ".storyloop" / "state" / "runs" / f"{change_id}.json"
     require(not run_path.exists(),
             "A change cannot be revised after execution starts; create a new product change")
+    if "inherited_constraints" in current:
+        product = redacted_copy(product)
     canonical = _validated_copy(product)
     canonical.pop("slug", None)
     moment = (now or _utc_now)()
@@ -215,6 +232,35 @@ def contract_digest(product: dict) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def redacted_copy(value):
+    """Do not persist credential-shaped text echoed from a superseded context."""
+    if isinstance(value, str):
+        return redact(value)
+    if isinstance(value, list):
+        return [redacted_copy(item) for item in value]
+    if isinstance(value, dict):
+        return {key: redacted_copy(item) for key, item in value.items()}
+    return value
+
+
+def supersede_view(project: Path, state: dict) -> dict:
+    """Compare the current draft's ACs with its immutable parent contract."""
+    if "inherited_constraints" not in state:
+        return {}
+    old = load_change(project, state["supersedes"]["change_id"])
+    previous = {item["id"]: item for story in old["product"]["stories"]
+                for item in story["acceptance"]}
+    current = {item["id"]: item for story in state["product"]["stories"]
+               for item in story["acceptance"]}
+    return {"inherited_constraints": deepcopy(state["inherited_constraints"]),
+            "criteria_diff": {
+                "added": sorted(current.keys() - previous.keys()),
+                "removed": sorted(previous.keys() - current.keys()),
+                "changed": sorted(key for key in current.keys() & previous.keys()
+                                  if current[key] != previous[key]),
+            }}
+
+
 def draft_directory(project: Path, change_id: str) -> Path:
     return Path(project).resolve() / ".storyloop" / "drafts" / identifier(change_id, "change id")
 
@@ -256,6 +302,16 @@ def write_change_preview(project: Path, state: dict) -> None:
         f"## 澄清记录\n\n{_clarification_lines(product.get('clarifications', []))}\n\n"
         f"## 待决问题\n\n{questions}\n"
     )
+    if "inherited_constraints" in state:
+        view = supersede_view(project, state)
+        constraints = "\n".join(
+            f"- {item['id']}（来源：{item['source']}）：{item['text']}"
+            for item in view["inherited_constraints"]) or "- 无"
+        difference = view["criteria_diff"]
+        lines = [f"{label}：{', '.join(difference[key]) or '无'}" for label, key in
+                 (("新增", "added"), ("删除", "removed"), ("改动", "changed"))]
+        proposal += (f"\n## 沿用的已确认约束\n\n{constraints}\n"
+                     f"\n## 与被替代合同的条件差异\n\n" + "\n".join(lines) + "\n")
     if product.get("nature") == "base" and state.get("base_proposal_sha256"):
         source = Path(project) / ".storyloop/base-proposals" / f"{state['change_id']}.json"
         if source.is_file():
@@ -271,7 +327,8 @@ def write_change_preview(project: Path, state: dict) -> None:
     _write_text(root / "checklist.md", render_checklist(evaluate_checklist(
         product, project, require_entries=state.get("verification_entries_required") is True,
         require_observation=state.get("observation_required") is True,
-        require_output_contract=state.get("output_contract_required") is True)))
+        require_output_contract=state.get("output_contract_required") is True,
+        inherited_constraints=state.get("inherited_constraints"))))
 
 
 def _question_line(item: dict) -> str:

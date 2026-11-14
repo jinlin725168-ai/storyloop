@@ -195,6 +195,10 @@ SCHEMAS = {
         "slug": _nullable(STRING),
         "clarifications": _nullable({"type": "array", "items": _obj(
             {"session": STRING, "question": STRING, "answer": STRING})}),
+        "constraint_resolutions": _nullable({"type": "array", "items": _obj({
+            "constraint_id": STRING,
+            "resolution": {"type": "string", "enum": ["keep", "conflict"]},
+            "question_id": _nullable(STRING)})}),
         "questions": {"type": "array", "items": QUESTION},
         "stories": {"type": "array", "items": STORY},
         "nature": _nullable({"type": "string", "enum": list(change_types.CHANGE_TYPES)}),
