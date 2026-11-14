@@ -13,7 +13,7 @@ from tests.lesson_support import cleanup_repo, git_repo
 def init_result(project: Path) -> tuple[subprocess.CompletedProcess, dict]:
     result = subprocess.run(
         [sys.executable, "-m", "storyloop", "init", str(project)],
-        capture_output=True, text=True, check=False,
+        capture_output=True, text=True, encoding="utf-8", check=False,
     )
     return result, json.loads(result.stderr)
 
