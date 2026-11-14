@@ -36,6 +36,7 @@ def assess(project: Path, change: dict, state: dict, services, manifest: dict,
                "suite_files": files, "criteria": [criterion for story in change["product"]["stories"]
                                                   for criterion in story["acceptance"]],
                "previous_findings": ((state.get("acceptance") or {}).get("precheck") or {}).get("findings") or [],
+               "answers": _answers(project, change["change_id"]),
                "verification_entries": [entry for story in change["product"]["stories"]
                                         for entry in story.get("verification_entries") or []],
                "checklist": ["每条 AC 的全部前置和分支均执行", "比较完整可观察结果",
@@ -56,6 +57,15 @@ def assess(project: Path, change: dict, state: dict, services, manifest: dict,
         raise StoryLoopError("Oracle strength precheck needs a human decision",
                              code="NEEDS_INPUT", details={"precheck": result})
     return result
+
+
+def _answers(project: Path, change_id: str) -> list[dict]:
+    """Human answers to earlier pauses, so a settled decision is not asked again."""
+    from .answers import load_answers
+    try:
+        return load_answers(project, change_id)
+    except (StoryLoopError, OSError):
+        return []
 
 
 def _validate(value: object) -> None:

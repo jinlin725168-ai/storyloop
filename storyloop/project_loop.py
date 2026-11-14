@@ -52,7 +52,7 @@ from .project_loop_failures import (apply_overrule, epoch_of, record_boundary, r
 from .project_loop_support import control_digest, run_path, save_run  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .run_stops import pause
 from .oracle_counts import check_layers
-from .project_preparation import _prepare_acceptance, reprove_after_base
+from .project_preparation import _prepare_acceptance, answered_precheck, reprove_after_base
 from .project_profile import layer_commands
 from .processutil import redact, redaction_prefix
 from .system_smoke import run_system_smoke_isolated  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
@@ -176,7 +176,7 @@ def _resume_and_prepare(project: Path, change: dict, state: dict, services: Loop
         if paused is not None:
             return paused
     red_environment = (state.get("acceptance") or {}).get("reason") == "RED_ENVIRONMENT_ERROR"
-    if fresh or red_environment or state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}:
+    if fresh or red_environment or answered_precheck(state) or state["status"] in {"PREPARING", "CONTRACT_READY", "CONTRACT_COMMITTED", "EXISTING_GREEN", "ORACLE_DEFECT"}:
         paused = _prepare_acceptance(project, change, services, state)
         if paused is not None:
             return paused
