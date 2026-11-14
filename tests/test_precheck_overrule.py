@@ -8,19 +8,42 @@ from storyloop.project_loop_failures import apply_overrule, require_routed_choic
 from tests.test_oracle_strength_precheck import CHANGE, finding
 
 
+def _services(change_id, calls):
+    from storyloop.run_services import LoopServices
+    from tests.test_project_loop import smoke_payload
+
+    def generate(project, request):
+        answer = smoke_payload(change_id)
+        answer["manifest"]["tests"][0]["entry_ids"] = ["VE-1"]
+        return answer
+
+    def review(project, context):
+        calls.append(context.get("mode"))
+        if context.get("mode") == "oracle-strength":
+            return {"verdict": "fail", "summary": "contract dispute",
+                    "findings": [finding("MUST_FIX")], "questions": []}
+        return {"verdict": "pass", "summary": "ok", "findings": [], "questions": []}
+
+    def implement(project, context):
+        path = project / "modules/orders/service.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("VALUE = 1\n", encoding="utf-8")
+        return {"summary": "done", "questions": []}
+
+    return LoopServices(generate_smoke=generate, implement=implement, review=review)
+
+
 class PrecheckOverruleTests(unittest.TestCase):
     def test_resume_after_precheck_stop_proves_red_and_continues(self):
         import tempfile
         from storyloop.approvals import approve_change
         from storyloop.baseline import bootstrap_project
         from storyloop.project_loop import load_run_state, run_change
-        from storyloop.run_services import LoopServices
         from storyloop.smoke import RED_EVIDENCE
         from storyloop.storage import load_json
         from tests.routing_support import legacy_create_change
         from tests.support import product
         from tests.test_baseline_behavior import repository
-        from tests.test_project_loop import smoke_payload
 
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -33,25 +56,7 @@ class PrecheckOverruleTests(unittest.TestCase):
             approve_change(root, change_id)
             calls = []
 
-            def generate(project, request):
-                answer = smoke_payload(change_id)
-                answer["manifest"]["tests"][0]["entry_ids"] = ["VE-1"]
-                return answer
-
-            def review(project, context):
-                calls.append(context.get("mode"))
-                if context.get("mode") == "oracle-strength":
-                    return {"verdict": "fail", "summary": "contract dispute",
-                            "findings": [finding("MUST_FIX")], "questions": []}
-                return {"verdict": "pass", "summary": "ok", "findings": [], "questions": []}
-
-            def implement(project, context):
-                path = project / "modules/orders/service.py"
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("VALUE = 1\n", encoding="utf-8")
-                return {"summary": "done", "questions": []}
-
-            service = LoopServices(generate_smoke=generate, implement=implement, review=review)
+            service = _services(change_id, calls)
             def no_progress(project, cid, services, stopped):
                 from storyloop.project_loop_support import save_run
                 state = load_run_state(project, cid)
