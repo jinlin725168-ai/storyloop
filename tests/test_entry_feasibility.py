@@ -153,7 +153,8 @@ class EntryFeasibilityTests(unittest.TestCase):
             self.assertIn("1", result["next"])
 
     def test_spec_craft_marks_new_observation_as_must_be_red(self):
-        skill = (Path(__file__).resolve().parents[1] / "storyloop/skills/spec-craft/SKILL.md").read_text()
+        skill = (Path(__file__).resolve().parents[1] / "storyloop/skills/spec-craft/SKILL.md").read_text(
+            encoding="utf-8")
         self.assertIn("version: 1.4.3", skill)
         self.assertIn("observation", skill)
         self.assertIn("regression/state_preservation/non_goal", skill)
