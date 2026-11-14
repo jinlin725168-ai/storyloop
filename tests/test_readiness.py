@@ -137,6 +137,41 @@ class ReadinessTests(unittest.TestCase):
         passed = inspect_readiness(self.project)['layers']['checks']['results'][0]
         self.assertNotIn('output_tail', passed)
 
+    def test_failure_summary_uses_full_streams_and_bounded_redacted_lines(self):
+        script = ("import sys; "
+                  "print('FAIL: test_x (pkg.mod.Class.test_x)'); "
+                  "print('FAILED tests/test_a.py::test_a - assert 1 == 2'); "
+                  "print('FAIL  module_a token=synthetic-secret'); "
+                  "print('FAIL  module_a token=synthetic-secret'); "
+                  "print('filler' * 500); "
+                  "print('ERROR: test_y', file=sys.stderr); sys.exit(1)")
+        self.config(check_commands=[['{python}', '-c', script]])
+        result = inspect_readiness(self.project)['layers']['checks']['results'][0]
+        self.assertEqual(result['failure_summary'], [
+            'FAIL: test_x (pkg.mod.Class.test_x)',
+            'FAILED tests/test_a.py::test_a - assert 1 == 2',
+            'FAIL  module_a token=[REDACTED]', 'ERROR: test_y'])
+        self.assertNotIn('FAIL: test_x', str(result['output_tail']))
+
+    def test_failure_summary_empty_without_heading(self):
+        self.config(check_commands=[['{python}', '-c', "print('ordinary output'); raise SystemExit(1)"]])
+        result = inspect_readiness(self.project)['layers']['checks']['results'][0]
+        self.assertEqual(result['failure_summary'], [])
+
+    def test_failure_summary_limits_after_redaction_and_truncation(self):
+        script = ("import sys; "
+                  "print('FAIL  ' + 'x'*295 + 'A'); "
+                  "print('FAIL  ' + 'x'*295 + 'B'); "
+                  "print('FAIL  ' + 'x'*270 + ' token=synthetic-secret'); "
+                  "[print('FAIL  module_%02d' % n) for n in range(30)]; sys.exit(1)")
+        self.config(check_commands=[['{python}', '-c', script]])
+        summary = inspect_readiness(self.project)['layers']['checks']['results'][0]['failure_summary']
+        self.assertEqual(len(summary), 20)
+        self.assertEqual(summary[0], 'FAIL  ' + 'x'*294)
+        self.assertEqual(summary[1], 'FAIL  ' + 'x'*270 + ' token=[REDACTED]')
+        self.assertEqual(summary[2], 'FAIL  module_00')
+        self.assertNotIn('synthetic-secret', str(summary))
+
     def test_timeout_preserves_output_and_start_failure_keeps_check_identity(self):
         self.config(check_commands=[['{python}', '-c',
                     "import sys,time; print('TIMEOUT TAIL', flush=True); time.sleep(10)"]])

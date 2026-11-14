@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import hashlib
 import io
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -29,6 +30,26 @@ from .storage import load_json, write_json
 from .acceptance_defects import (red_fixture_category as _red_fixture_category,
                                  red_defect_context as _red_defect_context,
                                  red_failure_classification as _red_failure_classification)
+
+
+_FAILURE_HEADING = re.compile(r"^(?:FAIL(?::|\s)|ERROR(?::|\s)|FAILED\s)")
+
+
+def _failure_summary(output: dict) -> list[str]:
+    """Extract bounded, redacted failure headings in stdout then stderr order."""
+    lines = []
+    seen = set()
+    for stream in ("stdout", "stderr"):
+        for line in str(output.get(stream, "")).splitlines():
+            if not _FAILURE_HEADING.match(line):
+                continue
+            heading = redact(line)[:300]
+            if heading not in seen:
+                seen.add(heading)
+                lines.append(heading)
+                if len(lines) == 20:
+                    return lines
+    return lines
 
 
 def run_smoke(
@@ -463,6 +484,7 @@ def _run_test(project: Path, test: dict, patterns: list[dict] | None = None,
         result["process_error"] = True
     if capture_output_tail and status != "PASS":
         raw = outcome.get("output_tail") or {}
+        result["failure_summary"] = _failure_summary(raw)
         stdout = redact(raw.get("stdout", ""))
         stderr = redact(raw.get("stderr", ""))
         stdout_limit = min(len(stdout), 1500 - min(len(stderr), 750))

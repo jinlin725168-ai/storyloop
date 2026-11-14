@@ -18,6 +18,22 @@ from tests.test_intake import assessed_product
 
 
 class RoutingCliTests(unittest.TestCase):
+    def test_readiness_text_shows_failure_summary_under_layer(self):
+        from storyloop.storage import load_json, write_json
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            readiness_repository(root)
+            path = root / '.storyloop/config.json'
+            config = load_json(path)
+            config['profile']['check_commands'] = [[
+                '{python}', '-c', "print('FAIL: test_x'); print('FAIL  module_a'); raise SystemExit(1)"]]
+            write_json(path, config)
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(main(['readiness', folder]), 2)
+            self.assertIn('checks: FAILED\nchecks: REGRESSION-001\n  FAIL: test_x\n  FAIL  module_a',
+                          output.getvalue())
+
     def test_argument_matrix(self):
         base = dict(command='approve', change_id='ID', readiness=None, design=None,
                     continue_heavy=None, tier=None, option=None, reason=None)

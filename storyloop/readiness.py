@@ -192,6 +192,7 @@ def _result(item: dict) -> dict:
     keys = ('id', 'status', 'returncode', 'timed_out', 'counts')
     result = {key: item.get(key) for key in keys if key in item}
     if item.get('status') != 'PASS':
+        result['failure_summary'] = item.get('failure_summary') or []
         if item.get('command'):
             result['command'] = [redact(str(part)) for part in item['command']]
         result['output_tail'] = item.get('output_tail') or {'message': '无可用输出'}

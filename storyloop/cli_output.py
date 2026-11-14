@@ -28,6 +28,17 @@ def display(result: dict, complete_json: bool) -> None:
     for key in ("change_id", "project", "next", "report", "pending", "accepted", "paths", "written"):
         if key in result and result[key] is not None:
             print(f"{key}: {result[key]}")
+    if result.get("readiness_status") or ("layers" in result and "binding" in result):
+        for name, layer in result.get("layers", {}).items():
+            if layer.get("status") != "FAILED":
+                continue
+            print(f"{name}: {layer['status']}")
+            for item in layer.get("results", []):
+                if item.get("status") == "PASS" or not item.get("failure_summary"):
+                    continue
+                print(f"{name}: {item.get('id', 'command')}")
+                for heading in item["failure_summary"]:
+                    print(f"  {heading}")
     if isinstance(result.get("stop"), dict):
         for line in render_stop(result["stop"]):
             print(line)
