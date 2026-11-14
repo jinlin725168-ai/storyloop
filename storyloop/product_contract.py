@@ -52,7 +52,7 @@ def _acceptance(value: object, seen: set, consumers: set) -> None:
     for criterion in value:
         fields(criterion, {"id", "given", "when", "then", "kind"},
                {"row_type", "oracle_class", "consumers", "reproduces_defect", "entry_ids",
-                "observation"})
+                "observation", "new_output", "output_contract"})
         key = identifier(criterion["id"], "criterion id")
         require(key not in seen, "Duplicate acceptance id")
         seen.add(key)
@@ -69,6 +69,12 @@ def _criterion_extras(criterion: dict, consumers: set) -> None:
                 "Criterion entry_ids must be nonempty and unique")
     if "observation" in criterion:
         text(criterion["observation"], "criterion observation")
+    if "new_output" in criterion:
+        require(type(criterion["new_output"]) is bool, "new_output must be a boolean")
+        require(not criterion["new_output"] or criterion["kind"] == "automated",
+                "new_output applies only to automated criteria")
+    if "output_contract" in criterion:
+        require(isinstance(criterion["output_contract"], dict), "output_contract must be an object")
     require(criterion.get("row_type", "positive") in ROW_TYPES, "Invalid acceptance row_type")
     if "oracle_class" in criterion:
         require(criterion["oracle_class"] in ORACLE_CLASSES, "Invalid acceptance oracle_class")

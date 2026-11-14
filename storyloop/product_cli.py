@@ -49,7 +49,8 @@ def change(project: Path, args, product_answer, revise_with_agent,
         pending = state["product"]["questions"] or blocking_items(
             evaluate_checklist(state["product"], project,
                                require_entries=state.get("verification_entries_required") is True,
-                               require_observation=state.get("observation_required") is True))
+                               require_observation=state.get("observation_required") is True,
+                               require_output_contract=state.get("output_contract_required") is True))
         return draft_result(project, state, draft_next(project, state) if pending else created["next"])
     require(not args.reason, "--reason is only valid with --supersede")
     if args.idea:
@@ -65,7 +66,7 @@ def change(project: Path, args, product_answer, revise_with_agent,
                            prefix=prefix)
         created = create_change(project, args.idea, product, slug=slug,
                                 require_verification_entries=True, require_observation=True,
-                                require_entry_feasibility=True)
+                                require_entry_feasibility=True, require_output_contract=True)
         adopt_pending(project, created["change_id"])
         state = clarify_interactively(project, created["change_id"], revise_with_agent, interactive)
         return draft_result(project, state)
@@ -159,10 +160,12 @@ def draft_result(project: Path, state: dict, next_action=None) -> dict:
     blockers = blocking_items(evaluate_checklist(
         state["product"], project,
         require_entries=state.get("verification_entries_required") is True,
-        require_observation=state.get("observation_required") is True))
+        require_observation=state.get("observation_required") is True,
+        require_output_contract=state.get("output_contract_required") is True))
     pending = state["product"].get("questions") or blockers
     hint = draft_next(project, state) if pending else (stop["resume"] if stop else next_action)
-    details = {"blocking_items": blockers} if state.get("observation_required") is True else {}
+    details = ({"blocking_items": blockers} if state.get("observation_required") is True
+               or state.get("output_contract_required") is True else {})
     return {**state, **details, "stop": stop,
             "next": supersede_revision_next(project, state) or hint or draft_next(project, state)}
 

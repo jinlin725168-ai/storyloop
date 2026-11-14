@@ -86,10 +86,16 @@ ACCEPTANCE_TEST = _obj({"id": STRING, "criteria": STRINGS, "command": STRINGS,
                         "timeout_seconds": {"type": "integer"},
                         "entry_ids": _nullable(STRINGS),
                         "tier": _nullable({"type": "string", "enum": ["fast", "heavy"]})})
+OUTPUT_FIELD = _obj({"name": _nullable(STRING), "type": _nullable(STRING),
+                     "meaning": _nullable(STRING)})
+OUTPUT_CONTRACT = _obj({"location": _nullable(STRING),
+                        "fields": _nullable({"type": "array", "items": OUTPUT_FIELD})})
 CRITERION = _obj({"id": STRING, "given": STRING, "when": STRING, "then": STRING,
                   "kind": {"type": "string", "enum": ["automated", "manual"]},
                   "entry_ids": _nullable(STRINGS),
                   "observation": _nullable(STRING),
+                  "new_output": _nullable({"type": "boolean"}),
+                  "output_contract": _nullable(OUTPUT_CONTRACT),
                   "row_type": _nullable(ROW_TYPE),
                   "oracle_class": _nullable({"type": "string", "enum": ["auto-fast", "auto-heavy", "manual"]}),
                   "consumers": _nullable(STRINGS),

@@ -35,6 +35,7 @@ FAST = [
     "tests.test_routing_policy", "tests.test_routing_risks", "tests.test_skill_custom", "tests.test_skill_selection",
     "tests.test_skills", "tests.test_spec_craft", "tests.test_smoke", "tests.test_state_format", "tests.test_stop_report",
     "tests.test_onboarding", "tests.test_onboarding_source_files", "tests.test_onboarding_lock", "tests.test_smoke_harness",
+    "tests.test_output_contract",
     "tests.test_smoke_harness_protocol", "tests.test_smoke_harness_scratch",
 ]
 

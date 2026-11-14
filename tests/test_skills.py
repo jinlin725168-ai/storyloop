@@ -108,7 +108,7 @@ class SurveyUsesSkillTests(unittest.TestCase):
 class OracleCraftTests(unittest.TestCase):
     def test_spec_craft_requires_entry_coverage_self_check(self):
         skill = packaged_skills()['spec-craft']
-        self.assertEqual(skill['version'], '1.4.3')
+        self.assertEqual(skill['version'], '1.4.4')
         content = (skill['root'] / 'SKILL.md').read_text(encoding='utf-8')
         self.assertIn('入口覆盖自检', content)
         self.assertIn('observable', content)
@@ -164,7 +164,7 @@ class OracleCraftTests(unittest.TestCase):
     def test_oracle_craft_describes_preparation_execution_observation(self):
         from storyloop.skills import packaged_skills
         skill = packaged_skills()["oracle-craft"]
-        self.assertEqual(skill["version"], "1.1.5")
+        self.assertEqual(skill["version"], "1.1.6")
         oracle = (skill["root"] / "SKILL.md").read_text(encoding="utf-8")
         for phrase in ("准备 / 执行 / 观察", "subprocess", "NEEDS_SPEC_FIX"):
             self.assertIn(phrase, oracle)
