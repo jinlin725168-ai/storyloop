@@ -102,7 +102,7 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 |---|---|---|
 | `PREPARING` / `CONTRACT_READY` | 建分支、物化合同、生成验收套件 | 能 |
 | `CONTRACT_COMMITTED` | 合同与套件已提交，待证明 RED | 能；套件副作用阻断 RED 时可先 `acceptance-repair` |
-| `ORACLE_DEFECT` | RED 检查或审查发现判据缺陷 | `acceptance-repair`；仅审查归属可用 `run --overrule TEXT` |
+| `ORACLE_DEFECT` | RED 检查、判据强度预审或审查发现判据缺陷 | `acceptance-repair`；审查归属或判据强度预审的 `MUST_FIX` 可用 `run --overrule TEXT` |
 | `NEEDS_SPEC_FIX` | 审查发现合同缺陷 | `change --supersede ID --message TEXT`，或 `run --overrule TEXT` |
 | `NO_PROGRESS` | 根因调查后失败特征未变且无原失败用例转绿 | 处理后 `run`；或修判据、修合同重开 |
 | `SUPERSEDED` | 已作废，`superseded_by` 指向新草案 | 不能续跑；批准新变更 |
@@ -139,7 +139,7 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 | `run.lessons` | 复盘状态对象：`retrospective`、`signals`、`drafts`、`upgrade_suggested`、`error`；无信号、失败或成本上限均不改变 `PASSED` |
 | `run.lessons_recurrence` | 本变更中“经验已提供但随后仍失败”的经验 ID 列表；跨变更次数另存 `.storyloop/state/lessons.json` |
 
-`run --overrule` 必须给非空理由，只允许审查判定的 `ORACLE_DEFECT` 或 `NEEDS_SPEC_FIX`。对应发现改为 `implementation` 并重算归属；混合发现中剩余的判据问题仍会停下。实现前 RED 检查的判据错误不可驳回。
+`run --overrule` 必须给非空理由。审查判定的 `ORACLE_DEFECT` 或 `NEEDS_SPEC_FIX` 会重算归属；混合发现中剩余的判据问题仍会停下。判据强度预审的 `MUST_FIX` 也可人工推翻，包括 `no_progress` / `round_limit` 停止；裁定记录发现 ID、理由、时间和套件摘要，只对当前套件生效，随后照常证明 RED。套件变化后必须重审。实现前 RED 的确定性错误（入口调用、路径越界、保持性条件失败等）不可驳回。
 
 `change --supersede` 与 `--idea`、`--change` 互斥，必须有非空 `--message`。除 `NEEDS_SPEC_FIX` 外必须有 `--reason`；`--reason` 只用于 supersede。允许的旧运行状态为 `NEEDS_SPEC_FIX`、`BUDGET_EXHAUSTED`、`NO_PROGRESS`、`ORACLE_DEFECT`、`EXISTING_GREEN`、`NEEDS_INPUT`、`IMPLEMENTING`、`BOUNDARY_VIOLATION`、`CHARACTERIZATION_FAILED`。已合并的变更不允许作废。重复同一修订请求返回已有新草案，不重复创建；新运行必须从旧运行的当前源分支启动，不能从旧功能分支继续。
 

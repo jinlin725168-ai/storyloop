@@ -279,7 +279,7 @@ storyloop change /path/to/project --change <新ID> --message "在当前源分支
 storyloop run /path/to/project --change FEAT-20261016-001 --overrule "已核实 A2 与代码一致，失败应由实现修复"
 ```
 
-理由进入运行状态和 decisions.md；对应发现改回实现问题。该操作只适用于审查分流，不能驳回实现前 RED 检查的确定性错误。若同轮还有其他判据问题，处理合同归属后仍会停在 `ORACLE_DEFECT`。
+理由进入运行状态和 decisions.md；审查分流时对应发现改回实现问题。判据强度预审的 `MUST_FIX`（包括无进展或轮次上限停机）也可人工推翻，裁定仅对当时验收套件摘要有效，之后仍需证明 RED；套件变化须重新预审。不能驳回入口调用、越界或实现前保持性条件失败等确定性错误。若同轮还有其他判据问题，处理合同归属后仍会停在 `ORACLE_DEFECT`。
 
 ## 7. 底座变更如何处理
 
@@ -356,7 +356,7 @@ storyloop run C:\work\my-project --change FEAT-20260916-001
 |---|---|---|
 | `PREPARING` / `CONTRACT_READY` | 建分支、物化合同、生成验收套件 | 自动 |
 | `CONTRACT_COMMITTED` | 合同与套件已提交，待证明 RED | 自动；套件副作用阻断 RED 时可 `acceptance-repair`，修复后重新证明 RED |
-| `ORACLE_DEFECT` | RED 检查或实现后审查发现判据缺陷 | `acceptance-repair`；仅审查归属可 `run --overrule "理由"` |
+| `ORACLE_DEFECT` | RED 检查、判据强度预审或实现后审查发现判据缺陷 | `acceptance-repair`；审查归属或预审 `MUST_FIX` 可 `run --overrule "理由"` |
 | `NEEDS_SPEC_FIX` | 审查发现合同与事实或判据矛盾 | `change --supersede ID --message "修订意见"`，或 `run --overrule "理由"` |
 | `NO_PROGRESS` | 根因调查后仍是相同失败、无原失败用例转绿 | 看停止报告，处理后 `run`；或修判据、修合同重开 |
 | `SUPERSEDED` | 已作废并链接到新草案 | 处理旧分支未提交内容，切回源分支，批准新变更 |

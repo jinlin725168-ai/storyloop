@@ -96,8 +96,8 @@ def _run_change_locked(
     saved_path = run_path(project, change_id)
     saved = load_json(saved_path) if saved_path.exists() else None
     if overrule:
-        require(saved and saved.get("routed") and saved.get("status") in {"ORACLE_DEFECT", "NEEDS_SPEC_FIX"},
-                "--overrule 只能用于审查判定的 ORACLE_DEFECT 或 NEEDS_SPEC_FIX")
+        require(saved is not None, "--overrule 需要已有停点")
+        require_routed_choice(saved, overrule)
     if saved and saved.get("status") == "PASSED":
         require(change["status"] == "PASSED", "Completed run has inconsistent change state")
         return passed_result(saved)

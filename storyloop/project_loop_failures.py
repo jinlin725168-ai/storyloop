@@ -239,6 +239,7 @@ def _pause_routed(project: Path, state: dict, target: str, findings: list[dict])
 
 def require_routed_choice(state: dict, overrule: str | None) -> None:
     routed = state.get("status") in ROUTED_STOPS.values() and state.get("routed")
+    precheck = _precheck_overrulable(state)
     if routed and not overrule:
         from .failure_attribution import characterization_oracle
         if characterization_oracle(state):
@@ -249,12 +250,28 @@ def require_routed_choice(state: dict, overrule: str | None) -> None:
         require(False, f"{state['status']}：审查判定问题不在实现。修正判据用 storyloop acceptance-repair "
                        "--reason <原因>；合同缺陷用 storyloop change --supersede；"
                        "不同意这个判定用 storyloop run --overrule <理由>")
-    require(not overrule or routed, "--overrule 只能用于审查判定的 ORACLE_DEFECT 或 NEEDS_SPEC_FIX")
+    require(not overrule or routed or precheck,
+            "--overrule 只能用于审查判定的 ORACLE_DEFECT 或 NEEDS_SPEC_FIX，或判据强度预审的 MUST_FIX")
+
+
+def _precheck_overrulable(state: dict) -> bool:
+    acceptance = state.get("acceptance") or {}
+    precheck = acceptance.get("precheck") or {}
+    findings = precheck.get("findings") or []
+    return (state.get("status") == "ORACLE_DEFECT" and not state.get("routed")
+            and acceptance.get("defect_category") == "ORACLE_STRENGTH_PRECHECK"
+            and precheck.get("verdict") == "fail" and bool(findings)
+            and any(item.get("disposition") == "MUST_FIX" and item.get("blocking") is True
+                    for item in findings)
+            and all(item.get("disposition") in {"MUST_FIX", "ADVISORY"}
+                    and item.get("id") for item in findings))
 
 
 def apply_overrule(project: Path, state: dict, reason: str) -> dict | None:
     """Rewrite the blamed findings, then route the whole mixed review again."""
     reason = text(reason, "overrule reason")
+    if _precheck_overrulable(state):
+        return _overrule_precheck(project, state, reason)
     if state["routed"].get("source") == "consistency":
         from .consistency import overrule_consistency
         return overrule_consistency(project, state, reason)
@@ -276,6 +293,33 @@ def apply_overrule(project: Path, state: dict, reason: str) -> dict | None:
     transition(project, state, "IMPLEMENTING", event="overrule")
     save_run(project, state)
     return None
+
+
+def _overrule_precheck(project: Path, state: dict, reason: str) -> None:
+    """Adjudicate only the reviewed suite; RED and deterministic gates still run."""
+    from .intervention_events import append_event
+    from .smoke import smoke_digests
+    from .changes import load_change
+
+    precheck = state["acceptance"]["precheck"]
+    digests = smoke_digests(project, load_change(project, state["change_id"]))
+    require(digests == precheck["suite_digests"],
+            "验收套件已变化；请重新运行判据强度预审后再裁定")
+    at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    finding_ids = sorted(item["id"] for item in precheck["findings"]
+                         if item["disposition"] == "MUST_FIX")
+    record = {"at": at, "status": state["status"], "attempt": state["attempt"],
+              "source": "precheck", "reason": reason, "findings": finding_ids,
+              "finding_ids": finding_ids, "suite_digests": digests}
+    state.setdefault("overrules", []).append(record)
+    append_event(state, "overrule", source="precheck", stop="ORACLE_DEFECT", at=at)
+    state["oracle_strength_precheck"] = {**precheck, "verdict": "pass",
+                                         "reviewed_verdict": precheck["verdict"],
+                                         "reviewed_summary": precheck.get("summary"),
+                                         "summary": "人工推翻判据强度预审 MUST_FIX",
+                                         "human_overrule": record}
+    _clear_stop(state)
+    save_run(project, state)
 
 
 def _record_overrule(state: dict, reason: str, keys: set[str]) -> None:
