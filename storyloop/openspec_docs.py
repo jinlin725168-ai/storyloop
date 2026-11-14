@@ -130,7 +130,10 @@ def render_decisions(change: dict, answers: list[dict], manual: list[dict], rese
               for item in (repairs or [])] or ["- none"]
     lines += ["", "## Overruled attributions", ""]
     lines += [f"- {item.get('at', '')} {item.get('status')} at attempt {item.get('attempt')}: {item.get('reason')} "
-              f"({', '.join(item.get('findings') or [])})" for item in (overrules or [])] or ["- none"]
+              f"({', '.join(item.get('findings') or [])})"
+              + (f" [人工推翻判据强度预审；suite={item.get('suite_digests')}]"
+                 if item.get("source") == "precheck" else "")
+              for item in (overrules or [])] or ["- none"]
     return "\n".join(lines) + "\n"
 
 

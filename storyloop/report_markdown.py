@@ -62,6 +62,11 @@ def _render_item(entry: dict, report: dict) -> list[str]:
         lines.append("- 作者：未知（未持久化可靠作者来源）")
         lines.append("- 内容验证：未经过机器事实验证（`CONTENT_NOT_MACHINE_VERIFIED`）")
     lines.append("")
+    if identifier == "oracle_strength_precheck" and isinstance(data, dict) and data.get("human_overrule"):
+        decision = data["human_overrule"]
+        lines.extend(["- 判定：人工推翻 MUST_FIX（仅限当前验收套件）",
+                      f"- 理由：{_text(decision.get('reason'))}",
+                      f"- 发现 ID：{_text(', '.join(decision.get('finding_ids') or []))}", ""])
     if identifier == "role_calls" and isinstance(data, list):
         lines.extend(_role_calls(data))
     elif identifier == "cost" and isinstance(data, dict):

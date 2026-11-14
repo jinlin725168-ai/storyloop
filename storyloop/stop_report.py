@@ -282,6 +282,10 @@ def _stop_actions(project: Path | str, state: dict, status: str, details: dict
     options = routing_options(project, change_id, status, {**state, **details}) or _options(
         status, project_text, change_id, bool(state.get("routed")),
         details.get("ci_requires_human_proposal", False))
+    from .project_loop_failures import _precheck_overrulable
+    if _precheck_overrulable({**state, **details}):
+        options.append({"action": "人工推翻判据强度预审", "command": _command(
+            "storyloop", "run", project_text, "--change", change_id, "--overrule", "<理由>")})
     if (details.get("acceptance") or {}).get("reason") == "RED_ENVIRONMENT_ERROR":
         options = [{"action": "修复 RED 执行环境后重试", "command": _command(
             "storyloop", "run", project_text, "--change", change_id)}]
