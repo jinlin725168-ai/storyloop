@@ -23,7 +23,8 @@ EARS_MARKERS = ("SHALL", "MUST", "应", "必须", "须")
 
 def evaluate_checklist(product: dict, project: Path | None = None,
                        *, require_entries: bool = False,
-                       require_observation: bool = False) -> list[dict]:
+                       require_observation: bool = False,
+                       require_output_contract: bool = False) -> list[dict]:
     """Return checklist items: {id, dimension, level: ok|warning|error, text}."""
     items: list[dict] = []
     add = _adder(items)
@@ -68,8 +69,48 @@ def evaluate_checklist(product: dict, project: Path | None = None,
                     add("Measurability", "error",
                         f"{criterion_id} lacks observation through its declared entry in the given state",
                         criterion_id=criterion_id)
+        if require_output_contract:
+            for criterion in story.get("acceptance") or []:
+                if criterion.get("kind") != "automated" or criterion.get("new_output") is not True:
+                    continue
+                for problem in _output_contract_problems(criterion.get("output_contract")):
+                    add("Measurability", "error", f"{criterion['id']} output_contract {problem}",
+                        criterion_id=criterion["id"])
     _nature_items(add, product, project)
     return items
+
+
+def _output_contract_problems(contract: object) -> list[str]:
+    """Keep incomplete draft data visible so the checklist can name each missing part."""
+    if not isinstance(contract, dict):
+        return ["is required for new machine-readable output"]
+    problems = []
+    if not _filled(contract.get("location")):
+        problems.append("needs an entry or file location")
+    fields = contract.get("fields")
+    if not isinstance(fields, list) or not fields:
+        return [*problems, "needs at least one field or section name and type"]
+    for index, field in enumerate(fields, 1):
+        if not isinstance(field, dict):
+            problems.append(f"field {index} needs name, type and meaning")
+            continue
+        for key in ("name", "type", "meaning"):
+            if not _filled(field.get(key)):
+                problems.append(f"field {index} needs {key}")
+        name, kind = field.get("name"), field.get("type")
+        if _filled(name) and _filled(kind):
+            prefix = name + ("[]." if kind in {"array<object>", "list<object>"} else ".")
+            if kind in {"object", "array<object>", "list<object>"} and not any(
+                    isinstance(child, dict) and _filled(child.get("name"))
+                    and child["name"].startswith(prefix) for child in fields):
+                problems.append(f"field {index} needs named child fields")
+            if kind in {"array", "list"}:
+                problems.append(f"field {index} needs an element type")
+    return problems
+
+
+def _filled(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
 
 
 IDENTIFIER_LIKE = re.compile(r"\b[a-z]+[A-Z]\w*\b|\b\w+\(\)")

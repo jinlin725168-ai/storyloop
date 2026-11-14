@@ -38,7 +38,7 @@
 | `lessons` | `[--confirm ID \| --retire ID --reason TEXT]` | 经验清单或 `COMMITTED`；确认与退休互斥，退休必须给理由 |
 | `lessons-propose` | `--change ID` | `DONE`、`FAILED`、`SKIPPED_NO_SIGNAL` 或 `SKIPPED_COST_LIMIT` 的复盘结果 |
 
-新建产品合同的每条自动验收条件须写 `observation`，说明在其 `given` 状态下如何通过绑定的 `entry_ids` 观察 `then`。缺少说明且没有针对该条件的待决问题时，需求质量检查逐条阻断；问题用 `criterion_id` 绑定条件。新草稿批准前还会在源提交解析 `public_function` 的模块与公开名，并在 `cli`、`stop_json` 定位明确写出 `storyloop <子命令>` 时核对该子命令；项目自己的 CLI、`mvn`、`curl` 不受 StoryLoop 命令核验。新草稿以 `observation_required` 和 `entry_feasibility_required` 标记这两项规则；旧草稿、bench 冻结 Case 与旧格式合同继续按原规则读取，无需迁移。
+新建产品合同的每条自动验收条件须写 `observation`，说明在其 `given` 状态下如何通过绑定的 `entry_ids` 观察 `then`。依赖本次新增机器可读输出的条件标 `new_output: true`，并写 `output_contract: {location, fields:[{name,type,meaning}]}`：位置指入口或文件，字段名可用 `items[].id` 表示列表/对象子字段。缺少输出位置、字段/段落名、类型或含义时，需求质量检查按条件逐条阻断；验收只按约定格式断言。新草稿批准前还会在源提交解析 `public_function` 的模块与公开名，并在 `cli`、`stop_json` 定位明确写出 `storyloop <子命令>` 时核对该子命令；项目自己的 CLI、`mvn`、`curl` 不受 StoryLoop 命令核验。新草稿以 `observation_required`、`output_contract_required` 和 `entry_feasibility_required` 标记这些规则；旧草稿、bench 冻结 Case 与旧格式合同继续按原规则读取，无需迁移。
 
 `storyloop change PATH --idea TEXT --json` 的草稿结果新增 `blocking_items` 数组；每项有检查编号 `id`、`dimension`、`level`、问题说明 `text`，涉及条件时另有 `criterion_id`。既有 `next` 中的阻断总数提示保持原样。
 

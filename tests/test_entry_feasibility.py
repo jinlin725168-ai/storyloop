@@ -156,6 +156,8 @@ class EntryFeasibilityTests(unittest.TestCase):
                     self.assertEqual(result["status"], "PASSED")
                     self.assertNotIn("entry_feasibility_required",
                                      load_change(root, contract_value["change_id"]))
+                    self.assertNotIn("output_contract_required",
+                                     load_change(root, contract_value["change_id"]))
 
     def test_auxiliary_bench_command_is_in_actual_cli_registry(self):
         from storyloop.verification_entries import _cli_commands
@@ -230,7 +232,7 @@ class EntryFeasibilityTests(unittest.TestCase):
     def test_spec_craft_marks_new_observation_as_must_be_red(self):
         skill = (Path(__file__).resolve().parents[1] / "storyloop/skills/spec-craft/SKILL.md").read_text(
             encoding="utf-8")
-        self.assertIn("version: 1.4.3", skill)
+        self.assertIn("version: 1.4.4", skill)
         self.assertIn("observation", skill)
         self.assertIn("regression/state_preservation/non_goal", skill)
 

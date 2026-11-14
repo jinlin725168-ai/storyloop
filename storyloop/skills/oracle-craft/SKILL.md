@@ -1,6 +1,6 @@
 ---
 name: oracle-craft
-version: 1.1.5
+version: 1.1.6
 roles: [product, acceptance, design, review]
 description: 如何写 StoryLoop 的判据与公共验证入口：行类型、测试有效性、结构断言、执行器退出码。product、acceptance、design、review 角色使用。
 ---
@@ -32,6 +32,7 @@ description: 如何写 StoryLoop 的判据与公共验证入口：行类型、�
 
 - 好：经 `storyloop status <project> --change <id> --json` 读取 `stop.options[].action`，用合同给出的字面预期断言某个停点的下一步。
 - 坏：只断言文件存在、私有路由函数被调用一次，或根据生产代码同一算法重算 expected；这些不能证明外部行为。
+- 新机器可读输出以合同的 `output_contract` 为断言边界：验收精确比较约定位置、字段/段落名、类型与含义，列表/对象覆盖约定的子字段；不要额外规定合同未列的输出格式。约定字段未断言属于过弱，按约定字段断言不属于“超出合同”。
 - 尽量经真实公共接口观察；只在外部服务、时钟等系统边界替换依赖，不 mock StoryLoop 自己的守卫、路由或候选行为。测试前提失败须作为夹具问题报告，不能伪装成 RED。
 
 ### 准备 / 执行 / 观察

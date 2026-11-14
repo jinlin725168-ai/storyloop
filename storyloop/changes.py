@@ -26,6 +26,7 @@ def create_change(
     require_entry_coverage: bool | None = None,
     require_observation: bool = False,
     require_entry_feasibility: bool = False,
+    require_output_contract: bool = False,
 ) -> dict:
     """Create a local ignored draft from one short product idea."""
     project = Path(project).resolve()
@@ -63,6 +64,8 @@ def create_change(
         state["observation_required"] = True
     if require_entry_feasibility:
         state["entry_feasibility_required"] = True
+    if require_output_contract:
+        state["output_contract_required"] = True
     if supersedes is not None:
         state["supersedes"] = _supersedes(supersedes)
     from .intake import project_intake
@@ -86,7 +89,7 @@ def load_change(project: Path, change_id: str) -> dict:
     optional = {"supersedes", "superseded_by", "routing_version", "intake",
                 "base_proposal_sha256", "blocked_by", "intervention_events",
                 "verification_entries_required", "entry_coverage_required", "observation_required",
-                "entry_feasibility_required"}
+                "entry_feasibility_required", "output_contract_required"}
     require(required <= set(value) <= required | optional and value["version"] == 1,
             "Invalid change state")
     require(value["change_id"] == change_id, "Change state identity mismatch")
@@ -100,6 +103,8 @@ def load_change(project: Path, change_id: str) -> dict:
         require(value["observation_required"] is True, "Invalid observation requirement")
     if "entry_feasibility_required" in value:
         require(value["entry_feasibility_required"] is True, "Invalid entry feasibility requirement")
+    if "output_contract_required" in value:
+        require(value["output_contract_required"] is True, "Invalid output contract requirement")
     if "base_proposal_sha256" in value:
         require(nature_of(value["product"]) == "base"
                 and isinstance(value["base_proposal_sha256"], str)
@@ -265,7 +270,8 @@ def write_change_preview(project: Path, state: dict) -> None:
                 render_delta_spec(product, state["change_id"], main_spec))
     _write_text(root / "checklist.md", render_checklist(evaluate_checklist(
         product, project, require_entries=state.get("verification_entries_required") is True,
-        require_observation=state.get("observation_required") is True)))
+        require_observation=state.get("observation_required") is True,
+        require_output_contract=state.get("output_contract_required") is True)))
 
 
 def _question_line(item: dict) -> str:
