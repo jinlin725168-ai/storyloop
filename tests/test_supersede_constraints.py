@@ -43,7 +43,8 @@ class SupersedeConstraintTests(unittest.TestCase):
             return replacement(request) if replacement else revised(request)
 
         new = supersede_change(self.root, self.old_id, "revise AC-1", revise)
-        proposal = (self.root / ".storyloop/drafts" / new["change_id"] / "proposal.md").read_text()
+        proposal = (self.root / ".storyloop/drafts" / new["change_id"] / "proposal.md").read_text(
+            encoding="utf-8")
         return new, proposal, seen[0]
 
     def test_four_human_sources_are_redacted_and_inherited(self):
