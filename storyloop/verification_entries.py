@@ -4,6 +4,7 @@ import ast
 from pathlib import Path
 import re
 
+from .git_command import git
 from .models import StoryLoopError, fields, identifier, require, text
 from .path_security import repository_relative
 from .processutil import redact
@@ -37,6 +38,64 @@ def validate_criterion_entry_ids(product: dict) -> None:
                     f"Automatic AC {criterion['id']} needs nonempty unique entry_ids")
             require(set(entry_ids) <= owned,
                     f"Automatic AC {criterion['id']} entry_ids must belong to the same story")
+
+
+def validate_entry_feasibility(project: Path, product: dict) -> None:
+    """Resolve declared public seams at the source commit without importing candidate code."""
+    if not new_format(product):
+        return
+    source_commit = git(project, "rev-parse", "HEAD").strip()
+    commands = _cli_commands()
+    for story in product["stories"]:
+        for entry in story["verification_entries"]:
+            kind, locator = entry["kind"], entry["locator"]
+            if kind in {"cli", "stop_json"}:
+                match = re.search(r"\bstoryloop\s+([a-z][a-z0-9-]*)", locator)
+                require(match is not None and match.group(1) in commands,
+                        f"Verification entry {entry['id']} references an unknown storyloop command")
+            elif kind == "public_function":
+                require(_resolves_function(project, source_commit, locator),
+                        f"Verification entry {entry['id']} has no source module or public symbol")
+
+
+def _resolves_function(project: Path, commit: str, locator: str) -> bool:
+    parts = [re.sub(r"\s*\(.*$", "", part.strip()) for part in locator.split(" / ")]
+    first = parts[0].split(".")
+    for split in range(len(first) - 1, 0, -1):
+        module = "/".join(first[:split]) + ".py"
+        for prefix in ("", "src/"):
+            try:
+                source = git(project, "show", f"{commit}:{prefix}{module}")
+            except StoryLoopError:
+                continue
+            try:
+                tree = ast.parse(source)
+            except SyntaxError:
+                return False
+            names = {node.name for node in tree.body
+                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+            requested = [".".join(first[split:]), *parts[1:]]
+            return all(name in names for name in requested)
+    return False
+
+
+def _cli_commands() -> set[str]:
+    """Read the trusted CLI registry without importing its higher-level module."""
+    commands = set()
+    cli = Path(__file__).with_name("cli.py")
+    for source in (cli, cli.with_name("bench_cli.py")):
+        tree = ast.parse(source.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if source == cli and isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "descriptions" for target in node.targets):
+                commands.update(ast.literal_eval(node.value))
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "add_parser" and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "sub" and node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and isinstance(node.args[0].value, str)):
+                commands.add(node.args[0].value)
+    return commands
 
 
 def check_entry_use(project: Path, change: dict, manifest: dict) -> None:

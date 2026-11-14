@@ -78,7 +78,8 @@ FILES = {"type": "array", "items": _obj({"path": STRING, "content": STRING})}
 SYSTEM_SMOKE_TEST = _obj({"id": STRING, "description": STRING, "command": STRINGS,
                           "timeout_seconds": {"type": "integer"}})
 QUESTION = _obj({"id": STRING, "text": STRING, "options": STRINGS,
-                 "recommended": _nullable(STRING), "why": _nullable(STRING)})
+                 "recommended": _nullable(STRING), "why": _nullable(STRING),
+                 "criterion_id": _nullable(STRING)})
 ROW_TYPE = {"type": "string", "enum": ["positive", "degradation", "unknown_state", "form_parity",
                                        "regression", "state_preservation", "non_goal"]}
 ACCEPTANCE_TEST = _obj({"id": STRING, "criteria": STRINGS, "command": STRINGS,
@@ -88,6 +89,7 @@ ACCEPTANCE_TEST = _obj({"id": STRING, "criteria": STRINGS, "command": STRINGS,
 CRITERION = _obj({"id": STRING, "given": STRING, "when": STRING, "then": STRING,
                   "kind": {"type": "string", "enum": ["automated", "manual"]},
                   "entry_ids": _nullable(STRINGS),
+                  "observation": _nullable(STRING),
                   "row_type": _nullable(ROW_TYPE),
                   "oracle_class": _nullable({"type": "string", "enum": ["auto-fast", "auto-heavy", "manual"]}),
                   "consumers": _nullable(STRINGS),

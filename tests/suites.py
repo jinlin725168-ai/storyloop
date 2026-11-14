@@ -40,6 +40,7 @@ FAST = [
 END_TO_END = [
     "tests.test_trace_ids", "tests.test_execution_profile",
     "tests.test_verification_entries",
+    "tests.test_entry_feasibility",
     "tests.test_product_e2e", "tests.test_nature_e2e", "tests.test_change_types",
     "tests.test_reports_e2e", "tests.test_roles_e2e",
     "tests.test_regression_updates",

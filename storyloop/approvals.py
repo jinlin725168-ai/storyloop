@@ -42,8 +42,12 @@ def _approve_locked(project, change_id, approved_by, now, tier) -> dict:
         if state.get("entry_coverage_required") is True:
             from .verification_entries import validate_criterion_entry_ids
             validate_criterion_entry_ids(product)
+        if any("verification_entries" in story for story in product["stories"]):
+            from .verification_entries import validate_entry_feasibility
+            validate_entry_feasibility(project, product)
         blocking = blocking_items(evaluate_checklist(
-            product, project, require_entries=state.get("verification_entries_required") is True))
+            product, project, require_entries=state.get("verification_entries_required") is True,
+            require_observation=state.get("observation_required") is True))
         require(not blocking, "Requirement checklist has blocking items; revise the contract: "
                 + "; ".join(item["text"] for item in blocking[:3]))
     approved_by = text(approved_by, "approver")

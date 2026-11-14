@@ -36,6 +36,7 @@ class ProductCliTests(unittest.TestCase):
             for criterion in approved_product["stories"][0]["acceptance"]:
                 if criterion["kind"] == "automated":
                     criterion["entry_ids"] = ["VE-BOOK"]
+                    criterion["observation"] = "Read the booking response after the request"
             with patch("storyloop.cli.invoke_project_agent", return_value=approved_product):
                 created = dispatch(args)
             self.assertEqual(created["status"], "DRAFT")

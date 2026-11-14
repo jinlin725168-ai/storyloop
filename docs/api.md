@@ -38,6 +38,10 @@
 | `lessons` | `[--confirm ID \| --retire ID --reason TEXT]` | 经验清单或 `COMMITTED`；确认与退休互斥，退休必须给理由 |
 | `lessons-propose` | `--change ID` | `DONE`、`FAILED`、`SKIPPED_NO_SIGNAL` 或 `SKIPPED_COST_LIMIT` 的复盘结果 |
 
+新建产品合同的每条自动验收条件须写 `observation`，说明在其 `given` 状态下如何通过绑定的 `entry_ids` 观察 `then`。缺少说明且没有针对该条件的待决问题时，需求质量检查逐条阻断；问题用 `criterion_id` 绑定条件。批准前还会在源提交解析 `public_function` 的模块与符号，并确认 `cli`、`stop_json` 引用的 StoryLoop 子命令存在。新草稿以 `observation_required` 标记此规则；旧草稿与旧格式合同继续按原规则读取，无需迁移。
+
+`storyloop change PATH --idea TEXT --json` 的草稿结果新增 `blocking_items` 数组；每项有检查编号 `id`、`dimension`、`level`、问题说明 `text`，涉及条件时另有 `criterion_id`。既有 `next` 中的阻断总数提示保持原样。
+
 例如 `storyloop change PATH --idea "导出用户" --slug user-export` 会生成形如 `FEAT-20261024-user-export` 的 ID。短名须为 3–40 个小写字母、数字或连字符，首尾为字母或数字。未提供短名时继续使用 `FEAT-20261024-001` 这样的序号格式；已有旧格式 ID 仍可使用。
 
 各命令的用法见 [使用指南](product-iteration-guide.md)。两阶段接入、onboarding.json、`{storyloop_harness}` argv、可信 case 及公开 helper API 见[版本化冒烟执行器](smoke-harness.md)。scaffold 幂等只接受未改草案；人工补齐后按干净提交执行原 init。init 失败按写入内容归属回滚，不覆盖并发修改。
