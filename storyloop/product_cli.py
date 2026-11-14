@@ -64,7 +64,8 @@ def change(project: Path, args, product_answer, revise_with_agent,
         slug = choose_slug(args, product.get("slug"), interactive and sys.stdin.isatty(),
                            prefix=prefix)
         created = create_change(project, args.idea, product, slug=slug,
-                                require_verification_entries=True, require_observation=True)
+                                require_verification_entries=True, require_observation=True,
+                                require_entry_feasibility=True)
         adopt_pending(project, created["change_id"])
         state = clarify_interactively(project, created["change_id"], revise_with_agent, interactive)
         return draft_result(project, state)

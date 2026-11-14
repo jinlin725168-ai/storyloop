@@ -25,6 +25,7 @@ def create_change(
     *, require_verification_entries: bool = False,
     require_entry_coverage: bool | None = None,
     require_observation: bool = False,
+    require_entry_feasibility: bool = False,
 ) -> dict:
     """Create a local ignored draft from one short product idea."""
     project = Path(project).resolve()
@@ -60,6 +61,8 @@ def create_change(
         state["entry_coverage_required"] = True
     if require_observation:
         state["observation_required"] = True
+    if require_entry_feasibility:
+        state["entry_feasibility_required"] = True
     if supersedes is not None:
         state["supersedes"] = _supersedes(supersedes)
     from .intake import project_intake
@@ -82,7 +85,8 @@ def load_change(project: Path, change_id: str) -> dict:
     from .models import require
     optional = {"supersedes", "superseded_by", "routing_version", "intake",
                 "base_proposal_sha256", "blocked_by", "intervention_events",
-                "verification_entries_required", "entry_coverage_required", "observation_required"}
+                "verification_entries_required", "entry_coverage_required", "observation_required",
+                "entry_feasibility_required"}
     require(required <= set(value) <= required | optional and value["version"] == 1,
             "Invalid change state")
     require(value["change_id"] == change_id, "Change state identity mismatch")
@@ -94,6 +98,8 @@ def load_change(project: Path, change_id: str) -> dict:
         require(value["entry_coverage_required"] is True, "Invalid entry coverage requirement")
     if "observation_required" in value:
         require(value["observation_required"] is True, "Invalid observation requirement")
+    if "entry_feasibility_required" in value:
+        require(value["entry_feasibility_required"] is True, "Invalid entry feasibility requirement")
     if "base_proposal_sha256" in value:
         require(nature_of(value["product"]) == "base"
                 and isinstance(value["base_proposal_sha256"], str)

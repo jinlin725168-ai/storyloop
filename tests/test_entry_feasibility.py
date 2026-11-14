@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+import json
 
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project
@@ -35,7 +36,8 @@ class EntryFeasibilityTests(unittest.TestCase):
             repository(root)
             bootstrap_project(root)
             value = contract(locator="storyloop.missing_module.absent()")
-            draft = create_change(root, "idea", value, require_verification_entries=True)
+            draft = create_change(root, "idea", value, require_verification_entries=True,
+                                  require_entry_feasibility=True)
             with self.assertRaisesRegex(StoryLoopError, "VE-ENTRY"):
                 approve_change(root, draft["change_id"])
             self.assertEqual(load_change(root, draft["change_id"])["status"], "DRAFT")
@@ -51,7 +53,8 @@ class EntryFeasibilityTests(unittest.TestCase):
                 ("stop_json", "storyloop no-such-command <project> --json 输出")]:
                 with self.subTest(kind=kind):
                     draft = create_change(root, "idea", contract(kind, locator),
-                                          require_verification_entries=True)
+                                          require_verification_entries=True,
+                                          require_entry_feasibility=True)
                     with self.assertRaisesRegex(StoryLoopError, "VE-ENTRY"):
                         approve_change(root, draft["change_id"])
 
@@ -68,6 +71,29 @@ class EntryFeasibilityTests(unittest.TestCase):
                     except StoryLoopError as exc:
                         self.assertNotIn("VE-ENTRY", str(exc))
 
+    def test_external_cli_and_stop_json_entries_can_be_approved(self):
+        from storyloop.readiness import inspect_readiness, approve_readiness
+        from tests.routing_support import readiness_repository
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            readiness_repository(root)
+            ready = inspect_readiness(root)
+            approve_readiness(root, ready["digest"], "Local tests")
+            for kind, locator in (("cli", "mvn -q test"),
+                                  ("stop_json", "curl http://localhost/api --json")):
+                with self.subTest(kind=kind):
+                    value = assessed_product()
+                    value["stories"][0]["verification_entries"] = contract(kind, locator)["stories"][0][
+                        "verification_entries"]
+                    for criterion in value["stories"][0]["acceptance"]:
+                        if criterion["kind"] == "automated":
+                            criterion["entry_ids"] = ["VE-ENTRY"]
+                            criterion["observation"] = "Read the public command result"
+                    draft = create_change(root, "idea", value, require_verification_entries=True,
+                                          require_entry_feasibility=True)
+                    self.assertEqual(approve_change(root, draft["change_id"])["status"], "APPROVED")
+
     def test_function_resolves_from_committed_source_not_working_tree(self):
         from storyloop.verification_entries import validate_entry_feasibility
 
@@ -82,6 +108,54 @@ class EntryFeasibilityTests(unittest.TestCase):
             validate_entry_feasibility(root, value)
             (root / "sample.py").write_text("def missing(value):\n    return value\n")
             validate_entry_feasibility(root, value)
+
+    def test_function_exported_by_import_or_assignment_resolves(self):
+        from storyloop.verification_entries import validate_entry_feasibility
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            (root / "symbols.py").write_text("def source():\n    return 1\n")
+            (root / "sample.py").write_text(
+                "from symbols import source as imported\nimport symbols as module_alias\n"
+                "assigned = lambda: 1\n")
+            test_git(root, "add", "symbols.py", "sample.py")
+            test_git(root, "commit", "-q", "-m", "exports")
+            for name in ("imported", "module_alias", "assigned"):
+                with self.subTest(name=name):
+                    validate_entry_feasibility(root, contract(locator=f"sample.{name}()"))
+
+    def test_five_frozen_v21_cases_do_not_enable_entry_feasibility(self):
+        from storyloop.bench_worker import _execute_change
+        from storyloop.intake import project_intake
+
+        cases = Path(__file__).resolve().parents[1] / "bench/cases"
+        contracts = sorted(cases.glob("*/v2/contract.json"))
+        self.assertEqual(len(contracts), 5)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository(root)
+            bootstrap_project(root)
+            intake = project_intake(root, product())
+            for contract_path in contracts:
+                contract_value = json.loads(contract_path.read_text(encoding="utf-8"))
+                with self.subTest(case=contract_path.parent.parent.name), \
+                        patch("storyloop.intake.project_intake", return_value=intake), \
+                        patch("storyloop.approvals._intake_approval", return_value={}), \
+                        patch("storyloop.approvals.version_snapshot", return_value={}), \
+                        patch("storyloop.approvals.evaluate_checklist", return_value=[]), \
+                        patch("storyloop.verification_entries.validate_entry_feasibility",
+                              side_effect=AssertionError("bench must skip new feasibility gate")), \
+                        patch("storyloop.bench_worker._run_until_stop", return_value={"status": "PASSED"}):
+                    result = _execute_change(
+                        root, contract_value, str(contract_path.parent), 2, "generated",
+                        create_change=create_change, approve_change=approve_change,
+                        load_change=load_change, install_smoke_suite=None,
+                        run_change=None, approve_design=None, load_run_state=None,
+                        case_revision="2.1")
+                    self.assertEqual(result["status"], "PASSED")
+                    self.assertNotIn("entry_feasibility_required",
+                                     load_change(root, contract_value["change_id"]))
 
     def test_auxiliary_bench_command_is_in_actual_cli_registry(self):
         from storyloop.verification_entries import _cli_commands
@@ -147,6 +221,7 @@ class EntryFeasibilityTests(unittest.TestCase):
                                         "--no-interactive"])
             with patch("storyloop.cli.invoke_project_agent", return_value=value):
                 result = dispatch(args)
+            self.assertTrue(result["entry_feasibility_required"])
             blocker = next(item for item in result["blocking_items"]
                            if item.get("criterion_id") == "AC-1")
             self.assertIn("observation", blocker["text"])

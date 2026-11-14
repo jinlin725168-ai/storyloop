@@ -51,8 +51,9 @@ def validate_entry_feasibility(project: Path, product: dict) -> None:
             kind, locator = entry["kind"], entry["locator"]
             if kind in {"cli", "stop_json"}:
                 match = re.search(r"\bstoryloop\s+([a-z][a-z0-9-]*)", locator)
-                require(match is not None and match.group(1) in commands,
-                        f"Verification entry {entry['id']} references an unknown storyloop command")
+                if match:
+                    require(match.group(1) in commands,
+                            f"Verification entry {entry['id']} references an unknown storyloop command")
             elif kind == "public_function":
                 require(_resolves_function(project, source_commit, locator),
                         f"Verification entry {entry['id']} has no source module or public symbol")
@@ -72,11 +73,24 @@ def _resolves_function(project: Path, commit: str, locator: str) -> bool:
                 tree = ast.parse(source)
             except SyntaxError:
                 return False
-            names = {node.name for node in tree.body
-                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+            names = _exported_names(tree)
             requested = [".".join(first[split:]), *parts[1:]]
             return all(name in names for name in requested)
     return False
+
+
+def _exported_names(tree: ast.Module) -> set[str]:
+    names = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            names.add(node.name)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            names.update(alias.asname or alias.name.split(".", 1)[0] for alias in node.names
+                         if alias.name != "*")
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                names.update(item.id for item in ast.walk(target) if isinstance(item, ast.Name))
+    return names
 
 
 def _cli_commands() -> set[str]:

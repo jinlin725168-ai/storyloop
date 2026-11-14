@@ -48,7 +48,8 @@ def _supersede_locked(project: Path, old_id: str, message: str,
     product = read_only_call(project, old_id, lambda: reviser(request))
     new = create_change(project, old["idea"], product, supersedes=link,
                         require_verification_entries=old.get("verification_entries_required") is True,
-                        require_observation=old.get("observation_required") is True)
+                        require_observation=old.get("observation_required") is True,
+                        require_entry_feasibility=old.get("entry_feasibility_required") is True)
     _finish_link(project, old, run, new["change_id"])
     return _result(project, new, run)
 
