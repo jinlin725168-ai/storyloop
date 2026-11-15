@@ -160,6 +160,27 @@ class AcceptanceProgressRetryTests(unittest.TestCase):
         self.assertEqual(result["status"], "ACCEPTANCE_REPAIRED")
         self.assertEqual(len(calls), 1)
 
+    def test_rerun_after_no_progress_resumes_when_findings_change_without_human_repair(self):
+        # 2026-11-15 self-iteration C: after an engine fix a plain rerun replaced the stuck
+        # entry finding with new precheck findings, yet the stale flag stopped without retrying.
+        from storyloop.acceptance_progress import blocking_signatures
+
+        old, _ = blocking_signatures(blocked("A")["acceptance"])
+
+        def stuck():
+            return {"repairs": [{"automatic": True}, {"automatic": True}],
+                    "acceptance": blocked("A")["acceptance"],
+                    "acceptance_retry": {"version": 1, "exhausted": True, "rounds": [
+                        {"repair_count": 2, "signatures": old, "finding_ids": ["A"]}]}}
+
+        result, _, calls = self.run_sequence([blocked("B"),
+            {"status": "ACCEPTANCE_REPAIRED"}], state={**stuck(), "acceptance": blocked("B")["acceptance"]})
+        self.assertEqual(result["status"], "ACCEPTANCE_REPAIRED")
+        self.assertEqual(len(calls), 1)
+        result, state, calls = self.run_sequence([blocked("A")], state=stuck())
+        self.assertEqual((result["status"], calls), ("ORACLE_DEFECT", []))
+        self.assertTrue(state["acceptance_retry"]["exhausted"])
+
     def test_stable_review_id_ignores_message_wording_drift(self):
         from storyloop.acceptance_progress import blocking_signatures
 

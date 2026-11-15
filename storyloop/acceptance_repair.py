@@ -27,7 +27,7 @@ from .smoke_runner import run_commands_at_commit, run_smoke_isolated
 from .storage import load_json
 from .verification_entries import check_entry_use
 from .acceptance_progress import (DEFAULT_AUTO_RETRY_ROUND_LIMIT, PROGRESS_CATEGORIES,
-                                  remember_round, stale_acceptance_stop)
+                                  blocking_signatures, remember_round, stale_acceptance_stop)
 
 if TYPE_CHECKING:  # the loop imports this module; the services type is only an annotation
     from .run_services import LoopServices
@@ -74,6 +74,10 @@ def retry_fixture_red(project: Path, change_id: str, services: LoopServices | No
         if (progress.get("exhausted") and repairs and repairs[-1].get("automatic") is not True
                 and len(repairs) > (progress.get("rounds") or [{}])[-1].get("repair_count", -1)):
             progress.pop("exhausted", None)  # a human submitted a new suite after the stop
+        if (progress.get("exhausted") and progressive
+                and blocking_signatures(acceptance)[0]
+                != (progress.get("rounds") or [{}])[-1].get("signatures")):
+            progress.pop("exhausted", None)  # e.g. a rerun on a fixed engine changed the findings
         if state.get("acceptance_retry", {}).get("exhausted"):
             break
         reason, finding_ids = remember_round(state, acceptance) if progressive else (None, [])
