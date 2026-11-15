@@ -173,6 +173,24 @@ class ManifestEntryTests(unittest.TestCase):
             "    assert result.returncode == 0\n")}
         self.assertEqual(verification_entries.entry_use_findings(value, suite, sources), [])
 
+    def test_cli_locator_without_program_name_uses_its_known_command(self):
+        # 2026-11-15 self-iteration C: approval accepted this prose locator, then every
+        # acceptance round reported UNVERIFIED_ENTRY_USE although the case ran storyloop bench.
+        value = new_product()
+        value["stories"] = value["stories"][:1]
+        value["stories"][0]["verification_entries"][0]["locator"] = (
+            "公开 CLI 的 bench --json report <run-id> 入口")
+        suite = {"tests": [{"id": "T-1", "criteria": ["AC-1"], "entry_ids": ["VE-CLI"],
+                            "command": ["{python}", "acceptance/changes/C/case.py"]}]}
+        sources = {"case.py": (
+            "import subprocess\nimport sys\n"
+            "def test_report(flags):\n"
+            "    subprocess.run([sys.executable, '-m', 'storyloop', 'bench', *flags, "
+            "'report', 'r1'])\n")}
+        self.assertEqual(verification_entries.entry_use_findings(value, suite, sources), [])
+        sources["case.py"] = sources["case.py"].replace("'bench'", "'status'")
+        self.assertEqual(len(verification_entries.entry_use_findings(value, suite, sources)), 1)
+
     def test_unverified_entry_points_to_test_method_and_required_call(self):
         value = new_product()
         value["stories"] = value["stories"][:1]
