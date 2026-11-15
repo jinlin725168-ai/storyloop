@@ -14,6 +14,9 @@ def display(result: dict, complete_json: bool) -> None:
     if complete_json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
+    if "run_id" in result and "cases" in result and "summary" in result:
+        print(_render_bench_report(result))
+        return
     if result.get("status") == "LOG":
         print(render_log(result))
         return
@@ -44,3 +47,22 @@ def display(result: dict, complete_json: bool) -> None:
             print(line)
     for warning in result.get("warnings", []):
         print(f"warning: {warning}")
+
+
+def _render_bench_report(record: dict) -> str:
+    summary = record["summary"]
+    revision = record.get("case_revision") or record["case_version"]
+    lines = [
+        f"Run {record['run_id']}（{revision}，{record['scope']}，{record['suite_source']}）",
+        f"通过 {summary['passed']}/{summary['attempts']}，Gold 失败 {summary['gold_failed']}，"
+        f"非例行介入合计 {summary['nonroutine_total']}",
+    ]
+    for case in summary["cases"]:
+        verdicts = "/".join(case["verdicts"])
+        nonroutine = "/".join(str(value) for value in case["nonroutine"])
+        lines.append(f"{case['case_id']}：{verdicts}（非例行 {nonroutine}）")
+    stops = sorted(summary["stop_reasons"].items(), key=lambda item: (-item[1], item[0]))
+    lines.append("停点：" + "，".join(f"{reason}×{count}" for reason, count in stops))
+    if summary["stage_gate_passed"] is not None:
+        lines.append("门槛：通过" if summary["stage_gate_passed"] else "门槛：未通过")
+    return "\n".join(lines)
