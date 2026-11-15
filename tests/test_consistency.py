@@ -74,6 +74,63 @@ class ConsistencyGateTests(unittest.TestCase):
         self.services = replace(self.services, review=coherent)
         return self.state
 
+    def _oracle_response(self):
+        from storyloop.smoke import suite_relative
+        path = next((self.root / suite_relative(self.root, self.identifier)).rglob('*.py'))
+        return {**coherent(), 'verdict': 'blocked', 'findings': [
+            {**finding('oracle', path.relative_to(self.root).as_posix() + ':1'),
+             'id': 'ORACLE-AC-1-01', 'disposition': 'MUST_FIX',
+             'evidence': 'Suite omits a contracted branch',
+             'required_change': 'Exercise the branch'}]}
+
+    def test_passed_precheck_makes_consistency_oracle_finding_advisory(self):
+        self.prepared()
+        from storyloop.smoke import smoke_digests
+        self.state['oracle_strength_precheck'] = {
+            'verdict': 'pass', 'suite_digests': smoke_digests(self.root, self.change)}
+        self.services = replace(self.services, review=lambda p, c: self._oracle_response())
+        self.assertIsNone(ensure_consistency(self.root, self.change, self.state, self.services))
+        record = self.state['planning']['consistency']
+        self.assertEqual(record['verdict'], 'coherent')
+        self.assertEqual(record['status'], 'COHERENT')
+        self.assertEqual(record['findings'][0]['disposition'], 'ADVISORY')
+        self.assertFalse(record['findings'][0]['blocking'])
+
+    def test_missing_precheck_keeps_consistency_oracle_blocker(self):
+        self.prepared()
+        self.services = replace(self.services, review=lambda p, c: self._oracle_response())
+        result = ensure_consistency(self.root, self.change, self.state, self.services)
+        self.assertEqual(result['status'], 'ORACLE_DEFECT')
+
+    def test_human_precheck_ruling_downgrades_oracle_decision_question(self):
+        self.prepared()
+        from storyloop.smoke import smoke_digests
+        self.state['oracle_strength_precheck'] = {
+            'verdict': 'pass', 'human_overrule': {'reason': 'The contract does not require this branch'},
+            'suite_digests': smoke_digests(self.root, self.change)}
+        response = self._oracle_response()
+        response['verdict'] = 'needs_input'
+        response['findings'][0].update(disposition='DECISION_NEEDED',
+                                       required_change='Should this branch be required?')
+        response['questions'] = ['Should this branch be required?']
+        result = validate_consistency(response, self.root, self.change, self.state)
+        self.assertEqual(result['verdict'], 'coherent')
+        self.assertEqual(result['questions'], [])
+        self.assertEqual(result['findings'][0]['disposition'], 'ADVISORY')
+
+    def test_changed_suite_invalidates_precheck_for_consistency(self):
+        self.prepared()
+        from storyloop.smoke import smoke_digests, suite_relative
+        self.state['oracle_strength_precheck'] = {
+            'verdict': 'pass', 'suite_digests': smoke_digests(self.root, self.change)}
+        suite = self.root / suite_relative(self.root, self.identifier)
+        path = next(suite.rglob('*.py'))
+        path.write_text(path.read_text() + '\n# suite changed\n')
+        response = self._oracle_response()
+        result = validate_consistency(response, self.root, self.change, self.state)
+        self.assertTrue(result['findings'][0]['blocking'])
+        self.assertEqual(result['verdict'], 'blocked')
+
     def test_actual_gate_precedes_characterization_and_caches_same_binding(self):
         self.prepared()
         calls = []

@@ -119,10 +119,20 @@ def validate_consistency(answer: object, project: Path, change: dict, state: dic
                 else 'needs_input' if answer['questions'] else 'coherent')
     require(answer['verdict'] == expected and not (blocked and answer['questions'] and not decisions),
             'Consistency verdict contradicts findings/questions')
+    return _normalized_review(answer, project, change, state, decisions)
+
+
+def _normalized_review(answer: dict, project: Path, change: dict,
+                       state: dict, decisions: list[dict]) -> dict:
     result = deepcopy(answer)
     if decisions and not result['questions']:
         result['questions'] = [item['required_change'] for item in decisions]
+    precheck_passed = _current_precheck_passed(project, change, state)
     for item in result['findings']:
+        if item.get('target') == 'oracle' and precheck_passed:
+            item['disposition'] = 'ADVISORY'
+            item['blocking'] = False
+            continue
         if (item.get('target') == 'oracle' and item.get('disposition') == 'MUST_FIX'
                 and item.get('basis') == 'plan_only'):
             source = item.get('basis_evidence')
@@ -130,9 +140,27 @@ def validate_consistency(answer: object, project: Path, change: dict, state: dic
                     'Plan-only oracle finding needs a valid plan basis location')
             item['disposition'] = 'ADVISORY'
             item['blocking'] = False
-    if not decisions and not result['questions']:
-        result['verdict'] = 'blocked' if any(item['blocking'] for item in result['findings']) else 'coherent'
+    if precheck_passed:
+        downgraded = {item.get('required_change') for item in decisions
+                      if item.get('target') == 'oracle' and isinstance(item.get('required_change'), str)}
+        result['questions'] = [question for question in result['questions'] if question not in downgraded]
+    remaining_decisions = any(item.get('disposition') == 'DECISION_NEEDED'
+                              for item in result['findings'])
+    result['verdict'] = ('needs_input' if remaining_decisions or result['questions'] else
+                         'blocked' if any(item['blocking'] for item in result['findings']) else 'coherent')
     return result
+
+
+def _current_precheck_passed(project: Path, change: dict, state: dict) -> bool:
+    """Honor a review or human ruling only while its protected suite is unchanged."""
+    precheck = state.get('oracle_strength_precheck') or {}
+    if precheck.get('verdict') != 'pass' or not precheck.get('suite_digests'):
+        return False
+    from .smoke import smoke_digests
+    try:
+        return precheck['suite_digests'] == smoke_digests(project, change)
+    except (StoryLoopError, OSError):
+        return False
 
 
 def _validate_location(item: dict, project: Path, change: dict, state: dict) -> None:
