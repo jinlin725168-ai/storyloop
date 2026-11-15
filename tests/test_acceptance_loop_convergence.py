@@ -99,6 +99,22 @@ class AcceptanceLoopConvergenceTests(unittest.TestCase):
         self.assertEqual(len(requests), 2)
         self.assertIn("prior repair", requests[1]["validation_errors"][0])
 
+    def test_introduced_by_accepts_fullwidth_punctuation_after_line(self):
+        # Self-iteration FIX-20261115-log-acceptance-rounds: the model wrote "path:80：reason";
+        # requiring whitespace after the line number blocked the run.
+        state = {"routing": {"effective_tier": "standard"},
+                 "repairs": [{"automatic": True}, {"automatic": True,
+                              "changed_paths": ["acceptance/test.py"]}],
+                 "acceptance": {"precheck": {"findings": [finding("MUST_FIX")]}}}
+        for source in ("acceptance/test.py:12：此前编辑改了夹具", "acceptance/test.py:12, changed setup",
+                       "acceptance/test.py:12 changed setup"):
+            with self.subTest(source=source):
+                answer = precheck_answer(new_id=True, full=True)
+                answer["findings"][0]["introduced_by"] = source
+                error, requests = self.assess([answer], state)
+                self.assertEqual(error.code, "ORACLE_DEFECT")
+                self.assertEqual(len(requests), 1, requests[-1].get("validation_errors"))
+
     def test_prior_suite_edits_are_read_from_repair_commit(self):
         from storyloop.oracle_strength_precheck import _prior_suite_edits
         with patch("storyloop.baseline._git", return_value="acceptance/test.py\n") as git:
