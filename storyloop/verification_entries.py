@@ -311,14 +311,24 @@ def validate_entry_paths(option: dict, product: dict, manifest: dict) -> None:
             if path in paths:
                 changed_coverage.add((criterion_id, entry_id))
         text(row["via"], "entry path via")
+    # A test may serve several ACs through several entries; an AC that declares entry_ids needs
+    # only its own entries covered. Older contracts without entry_ids keep the full cross product.
+    bound = {criterion["id"]: set(criterion.get("entry_ids") or []) for story in product["stories"]
+             for criterion in story["acceptance"]}
     required = set()
     for test in manifest["tests"]:
         for criterion_id in test["criteria"]:
             require(criterion_id in criterion_stories, "Oracle references unknown automatic criterion")
             for entry_id in test["entry_ids"]:
                 require(entry_id in owners, "Oracle references unknown verification entry")
+                if bound[criterion_id] and entry_id not in bound[criterion_id]:
+                    continue
                 if owners[entry_id] == criterion_stories[criterion_id]:
                     required.add((criterion_id, entry_id))
-    require(required <= covered, "Plan entry_paths does not cover every oracle-used entry and AC")
+    missing = sorted(required - covered)
+    if missing:
+        from .errors import require_role_evidence
+        require_role_evidence(False, "Plan entry_paths does not cover every oracle-used entry and AC: "
+                              + ", ".join(f"{criterion}/{entry}" for criterion, entry in missing))
     require({pair for pair in required if pair[0] in red_criteria} <= changed_coverage,
             "Expect-red entry_paths must reach a touched/creates file")

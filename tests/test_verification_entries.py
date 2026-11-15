@@ -289,6 +289,37 @@ class PlanEntryTests(unittest.TestCase):
                                       "path": "app/service.py", "via": "CLI reaches changed service"})
         self.assertIsNone(validate_entry_paths(option, value, suite))
 
+    def test_required_pairs_follow_criterion_entry_ids_and_name_missing_pairs(self):
+        # Self-iteration FIX-20261115-log-acceptance-rounds: a test listing AC-1/AC-2 and two
+        # entries required every cross pair, though each AC binds only one entry; the plain
+        # require then crashed planning instead of stopping for revision.
+        from copy import deepcopy
+        from storyloop.verification_entries import validate_entry_paths
+
+        value = new_product()
+        value["stories"] = value["stories"][:1]
+        story = value["stories"][0]
+        second = deepcopy(story["verification_entries"][0])
+        second["id"] = "VE-JSON"
+        story["verification_entries"].append(second)
+        other = deepcopy(story["acceptance"][0])
+        other["id"] = "AC-2"
+        story["acceptance"][0]["entry_ids"] = ["VE-CLI"]
+        other["entry_ids"] = ["VE-JSON"]
+        story["acceptance"].append(other)
+        suite = {"tests": [{**manifest()["tests"][0], "criteria": ["AC-1", "AC-2"],
+                            "entry_ids": ["VE-CLI", "VE-JSON"]}]}
+        option = {"touched": ["app/service.py"], "creates": [], "entry_paths": [
+            {"entry_id": "VE-CLI", "criterion_ids": ["AC-1"], "path": "app/service.py", "via": "CLI"},
+            {"entry_id": "VE-JSON", "criterion_ids": ["AC-2"], "path": "app/service.py", "via": "JSON"}]}
+        self.assertIsNone(validate_entry_paths(option, value, suite))
+
+        option["entry_paths"] = option["entry_paths"][:1]
+        with self.assertRaises(StoryLoopError) as caught:
+            validate_entry_paths(option, value, suite)
+        self.assertIn("AC-2/VE-JSON", str(caught.exception))
+        self.assertIs(caught.exception.details.get("repairable"), True)
+
     def test_selected_option_covers_automatic_entry_pairs_and_scope(self):
         from storyloop.verification_entries import validate_entry_paths
 
