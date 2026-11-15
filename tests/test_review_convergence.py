@@ -468,3 +468,20 @@ class ConvergenceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpecEntryParsingTests(unittest.TestCase):
+    def test_entry_id_followed_by_fullwidth_colon_is_recognised(self):
+        # Self-iteration FIX-20261115-log-acceptance-rounds: "VE-LOG-JSON：说明" (no space after
+        # the full-width colon) was read as one token, so a complete spec was rejected as missing entry.
+        from storyloop.review_convergence import _missing_spec
+        spec = {"inputs": "i", "preconditions": "p", "expected": "e", "negative_boundary": "n",
+                "contract_plan": "c"}
+        allowed = {"AC-1": {"VE-LOG-JSON"}}
+        for entry in ("VE-LOG-JSON：测试子进程执行公开入口", "VE-LOG-JSON: run the entry",
+                      "VE-LOG-JSON（说明）", "VE-LOG-JSON 说明"):
+            with self.subTest(entry=entry):
+                item = {"criterion_id": "AC-1", "criterion_spec": {**spec, "entry": entry}}
+                self.assertEqual(_missing_spec(item, allowed), [])
+        item = {"criterion_id": "AC-1", "criterion_spec": {**spec, "entry": "VE-OTHER：说明"}}
+        self.assertEqual(_missing_spec(item, allowed), ["entry"])
