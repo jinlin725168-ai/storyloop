@@ -20,7 +20,7 @@ FAST = [
     "tests.test_ci_runner", "tests.test_claude_adapter", "tests.test_claude_role_profiles",
     "tests.test_codex_adapter", "tests.test_characterize_codex_exec", "tests.test_characterize_init_cli",
     "tests.test_characterize_init_run_hints", "tests.test_characterize_cli_output_other_commands",
-    "tests.test_characterize_readiness_projection", "tests.test_characterize_smoke_runner_tail", "tests.test_core", "tests.test_correction_views",
+    "tests.test_characterize_readiness_projection", "tests.test_characterize_smoke_runner_tail", "tests.test_characterize_acceptance_retry_log_preserved", "tests.test_acceptance_retry_log", "tests.test_core", "tests.test_correction_views",
     "tests.test_design_revision_findings",
     "tests.test_failure_attribution", "tests.test_final_role_boundaries", "tests.test_forbidden_path_legacy",
     "tests.test_foundation_survey", "tests.test_foundation_quality", "tests.test_git_command", "tests.test_git_identity", "tests.test_init_git_control", "tests.test_monorepo_detection",
