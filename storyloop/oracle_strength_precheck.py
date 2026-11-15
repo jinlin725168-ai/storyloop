@@ -112,11 +112,13 @@ def _validate(value: object, context: dict | None = None) -> None:
         require(not missing, f"{item['id']} criterion_spec needs {', '.join(missing)}")
         if item.get("id") not in prior_ids:
             source = item.get("introduced_by") or ""
-            require(bool(re.search(r"\S+:\d+\s+\S+", source)),
+            # "path:line reason"; any punctuation (including full-width "：，") may separate the reason.
+            match = re.search(r"([^\s:：]+):(\d+)[\s:：,，;；。.\-—]*(\S.*)", source)
+            require(match is not None,
                     f"{item['id']} introduced_by needs the prior edit path:line and reason")
             edits = context.get("prior_suite_edits") or []
             if edits:
-                location = source.split(":", 1)[0]
+                location = match.group(1)
                 require(any(path == location or path.endswith("/" + location) for path in edits),
                         f"{item['id']} introduced_by must name a file changed in the prior repair")
 
