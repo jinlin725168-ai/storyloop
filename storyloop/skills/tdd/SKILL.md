@@ -1,6 +1,6 @@
 ---
 name: tdd
-version: 1.0.0
+version: 1.0.1
 roles: [implement, characterize]
 description: 在已批准合同的验证入口上做实现测试，或在改动前特征化必须保留的旧行为时使用。
 ---
@@ -17,6 +17,8 @@ description: 在已批准合同的验证入口上做实现测试，或在改动�
 4. 在交给引擎的 `## Tests First` 中列 AC、测试路径／名称、先红证据和后绿命令结果；引擎的受保护套件、层检查与停点仍是最终门禁。
 
 好测试：用固定输入经公开 CLI／HTTP／公共函数，断言合同给出的具体输出（如 `status == "PASSED"`）。坏测试：只查文件存在、私有函数调用次数、mock 内部协作者，或用生产算法重算 expected。只在外部服务、时间、随机性等系统边界 mock；优先用真实业务链路和独立的期望字面值。
+
+跨平台：CI 也在 Windows 上运行同一套测试。读写文本与 `subprocess.run(..., text=True)` 都显式写 `encoding="utf-8"`；路径比较用 `Path.resolve()` 或 `os.path.samefile`，不拼接或硬编码 `/`、`\` 与引号；不依赖 POSIX 专有命令或权限位。
 
 ## characterize：先锁不变项
 

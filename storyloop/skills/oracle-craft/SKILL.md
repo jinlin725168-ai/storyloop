@@ -1,6 +1,6 @@
 ---
 name: oracle-craft
-version: 1.1.6
+version: 1.1.7
 roles: [product, acceptance, design, review]
 description: 如何写 StoryLoop 的判据与公共验证入口：行类型、测试有效性、结构断言、执行器退出码。product、acceptance、design、review 角色使用。
 ---
@@ -52,7 +52,7 @@ prepare_state(project, change_id)  # 仅准备；所需 helper 列入 source_fil
 completed = subprocess.run(
     [sys.executable, "-m", "storyloop", "status", str(project),
      "--change", change_id, "--json"],
-    check=True, capture_output=True, text=True,
+    check=True, capture_output=True, text=True, encoding="utf-8",
 )
 status = json.loads(completed.stdout)
 assert status["stop"]["status"] == "DESIGN_REVISION_REQUIRED"  # 按合同字面预期替换

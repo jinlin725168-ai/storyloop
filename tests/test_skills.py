@@ -164,8 +164,9 @@ class OracleCraftTests(unittest.TestCase):
     def test_oracle_craft_describes_preparation_execution_observation(self):
         from storyloop.skills import packaged_skills
         skill = packaged_skills()["oracle-craft"]
-        self.assertEqual(skill["version"], "1.1.6")
+        self.assertEqual(skill["version"], "1.1.7")
         oracle = (skill["root"] / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn('text=True, encoding="utf-8"', oracle)
         for phrase in ("准备 / 执行 / 观察", "subprocess", "NEEDS_SPEC_FIX"):
             self.assertIn(phrase, oracle)
 
