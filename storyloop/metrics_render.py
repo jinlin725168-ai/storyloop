@@ -16,9 +16,11 @@ def render_metrics(result: dict) -> str:
              "| 指标 | 值 | 样本 | 说明 |", "|---|---:|---:|---|"]
     rows = _metric_rows(result.get("metrics"))
     lines.extend(rows or ["| — | 无数据（NO_SAMPLE） | 0/0；n=0 | 无数据 |"])
+    metrics = result.get("metrics")
+    l1 = metrics.get("L1", {}) if isinstance(metrics, dict) else {}
+    _append_list(lines, "人工介入（按变更）", _intervention_changes(l1), "无")
     fired, insufficient, unavailable = _suggestion_groups(result.get("suggestions"))
     _append_list(lines, "调整建议", [_suggestion(item) for item in fired], "无")
-    metrics = result.get("metrics")
     m10 = metrics.get("M10", {}) if isinstance(metrics, dict) else {}
     _append_list(lines, "自动化方向参考", _intervention_counts(m10.get("value"))[:3], "无")
     _append_list(lines, "样本不足", [_insufficient(item) for item in insufficient], "无")
@@ -59,6 +61,12 @@ def _metric_row(metric_id: str, metric: dict) -> str:
     shown = _number(value) if value is not None else f"无数据（{_metric_reason(metric)}）"
     if metric_id == "M10" and isinstance(value, dict):
         shown = "；".join(_intervention_counts(value)) or "0"
+    if metric_id == "L1" and isinstance(metric.get("by_change"), dict) and metric["by_change"]:
+        summary = metric.get("summary", {})
+        if isinstance(summary, dict):
+            shown = (f"非例行 {_number(summary.get('nonroutine'))}，"
+                     f"例行 {_number(summary.get('routine'))}，"
+                     f"自动修复 {_number(summary.get('automatic_repair'))}")
     sample = f"{_number(metric.get('numerator'))}/{_number(metric.get('denominator'))}；n={_number(metric.get('n'))}"
     details = []
     changes = _list(metric.get("changes"))
@@ -78,6 +86,34 @@ def _intervention_counts(value: object) -> list[str]:
         return []
     counts = [(name, count) for name, count in value.items() if type(count) is int and count > 0]
     return [f"{name}={count}" for name, count in sorted(counts, key=lambda item: -item[1])]
+
+
+def _intervention_changes(metric: object) -> list[str]:
+    if not isinstance(metric, dict) or not isinstance(metric.get("by_change"), dict):
+        return []
+    lines = []
+    for change_id, row in sorted(metric["by_change"].items()):
+        if not isinstance(row, dict) or row.get("nonroutine") is None:
+            lines.append(f"{_safe(change_id)}：无数据")
+            continue
+        nonroutine = _intervention_category(row, "nonroutine", "非例行")
+        routine = _intervention_category(row, "routine", "例行")
+        repair = _number(row.get("automatic_repair"))
+        lines.append(f"{_safe(change_id)}：{nonroutine}；{routine}；自动修复 {repair}")
+    return lines
+
+
+def _intervention_category(row: dict, key: str, label: str) -> str:
+    count = row.get(key)
+    rendered = f"{label} {_number(count)}"
+    if type(count) is not int or count == 0:
+        return rendered
+    types = row.get(f"{key}_types")
+    if isinstance(types, dict):
+        items = [f"{_safe(name)}×{_number(amount)}" for name, amount in sorted(types.items())]
+        if items:
+            rendered += "（" + "、".join(items) + "）"
+    return rendered
 
 
 def _metric_reason(metric: dict) -> str:
