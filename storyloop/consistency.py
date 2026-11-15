@@ -122,6 +122,16 @@ def validate_consistency(answer: object, project: Path, change: dict, state: dic
     result = deepcopy(answer)
     if decisions and not result['questions']:
         result['questions'] = [item['required_change'] for item in decisions]
+    for item in result['findings']:
+        if (item.get('target') == 'oracle' and item.get('disposition') == 'MUST_FIX'
+                and item.get('basis') == 'plan_only'):
+            source = item.get('basis_evidence')
+            require(isinstance(source, str) and validate_plan_location(state['planning']['plan'], source),
+                    'Plan-only oracle finding needs a valid plan basis location')
+            item['disposition'] = 'ADVISORY'
+            item['blocking'] = False
+    if not decisions and not result['questions']:
+        result['verdict'] = 'blocked' if any(item['blocking'] for item in result['findings']) else 'coherent'
     return result
 
 

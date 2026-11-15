@@ -103,6 +103,7 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 | `PREPARING` / `CONTRACT_READY` | 建分支、物化合同、生成验收套件 | 能 |
 | `CONTRACT_COMMITTED` | 合同与套件已提交，待证明 RED | 能；套件副作用阻断 RED 时可先 `acceptance-repair` |
 | `ORACLE_DEFECT` | RED 检查、判据强度预审或审查发现判据缺陷 | `acceptance-repair`；审查归属或判据强度预审的 `MUST_FIX` 可用 `run --overrule TEXT` |
+
 | `NEEDS_SPEC_FIX` | 审查发现合同缺陷 | `change --supersede ID --message TEXT`，或 `run --overrule TEXT` |
 | `NO_PROGRESS` | 根因调查后失败特征未变且无原失败用例转绿 | 处理后 `run`；或修判据、修合同重开 |
 | `SUPERSEDED` | 已作废，`superseded_by` 指向新草案 | 不能续跑；批准新变更 |
@@ -118,6 +119,8 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 | `MANUAL_ACCEPTANCE_REQUIRED` | 自动验证与审查全过，等人工条件 | `accept` 全部条件后能；工作区变了要 `reset` |
 | `VERIFIED` / `MERGED` / `RECEIPTING` / `FINALIZING` | 完成阶段各步（幂等） | 能 |
 | `PASSED` | 已合并、回执已写 | 终态 |
+
+判据强度预审的每条 `MUST_FIX` 都给出 `required_change` 的 `input`、`assertion`、`expected`，供自动或人工 `acceptance-repair` 逐条修改。自动修复进入第 3 轮后，预审还须给完整判据规格，并说明新阻断意见由上一轮哪处套件改动引入；缺项会要求 review 角色补全。一致性审查中，仅由方案内部约束支持的判据强度意见作为非阻断建议记录，合同条件支持的缺陷仍阻断。
 
 变更状态（`status --json` 顶层 `status`）：`DRAFT`、`APPROVED`、`PASSED`、`SUPERSEDED`。
 

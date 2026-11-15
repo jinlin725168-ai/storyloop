@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 from .models import StoryLoopError, require
 from .project_contracts import validate_review
@@ -41,10 +42,16 @@ def assess(project: Path, change: dict, state: dict, services, manifest: dict,
                                         for entry in story.get("verification_entries") or []],
                "checklist": ["每条 AC 的全部前置和分支均执行", "比较完整可观察结果",
                              "不得增加合同外断言", "夹具只使用获准资源"]}
+    context["precheck_round"] = 1 + sum(item.get("automatic") is True for item in
+                                        state.get("repairs") or [])
+    if context["precheck_round"] >= 3:
+        context["required_spec_fields"] = ["inputs", "preconditions", "entry", "expected",
+                                           "negative_boundary", "contract_plan"]
+        context["prior_suite_edits"] = _prior_suite_edits(project, state)
     answer = answer_with_repair(
         lambda request: read_only_call(project, change["change_id"],
                                        lambda: services.review(project, request)),
-        context, lambda value: _validate(value))
+        context, lambda value: _validate(value, context))
     verdict = validate_review(answer)
     result = {"verdict": verdict, "summary": answer["summary"],
               "findings": answer["findings"], "questions": answer["questions"],
@@ -68,10 +75,50 @@ def _answers(project: Path, change_id: str) -> list[dict]:
         return []
 
 
-def _validate(value: object) -> None:
+def _prior_suite_edits(project: Path, state: dict) -> list[str]:
+    """Read the last repair commit without changing the persisted run-state format."""
+    repair = (state.get("repairs") or [{}])[-1]
+    if repair.get("changed_paths") is not None:  # accepts older test adapters
+        return repair["changed_paths"]
+    commit = repair.get("commit")
+    if not commit:
+        return []
+    from .baseline import _git
+    try:
+        return _git(project, "diff-tree", "--no-commit-id", "--name-only", "-r", commit).splitlines()
+    except (StoryLoopError, OSError):
+        return []
+
+
+def _validate(value: object, context: dict | None = None) -> None:
     validate_review(value)
     require(all(item.get("disposition") for item in value["findings"]),
             "Oracle strength review needs classified findings")
+    context = context or {}
+    prior_ids = {item.get("id") for item in context.get("previous_findings") or []}
+    entries = {criterion["id"]: set(criterion.get("entry_ids") or []) for criterion in
+               context.get("criteria") or []}
+    from .review_convergence import _missing_spec
+    for item in value["findings"]:
+        if item.get("disposition") != "MUST_FIX":
+            continue
+        change = item.get("required_change")
+        require(isinstance(change, dict) and all(isinstance(change.get(key), str)
+                and change[key].strip() for key in ("input", "assertion", "expected")),
+                f"{item.get('id')} required_change needs input, assertion and expected")
+        if context.get("precheck_round", 1) < 3:
+            continue
+        missing = _missing_spec(item, entries)
+        require(not missing, f"{item['id']} criterion_spec needs {', '.join(missing)}")
+        if item.get("id") not in prior_ids:
+            source = item.get("introduced_by") or ""
+            require(bool(re.search(r"\S+:\d+\s+\S+", source)),
+                    f"{item['id']} introduced_by needs the prior edit path:line and reason")
+            edits = context.get("prior_suite_edits") or []
+            if edits:
+                location = source.split(":", 1)[0]
+                require(any(path == location or path.endswith("/" + location) for path in edits),
+                        f"{item['id']} introduced_by must name a file changed in the prior repair")
 
 
 def stamp_red(project: Path, change_id: str, precheck: dict) -> dict:

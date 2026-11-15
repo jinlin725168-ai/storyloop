@@ -119,9 +119,8 @@ def _repair_once(project: Path, change_id: str, reason: str, services: LoopServi
     existing = [{"path": p.relative_to(suite_root).as_posix(), "content": p.read_text(encoding="utf-8")}
                 for p in sorted(suite_root.rglob("*")) if p.is_file() and p.name != "manifest.json"]
     evidence = _last_smoke_evidence(project, change_id, state)
-    request = {**change, "repair": {"reason": reason, "existing_files": existing,
-                                    "manifest": load_json(suite_root / "manifest.json"),
-                                    "failure_evidence": evidence}}
+    request = repair_request(change, state, reason, existing,
+                             load_json(suite_root / "manifest.json"), evidence)
     from .design_approval import repair_reuse_snapshot
     reuse = repair_reuse_snapshot(project, change, state)
     generated = read_only_call(project, change_id, lambda: services.generate_smoke(project, request))
@@ -222,6 +221,19 @@ def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict
     save_run(project, state)
     return {"status": "ACCEPTANCE_REPAIRED", "change_id": change_id, "commit": commit["commit"],
             "next": f"storyloop run {shlex.quote(str(project))} --change {change_id}"}
+
+
+def repair_request(change: dict, state: dict, reason: str, existing: list[dict],
+                   manifest: dict, evidence: dict) -> dict:
+    """Give automatic and human repairs the same itemized, executable precheck directions."""
+    findings = ((state.get("acceptance") or {}).get("precheck") or {}).get("findings") or []
+    required = [{key: item[key] for key in ("id", "criterion_id", "location", "required_change",
+                                            "criterion_spec", "introduced_by") if key in item}
+                for item in findings if item.get("disposition") == "MUST_FIX"
+                and isinstance(item.get("required_change"), dict)]
+    return {**change, "repair": {"reason": reason, "existing_files": existing,
+                                  "manifest": manifest, "failure_evidence": evidence,
+                                  "required_changes": required}}
 
 
 def _failure_summary(error: StoryLoopError) -> str:

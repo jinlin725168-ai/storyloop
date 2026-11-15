@@ -8,10 +8,14 @@ from storyloop.oracle_strength_precheck import assess, enabled
 
 
 def finding(level):
+    required_change = ({"input": "nested artifact in reader mode",
+                        "assertion": "compare the complete observable result",
+                        "expected": "nested artifact is retained"}
+                       if level == "MUST_FIX" else "resolve disputed boundary")
     return {"id": "ORACLE-A01", "criterion_id": "AC-1", "target": "oracle",
             "disposition": level, "blocking": level != "ADVISORY",
             "location": "acceptance/test.py:8", "evidence": "nested branch absent",
-            "message": "missing nested branch", "required_change": "exercise nested path"}
+            "message": "missing nested branch", "required_change": required_change}
 
 
 CHANGE = {"change_id": "C", "product": {"stories": [{"acceptance": [],
@@ -70,6 +74,8 @@ class OracleStrengthPrecheckTests(unittest.TestCase):
             self.assertEqual(result["status"], "PASSED", result)
             self.assertEqual(reviews.count("oracle-strength"), 2)
             self.assertEqual(len(suites), 2)
+            self.assertEqual(suites[1]["repair"]["required_changes"][0]["required_change"],
+                             finding("MUST_FIX")["required_change"])
             state = load_run_state(root, change_id)
             self.assertTrue(state["repairs"][0]["automatic"])
             self.assertEqual(state["intervention_events"][-1]["defect_category"],
