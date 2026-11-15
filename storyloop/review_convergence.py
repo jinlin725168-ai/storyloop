@@ -1,6 +1,7 @@
 """Persist bounded follow-up for repeated oracle-strength review findings."""
 
 from copy import deepcopy
+import re
 
 from .models import identifier, require, text
 from .role_schemas import validate_finding
@@ -91,7 +92,9 @@ def _missing_spec(item: dict, approved_entries: dict[str, set[str]] | None = Non
     missing = [field for field in SPEC_FIELDS
                if not isinstance(spec.get(field), str) or not spec[field].strip()]
     allowed = approved_entries.get(item.get("criterion_id"), set()) if approved_entries else None
-    if allowed is not None and "entry" not in missing and spec["entry"].split()[0] not in allowed:
+    # The spec names the entry ID first; any punctuation (including full-width "：") may follow it.
+    entry_id = re.match(r"[A-Za-z0-9_.-]+", spec["entry"].strip()) if "entry" not in missing else None
+    if allowed is not None and "entry" not in missing and (entry_id is None or entry_id.group(0) not in allowed):
         missing.append("entry")
     return missing
 
