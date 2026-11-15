@@ -58,7 +58,7 @@ def dispatch_bench(args) -> dict:
         require(args.run_id.isalnum(), "Invalid Run ID")
         path = args.output_root / ".storyloop/bench/runs" / f"{args.run_id}.json"
         require(path.is_file() and not path.is_symlink(), "Run record is unavailable")
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text(encoding="utf-8"))
         return {**record, "summary": _summarize_run(record)}
     return _run(args)
 

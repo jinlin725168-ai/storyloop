@@ -19,7 +19,7 @@ class BenchReportTests(unittest.TestCase):
                 [sys.executable, "-m", "storyloop", "bench",
                  *(["--json"] if as_json else []), "report", record["run_id"],
                  "--output-root", str(root)],
-                capture_output=True, text=True, check=False,
+                capture_output=True, text=True, encoding="utf-8", check=False,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             return json.loads(result.stdout) if as_json else result.stdout.splitlines()
