@@ -11,7 +11,7 @@ FAST = [
     "tests.test_acceptance_layout", "tests.test_adapter_capabilities", "tests.test_adapter_conformance",
     "tests.test_baseline_api", "tests.test_baseline_behavior", "tests.test_baseline_cli",
     "tests.test_baseline_contract", "tests.test_candidate_allow", "tests.test_change_approval",
-    "tests.test_bench_case", "tests.test_bench_calibrate", "tests.test_bench_run", "tests.test_bench_report",
+    "tests.test_bench_case", "tests.test_bench_calibrate", "tests.test_bench_run", "tests.test_bench_report", "tests.test_metrics_intervention_text", "tests.test_metrics_render_characterization",
     "tests.test_characterize_bench_report_record", "tests.test_characterize_cli_output_nonbench",
     "tests.test_bench_real_exec",
     "tests.test_bench_cases_v2_draft",
