@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 import sys
 
@@ -57,8 +58,35 @@ def dispatch_bench(args) -> dict:
         require(args.run_id.isalnum(), "Invalid Run ID")
         path = args.output_root / ".storyloop/bench/runs" / f"{args.run_id}.json"
         require(path.is_file() and not path.is_symlink(), "Run record is unavailable")
-        return json.loads(path.read_text())
+        record = json.loads(path.read_text())
+        return {**record, "summary": _summarize_run(record)}
     return _run(args)
+
+
+def _summarize_run(record: dict) -> dict:
+    verdicts = Counter()
+    stop_reasons = Counter()
+    cases = []
+    attempts = passed = gold_failed = nonroutine_total = 0
+    for case in record["cases"]:
+        case_summary = {"case_id": case["case_id"], "verdicts": [], "nonroutine": []}
+        for attempt in case["attempts"]:
+            verdict = attempt["verdict"]
+            nonroutine = attempt["nonroutine_count"]
+            attempts += 1
+            passed += verdict == "PASSED"
+            gold_failed += attempt["gold_passed"] is False
+            nonroutine_total += nonroutine
+            verdicts[verdict] += 1
+            stop_reasons[attempt["termination_reason"] or "none"] += 1
+            case_summary["verdicts"].append(verdict)
+            case_summary["nonroutine"].append(nonroutine)
+        cases.append(case_summary)
+    gate = record.get("stage_gate")
+    return {"attempts": attempts, "passed": passed, "gold_failed": gold_failed,
+            "verdicts": dict(verdicts), "stop_reasons": dict(stop_reasons),
+            "nonroutine_total": nonroutine_total, "cases": cases,
+            "stage_gate_passed": gate["passed"] if gate is not None else None}
 
 
 def _run(args) -> dict:
