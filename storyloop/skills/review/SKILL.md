@@ -1,6 +1,6 @@
 ---
 name: review
-version: 1.1.1
+version: 1.1.2
 roles: [review, implement]
 description: 审查分级、稳定意见 ID 与同一判据的收敛规则。
 ---
@@ -12,6 +12,10 @@ description: 审查分级、稳定意见 ID 与同一判据的收敛规则。
 一次审查列出当前已发现的全部意见。每条新格式意见写 `id`、`criterion_id`、`target`、`disposition`、`blocking`、`location`、`evidence`、`message`、`required_change`。同一变更中同一判据、归属与位置的根因重审沿用 ID；新根因使用新 ID。建议格式为 `ORACLE-AC-4-01`，不得每轮重新编号。
 
 `oracle-strength` 预审一次列出套件中全部阻断意见；修复后对最新整套验收重新审查，参照 `previous_findings` 给未解决的根因沿用 ID。意见减少或新增时如实报告，不能只复核上轮清单。
+
+每条预审 `MUST_FIX` 的 `required_change` 写清 `input`（前置与输入）、`assertion`（要比较的可观察结果）、`expected`（期望值或判定）。自动验收修复进入第 3 轮起，每条仍阻断的意见还须写全 `criterion_spec` 的六项；新意见用 `introduced_by` 指明上一轮哪处套件修改（文件:行）引入了该问题及原因，不把之前遗漏的独立问题延后提出。
+
+方案批准后的一致性审查以合同条件为判据强度边界。仅由方案内部约束支持的 oracle 强度建议标 `basis: plan_only`，以 `basis_evidence` 指向对应 `plan:` 位置并归为 `ADVISORY`；合同 AC 支持的缺陷标 `basis: contract`，仍按阻断规则处理。
 
 新增机器可读输出以已批准 AC 的 `output_contract` 为边界：测试精确断言约定字段、段落、类型及子字段是有效约束，不判为超出合同；未断言约定字段才属于强度不足，擅加未约定的输出格式则属于过严。合同没有约定格式时把缺口归给合同，不要求验收自定字段。
 

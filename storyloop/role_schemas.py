@@ -31,8 +31,16 @@ def validate_finding(item: dict) -> None:
                 "location", "evidence", "message", "required_change"}
     require(required <= item.keys(), "Review finding lacks tracking fields")
     identifier(item["id"], "review finding id")
-    for field in ("criterion_id", "target", "location", "evidence", "message", "required_change"):
+    for field in ("criterion_id", "target", "location", "evidence", "message"):
         text(item[field], f"review finding {field}")
+    change = item["required_change"]
+    if isinstance(change, dict) and item["target"] == "oracle" and item["disposition"] == "MUST_FIX":
+        require(set(change) == {"input", "assertion", "expected"},
+                "required_change needs input, assertion and expected")
+        for field in ("input", "assertion", "expected"):
+            text(change[field], f"required_change.{field}")
+    else:
+        text(change, "review finding required_change")
     require(item["target"] in {"contract", "oracle", "design", "implementation", "out_of_scope"},
             "Invalid review finding target")
     require(type(item["blocking"]) is bool and
@@ -129,7 +137,12 @@ TRACKING_FIELDS = {"id": _nullable(STRING),
                    "disposition": _nullable({"type": "string", "enum": [
                        "MUST_FIX", "DECISION_NEEDED", "ADVISORY"]}),
                    "blocking": _nullable({"type": "boolean"}),
-                   "required_change": _nullable(STRING),
+                   "required_change": {"type": ["string", "object", "null"],
+                                       "properties": {key: STRING for key in
+                                                      ("input", "assertion", "expected")},
+                                       "required": ["input", "assertion", "expected"],
+                                       "additionalProperties": False},
+                   "introduced_by": _nullable(STRING),
                    "criterion_spec": _nullable(_obj(SPEC_FIELDS))}
 FINDING = _obj({"message": STRING, "perspective": _nullable(STRING),
                 "criterion_id": _nullable(STRING), "evidence": _nullable(STRING),
@@ -184,6 +197,8 @@ CONSISTENCY = _obj({
         'criterion_id': STRING, 'location': STRING, 'blocking': {'type': 'boolean'},
         'message': STRING, 'evidence': _nullable(STRING), **{
             key: value for key, value in TRACKING_FIELDS.items() if key != 'blocking'},
+        'basis': _nullable({'type': 'string', 'enum': ['contract', 'plan_only']}),
+        'basis_evidence': _nullable(STRING),
     })}})
 CONSISTENCY['properties']['findings']['items']['x-review-finding'] = True
 
