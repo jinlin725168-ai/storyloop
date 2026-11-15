@@ -225,13 +225,27 @@ def _command_sources(command: list[str], parsed: dict[str, ast.AST]) -> dict[str
 
 def _uses_entry(entry: dict, tree: ast.AST) -> bool:
     if entry["kind"] in {"cli", "stop_json"}:
-        match = re.search(r"\bstoryloop\s+([a-z][a-z0-9-]*)", entry["locator"])
-        return bool(match and _calls_cli(tree, match.group(1)))
+        subcommand = _cli_subcommand(entry["locator"])
+        return bool(subcommand and _calls_cli(tree, subcommand))
     # Locators may show a call signature, e.g. "pkg.mod.fn(project, role)"; match the dotted name.
     choices = [re.sub(r"\s*\(.*$", "", part.strip()) for part in entry["locator"].split(" / ")]
     module, dot, first = choices[0].rpartition(".")
     return bool(dot and any(_calls_function(tree, module, symbol)
                             for symbol in [first, *choices[1:]]))
+
+
+def _cli_subcommand(locator: str) -> str | None:
+    """Name the storyloop subcommand a CLI locator describes.
+
+    Locators are prose; approval accepts ones that omit the program name (e.g.
+    "公开 CLI 的 bench report <run-id> 入口"), so fall back to the first known command word.
+    """
+    match = re.search(r"\bstoryloop\s+([a-z][a-z0-9-]*)", locator)
+    if match:
+        return match.group(1)
+    commands = _cli_commands()
+    return next((word for word in re.findall(r"(?<![\w-])[a-z][a-z0-9-]*", locator)
+                 if word in commands), None)
 
 
 def _calls_cli(tree: ast.AST, subcommand: str) -> bool:
