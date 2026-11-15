@@ -21,13 +21,13 @@ from .guarded_calls import read_only_call
 from .project_loop_support import relative_files, run_path, save_run
 from .run_stops import pause
 from .run_transitions import transition, REPAIRABLE
-from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, without_manifest_echo
+from .smoke import RED_EVIDENCE, RESULT_EVIDENCE, install_smoke_suite, suite_digest, without_manifest_echo
 from .smoke import suite_relative, suite_root as acceptance_suite_root
 from .smoke_runner import run_commands_at_commit, run_smoke_isolated
 from .storage import load_json
 from .verification_entries import check_entry_use
 from .acceptance_progress import (DEFAULT_AUTO_RETRY_ROUND_LIMIT, PROGRESS_CATEGORIES,
-                                  remember_round)
+                                  remember_round, stale_acceptance_stop)
 
 if TYPE_CHECKING:  # the loop imports this module; the services type is only an annotation
     from .run_services import LoopServices
@@ -62,6 +62,7 @@ def retry_fixture_red(project: Path, change_id: str, services: LoopServices | No
     require(type(round_limit) is int and 0 <= round_limit <= 50,
             "Invalid acceptance_auto_retry_round_limit")
     state = load_json(run_path(project, change_id))
+    result = _current_retry_result(project, change_id, services, state, result)
     while result.get("status") == "ORACLE_DEFECT":
         acceptance = state.get("acceptance") or {}
         if acceptance.get("fixture_repairable") is not True:
@@ -89,7 +90,45 @@ def retry_fixture_red(project: Path, change_id: str, services: LoopServices | No
         save_run(project, state)
         result = _repair_once(project, change_id, AUTO_REASON, services, automatic=True)
         state = load_json(run_path(project, change_id))
+        result = _current_retry_result(project, change_id, services, state, result)
     return result
+
+
+def _current_retry_result(project: Path, change_id: str, services: LoopServices | None,
+                          state: dict, result: dict) -> dict:
+    """A returned failure cannot override a newer persisted RED proof or suite."""
+    if state.get("status") == "IMPLEMENTING" and state.get("red_evidence_sha256"):
+        repair = (state.get("repairs") or [{}])[-1]
+        return {"status": "ACCEPTANCE_REPAIRED", "change_id": change_id,
+                "commit": repair.get("commit"),
+                "next": f"storyloop run {shlex.quote(str(project))} --change {change_id}"}
+    if result.get("status") != "ORACLE_DEFECT" or not state.get("contract_commit"):
+        return result
+    change = load_change(project, change_id)
+    current = suite_digest(project, change)
+    acceptance = state.get("acceptance") or {}
+    if stale_acceptance_stop(state, current):
+        return reprove_current_suite(project, change, state, services)
+    returned_digest = (result.get("acceptance") or {}).get("suite_digest")
+    if acceptance.get("suite_digest") == current and returned_digest != current:
+        return {"status": "ORACLE_DEFECT", "change_id": change_id,
+                "acceptance": acceptance, "stop": state.get("stop"),
+                "error": state.get("error"), "next": state.get("next")}
+    return result
+
+
+def reprove_current_suite(project: Path, change: dict, state: dict,
+                          services: LoopServices | None) -> dict:
+    """Recheck a committed repair when the saved stop belongs to another suite."""
+    repairs = state.get("repairs") or []
+    require(repairs and repairs[-1].get("commit"), "Current suite has no repair commit to reprove")
+    from .design_approval import repair_reuse_snapshot
+    if services is None:
+        from .default_loop_services import _default_services
+        services = _default_services()
+    reuse = repair_reuse_snapshot(project, change, state)
+    return _prove_repaired_suite(project, change, state, {"commit": repairs[-1]["commit"]},
+                                 reuse, services)
 
 
 def _retry_stop(project: Path, state: dict, acceptance: dict, reason: str,
@@ -151,10 +190,16 @@ def _repair_once(project: Path, change_id: str, reason: str, services: LoopServi
                  defect_category=entry.get("defect_category"))
     try:
         return _prove_repaired_suite(project, change, state, commit, reuse, services)
-    except Exception:
+    except Exception as exc:
         from .consistency import invalidate_consistency
+        from .processutil import redact
         invalidate_consistency(state, replan=True)
         state.pop("red_evidence_sha256", None)
+        state["retry_recheck"] = {"suite_digest": suite_digest(project, change),
+                                  "error": redact(str(exc))[:2000]}
+        state.pop("acceptance", None)
+        state.pop("stop", None)
+        state.pop("error", None)
         save_run(project, state)
         raise
 
@@ -213,7 +258,8 @@ def _prove_repaired_suite(project: Path, change: dict, state: dict, commit: dict
     invalidate_consistency(state, replan=not retained)
     if retained:
         state['planning']['review_repaired_suite'] = True
-    for key in ("questions", "error", "pending", "acceptance", "next", "routed", "stop", "mode"):
+    for key in ("questions", "error", "pending", "acceptance", "next", "routed", "stop", "mode",
+                "retry_recheck"):
         state.pop(key, None)
     ensure_baseline(project, state, change["product"], run_commands_at_commit)
     transition(project, state, "IMPLEMENTING", event="repair_red",
@@ -269,7 +315,9 @@ def _unproven_suite(project: Path, state: dict, error: StoryLoopError) -> dict:
     state["attempt"] = 0
     for key in ("questions", "pending", "next", "routed", "stop", "mode"):
         state.pop(key, None)
-    details = {"error": str(error), "acceptance": {"status": error.code, **error.details}}
+    change = load_change(project, state["change_id"])
+    details = {"error": str(error), "acceptance": {"status": error.code, **error.details,
+               "suite_digest": suite_digest(project, change)}}
     if error.code == "NEEDS_INPUT":
         details["questions"] = (error.details.get("precheck") or {}).get("questions") or []
     return pause(project, state, error.code, **details)

@@ -32,6 +32,7 @@ FAST = [
     "tests.test_report_presentation", "tests.test_report_rendering", "tests.test_role_context_integration",
     "tests.test_role_profiles", "tests.test_role_schemas", "tests.test_role_subagents",
     "tests.test_review_convergence",
+    "tests.test_stale_retry_result",
     "tests.test_acceptance_loop_convergence",
     "tests.test_precheck_overrule",
     "tests.test_routing_policy", "tests.test_routing_risks", "tests.test_skill_custom", "tests.test_skill_selection",
