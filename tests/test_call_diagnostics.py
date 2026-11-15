@@ -105,8 +105,11 @@ class LogAndNextStepTests(unittest.TestCase):
             self.assertEqual(run_change(root, change_id, services)["status"], "PASSED")
             log = change_log(root, change_id)
             self.assertEqual(log["failures"][0]["gate"], "contract")
+            self.assertEqual(log["acceptance_rounds"], [])
+            self.assertIsNone(log["acceptance_retry_stop"])
             self.assertIn("storyloop report", log["next"])
             self.assertIn("第 1 轮  contract", render_log(log))
+            self.assertNotIn("验收自动修复", render_log(log))
         finally:
             temporary.cleanup()
 
