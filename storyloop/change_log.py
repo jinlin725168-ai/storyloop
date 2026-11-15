@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .call_log import call_folder, load_meta
 from .changes import load_change
+from .processutil import redact
 from .run_hints import append_pending_memory, next_step
 from .stop_report import failure_view, render_stop, stop_of
 from .storage import load_json
@@ -22,6 +23,7 @@ def change_log(project: Path, change_id: str) -> dict:
     run_path = project / ".storyloop/state/runs" / f"{change_id}.json"
     run = load_json(run_path) if run_path.exists() else None
     status = (run or {}).get("status") or change["status"]
+    acceptance_rounds, acceptance_retry_stop = _acceptance_retry_view(run or {})
     return {
         "status": "LOG", "change_id": change_id, "change_status": change["status"],
         "run_status": run.get("status") if run else None,
@@ -35,8 +37,36 @@ def change_log(project: Path, change_id: str) -> dict:
         "error": (run or {}).get("error"),
         "telemetry": summarize(project, change_id),
         "lessons": (run or {}).get("lessons"),
+        "acceptance_rounds": acceptance_rounds,
+        "acceptance_retry_stop": acceptance_retry_stop,
         "next": append_pending_memory(project, next_step(status, change_id, project, run or {})),
     }
+
+
+def _acceptance_retry_view(run: dict) -> tuple[list[dict], dict | None]:
+    retry = run.get("acceptance_retry") or {}
+    repairs = run.get("repairs") or []
+    rounds = []
+    previous: set[str] = set()
+    for number, item in enumerate(retry.get("rounds") or [], 1):
+        ids = item.get("finding_ids") or [
+            "|".join(str(signature.get(key) or "") for key in
+                     ("category", "criterion_id", "path", "rule"))
+            for signature in item.get("signatures") or []]
+        blocking = sorted(redact(str(value)) for value in ids)
+        current = set(blocking)
+        repair_count = item.get("repair_count")
+        repair = repairs[repair_count] if type(repair_count) is int and 0 <= repair_count < len(repairs) else None
+        rounds.append({"round": number, "blocking_ids": blocking,
+                       "new_ids": sorted(current - previous),
+                       "resolved_ids": sorted(previous - current),
+                       "repair": ("automatic" if repair.get("automatic") is True else "human")
+                       if repair is not None else None})
+        previous = current
+    stop = retry.get("stop")
+    stop_view = ({"reason": stop.get("reason"), "round_limit": stop.get("round_limit")}
+                 if stop else None)
+    return rounds, stop_view
 
 
 def _call_view(project: Path, entry: dict) -> dict:
@@ -85,6 +115,17 @@ def render_log(result: dict) -> str:
     if result.get("stop"):
         lines.append("")
         lines += render_stop(result["stop"])
+    if result.get("acceptance_rounds"):
+        lines.append("")
+        lines.append("验收自动修复")
+        for item in result["acceptance_rounds"]:
+            ids = "、".join(value.replace("\r", "\\r").replace("\n", "\\n")
+                           for value in item["blocking_ids"]) or "无"
+            lines.append(f"第 {item['round']} 轮：阻断 {len(item['blocking_ids'])} 条"
+                         f"（新增 {len(item['new_ids'])}，解决 {len(item['resolved_ids'])}）：{ids}")
+        stop = result.get("acceptance_retry_stop")
+        if stop:
+            lines.append(f"停止：{stop['reason']}（上限 {stop['round_limit']} 轮）")
     total = result.get("telemetry") or {}
     cost = f"，费用 ${total['cost_usd']:.2f}" if isinstance(total.get("cost_usd"), (int, float)) else ""
     lines.append("")
