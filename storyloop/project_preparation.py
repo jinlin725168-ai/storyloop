@@ -12,18 +12,19 @@ from .lesson_store import lessons_digest
 from .openspec_docs import validate_with_cli
 from .project_git import commit_paths
 from .guarded_calls import read_only_call
-from .project_loop_support import relative_files, save_run
+from .project_loop_support import relative_files, run_path, save_run
 from .run_stops import pause
 from .oracle_counts import ensure_baseline
 from .semantic_repair import answer_with_repair
 from .smoke import (RED_EVIDENCE, install_smoke_suite, load_smoke_manifest, protection_path,
-                    RESULT_EVIDENCE, validate_suite, without_manifest_echo,
+                    RESULT_EVIDENCE, suite_digest, validate_suite, without_manifest_echo,
                     suite_root as acceptance_suite_root)
 from .smoke_runner import run_commands_at_commit, run_smoke_isolated
 from .storage import load_json, write_bytes_atomic
 from .verification_entries import check_entry_use
 from .oracle_strength_precheck import assess as strength_assess, stamp_red
 from .baseline import load_project_config
+from .acceptance_progress import stale_acceptance_stop
 if TYPE_CHECKING:
     from .run_services import LoopServices
 
@@ -54,6 +55,16 @@ def _prepare_acceptance(
                 project, change_id, lambda: services.generate_smoke(project, request)),
             change, validate)
         install_smoke_suite(project, change, without_manifest_echo(generated["files"]), generated["manifest"])
+    if stale_acceptance_stop(state, suite_digest(project, change)):
+        from .acceptance_repair import reprove_current_suite, retry_fixture_red
+        result = reprove_current_suite(project, change, state, services)
+        if result["status"] == "ORACLE_DEFECT":
+            result = retry_fixture_red(project, change_id, services, result)
+        if result["status"] == "ACCEPTANCE_REPAIRED":
+            state.clear()
+            state.update(load_json(run_path(project, change_id)))
+            return None
+        return result
     smoke_root = acceptance_suite_root(project, change_id)
     paths = relative_files(project, [contract_root, smoke_root])
     if state["status"] == "PREPARING":
@@ -89,11 +100,10 @@ def _prepare_acceptance(
         if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
             raise
         stopped = pause(project, state, exc.code, error=str(exc),
-                        acceptance={"status": exc.code, **exc.details})
+                        acceptance={"status": exc.code, **exc.details,
+                                    "suite_digest": suite_digest(project, change)})
         if exc.details.get("fixture_repairable") is True:
             from .acceptance_repair import retry_fixture_red
-            from .project_loop_support import run_path
-            from .storage import load_json
             result = retry_fixture_red(project, change_id, services, stopped)
             if result["status"] == "ACCEPTANCE_REPAIRED":
                 state.clear()

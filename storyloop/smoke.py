@@ -9,6 +9,7 @@ smoke suite (layer 1) lives at `acceptance/smoke/` itself, see system_smoke.py.
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 from .models import StoryLoopError, fields, identifier, require  # noqa: F401  # 兼容再导出：保留旧模块导入路径
@@ -126,6 +127,13 @@ def smoke_digests(project: Path, change: dict) -> dict[str, str]:
     load_smoke_manifest(project, change)
     value = load_json(_protection_path(Path(project).resolve(), change_id))
     return dict(value["digests"])
+
+
+def suite_digest(project: Path, change: dict) -> str:
+    """Fingerprint the protected suite without depending on its current Git commit."""
+    encoded = json.dumps(smoke_digests(project, change), sort_keys=True,
+                         separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _validate_manifest(manifest: object, change: dict) -> dict:

@@ -11,6 +11,20 @@ PROGRESS_CATEGORIES = frozenset({
 DEFAULT_AUTO_RETRY_ROUND_LIMIT = 10
 
 
+def stale_acceptance_stop(state: dict, current_digest: str) -> bool:
+    """A saved oracle stop cannot describe a newer committed acceptance suite."""
+    if state.get("status") != "ORACLE_DEFECT":
+        return False
+    acceptance = state.get("acceptance") or {}
+    if acceptance.get("fixture_repairable") is not True:
+        return False
+    previous = acceptance.get("suite_digest")
+    if previous:
+        return previous != current_digest
+    rounds = (state.get("acceptance_retry") or {}).get("rounds") or []
+    return bool(rounds and len(state.get("repairs") or []) > rounds[-1].get("repair_count", 0))
+
+
 def blocking_signatures(acceptance: dict) -> tuple[list[dict], list[str]]:
     """Use stable review IDs for precheck findings and concrete rules for deterministic defects."""
     category = acceptance.get("defect_category") or "UNKNOWN"

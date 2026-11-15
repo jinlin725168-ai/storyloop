@@ -151,6 +151,8 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 替代草案的 `proposal.md` 展示“沿用的已确认约束”和“与被替代合同的条件差异”两节；未处理的约束使 `change --json` 的 `blocking_items` 逐条带 `constraint_id` 并阻止批准。旧运行的证据原文与调用记录不写入草案或公开 JSON。
 
 `acceptance-repair` 要求已有合同提交，允许的运行状态为 `CONTRACT_COMMITTED`、`IMPLEMENTING`、`BUDGET_EXHAUSTED`、`NEEDS_INPUT`、`EXISTING_GREEN`、`ORACLE_DEFECT`、`NO_PROGRESS`。其中 `CONTRACT_COMMITTED` 用于套件已提交、证明 RED 时因套件写入候选副本等副作用报 `BLOCKED` 的恢复；`PREPARING` 与 `PASSED` 仍禁止修复。修复套件提交后，引擎仍从合同提交重建候选副本并重新证明 RED，不跳过判据门。
+
+验收修复每轮以当前受保护套件重新核验。`ORACLE_DEFECT` 的验收详情与停点证据记录 `suite_digest`；若重跑时当前套件摘要与停点不符，引擎对当前套件重新证明 RED，再按新结果继续或停机。重证明意外中断时保留 `retry_recheck` 摘要与错误，旧套件的失败详情不再作为当前停点。
 特征化只能创建 `test_roots` 下的专用新测试文件，并逐个声明锁定的行为、符号与验收条件。与合同中将改变的符号或条件重叠时，引擎要求角色当场重写；审查发现特征化冲突时整批作废锁与候选并重试，不计该实现轮次。项目原有测试和金样本不进入特征化锁，实现者可按需求更新并接受审查。`acceptance-repair` 仍只修验收套件。
 
 ### 错误码

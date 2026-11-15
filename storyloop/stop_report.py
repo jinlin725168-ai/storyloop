@@ -192,6 +192,8 @@ def _evidence(state: dict, details: dict) -> list[str]:
     violations = details.get("violations") or state.get("violations") or []
     evidence += [item.get("path", "") for item in violations if isinstance(item, dict)]
     acceptance = details.get("acceptance") or state.get("acceptance") or {}
+    if acceptance.get("suite_digest"):
+        evidence.append("验收套件 digest: " + str(acceptance["suite_digest"])[:64])
     precheck = acceptance.get("precheck") or {}
     if precheck:
         evidence.append("判据强度预审: " + redact(str(precheck.get("summary") or ""))[:500])
