@@ -214,6 +214,23 @@ def _codex_events(stream: str, telemetry: dict) -> None:
             telemetry["output_tokens"] += int(usage.get("output_tokens") or 0)
 
 
+def _codex_errors(stream: str) -> list[str]:
+    messages = []
+    for line in stream.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        error = event.get("error") if event.get("type") == "turn.failed" else event
+        if event.get("type") in {"error", "turn.failed"} and isinstance(error, dict):
+            message = redact(str(error.get("message") or "")).strip()
+            if message and message not in messages:
+                messages.append(message)
+    return messages
+
+
 def _check_process(result: dict) -> None:
     if (result.get("contained") is not True or result.get("timed_out")
             or result.get("truncated") or result.get("error")
@@ -224,6 +241,8 @@ def _check_process(result: dict) -> None:
         if result.get("returncode") not in (0, None):
             reasons.append(f"exit {result['returncode']}")
         tail = redact(str(result.get("stderr") or "")).strip().splitlines()[-3:]
+        # Codex reports quota and API errors as --json events on stdout, not on stderr.
+        tail = [*_codex_errors(str(result.get("stdout") or "")), *tail]
         detail = "; ".join(reasons) + (" | " + " / ".join(tail)[:600] if tail else "")
         # The agent never produced an answer (crash, timeout, rate limit, lost containment): an
         # infrastructure failure, distinct from an answer the loop can judge.
