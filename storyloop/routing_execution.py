@@ -77,7 +77,8 @@ def rebind_after_locks(project, change, state):
     if all(plan['binding'].get(k) == v for k, v in live.items()):
         return None
     planning.setdefault('history', []).append({'reason': 'Characterization changed binding',
-                                               'plan': deepcopy(plan), 'attempt': state['attempt']})
+                                               'plan': deepcopy(plan), 'attempt': state['attempt'],
+                                               'automatic': True})
     plan['binding'].update(live)
     plan.pop('approval', None)
     plan['id'] = digest({k: v for k, v in plan.items() if k not in {'id', 'status', 'approval'}})

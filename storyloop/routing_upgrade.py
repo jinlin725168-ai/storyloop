@@ -23,7 +23,8 @@ def invalidate_planning(state: dict, reason: str) -> None:
     """Forget decisions, preserving history, spent attempts and evidence-backed locks."""
     planning = state.setdefault('planning', {})
     planning.setdefault('history', []).append({'reason': reason, 'plan': planning.get('plan'),
-                                              'attempt': state.get('attempt', 0)})
+                                              'attempt': state.get('attempt', 0),
+                                              'automatic': True})
     for key in ('plan', 'assessment', 'consistency', 'dependency_evidence',
                 'continue_heavy', 'pending_option', 'execution_digest', 'characterization_input',
                 'review_repaired_suite'):

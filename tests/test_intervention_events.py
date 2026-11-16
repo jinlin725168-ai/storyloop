@@ -35,6 +35,26 @@ class InterventionEventTests(unittest.TestCase):
         self.assertEqual(set(rows["FIX-20261107-scratch-glob"]["nonroutine_types"]),
                          {"replan", "acceptance_repair", "overrule"})
 
+    def test_engine_replanning_history_is_not_a_human_replan(self):
+        # 2026-11-15 self-iteration D: an L3 scope re-plan had no observed event, so its
+        # history entry was inferred as a human replan on top of the repeated design approval.
+        event = {"kind": "design_approval", "at": "2026-01-01T00:00:00+00:00",
+                 "stop": "DESIGN_APPROVAL_REQUIRED", "change_id": "C-3", "source": "design-approve"}
+        record = {"change_id": "C-3", "status": "PASSED", "design_approved": True,
+                  "intervention_events": [event, {**event, "repeated": True}],
+                  "planning_history": [{"reason": "L3 scope or risk expansion", "attempt": 1},
+                                       {"reason": "Fix the plan", "attempt": 1, "automatic": True},
+                                       {"reason": "Human wording", "attempt": 1}]}
+        row = summarize_interventions([record])["by_change"]["C-3"]
+        self.assertEqual(row["nonroutine_types"], {"design_approval": 1, "replan": 1})
+
+    def test_engine_invalidation_marks_history_automatic(self):
+        from storyloop.routing_upgrade import invalidate_planning
+
+        state = {"attempt": 1, "planning": {"plan": {}}}
+        invalidate_planning(state, "Base upgrade changed plan inputs")
+        self.assertIs(state["planning"]["history"][-1]["automatic"], True)
+
     def test_missing_events_or_legacy_evidence_is_unknown(self):
         row = summarize_interventions([{"change_id": "C-2", "intervention_events": None,
                                         "repairs": None, "overrules": None,
