@@ -10,10 +10,25 @@ from .guarded_calls import read_only_call
 from .semantic_repair import answer_with_repair
 
 
-def enabled(state: dict, config: dict) -> bool:
-    """Only a light route may opt out; standard and heavy always review."""
+def enabled(state: dict, config: dict, change: dict | None = None) -> bool:
+    """Review suites where a weak oracle is costly: heavy routes, contracts that change existing
+    behaviour, and stateful changes. Below heavy, a purely additive contract skips it (its RED
+    proof and final review remain); a light route may also opt out by configuration."""
     tier = (state.get("routing") or {}).get("effective_tier")
-    return tier != "light" or config.get("oracle_strength_precheck", True)
+    if tier == "light" and not config.get("oracle_strength_precheck", True):
+        return False
+    if tier != "heavy" and change is not None and _additive_without_state(change["product"]):
+        return False
+    return True
+
+
+def _additive_without_state(product: dict) -> bool:
+    from .intake import contract_change
+
+    risks = (product.get("assessment") or {}).get("risks") or {}
+    stateful = any((risks.get(key) or {}).get("value") != "no"
+                   for key in ("persistent_state", "migration"))
+    return not stateful and contract_change(product) == "safe"
 
 
 def assess(project: Path, change: dict, state: dict, services, manifest: dict,
@@ -21,7 +36,7 @@ def assess(project: Path, change: dict, state: dict, services, manifest: dict,
     # Older contracts have no approved verification seam to review against.
     if not any("verification_entries" in story for story in change["product"]["stories"]):
         return None
-    if not enabled(state, config):
+    if not enabled(state, config, change):
         return None
     from .smoke import smoke_digests, suite_root
 

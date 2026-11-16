@@ -65,6 +65,29 @@ class PolicyTests(unittest.TestCase):
                 value["risks"][key] = "yes"
                 self.assertEqual(evaluate(value, policy)["tier"], "standard")
 
+    def test_additive_contract_routes_interface_risks_to_standard_only(self):
+        # 2026-11-16 assessment: three 100-280 line CLI output additions (C/D/E) were all
+        # heavy because any output change counted as an external contract risk.
+        policy = validate_policy(None)
+        value = signals(contract_change="safe")
+        value["risks"].update(external_contract="yes", new_interface="yes")
+        result = evaluate(value, policy)
+        self.assertEqual(result["tier"], "standard")
+        self.assertIn("ADDITIVE-CONTRACT", [reason["rule_id"] for reason in result["reasons"]])
+        self.assertNotIn("HEAVY-RISK", [reason["rule_id"] for reason in result["reasons"]])
+        for level in ("review", "breaking"):
+            with self.subTest(level=level):
+                self.assertEqual(evaluate({**value, "contract_change": level}, policy)["tier"], "heavy")
+        value["risks"]["sensitive"] = "yes"
+        result = evaluate(value, policy)
+        self.assertEqual(result["tier"], "heavy")
+        heavy = next(r for r in result["reasons"] if r["rule_id"] == "HEAVY-RISK")
+        self.assertEqual(heavy["fields"], ["risks.sensitive"])
+
+    def test_contract_change_level_is_validated(self):
+        with self.assertRaises(StoryLoopError):
+            evaluate(signals(contract_change="minor"), validate_policy(None))
+
     def test_fix_conforming_to_existing_contract_can_remain_light(self):
         result = evaluate(signals(nature="fix"), validate_policy(None))
         self.assertEqual(result["tier"], "light")
