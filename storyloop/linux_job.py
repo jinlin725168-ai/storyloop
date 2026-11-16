@@ -26,7 +26,8 @@ def start_linux(command, cwd, env, source, output, error):
     reader, writer = os.pipe()
     try:
         process = subprocess.Popen(
-            [sys.executable, str(Path(__file__).with_name("linux_supervisor.py")),
+            # -I -S: the stdlib-only supervisor skips site setup on every command.
+            [sys.executable, "-I", "-S", str(Path(__file__).with_name("linux_supervisor.py")),
              str(writer), *command],
             cwd=cwd, env=env, stdin=source, stdout=output, stderr=error,
             shell=False, start_new_session=True, pass_fds=(writer,),

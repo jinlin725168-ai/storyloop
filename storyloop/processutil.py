@@ -101,7 +101,11 @@ def _wait(process, output, error, deadline: float, limit: int = MAX_OUTPUT) -> t
         truncated = _output_size(output, error) > limit
         if timed_out or truncated:
             return timed_out, truncated
-        time.sleep(0.05)
+        try:
+            # Returns as soon as the process exits; a fixed sleep cost every command 50 ms.
+            process.wait(timeout=0.05)
+        except subprocess.TimeoutExpired:
+            pass
     return False, _output_size(output, error) > limit
 
 

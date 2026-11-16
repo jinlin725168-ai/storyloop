@@ -98,6 +98,31 @@ class RedactPerformanceTests(unittest.TestCase):
 
 
 
+class ProcessWaitTests(unittest.TestCase):
+    def test_wait_returns_when_the_process_exits_instead_of_sleeping_a_full_interval(self):
+        # 2026-11-16 profiling: every run_process slept a fixed 50 ms although a git query
+        # finishes in 1-17 ms; one routing e2e test spent 52 of 61 s there.
+        from storyloop.processutil import _wait
+
+        process = MagicMock()
+        process.poll.side_effect = [None, 0]
+        with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as error, \
+                patch("storyloop.processutil.time.sleep") as sleep:
+            self.assertEqual(_wait(process, output, error, time.monotonic() + 30), (False, False))
+        sleep.assert_not_called()
+        process.wait.assert_called_once()
+        self.assertLessEqual(process.wait.call_args.kwargs["timeout"], 0.05)
+
+    def test_wait_still_reports_timeout(self):
+        from storyloop.processutil import _wait
+
+        process = MagicMock()
+        process.poll.return_value = None
+        process.wait.side_effect = subprocess.TimeoutExpired("x", 0.05)
+        with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as error:
+            self.assertEqual(_wait(process, output, error, time.monotonic() - 1), (True, False))
+
+
 class ProcessContainmentTests(unittest.TestCase):
     def test_posix_group_cleanup_never_claims_security_containment(self):
         process = MagicMock(pid=123)

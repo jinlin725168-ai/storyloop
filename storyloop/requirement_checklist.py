@@ -80,8 +80,9 @@ def evaluate_checklist(product: dict, project: Path | None = None,
     risks = (product.get("assessment") or {}).get("risks") or {}
     for key, risk in sorted(risks.items()):
         if isinstance(risk, dict) and risk.get("value") == "unknown":
-            # Intake stops approval on any unknown risk; show it while the draft is reviewed.
-            add("Clarity", "error",
+            # Intake owns the stop (NEEDS_INPUT with this reason); the checklist only makes it
+            # visible while the draft is reviewed, so approve, run and status agree on the stop.
+            add("Clarity", "warning",
                 f"risks.{key} is unknown: judge yes/no from repository evidence or ask it as a question")
     _nature_items(add, product, project)
     if inherited_constraints is not None:
