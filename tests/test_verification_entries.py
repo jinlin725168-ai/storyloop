@@ -173,6 +173,31 @@ class ManifestEntryTests(unittest.TestCase):
             "    assert result.returncode == 0\n")}
         self.assertEqual(verification_entries.entry_use_findings(value, suite, sources), [])
 
+    def test_cli_entry_of_any_project_program_is_recognised(self):
+        # 2026-11-16 L3 on sqlite-utils: the case ran ["sqlite-utils", "tables", ...] but only
+        # storyloop subcommands were recognised, so every round reported UNVERIFIED_ENTRY_USE.
+        value = new_product()
+        value["stories"] = value["stories"][:1]
+        value["stories"][0]["verification_entries"][0]["locator"] = (
+            "`sqlite-utils tables PATH [TABLE]... [options]` — the `tables` command of the click "
+            "group `sqlite_utils.cli.cli` (also reachable as `python -m sqlite_utils tables`)")
+        suite = {"tests": [{"id": "T-1", "criteria": ["AC-1"], "entry_ids": ["VE-CLI"],
+                            "command": ["{python}", "acceptance/changes/C/case.py"]}]}
+        calls = {
+            "program": "subprocess.run(['sqlite-utils', 'tables', path, 'Gosh'])",
+            "path": "subprocess.run(['/venv/bin/sqlite-utils', 'tables', path])",
+            "module": "subprocess.run([sys.executable, '-m', 'sqlite_utils', 'tables', path])",
+        }
+        for name, call in calls.items():
+            with self.subTest(call=name):
+                sources = {"case.py": f"import subprocess\nimport sys\ndef test_x(path):\n    {call}\n"}
+                self.assertEqual(verification_entries.entry_use_findings(value, suite, sources), [])
+        other = {"case.py": "import subprocess\ndef test_x(p):\n    subprocess.run(['sqlite-utils', 'views', p])\n"}
+        self.assertEqual(len(verification_entries.entry_use_findings(value, suite, other)), 1)
+        from storyloop.verification_entries import _cli_target
+        self.assertEqual(_cli_target("CLI 的 bench report 输出"), ("storyloop", "bench"))
+        self.assertEqual(_cli_target("`mytool --json`"), ("mytool", None))
+
     def test_cli_locator_without_program_name_uses_its_known_command(self):
         # 2026-11-15 self-iteration C: approval accepted this prose locator, then every
         # acceptance round reported UNVERIFIED_ENTRY_USE although the case ran storyloop bench.
