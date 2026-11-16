@@ -1,6 +1,6 @@
 ---
 name: review
-version: 1.1.4
+version: 1.1.5
 roles: [review, implement]
 description: 审查分级、稳定意见 ID 与同一判据的收敛规则。
 ---
@@ -13,7 +13,7 @@ description: 审查分级、稳定意见 ID 与同一判据的收敛规则。
 
 `oracle-strength` 预审一次列出套件中全部阻断意见，包括合同约定输出的每个分支及空值、缺省分支；同类覆盖缺口不得分轮提出。修复后对最新整套验收重新审查，参照 `previous_findings` 给未解决的根因沿用 ID。意见减少或新增时如实报告，不能只复核上轮清单。
 
-每条预审 `MUST_FIX` 的 `required_change` 写清 `input`（前置与输入）、`assertion`（要比较的可观察结果）、`expected`（期望值或判定）。自动验收修复进入第 3 轮起，每条仍阻断的意见还须写全 `criterion_spec` 的六项；新意见用 `introduced_by` 指明上一轮哪处套件修改（文件:行）引入了该问题及原因，不把之前遗漏的独立问题延后提出。
+每条预审 `MUST_FIX` 的 `required_change` 写清 `input`（前置与输入）、`assertion`（要比较的可观察结果）、`expected`（期望值或判定）。自动验收修复进入第 3 轮起，每条仍阻断的意见还须写全 `criterion_spec` 的六项；所有阻断意见在首轮一次提出。修复后新出现的意见用 `introduced_by` 指明上一轮哪处套件修改（文件:行）引入了该问题及原因；指不出、或所指文件不在上一轮修复中的新意见，引擎记为 `ADVISORY`（`downgraded: late_finding`），不再阻断。
 
 方案批准后的一致性审查专注方案与合同、已批准入口、改动范围的一致性。验收覆盖和断言强度由 RED 前预审负责；若当前套件已有通过的预审或人的推翻裁定，oracle 意见仅记录为 `ADVISORY`。未预审或套件已变时，沿用一致性审查规则：仅由方案内部约束支持的 oracle 强度建议标 `basis: plan_only`，以 `basis_evidence` 指向对应 `plan:` 位置并归为 `ADVISORY`；合同 AC 支持的缺陷标 `basis: contract`，按阻断规则处理。
 
