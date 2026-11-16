@@ -3,6 +3,8 @@
     python tests/run.py --suite core            # Linux PRs and pushes to main
     python tests/run.py --suite platform        # Windows PRs
     python tests/run.py --suite full --workers 4 # every tests/test_*.py module
+    python tests/run.py --suite core --base origin/main      # plus modules the change can break
+    python tests/run.py --suite affected --base origin/main  # only those (local pre-check)
 
 Modules run in separate processes because each test builds its own temporary Git repository;
 a module is the unit of parallelism, so the slowest module bounds the wall time.
@@ -20,17 +22,27 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from suites import CORE, PLATFORM_SUITE  # noqa: E402  (tests/ is not a package root when run as a script)
+from affected import affected_modules, changed_files  # noqa: E402
 
 RAN = re.compile(r"^Ran (\d+) tests? in", re.MULTILINE)
 SKIPPED = re.compile(r"(?:^|[,(]\s*)skipped=(\d+)", re.MULTILINE)
 
 
 def modules(root: Path, suite: str) -> list[str]:
+    if suite == "affected":
+        return []
     if suite == "core":
         return list(CORE)
     if suite == "platform":
         return list(PLATFORM_SUITE)
     return sorted("tests." + path.stem for path in (root / "tests").glob("test_*.py"))
+
+
+def with_affected(names: list[str], extra: list[str]) -> list[str]:
+    """Add whole modules; a single test ID already covered by an added module is dropped."""
+    added = set(extra) - set(names)
+    kept = [name for name in names if ".".join(name.split(".")[:2]) not in added or name in added]
+    return sorted(set(kept) | added)
 
 
 def run_module(root: Path, module: str) -> dict:
@@ -46,7 +58,10 @@ def run_module(root: Path, module: str) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--suite", choices=("core", "platform", "full"), default="core")
+    parser.add_argument("--suite", choices=("core", "platform", "full", "affected"), default="core")
+    parser.add_argument("--base", help="add modules affected by changes since this Git ref")
+    parser.add_argument("--changed", nargs="*", default=None,
+                        help="add modules affected by these paths (instead of --base)")
     parser.add_argument("--workers", type=int, default=os.cpu_count() or 1)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--list", action="store_true", help="print the suite's modules and exit")
@@ -54,6 +69,16 @@ def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):  # Windows consoles default to a legacy code page (cf. cli.py)
         sys.stdout.reconfigure(encoding="utf-8")
     names = modules(args.root, args.suite)
+    changed = args.changed
+    if changed is None and args.base:
+        try:
+            changed = changed_files(args.root, args.base)
+        except (subprocess.CalledProcessError, OSError) as exc:
+            # No merge base (shallow clone, unknown ref): run everything rather than guess.
+            print(f"无法计算 {args.base} 以来的改动（{exc}），改跑 full", file=sys.stderr, flush=True)
+            names, changed = modules(args.root, "full"), []
+    if changed is not None:
+        names = with_affected(names, affected_modules(args.root, changed))
     if args.list:
         print("\n".join(names))
         return 0

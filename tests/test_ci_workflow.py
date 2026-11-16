@@ -18,5 +18,15 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertIn("gh issue comment", alert)
 
 
+    def test_suites_are_layered_by_event_and_platform(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+        tests = text[text.index("  tests:"):text.index("  lint:")]
+        self.assertIn("github.event_name == 'push' && (matrix.os == 'ubuntu-latest' && 'full' || 'core')", tests)
+        self.assertIn("(matrix.os == 'ubuntu-latest' && 'core' || 'platform')", tests)
+        self.assertIn("BASE: ${{ github.event.pull_request.base.sha }}", tests)
+        self.assertIn('args=(--base "$BASE")', tests)
+        self.assertIn("fetch-depth: 0", tests)
+
+
 if __name__ == "__main__":
     unittest.main()

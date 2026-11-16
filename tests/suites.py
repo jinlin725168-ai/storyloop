@@ -1,8 +1,9 @@
 """Test suites for tests/run.py.
 
-`core` runs on Linux PRs and pushes to main. `platform` runs on Windows PRs;
-it keeps cross-platform regressions, safety boundaries and the suite runner.
-`full` is every tests/test_*.py module; CI runs it daily and on demand.
+`core` runs on Linux PRs and on Windows pushes to main. `platform` runs on Windows PRs;
+it keeps cross-platform regressions, safety boundaries and the suite runner. PRs add the
+modules their change can break (tests/affected.py). `full` is every tests/test_*.py module;
+CI runs it on Linux pushes to main, daily on both platforms, and on demand.
 """
 
 # Pure logic and small fixtures: each module took under 3 s on Linux (2026-10-20 timing).
@@ -106,7 +107,7 @@ PLATFORM = [
 ]
 
 # The suite runner and this list.
-RUNNER = ["tests.test_suites"]
+RUNNER = ["tests.test_suites", "tests.test_affected"]
 
 # Keep I8 in core without running the entire slow completion-resilience module.
 INVARIANTS = [
