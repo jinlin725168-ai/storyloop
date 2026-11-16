@@ -86,5 +86,9 @@ def draft_stop(project, change):
     from .stop_report import build_entry_stop
     intake = change.get('intake') or {}
     if intake.get('status') and intake['status'] != 'READY':
-        return build_entry_stop(project, intake['status'], {**intake, 'change_id': change['change_id']})
+        details = {**intake, 'change_id': change['change_id']}
+        if intake['status'] == 'NEEDS_INPUT' and isinstance(change.get('product'), dict):
+            from .intake import needs_input_reasons
+            details['reasons'] = needs_input_reasons(change['product'], intake.get('decision'))
+        return build_entry_stop(project, intake['status'], details)
     return None

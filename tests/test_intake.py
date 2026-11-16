@@ -86,6 +86,22 @@ class IntakeTests(unittest.TestCase):
                 item['assessment']['criteria'][0][field] = value
                 self.assertEqual(self.assess(item)['status'], expected)
 
+    def test_approval_stop_names_the_input_rule_and_next_command(self):
+        # 2026-11-15 self-iteration E: approve stopped with blocker "NEEDS_INPUT", no reason
+        # and no option, because a feature criterion was marked partial.
+        from storyloop.stop_report import build_entry_stop
+        self.ready()
+        item = assessed_product()
+        item['assessment']['criteria'][0]['existence'] = 'partial'
+        state = create_change(self.root, 'idea', item)
+        with self.assertRaises(StoryLoopError) as caught:
+            approve_change(self.root, state['change_id'])
+        stop = build_entry_stop(self.root, caught.exception.code,
+                                {**caught.exception.details, 'change_id': state['change_id']})
+        self.assertIn('AC-1', stop['blocker'])
+        self.assertIn('partial', stop['blocker'])
+        self.assertIn('--message', stop['options'][0]['command'])
+
     def test_invalid_criterion_records_and_missing_proof(self):
         for mutate in (lambda a: a['criteria'].clear(),
                        lambda a: a['criteria'].append(deepcopy(a['criteria'][0])),

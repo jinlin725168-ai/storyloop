@@ -485,8 +485,10 @@ def build_entry_stop(project: Path, status: str, details: dict) -> dict:
     risks = [field for field in unresolved if isinstance(field, str) and field.startswith('risks.')]
     risk_stop = status == 'NEEDS_INPUT' and bool(risks)
     options = routing_options(project, details.get('change_id'), status,
-                              {**intake, **details} if risk_stop else details)
-    blocker = ('未决风险：' + ', '.join(risks)) if risk_stop else details.get('error', status)
+                              {**intake, **details} if status == 'NEEDS_INPUT' else details)
+    reasons = details.get('reasons') or []
+    blocker = ('未决风险：' + ', '.join(risks)) if risk_stop else (
+        '；'.join(reasons) if reasons else details.get('error', status))
     evidence = details.get('evidence', details.get('layers', {}))
     if status == 'PROJECT_NOT_READY':
         evidence = []
