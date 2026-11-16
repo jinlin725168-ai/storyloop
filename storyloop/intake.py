@@ -75,17 +75,35 @@ def _status(project: Path, commit: str, product: dict, decision: dict | None) ->
     criteria = assessment['criteria']
     if any(item['feasibility'] == 'infeasible' or _unavailable(project, commit, item) for item in criteria):
         return 'ORACLE_INFEASIBLE'
-    if (product['questions'] or not decision
-            or any(field.startswith('risks.') for field in decision['unresolved'])
-            or _manual_only_automation(product)
-            or any(item['feasibility'] == 'unknown' or item['existence'] == 'unknown'
-                   for item in criteria)):
-        return 'NEEDS_INPUT'
-    if (definition_for(type_of(product)).requires_new_criteria
-            and (all(item['existence'] == 'exists' for item in criteria)
-                 or any(item['existence'] == 'partial' for item in criteria))):
-        return 'NEEDS_INPUT'
-    return 'READY'
+    return 'NEEDS_INPUT' if needs_input_reasons(product, decision) else 'READY'
+
+
+def needs_input_reasons(product: dict, decision: dict | None) -> list[str]:
+    """Name each rule that keeps a draft at NEEDS_INPUT, so a stop can say what to revise."""
+    assessment = product.get('assessment')
+    if not assessment or not decision:
+        return ['缺少产品评估或分流决定，请补充评估后重新起草']
+    criteria = assessment['criteria']
+    reasons = []
+    if product['questions']:
+        reasons.append(f"仍有 {len(product['questions'])} 个待决问题")
+    risks = [field for field in decision['unresolved'] if field.startswith('risks.')]
+    if risks:
+        reasons.append('未决风险：' + ', '.join(risks))
+    if _manual_only_automation(product):
+        reasons.append('自动验收条件的可行性被评为 manual')
+    unknown = [item['criterion_id'] for item in criteria
+               if item['feasibility'] == 'unknown' or item['existence'] == 'unknown']
+    if unknown:
+        reasons.append('验收条件的可行性或现状为 unknown：' + ', '.join(unknown))
+    if definition_for(type_of(product)).requires_new_criteria:
+        partial = [item['criterion_id'] for item in criteria if item['existence'] == 'partial']
+        if partial:
+            reasons.append(f"{type_of(product)} 类变更要求验收新行为，但 existence 为 partial："
+                           + ', '.join(partial) + '（被验收的行为若尚不存在应为 absent）')
+        elif all(item['existence'] == 'exists' for item in criteria):
+            reasons.append(f"{type_of(product)} 类变更要求验收新行为，但全部验收条件 existence 为 exists")
+    return reasons
 
 
 def _manual_only_automation(product: dict) -> bool:
@@ -176,7 +194,10 @@ def require_intake(project: Path, change: dict) -> dict:
     _require_readiness_locked(project)
     current = project_intake(project, change['product'])
     if current['status'] != 'READY':
-        raise StoryLoopError(current['status'], code=current['status'], details={'intake': current})
+        details = {'intake': current}
+        if current['status'] == 'NEEDS_INPUT':
+            details['reasons'] = needs_input_reasons(change['product'], current['decision'])
+        raise StoryLoopError(current['status'], code=current['status'], details=details)
     previous = change.get('intake')
     if previous != current:
         raise StoryLoopError('NEEDS_INPUT: intake evidence is stale; revise the draft',
