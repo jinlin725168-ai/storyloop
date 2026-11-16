@@ -154,6 +154,12 @@ def _run_until_stop(project, change_id, run_change, approve_design, load_run_sta
         except StoryLoopError as exc:
             result, status = {"error": str(exc), "details": exc.details}, exc.code
         state = _safe_run_state(project, change_id, load_run_state)
+        if status == "AGENT_UNAVAILABLE" or state.get("status") == "AGENT_UNAVAILABLE":
+            # No answer was produced (crash, quota): infrastructure, never a product verdict.
+            stops.append({"status": "AGENT_UNAVAILABLE", "detail": _stop_detail(state, result)})
+            reason = _bound(str(result.get("error") or state.get("error") or "AGENT_UNAVAILABLE"))
+            return _finish_stop(project, change_id, load_run_state, "AGENT_UNAVAILABLE", stops,
+                                simulated, evidence, reason=reason)
         status = state.get("status") or status
         if status == "PASSED":
             return _finish_stop(project, change_id, load_run_state, "PASSED", stops,
