@@ -117,9 +117,20 @@ class OracleCraftTests(unittest.TestCase):
             review = instructions_for(Path(folder), "review")
         self.assertIn("Over-specification is not weakness", review)
 
+    def test_product_asks_every_pending_confirmation_in_one_round(self):
+        # 2026-11-15 self-iteration D asked the entry, then the output format, in separate rounds
+        # although the request stated both; E left risks.guard unknown with no question.
+        text = (packaged_skills()['spec-craft']['root'] / 'SKILL.md').read_text(encoding='utf-8')
+        self.assertIn('需求原文已逐字给出', text)
+        self.assertIn('同一轮一并提出', text)
+        with tempfile.TemporaryDirectory() as folder:
+            product = instructions_for(Path(folder), 'product')
+        self.assertIn('A risk left unknown must also appear as a question', product)
+        self.assertIn('in the same revision', product)
+
     def test_spec_craft_requires_entry_coverage_self_check(self):
         skill = packaged_skills()['spec-craft']
-        self.assertEqual(skill['version'], '1.4.4')
+        self.assertEqual(skill['version'], '1.4.5')
         content = (skill['root'] / 'SKILL.md').read_text(encoding='utf-8')
         self.assertIn('入口覆盖自检', content)
         self.assertIn('observable', content)
