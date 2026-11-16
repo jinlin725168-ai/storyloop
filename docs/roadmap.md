@@ -1,6 +1,6 @@
 # 路线图
 
-更新：2026-11-13（以 `origin/main` `769bfc0` 为准）。历史计划在 `docs/plans/`，当前演进计划在 `docs/superpowers/`。
+更新：2026-11-16（以 `origin/main` `86ecc7b` 为准）。历史计划在 `docs/plans/`，当前演进计划在 `docs/superpowers/`。
 
 ## 已完成
 
@@ -60,6 +60,12 @@
   | 门槛 2 | `d7da1e1` | 1 | 0 | 验收绕过声明入口 7 次；断言强度约 6 次 |
   | 门槛 3 | `4ddf964` | 3 | 1（dogfood10） | 合同入口覆盖不足致 design 提问 5 次；断言强度约 5 次；1 次假通过（dogfood9 漏测嵌套路径，Gold 失败） |
 
+- **门槛 4（Case v2.1）**：引擎含 #123/#124，PASSED 1/10，非例行介入合计 13，未达标；作为后续对比的 v2.1 基线。
+- **自迭代阶段（2026-11-13～16）**：门槛 4 后不再用 bench 驱动日常修复，改由 StoryLoop 对自身真实需求迭代。退出标准为连续 3 个真实变更 `PASSED`、每个非例行介入不超过 1、合并后 main CI 绿；C（`bench report` 汇总，[#153](https://github.com/jinlin725168-ai/storyloop/pull/153)）、D（`metrics` 介入统计，[#156](https://github.com/jinlin725168-ai/storyloop/pull/156)）、E（`log` 介入时间线，[#159](https://github.com/jinlin725168-ai/storyloop/pull/159)）以 1、1、0 次非例行达标，计数由产品自身 L1 给出。内部机制类变更（需在测试中模拟代理角色）不计入，另行实现。
+- **真实运行暴露的引擎修复**：入口定位不含程序名（[#152](https://github.com/jinlin725168-ai/storyloop/pull/152)）、阻断意见变化后解除重试耗尽（[#154](https://github.com/jinlin725168-ai/storyloop/pull/154)）、技能补跨平台要求（[#155](https://github.com/jinlin725168-ai/storyloop/pull/155)）、引擎自动重规划不计人工（[#157](https://github.com/jinlin725168-ai/storyloop/pull/157)）、NEEDS_INPUT 停点给出规则原因（[#158](https://github.com/jinlin725168-ai/storyloop/pull/158)）、预审把过严断言归为建议（[#164](https://github.com/jinlin725168-ai/storyloop/pull/164)）、产品角色一轮问完确认题（[#165](https://github.com/jinlin725168-ai/storyloop/pull/165)）、自动修复重生成相同套件时记为无进展（[#166](https://github.com/jinlin725168-ai/storyloop/pull/166)）。
+- **里程碑 bench（2026-11-16，Case v2.2）**：dogfood3/5/6 修订为 v2.2，去掉不可观察入口（[#160](https://github.com/jinlin725168-ai/storyloop/pull/160)、[#161](https://github.com/jinlin725168-ai/storyloop/pull/161)）。Codex 额度在第 4 次尝试后耗尽，有效样本 4 个：3 个 `PASSED`，非例行合计 4（同 Case 的门槛 4 为 1/4、5）。人决定以有效样本作为里程碑结论，不补跑。代理不可用改记为不可比较、连续两次即中止（[#163](https://github.com/jinlin725168-ai/storyloop/pull/163)）。
+- **测试体系**：定时全量长期为红且无人跟进，修复潜伏回归并在 main/定时失败时自动开 `ci-red` issue（[#166](https://github.com/jinlin725168-ai/storyloop/pull/166)）；按改动选取受影响测试，PR 跑 core/platform + 受影响模块、main 跑 Linux full（[#167](https://github.com/jinlin725168-ai/storyloop/pull/167)）；子进程退出即返回，单条受监督 git 命令 50.7ms → 16.9ms，core 327s → 212s（[#169](https://github.com/jinlin725168-ai/storyloop/pull/169)）。
+
 ## 已知问题
 
 - **main 推送 CI 长期为红（已修复）**：[#131](https://github.com/jinlin725168-ai/storyloop/pull/131) 修复 Windows 路径、编码与测试夹具等根因，main 推送 CI 已全绿；PR 上 Windows 也改跑 `core`，防止同类失败到 main 才暴露。
@@ -70,27 +76,28 @@
 
 ## 下一步
 
-路线仍按 2026-11-08 批准的 **①a → ①b → ①c → 门 → ② → ③**；①a～①c 已交付，当前停在**门**。依据是 [HelixHarness 调研](research/2026-11-08-HelixHarness调研.md)（[上游源码](https://github.com/didi/helixharness)，借鉴点与落地见[研究来源](references.md#helixharness2026-11-08)）与[验证入口及评测底座设计](superpowers/specs/2026-11-08-验证入口与评测底座-design.md)。审查角色继续使用 Codex（[#65](https://github.com/jinlin725168-ai/storyloop/issues/65)）；base 人工通道不变（[决策 0018](decisions/0018-base-human-only.md)）。
+2026-11-16 评估：核心判定（外环持有判定权、实现前盲写受保护验收、候选副本 RED、特征化锁、合同中的验证入口）合理且保持不变；但**判据一刀切过严，尚不能落地**。三个 100～280 行的命令行输出变更（C/D/E）因"改了输出即外部契约"全部分流为 heavy，每个 14～19 次代理调用、57～82 分钟；审查与验收占调用 61%，实现只占 8%。引擎约 3 万行，规则随事故叠加，一周内修了 10 余个规则缺陷和 2 次修复带入的回归。路线据此重排为 **A → B → C → D → E**：
 
-1. **修复 main CI**（已完成）：[#131](https://github.com/jinlin725168-ai/storyloop/pull/131) 的 Windows core 与 full 已跑绿；PR 上 Windows core 纳入必过矩阵。
-2. **门槛 4**：引擎含 #123/#124，Case 用 v2.1（已批准、已校准）。v2.1 基准与门槛 1～3 不可直接对比，报告单列。达标条件不变：5 Case 中至少 4 个两次均 `PASSED`（含 Gold 通过），每次非例行停点不超过 1；不可比较不算通过。模拟人的纠正理由固定、不读 Gold，结果比真实使用偏保守。
-3. **门槛未过时**：按停机证据归类，只修确定性可判定或有证据的根因；能确定性检测的验收缺陷进入自动退回（例行），只有凭判断的质量问题计非例行。每轮修复后再跑门槛，不在单个 Case 上调优。
-4. **② 扩面**（门槛通过后）：RuoYi 多故事功能变更、真实模型撞底座，并补 L3 真实项目观察。RuoYi 依赖的 Docker Desktop 本机故障，人已决定延后。
-5. **③ 需求与充分性**：spec-craft 剩余批次按决策树复核范围，再推进链路骨架 ② 和测试充分性。[#64](https://github.com/jinlin725168-ai/storyloop/issues/64) 报告瘦身仍不做；按需加载知识索引延至②之后。
+1. **A 收尾**：测试体系 P2 的慢模块提速与特征化测试生命周期。
+2. **B 按风险分档减负**（首要）：核心判定不动。
+   - B1 改动分级：引擎按确定性规则把改动分为 safe / review / breaking（新增字段、命令、输出段为 safe），只有 breaking 或高风险进入 heavy。
+   - B2 真正的 light 通道：不做设计审批；验收照写、RED 照证；判据预审只对 breaking 或状态类改动；最后一次合并审查。
+   - B3 收敛 AI 判断类审查：减少层数，每层最多一轮阻断后转为建议；把引擎规则逐条归为确定性或判断，判断类移入技能。
+   - B4 目标与护栏：safe 小改动 ≤8 次调用、≤25 分钟、0 次非例行；Gold 失败率与漏出缺陷不得上升，用 bench 与自迭代共同验证。
+3. **C 可靠与可迭代**：代理可用性预检（登录、额度、连通，结构化原因码）；按角色路由与备用适配器，记录实际路由；停点分类（配置 / 基础设施 / 契约 / 判据质量 / 需要人工）；嵌套项目测试夹具，使内部机制类变更也能自迭代。
+4. **D 充分性**：能力覆盖清单（每个公开命令与停点类型对应正向与边界测试，CI 校验）；技能发布门（技能版本变更须通过评测样本才算"已验证"）；链路骨架第 2 批先做 fix 溯源（引入变更与逃逸分类），规则 ID 与需求登记随后；spec-craft 第 3～5 批在此之后按决策树复核。
+5. **E 落地验证**：选一个不依赖 Docker 的真实开源项目，用真实需求跑 L3 观察。RuoYi 多故事与真实模型撞底座待本机 Docker 恢复后再做。
 
 ```mermaid
 flowchart LR
-    A["①a L1 分类 + L2 bench ✅"] --> B["①b 验证入口 + 审查收敛 ✅"]
-    B --> C["①c 技能融合 + 知识增量 ✅"]
-    C --> P["试跑 1～5 + 门槛 1～3<br/>修复 #114～#126 ✅"]
-    P --> CI["修复 main CI ✅"]
-    CI --> G{"门槛 4（Case v2.1）<br/>5 Case ≥4 两次 PASSED<br/>每次 ≤1 非例行停点"}
-    G -->|未过| F["按证据修根因"] --> G
-    G -->|通过| X["② RuoYi 多故事 + 真实模型 + L3"]
-    X --> Y["③ 需求决策树复核 + 骨架② + 充分性"]
+    S["自迭代达标 ✅<br/>里程碑 bench ✅<br/>测试体系 P0/P1 ✅"] --> A["A 收尾"]
+    A --> B["B 按风险分档减负<br/>safe/review/breaking · light 通道 · 审查收敛"]
+    B --> C["C 可靠与可迭代<br/>代理预检 · 备用路由 · 停点分类 · 嵌套夹具"]
+    C --> D["D 充分性<br/>能力覆盖 · 技能发布门 · fix 溯源"]
+    D --> E["E 真实开源项目落地（L3）"]
 ```
 
-阶段③的 spec-craft 仍须验证正式负责人判断与引擎交接；老仓库迁移、上游同步自动化、多变更并行和 Windows 真实产品闭环按实际需求启动。
+审查角色在此期间由开发者直接完成（Codex 暂停派发）；base 人工通道不变（[决策 0018](decisions/0018-base-human-only.md)）。
 
 ## 明确不做
 
