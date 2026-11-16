@@ -17,6 +17,8 @@ SCORE_CONTRACT = {"version": 3, "pass_requires": ["PASSED", "gold_passed"],
                   "nonroutine_budget": 1,
                   "missing_evidence": "NOT_COMPARABLE",
                   "cost_policy": "report_separately"}
+# Consecutive attempts without any agent answer before the run stops spending attempts.
+UNAVAILABLE_ABORT = 2
 
 
 def estimate_duration(case_count: int, scope: str) -> str:
@@ -79,6 +81,7 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
               "candidate_engine_commit": candidate_engine_commit, "adapter": adapter_name,
               "model": model, "budget": budget, "gold_python": interpreter,
               "scoring_contract": SCORE_CONTRACT, "cases": []}
+    unavailable = 0
     for case in cases:
         row = {"case_id": case["manifest"]["case_id"], "case_version": case["manifest"]["case_version"],
                "case_revision": case["manifest"].get("case_revision"),
@@ -88,14 +91,24 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
                "gold_sha256": case["gold_hash"], "attempts": []}
         for attempt in (1, 2):
             for side in (("base",) if scope == "base-only" else ("base", "candidate")):
-                outcome = invoke(side, case, attempt, simulate_human)
+                if "aborted" in result:
+                    outcome = {"status": "NOT_RUN", "events": [], "reason": "aborted_agent_unavailable"}
+                else:
+                    outcome = invoke(side, case, attempt, simulate_human)
                 row["attempts"].append(_attempt(outcome, side, attempt, case, check_gold))
+                unavailable = unavailable + 1 if outcome.get("status") == "AGENT_UNAVAILABLE" else 0
+                if unavailable >= UNAVAILABLE_ABORT and "aborted" not in result:
+                    # A persistent outage (e.g. exhausted quota) would turn every remaining
+                    # attempt into noise; stop instead of spending the run.
+                    result["aborted"] = {"reason": "AGENT_UNAVAILABLE", "case_id": row["case_id"],
+                                         "attempt": attempt, "detail": outcome.get("reason")}
         comparison = _comparison(row["attempts"])
         if scope == "base-only" and comparison["status"] == "COMPARABLE":
             comparison = {**comparison, "status": "BASE_ONLY"}
         row["comparison"] = comparison
         result["cases"].append(row)
-    if result["case_version"] == 2 and scope == "base-only" and suite_source == "generated":
+    if (result["case_version"] == 2 and scope == "base-only" and suite_source == "generated"
+            and "aborted" not in result):
         from .bench_real_exec import STAGE_CASE_IDS, stage_gate
         if {row["case_id"] for row in result["cases"]} == STAGE_CASE_IDS:
             result["stage_gate"] = stage_gate(result)
@@ -121,7 +134,8 @@ def _attempt(outcome: dict, side: str, number: int, case: dict, check_gold) -> d
     elif status == "PASSED":
         gold = check_gold(case, outcome)
         verdict = "PASSED" if gold is True else "FAILED" if gold is False else "NOT_COMPARABLE"
-    elif status in {"NOT_COMPARABLE", "TIMEOUT", "BUDGET_EXHAUSTED", "COST_LIMIT_REACHED"}:
+    elif status in {"NOT_COMPARABLE", "TIMEOUT", "BUDGET_EXHAUSTED", "COST_LIMIT_REACHED",
+                    "AGENT_UNAVAILABLE", "NOT_RUN"}:
         gold = None
         verdict = "NOT_COMPARABLE"
     else:
@@ -137,8 +151,10 @@ def _attempt(outcome: dict, side: str, number: int, case: dict, check_gold) -> d
             "readiness_evidence_path": outcome.get("readiness_evidence_path"),
             "stops": outcome.get("stops"),
             "stop_evidence_path": outcome.get("stop_evidence_path"),
-            "termination_reason": outcome.get("termination_reason") or outcome.get("reason")
+            "termination_reason": ("AGENT_UNAVAILABLE" if status == "AGENT_UNAVAILABLE" else None)
+            or outcome.get("termination_reason") or outcome.get("reason")
             or (status if status in {"BUDGET_EXHAUSTED", "COST_LIMIT_REACHED", "TIMEOUT"} else None),
+            "agent_error": outcome.get("reason") if status == "AGENT_UNAVAILABLE" else None,
             "routine_types": dict(routine),
             "nonroutine_types": dict(nonroutine), "nonroutine_count": sum(nonroutine.values()),
             "unknown_events": unknown, "calls": outcome.get("calls"),
