@@ -77,6 +77,12 @@ def evaluate_checklist(product: dict, project: Path | None = None,
                 for problem in _output_contract_problems(criterion.get("output_contract")):
                     add("Measurability", "error", f"{criterion['id']} output_contract {problem}",
                         criterion_id=criterion["id"])
+    risks = (product.get("assessment") or {}).get("risks") or {}
+    for key, risk in sorted(risks.items()):
+        if isinstance(risk, dict) and risk.get("value") == "unknown":
+            # Intake stops approval on any unknown risk; show it while the draft is reviewed.
+            add("Clarity", "error",
+                f"risks.{key} is unknown: judge yes/no from repository evidence or ask it as a question")
     _nature_items(add, product, project)
     if inherited_constraints is not None:
         resolutions = {item["constraint_id"]: item for item in
@@ -124,7 +130,8 @@ def _output_contract_problems(contract: object) -> list[str]:
                     and child["name"].startswith(prefix) for child in fields):
                 problems.append(f"field {index} needs named child fields")
             if kind in {"array", "list"}:
-                problems.append(f"field {index} needs an element type")
+                problems.append(f"field {index} ({name}) needs an element type: write array<object> "
+                                f"with {name}[].<child> fields, or array<string>/array<integer>")
     return problems
 
 
