@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import ctypes
 import os
-from pathlib import Path
 import signal
 import subprocess
 import sys
@@ -22,16 +21,22 @@ def _stop(signum, frame):
     raise StopRequested()
 
 
+def _read(path: str) -> str:
+    # pathlib would add ~5 ms of imports to every supervised command.
+    with open(path, encoding="ascii") as handle:
+        return handle.read()
+
+
 def _reap_all() -> None:
     deadline = time.monotonic() + 8
-    children = Path(f"/proc/self/task/{os.getpid()}/children")
+    children = f"/proc/self/task/{os.getpid()}/children"
     while True:
         try:
             while os.waitpid(-1, os.WNOHANG)[0]:
                 pass
         except ChildProcessError:
             return
-        for pid in children.read_text().split():
+        for pid in _read(children).split():
             try:
                 os.kill(int(pid), signal.SIGKILL)
             except ProcessLookupError:
@@ -48,7 +53,7 @@ def main() -> int:
     libc = ctypes.CDLL(None, use_errno=True)
     if libc.prctl(36, 1, 0, 0, 0) != 0:  # PR_SET_CHILD_SUBREAPER
         return 125
-    Path(f"/proc/self/task/{os.getpid()}/children").read_text()
+    _read(f"/proc/self/task/{os.getpid()}/children")
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
     code = 125
