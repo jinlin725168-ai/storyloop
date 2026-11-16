@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 import math
 
 KINDS = frozenset({"contract_approval", "design_approval", "manual_acceptance", "answer",
@@ -103,27 +103,70 @@ def _classify(events: list[dict] | None, change_id: str) -> tuple[Counter, Count
     routine, nonroutine = Counter(), Counter()
     unknown = automatic_repair = 0
     for event in events or []:
-        if not isinstance(event, dict) or event.get("kind") not in KINDS:
+        category = _event_class(event, change_id)
+        if category == "unknown":
             unknown += 1
-            continue
-        if not event.get("inferred") and not _complete_event(event, change_id):
-            unknown += 1
-            continue
-        kind = event["kind"]
-        if kind == "acceptance_repair" and event.get("automatic") is True:
+        elif category == "automatic_repair":
             automatic_repair += 1
-        elif kind == "replan" and event.get("automatic") is True:
-            continue  # the engine re-planned; any human approval it needs is its own event
-        elif kind in CORRECTIONS or kind == "acceptance_repair" or event.get("repeated") is True:
-            nonroutine[kind] += 1
-        elif kind == "answer" and event.get("planned") is not True:
-            if event.get("planned") is False:
-                nonroutine[kind] += 1
-            else:
-                unknown += 1
-        else:
-            routine[kind] += 1
+        elif category == "nonroutine":
+            nonroutine[event["kind"]] += 1
+        elif category == "routine":
+            routine[event["kind"]] += 1
     return routine, nonroutine, unknown, automatic_repair
+
+
+def _event_class(event: object, change_id: str) -> str:
+    if not isinstance(event, dict) or event.get("kind") not in KINDS:
+        return "unknown"
+    if not event.get("inferred") and not _complete_event(event, change_id):
+        return "unknown"
+    kind = event["kind"]
+    if kind == "acceptance_repair" and event.get("automatic") is True:
+        return "automatic_repair"
+    if kind == "replan" and event.get("automatic") is True:
+        return "not_counted"
+    if kind in CORRECTIONS or kind == "acceptance_repair" or event.get("repeated") is True:
+        return "nonroutine"
+    if kind == "answer" and event.get("planned") is not True:
+        return "nonroutine" if event.get("planned") is False else "unknown"
+    return "routine"
+
+
+def intervention_view(record: dict) -> dict:
+    """Expose the effective L1 events and exactly the L1 totals for one change."""
+    from .processutil import redact
+
+    events, _ = _effective_events(record)
+    row = _row(record)
+    observed = []
+    inferred = []
+    for event in events or []:
+        item = event if isinstance(event, dict) else {}
+        legacy = item.get("inferred") is True
+        view = {"at": None if legacy else _safe_field(item.get("at"), redact),
+                "kind": _safe_field(item.get("kind"), redact) or "",
+                "source": _safe_field(item.get("source"), redact),
+                "stop": _safe_field(item.get("stop"), redact),
+                "class": _event_class(event, record["change_id"]), "inferred": legacy}
+        (inferred if legacy else observed).append(view)
+    observed.sort(key=lambda item: _event_time(item["at"]))
+    return {"events": observed + inferred,
+            "totals": {key: row[key] for key in
+                       ("routine", "nonroutine", "automatic_repair", "unknown")}}
+
+
+def _safe_field(value: object, redact) -> str | None:
+    return redact(value) if isinstance(value, str) else None
+
+
+def _event_time(value: str | None) -> tuple[bool, datetime, str]:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
+        if parsed is not None and parsed.tzinfo is not None:
+            return False, parsed.astimezone(timezone.utc), value
+    except ValueError:
+        pass
+    return True, datetime.max.replace(tzinfo=timezone.utc), value or ""
 
 
 def _usage(record: dict) -> dict:

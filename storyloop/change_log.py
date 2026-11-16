@@ -11,6 +11,8 @@ from pathlib import Path
 
 from .call_log import call_folder, load_meta
 from .changes import load_change
+from .intervention_events import intervention_view
+from .metrics_collect import collect
 from .processutil import redact
 from .run_hints import append_pending_memory, next_step
 from .stop_report import failure_view, render_stop, stop_of
@@ -24,6 +26,11 @@ def change_log(project: Path, change_id: str) -> dict:
     run = load_json(run_path) if run_path.exists() else None
     status = (run or {}).get("status") or change["status"]
     acceptance_rounds, acceptance_retry_stop = _acceptance_retry_view(run or {})
+    record = next((item for item in collect(project)["changes"]
+                   if item["change_id"] == change_id), None)
+    interventions = intervention_view(record) if record else {
+        "events": [], "totals": {"routine": None, "nonroutine": None,
+                                 "automatic_repair": 0, "unknown": 1}}
     return {
         "status": "LOG", "change_id": change_id, "change_status": change["status"],
         "run_status": run.get("status") if run else None,
@@ -39,6 +46,7 @@ def change_log(project: Path, change_id: str) -> dict:
         "lessons": (run or {}).get("lessons"),
         "acceptance_rounds": acceptance_rounds,
         "acceptance_retry_stop": acceptance_retry_stop,
+        "interventions": interventions,
         "next": append_pending_memory(project, next_step(status, change_id, project, run or {})),
     }
 
@@ -115,6 +123,9 @@ def render_log(result: dict) -> str:
     if result.get("stop"):
         lines.append("")
         lines += render_stop(result["stop"])
+    if "interventions" in result:
+        lines.append("")
+        lines.extend(_render_interventions(result["interventions"]))
     if result.get("acceptance_rounds"):
         lines.append("")
         lines.append("验收自动修复")
@@ -137,6 +148,27 @@ def render_log(result: dict) -> str:
     if result.get("next"):
         lines.append(f"下一步: {result['next']}")
     return "\n".join(lines)
+
+
+def _render_interventions(view: dict) -> list[str]:
+    labels = {"routine": "例行", "nonroutine": "非例行",
+              "automatic_repair": "自动修复", "not_counted": "不计", "unknown": "未知"}
+    lines = ["人工介入"]
+    for event in view["events"]:
+        at = _single_line(event["at"]) or "推断"
+        source = _single_line(event["source"]) or "无"
+        stop = _single_line(event["stop"]) or "无"
+        kind = _single_line(event["kind"])
+        lines.append(f"{at}  {kind}  {labels[event['class']]}（{source}，停点 {stop}）")
+    totals = view["totals"]
+    nonroutine = "无数据" if totals["nonroutine"] is None else totals["nonroutine"]
+    lines.append(f"合计：非例行 {nonroutine}，例行 {totals['routine']}，"
+                 f"自动修复 {totals['automatic_repair']}")
+    return lines
+
+
+def _single_line(value: str | None) -> str:
+    return " ".join(value.split()) if value else ""
 
 
 def _render_calls(calls: list[dict]) -> list[str]:
