@@ -96,12 +96,12 @@
     {
       "evidence_id": "derived-contract",
       "path": "contract.json",
-      "sha256": "f1b323fc5be7eba270b42864e14b02a9941a6424d82792856b6d70f4d7872e97"
+      "sha256": "7eaef948752819707f7ef94953ae229c8e15ab8a95a19c8be0fec48cb6f35486"
     },
     {
       "evidence_id": "frozen-suite",
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/manifest.json",
-      "sha256": "91a49980154b502c7040b43175519fb8c6ed182d80e9241ec039b4dda3025284"
+      "sha256": "e434bae701e69728191b776a816da4ed738086d50bfb5d01100a374838c082ef"
     },
     {
       "evidence_id": "reference-test",
@@ -111,7 +111,7 @@
     {
       "evidence_id": "verification-entry-chain",
       "path": "verification-evidence.json",
-      "sha256": "b8fcfee594bb6111d1faca9c83802fb21c4df5097334076e7e2e51bfc5bc0995"
+      "sha256": "9e230598ac12463868736fbe2584e7df44f9459c48fa0d8cf95cf156bcd5600a"
     }
   ],
   "requirements": [

@@ -1,10 +1,4 @@
 {
-  "approval": {
-    "approved_at": "2026-11-13",
-    "approved_by": "jinlin725168-ai",
-    "contract_sha256": "7e5a7b7383e0449d1f3319bb79540016353a85096f4f5b364b7430e084e1808e",
-    "note": "人确认 Case v2.1 验证入口与判据覆盖"
-  },
   "change_id": "FIX-20261105-design-revision-findings",
   "product": {
     "assessment": {
@@ -37,7 +31,7 @@
             "expected": "两条意见分别呈现目标、阻塞严重度、脱敏后的内容和位置；修复前该断言失败。",
             "steps": [
               "以两条 blocking=true 的方案意见触发 DESIGN_REVISION_REQUIRED。",
-              "检查 run 返回的停点报告和终端文本。"
+              "经公开 status --json 检查 stop.review_findings。"
             ]
           },
           "story_id": "S1"
@@ -479,7 +473,7 @@
             "oracle_class": "auto-fast",
             "reproduces_defect": true,
             "row_type": "positive",
-            "then": "停点报告与 run 文本分别列出两条意见的目标、阻塞严重度、脱敏后的内容和位置",
+            "then": "status --json 的 DESIGN_REVISION_REQUIRED 停点 stop.review_findings 分别列出两条意见的目标、阻塞严重度、脱敏后的内容和位置",
             "when": "运行停在 DESIGN_REVISION_REQUIRED"
           },
           {

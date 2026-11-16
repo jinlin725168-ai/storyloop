@@ -13,10 +13,10 @@
   },
   "base_commit": "72f2b51b21df3eb84e3b43f2146fd07912f1dfb4",
   "case_id": "dogfood6-design-revision-findings",
-  "case_revision": "2.1",
+  "case_revision": "2.2",
   "case_version": 2,
-  "contract_sha256": "1e9ff1f8240738853884ead3f51696ff023eb876defed0e00d6e253b48c7263c",
-  "gold_sha256": "83d140b386206168bb4176712ca6f57b58a9847d5adb7fdf0133359a211c46ff",
+  "contract_sha256": "f8dd04b0e95861a3c5c95eec903072829a98db89ba91d97e596df24be1f26843",
+  "gold_sha256": "e7bfbaca1f49db686178b2757df4d4810032479009565b2773775d37e69e62be",
   "legacy_seam": false,
   "python": {
     "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
@@ -28,11 +28,11 @@
   "suite_files": [
     {
       "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/bench_design_revision_existing.py",
-      "sha256": "7f6dc578ce5555e639eee0aff49551f251c4e86c3096b233356fcdc1985268b0"
+      "sha256": "365a81da0b6ca063fa666f136dc58a5b0bbd02ec4946d1e5c189ee4092509e05"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/bench_design_revision_red.py",
-      "sha256": "6464732c74ba49ff338ff2320a2efa5477daec28be5281cbaa4ea9208e67e34c"
+      "sha256": "2932f897795e375e129fc70a0a588fae7dd6b6cd6d2bd1de38fb690e5fb84473"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/manifest.json",
@@ -40,12 +40,12 @@
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/test_findings.py",
-      "sha256": "ac96f07279a56f2cce281717076b6e0210f896bb19cac3a7a3d020ceec30c1e5"
+      "sha256": "167b343746fba540b486244c2e9d93a1ca6d25a5358624f45be41e6c9097b29f"
     },
     {
       "path": "checks/tests/test_design_revision_findings.py",
       "sha256": "e624c0aa686d6f618e158da907678cf5d4934be2b7da0d7358588a74b36ae7ea"
     }
   ],
-  "suite_sha256": "a1d75ec6db8aa5c53841b5a5ee2ccf3e0951e5e0aefae77b92a40e397a0ed833"
+  "suite_sha256": "a86eac07fbe9a3474d46c06eaa8f333c36c2ddcf925c0e8edc5e92d9c4a82465"
 }

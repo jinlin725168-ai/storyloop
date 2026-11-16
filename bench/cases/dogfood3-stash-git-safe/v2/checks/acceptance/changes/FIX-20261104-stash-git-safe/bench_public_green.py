@@ -4,7 +4,7 @@ from pathlib import Path
 import types
 
 SOURCE = 'test_public_run.py'
-SHA256 = 'f5d49df9fb5edc717ce84251b7536d3f441f150b13d11d2a7b18deb8bd042059'
+SHA256 = 'b067d8808920743e99ece22ee5ae93f951f9e5538e4bdc29b5f200e696db3102'
 SELECTOR = 'PublicRunStop.test_repeat_base_stop_without_agent'
 
 

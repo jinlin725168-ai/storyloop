@@ -24,7 +24,6 @@ from tests.test_project_loop import smoke_payload
 from tests.test_baseline_behavior import git
 from storyloop.baseline import bootstrap_project, load_project_config
 from storyloop.project_loop import LoopServices, load_run_state, run_change
-from storyloop.stop_report import stop_of
 
 def public(command, root, change_id, env=None):
     child = subprocess.run([sys.executable, '-m', 'storyloop', command, str(root),
@@ -32,7 +31,7 @@ def public(command, root, change_id, env=None):
                            if command == 'run' else
                            [sys.executable, '-m', 'storyloop', command, str(root),
                             '--change', change_id, '--json'],
-                           cwd=Path.cwd(), env=env, capture_output=True, text=True, timeout=30)
+                           cwd=Path.cwd(), env=env, capture_output=True, text=True, encoding="utf-8", timeout=30)
     if not child.stdout.strip():
         raise RuntimeError(command + ' CLI failed: ' + child.stderr[-1000:])
     return json.loads(child.stdout)
@@ -80,14 +79,8 @@ with tempfile.TemporaryDirectory() as folder:
             'findings': [], 'questions': [],
         }))
     state = load_run_state(root, change_id)
-    report_file = root / 'reports/storyloop' / change_id / 'report.md'
-    report_file.parent.mkdir(parents=True, exist_ok=True)
-    report_file.write_text(stop_of(root, state)['options'][0]['action'], encoding='utf-8')
     status = public('status', root, change_id)
     log = public('log', root, change_id)
-    report = public('report', root, change_id)
-    report_action = Path(report['report']).read_text(encoding='utf-8')
-    report_file.unlink()
     stub_dir = Path(folder, 'agent-stubs')
     stub_dir.mkdir()
     marker = stub_dir / 'called'
@@ -100,7 +93,7 @@ with tempfile.TemporaryDirectory() as folder:
     before = git(root, 'status', '--porcelain=v1', '--untracked-files=all')
     segment = result['next'].split('先用 ', 1)[1].split(' 保存', 1)[0] if '先用 ' in result['next'] else ''
     tokens = shlex.split(segment) if segment else []
-    executed = subprocess.run(tokens, cwd=folder, capture_output=True, text=True,
+    executed = subprocess.run(tokens, cwd=folder, capture_output=True, text=True, encoding="utf-8",
                               timeout=15) if tokens else None
     after = git(root, 'status', '--porcelain=v1', '--untracked-files=all')
     stash_paths = (git(root, 'stash', 'show', '-u', '--name-only', 'stash@{0}').splitlines()
@@ -115,7 +108,7 @@ with tempfile.TemporaryDirectory() as folder:
         'surfaces': [result['next'], result['stop']['options'][0]['action'],
                      status['next'], status['stop']['options'][0]['action'],
                      log['next'], log['stop']['options'][0]['action'],
-                     report_action],
+                     ],
         'stash_tokens': tokens, 'stash_exit': executed.returncode if executed else None,
         'stash_paths': stash_paths, 'before': before, 'after': after,
     }, ensure_ascii=False))
@@ -132,12 +125,11 @@ from pathlib import Path
 from storyloop.baseline import bootstrap_project
 from storyloop.run_hints import next_step
 from storyloop.run_stops import pause
-from storyloop.stop_report import stop_of
 
 
 def git(root, *args):
     result = subprocess.run(['git', '-C', str(root), *args], capture_output=True,
-                            text=True, timeout=10)
+                            text=True, encoding="utf-8", timeout=10)
     if result.returncode:
         raise RuntimeError('Git fixture failed: ' + result.stderr)
     return result.stdout
@@ -145,7 +137,7 @@ def git(root, *args):
 def public(command, root, change_id):
     child = subprocess.run([sys.executable, '-m', 'storyloop', command, str(root),
                             '--change', change_id, '--json'], cwd=Path.cwd(),
-                           capture_output=True, text=True, timeout=20)
+                           capture_output=True, text=True, encoding="utf-8", timeout=20)
     if not child.stdout.strip():
         raise RuntimeError(command + ' CLI failed: ' + child.stderr[-1000:])
     return json.loads(child.stdout)
@@ -192,16 +184,11 @@ with tempfile.TemporaryDirectory() as folder:
     change_path.parent.mkdir(parents=True, exist_ok=True)
     change_path.write_text(json.dumps(change), encoding='utf-8')
     run_path = root / '.storyloop/state/runs/FEAT-1.json'
-    report_file = root / 'reports/storyloop/FEAT-1/report.md'
-    report_file.parent.mkdir(parents=True, exist_ok=True)
-    report_file.write_text(stop_of(root, json.loads(run_path.read_text(encoding='utf-8'))
-                                )['options'][0]['action'], encoding='utf-8')
     saved_before = run_path.read_bytes().hex()
     work_before = git(root, 'status', '--porcelain=v1', '--untracked-files=all')
     stash_before = git(root, 'stash', 'list')
     status = public('status', root, 'FEAT-1')
     log = public('log', root, 'FEAT-1')
-    report = public('report', root, 'FEAT-1')
     saved_after = run_path.read_bytes().hex()
     work_after = git(root, 'status', '--porcelain=v1', '--untracked-files=all')
     stash_after = git(root, 'stash', 'list')
@@ -210,7 +197,7 @@ with tempfile.TemporaryDirectory() as folder:
     unlisted_before = {name: (root / name).read_text(encoding='utf-8')
                        for name in unlisted}
     executed = subprocess.run(tokens, cwd=folder, capture_output=True,
-                              text=True, timeout=10)
+                              text=True, encoding="utf-8", timeout=10)
     stash_paths = (git(root, 'stash', 'show', '-u', '--name-only', 'stash@{0}').splitlines()
                    if executed.returncode == 0 else [])
     print(json.dumps({
@@ -220,7 +207,6 @@ with tempfile.TemporaryDirectory() as folder:
         'empty_hint': next_step('BASE_CHANGE_REQUIRED', 'FEAT-1', root,
                                 {**details, 'legacy_paths': []}),
         'status_next': status['next'], 'log_next': log['next'],
-        'report_action': Path(report['report']).read_text(encoding='utf-8'),
         'saved_before': saved_before, 'saved_after': saved_after,
         'work_before': work_before, 'work_after': work_after,
         'stash_before': stash_before, 'stash_after': stash_after,
@@ -240,7 +226,7 @@ with tempfile.TemporaryDirectory() as folder:
 def probe(source):
     try:
         child = subprocess.run([sys.executable, '-c', source], cwd=Path.cwd(),
-                               capture_output=True, text=True, timeout=90)
+                               capture_output=True, text=True, encoding="utf-8", timeout=90)
         if child.returncode:
             raise HarnessError('Business subprocess failed: ' + child.stderr[-1500:])
         value = json.loads(child.stdout)
@@ -251,7 +237,7 @@ def probe(source):
                  'root', 'calls', 'status', 'rerun_status', 'rerun_next',
                  'rerun_action', 'agent_stub_called'} if source == RED_PROBE else
                 {'root', 'listed', 'run_next', 'run_action', 'approval', 'empty_hint',
-                 'status_next', 'log_next', 'report_action', 'saved_before',
+                 'status_next', 'log_next', 'saved_before',
                  'saved_after', 'work_before', 'work_after', 'stash_before',
                  'stash_after', 'stash_before_pause', 'stash_after_pause',
                  'stash_tokens', 'stash_exit', 'stash_paths', 'unlisted_before',
@@ -326,24 +312,22 @@ class ExistingBehavior(unittest.TestCase):
         markers = ['stash push', 'status --short', 'switch main',
                    'storyloop approve', 'storyloop run',
                    'switch feature/FEAT-1', '取回或丢弃暂存']
-        for surface in (value['run_next'], value['run_action'], value['report_action']):
+        for surface in (value['run_next'], value['run_action']):
             positions = [surface.index(marker) for marker in markers]
             self.assertEqual(positions, sorted(positions))
 
-    def test_ac5_reading_status_log_and_report_preserves_state(self):
+    def test_ac5_reading_status_and_log_preserves_state(self):
         value = probe(GREEN_PROBE)
         self.assertEqual(value['saved_after'], value['saved_before'])
         self.assertEqual(value['work_after'], value['work_before'])
         self.assertEqual(value['stash_after'], value['stash_before'])
         self.assertEqual(value['status_next'], value['log_next'])
-        self.assertEqual(value['report_action'], value['run_action'])
 
     def test_ac6_generating_hint_does_not_create_stash(self):
         value = probe(GREEN_PROBE)
         self.assertEqual(value['stash_before_pause'], value['stash_after_pause'])
         self.assertEqual(value['stash_after_pause'], value['stash_before'])
         self.assertIn('由你决定取回或丢弃暂存的改动', value['run_next'])
-        self.assertIn('由你决定取回或丢弃暂存的改动', value['report_action'])
 
 
 if __name__ == '__main__':

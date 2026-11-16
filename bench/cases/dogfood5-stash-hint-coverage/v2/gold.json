@@ -36,12 +36,12 @@
     {
       "evidence_id": "derived-contract",
       "path": "contract.json",
-      "sha256": "39a41088c266e12589819f6bdcf08c0f94df099836772d2695f3236b65cb1844"
+      "sha256": "19a6bf3d5cc9d2b16982d9eb786480c87cf53ee70e99d7bbe826db16018ae06d"
     },
     {
       "evidence_id": "frozen-suite",
       "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/manifest.json",
-      "sha256": "722b88891fb829147854520c6c81bb05973723182eaca52ba137136df4e52ae4"
+      "sha256": "a409da18e0e24d65871905af0608c72383f1e7eba6cbb3d6b30f7b69aa04070d"
     },
     {
       "evidence_id": "reference-test",
@@ -51,7 +51,7 @@
     {
       "evidence_id": "verification-entry-chain",
       "path": "verification-evidence.json",
-      "sha256": "3cf6971dcf22b63f532169b38c2ac4b7dd52f3b46a090219bed19c6851e74500"
+      "sha256": "f7bb6a8f5a5687a39c6086664863dd2784ee58c3c6775d03df37d5380bde540c"
     }
   ],
   "requirements": [

@@ -13,10 +13,10 @@
   },
   "base_commit": "4b93151924a25537533e2c0a0244fb107f833b9f",
   "case_id": "dogfood5-stash-hint-coverage",
-  "case_revision": "2.1",
+  "case_revision": "2.2",
   "case_version": 2,
-  "contract_sha256": "39a41088c266e12589819f6bdcf08c0f94df099836772d2695f3236b65cb1844",
-  "gold_sha256": "02bd075fa727ff8050fe3a3d9ac5ea5b6480ccbb451016e691bef456a25e6de6",
+  "contract_sha256": "19a6bf3d5cc9d2b16982d9eb786480c87cf53ee70e99d7bbe826db16018ae06d",
+  "gold_sha256": "5dacf4b5f5d51ac4640ce619e729981242282ae34540e3fdc9c41c16d88e3ad7",
   "legacy_seam": false,
   "python": {
     "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
@@ -28,24 +28,24 @@
   "suite_files": [
     {
       "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/bench_linked_base_existing_green.py",
-      "sha256": "50bdbd8c387d2f000117dc036192db789c39a37126161efa011371df2d8bb628"
+      "sha256": "d782444be805b5f936250c718e9557bf7670886766a6a6f4f00d8a97763f7100"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/bench_linked_base_paths_red.py",
-      "sha256": "26e54ae03518a51dc576da80eabd9b1417357ff68f1f76107c498e5daf506a0f"
+      "sha256": "65740935b0514078493f7f85a1e8c8fcb4ee1a31438912b6726cefbd33e64a18"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/manifest.json",
-      "sha256": "722b88891fb829147854520c6c81bb05973723182eaca52ba137136df4e52ae4"
+      "sha256": "a409da18e0e24d65871905af0608c72383f1e7eba6cbb3d6b30f7b69aa04070d"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-stash-hint-coverage/test_core.py",
-      "sha256": "cdfa73ea1a491ef6088ab24b6900f5a84ed29b7202c82b8358af988b5316ad9c"
+      "sha256": "e5481c6ed1b3f3f14d51943772c41e7effce6aaff97c7508751c3ba88c6e36e6"
     },
     {
       "path": "checks/tests/test_failure_routing.py",
       "sha256": "1a9e21071d52afd0b427cedc5a3816dde543e58d5fe86c542fdb82860a83d385"
     }
   ],
-  "suite_sha256": "6d284615d18ebdaa5859449e1681d3b679b4b3284d6a8f78ee815ab6bf4f8c25"
+  "suite_sha256": "3eeb1184ac40c2042104be452db8f9e78685317388a5329ff7a3b9f536dee27a"
 }

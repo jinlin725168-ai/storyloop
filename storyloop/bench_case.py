@@ -62,7 +62,7 @@ def _manifest(value: dict, source: Path) -> None:
             "Only v1/v2 Cases are supported")
     version = value["case_version"]
     if "case_revision" in value:
-        require(version == 2 and value["case_revision"] == "2.1",
+        require(version == 2 and value["case_revision"] in {"2.1", "2.2"},
                 "Unsupported Case revision")
     require(isinstance(value["case_id"], str) and ID.fullmatch(value["case_id"])
             and source.parent.name == value["case_id"] and source.name == f"v{version}",
@@ -132,7 +132,7 @@ def _v2_contract_and_suite(source: Path, contract: dict, revision: str | None = 
     product = validate_product(contract["product"])
     require(all(story.get("verification_entries") for story in product["stories"]),
             "v2 Case requires story verification_entries")
-    if revision == "2.1":
+    if revision in {"2.1", "2.2"}:
         from .verification_entries import validate_criterion_entry_ids
         validate_criterion_entry_ids(product)
     change_id = identifier(contract["change_id"], "change id")

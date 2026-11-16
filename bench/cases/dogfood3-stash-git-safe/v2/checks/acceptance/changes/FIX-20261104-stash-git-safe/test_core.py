@@ -21,7 +21,6 @@ from pathlib import Path
 from storyloop.baseline import bootstrap_project
 from storyloop.run_hints import next_step
 from storyloop.run_stops import pause
-from storyloop.stop_report import stop_of
 
 mode = sys.argv[1]
 change_id = 'FEAT-1'
@@ -30,7 +29,7 @@ all_paths = paths + ['a.py', 'b.py', 'unlisted.py']
 
 def git(root, *args):
     result = subprocess.run(['git', '-C', str(root), *args], capture_output=True,
-                            text=True, timeout=10)
+                            text=True, encoding="utf-8", timeout=10)
     if result.returncode:
         raise RuntimeError('Git fixture failed: ' + result.stderr)
     return result.stdout
@@ -42,7 +41,7 @@ def commands(text):
 def public(command, root, change_id):
     child = subprocess.run([sys.executable, '-m', 'storyloop', command, str(root),
                             '--change', change_id, '--json'], cwd=Path.cwd(),
-                           capture_output=True, text=True, timeout=20)
+                           capture_output=True, text=True, encoding="utf-8", timeout=20)
     if not child.stdout.strip():
         raise RuntimeError(command + ' CLI failed: ' + child.stderr[-1000:])
     return json.loads(child.stdout)
@@ -95,26 +94,19 @@ with tempfile.TemporaryDirectory() as folder:
             '用 git status --short 检查并另行保存其他改动；'
             'git switch main；base 通过后 git switch feature/FEAT-1')
         run_path.write_text(json.dumps(saved), encoding='utf-8')
-    report_path = root / 'reports/storyloop' / change_id / 'report.md'
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(stop_of(root, json.loads(run_path.read_text(encoding='utf-8'))
-                            )['options'][0]['action'], encoding='utf-8')
     saved_before = run_path.read_bytes().hex()
     work_before = git(root, 'status', '--porcelain', '--untracked-files=all')
     stash_before = git(root, 'stash', 'list')
     status = public('status', root, change_id)
     log = public('log', root, change_id)
-    report = public('report', root, change_id)
     saved_after = run_path.read_bytes().hex()
     work_after = git(root, 'status', '--porcelain', '--untracked-files=all')
     stash_after = git(root, 'stash', 'list')
-    report_action = Path(report['report']).read_text(encoding='utf-8')
     result = {'root': str(root), 'paths': paths, 'run_next': run['next'],
               'run_action': run['stop']['options'][0]['action'],
               'status_next': status['next'],
               'status_action': status['stop']['options'][0]['action'],
               'log_next': log['next'], 'log_action': log['stop']['options'][0]['action'],
-              'report_action': report_action,
               'approval': run['stop']['options'][0]['command'],
               'before_pause_stash': before_pause_stash,
               'after_pause_stash': after_pause_stash,
@@ -131,7 +123,7 @@ with tempfile.TemporaryDirectory() as folder:
             for name in all_paths if name not in paths}
         outside = Path(folder)
         executed = subprocess.run(tokens, cwd=outside, capture_output=True,
-                                  text=True, timeout=10)
+                                  text=True, encoding="utf-8", timeout=10)
         result['stash_exit'] = executed.returncode
         result['stash_files'] = git(root, 'diff', '--name-only', 'stash@{0}^1', 'stash@{0}').splitlines() \
             if executed.returncode == 0 else []
@@ -147,14 +139,14 @@ with tempfile.TemporaryDirectory() as folder:
 def probe(mode):
     try:
         child = subprocess.run([sys.executable, '-c', PROBE, mode], cwd=Path.cwd(),
-                               capture_output=True, text=True, timeout=30)
+                               capture_output=True, text=True, encoding="utf-8", timeout=30)
         if child.returncode:
             raise HarnessError('Business subprocess failed: ' + child.stderr[-1500:])
         value = json.loads(child.stdout)
     except (OSError, subprocess.TimeoutExpired, ValueError) as error:
         raise HarnessError('Business subprocess/protocol unavailable') from error
     required = {'root', 'paths', 'run_next', 'run_action', 'status_next',
-                'status_action', 'log_next', 'log_action', 'report_action',
+                'status_action', 'log_next', 'log_action',
                 'approval', 'before_pause_stash', 'after_pause_stash',
                 'saved_before', 'saved_after', 'work_before', 'work_after',
                 'stash_before', 'stash_after'}
@@ -191,7 +183,7 @@ class NewBehavior(unittest.TestCase):
                 expected = ['stash', 'status', 'switch', 'switch']
                 surfaces = [value[key] for key in (
                     'run_next', 'run_action', 'status_next', 'status_action',
-                    'log_next', 'log_action', 'report_action')]
+                    'log_next', 'log_action')]
                 for surface in surfaces:
                     parts = git_parts(surface)
                     self.assertEqual(len(parts), 4, surface)

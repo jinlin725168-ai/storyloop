@@ -124,7 +124,7 @@ def _execute_change(project: Path, contract: dict, source: str, version: int,
     created = create_change(project, "Frozen bench Case", contract["product"],
                             now=lambda: stamp, slug=slug,
                             require_verification_entries=version == 2,
-                            require_entry_coverage=case_revision == "2.1")
+                            require_entry_coverage=case_revision in {"2.1", "2.2"})
     if created["change_id"] != change_id:
         raise ValueError("Frozen change ID does not match the product contract")
     approve_change(project, change_id, approved_by="bench-frozen-contract")

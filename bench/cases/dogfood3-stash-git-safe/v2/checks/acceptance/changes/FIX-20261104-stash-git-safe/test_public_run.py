@@ -19,7 +19,6 @@ import tempfile
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project, load_project_config
 from storyloop.project_loop import LoopServices, run_change
-from storyloop.stop_report import stop_of
 from storyloop.storage import write_json
 from tests.routing_support import legacy_create_change
 from tests.support import product
@@ -59,16 +58,10 @@ with tempfile.TemporaryDirectory() as folder:
         generate_smoke=lambda p, c: smoke_payload(change_id), implement=implement,
         review=lambda p, c: {'verdict': 'fail', 'summary': 'retry',
                              'findings': [], 'questions': []}))
-    report_file = root / 'reports/storyloop' / change_id / 'report.md'
-    report_file.parent.mkdir(parents=True, exist_ok=True)
-    report_file.write_text(stop_of(root, json.loads((root / '.storyloop/state/runs'
-                                                    / (change_id + '.json')).read_text())
-                                   )['options'][0]['action'])
-
     def public(command, extra=(), env=None):
         child = subprocess.run([sys.executable, '-m', 'storyloop', command, str(root),
                                 '--change', change_id, '--json', *extra],
-                               cwd=Path.cwd(), capture_output=True, text=True,
+                               cwd=Path.cwd(), capture_output=True, text=True, encoding="utf-8",
                                env=env, timeout=30)
         if not child.stdout.strip():
             raise RuntimeError(command + ' CLI failed: ' + child.stderr[-1000:])
@@ -76,7 +69,6 @@ with tempfile.TemporaryDirectory() as folder:
 
     status = public('status')
     log = public('log')
-    report = public('report')
     stub_dir = Path(folder, 'agent-stubs')
     stub_dir.mkdir()
     marker = stub_dir / 'called'
@@ -98,7 +90,7 @@ with tempfile.TemporaryDirectory() as folder:
                                   repeated['stop']['options'][0]['action'],
                                   status['stop']['options'][0]['action'],
                                   log['stop']['options'][0]['action'],
-                                  Path(report['report']).read_text()],
+                                  ],
                       'agent_stub_called': marker.exists()}))
 '''
 
@@ -106,7 +98,7 @@ with tempfile.TemporaryDirectory() as folder:
 class PublicRunStop(unittest.TestCase):
     def probe(self):
         child = subprocess.run([sys.executable, '-c', PROBE], cwd=Path.cwd(),
-                               capture_output=True, text=True, timeout=90)
+                               capture_output=True, text=True, encoding="utf-8", timeout=90)
         self.assertEqual(child.returncode, 0, child.stderr[-1500:])
         return json.loads(child.stdout)
 
