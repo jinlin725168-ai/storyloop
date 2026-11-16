@@ -21,6 +21,7 @@ _SIGNALS = {
     "interfaces": 0,
     "max_references": 0,
     "complete": True,
+    "contract_change": "review",
     "risks": {
         key: "no"
         for key in (

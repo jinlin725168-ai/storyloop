@@ -11,6 +11,7 @@ from .errors import require_role_evidence, role_evidence_error
 from .assessment import validate_assessment
 from .baseline import _git, load_project_config
 from .models import StoryLoopError, require
+from .state_format import RED_ROWS
 from .product_contract import validate_product
 from .path_security import repository_relative, safe_target
 from .readiness import _require_readiness_locked
@@ -64,7 +65,29 @@ def _signals(product: dict, measured: dict) -> dict:
             # Feasibility describes available supporting methods, never changes contract kind.
             'manual': sum(c['kind'] == 'manual' for story in product['stories']
                           for c in story['acceptance']),
+            'contract_change': contract_change(product),
             'risks': risks}
+
+
+def contract_change(product: dict) -> str:
+    """Classify the contract as safe (additive), breaking, or review from rows and existence.
+
+    safe: every changed-behaviour row covers behaviour that does not exist yet, and at least one
+    must-hold row pins behaviour that already exists. breaking: a changed-behaviour row covers
+    existing behaviour. Anything else, including contracts without row types, needs review.
+    """
+    existence = {item['criterion_id']: item['existence']
+                 for item in (product.get('assessment') or {}).get('criteria') or []}
+    rows = [criterion for story in product['stories'] for criterion in story['acceptance']
+            if criterion.get('kind') == 'automated']
+    if not rows or any('row_type' not in row for row in rows):
+        return 'review'
+    changed = [existence.get(row['id']) for row in rows if row['row_type'] in RED_ROWS]
+    if any(state in ('exists', 'partial') for state in changed):
+        return 'breaking'
+    pinned = [row for row in rows if row['row_type'] not in RED_ROWS
+              and existence.get(row['id']) == 'exists']
+    return 'safe' if changed and all(state == 'absent' for state in changed) and pinned else 'review'
 
 
 def _status(project: Path, commit: str, product: dict, decision: dict | None) -> str:

@@ -220,5 +220,19 @@ class OracleStrengthPrecheckTests(unittest.TestCase):
                                 {"oracle_strength_precheck": False}))
 
 
+    def test_additive_change_below_heavy_skips_the_precheck(self):
+        # 2026-11-16 plan B2: precheck only where it buys safety; RED proof and final review stay.
+        from tests.test_intake import additive_product
+        change = {"product": additive_product()}
+        self.assertFalse(enabled({"routing": {"effective_tier": "standard"}}, {}, change))
+        self.assertTrue(enabled({"routing": {"effective_tier": "heavy"}}, {}, change))
+        stateful = {"product": additive_product()}
+        stateful["product"]["assessment"]["risks"]["persistent_state"]["value"] = "yes"
+        self.assertTrue(enabled({"routing": {"effective_tier": "standard"}}, {}, stateful))
+        breaking = {"product": additive_product()}
+        breaking["product"]["assessment"]["criteria"][0]["existence"] = "exists"
+        self.assertTrue(enabled({"routing": {"effective_tier": "standard"}}, {}, breaking))
+
+
 if __name__ == "__main__":
     unittest.main()

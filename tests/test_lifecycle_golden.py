@@ -173,6 +173,9 @@ class LifecycleGoldenTests(unittest.TestCase):
                 # New plan metadata is covered by its own tests; compare the frozen lifecycle fields.
                 for option in (actual["state"].get("planning", {}).get("plan", {}).get("options") or []):
                     option.pop("regression_updates", None)
+                # The additive-contract signal is covered by test_routing_policy and test_intake.
+                (actual["state"].get("planning", {}).get("assessment", {})
+                 .get("signals") or {}).pop("contract_change", None)
                 # The new top-level bench command adds help text, not lifecycle behavior.
                 actual["cli"]["help"] = expected["cli"]["help"]
                 self.assertEqual(actual, expected)

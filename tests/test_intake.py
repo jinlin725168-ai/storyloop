@@ -32,6 +32,20 @@ def assessed_product():
     return value
 
 
+def additive_product():
+    """Only new behaviour, with existing behaviour pinned by a regression row."""
+    item = assessed_product()
+    story = item['stories'][0]
+    base = deepcopy(story['acceptance'][0])
+    story['acceptance'] = [{**deepcopy(base), 'id': 'AC-1', 'row_type': 'positive'},
+                           {**deepcopy(base), 'id': 'AC-2', 'row_type': 'regression'}]
+    criterion = item['assessment']['criteria'][0]
+    item['assessment']['criteria'] = [
+        {**deepcopy(criterion), 'criterion_id': 'AC-1', 'existence': 'absent'},
+        {**deepcopy(criterion), 'criterion_id': 'AC-2', 'existence': 'exists'}]
+    return item
+
+
 class IntakeTests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
@@ -85,6 +99,28 @@ class IntakeTests(unittest.TestCase):
                 item = assessed_product()
                 item['assessment']['criteria'][0][field] = value
                 self.assertEqual(self.assess(item)['status'], expected)
+
+    def test_contract_change_level_from_rows_and_existence(self):
+        from storyloop.intake import contract_change
+        item = additive_product()
+        self.assertEqual(contract_change(item), 'safe')
+        changed = deepcopy(item)
+        changed['assessment']['criteria'][0]['existence'] = 'partial'
+        self.assertEqual(contract_change(changed), 'breaking')
+        unguarded = deepcopy(item)
+        unguarded['stories'][0]['acceptance'] = unguarded['stories'][0]['acceptance'][:1]
+        unguarded['assessment']['criteria'] = unguarded['assessment']['criteria'][:1]
+        self.assertEqual(contract_change(unguarded), 'review')
+        legacy = deepcopy(item)
+        del legacy['stories'][0]['acceptance'][0]['row_type']
+        self.assertEqual(contract_change(legacy), 'review')
+
+    def test_additive_output_change_is_not_heavy_for_its_contract_risk(self):
+        item = additive_product()
+        item['assessment']['risks']['external_contract']['value'] = 'yes'
+        decision = self.assess(item)['decision']
+        self.assertEqual(decision['tier'], 'standard')
+        self.assertIn('ADDITIVE-CONTRACT', [reason['rule_id'] for reason in decision['reasons']])
 
     def test_approval_stop_names_the_input_rule_and_next_command(self):
         # 2026-11-15 self-iteration E: approve stopped with blocker "NEEDS_INPUT", no reason

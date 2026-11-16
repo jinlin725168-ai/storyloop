@@ -28,7 +28,12 @@ COUNT_FIELDS = ("stories", "existing_files", "created_files", "interfaces", "max
 HEAVY_RISKS = RISK_FIELDS[:7]
 STANDARD_RISKS = RISK_FIELDS[7:10]
 SIGNAL_FIELDS = {"nature", "stories", "criteria", "manual", "existing_files",
-                 "created_files", "interfaces", "max_references", "complete", "risks"}
+                 "created_files", "interfaces", "max_references", "complete", "risks",
+                 "contract_change"}
+CONTRACT_CHANGES = ("safe", "review", "breaking")
+# Risks about the shape of a public interface. An additive contract (only new behaviour,
+# existing behaviour pinned by must-hold rows) cannot break consumers through them.
+INTERFACE_RISKS = ("external_contract", "new_interface")
 
 
 def max_tier(*tiers: str) -> str:
@@ -119,6 +124,8 @@ def _validate_signals(value: object) -> None:
         raise StoryLoopError("Invalid Signals count: manual")
     if not isinstance(value["complete"], bool):
         raise StoryLoopError("Invalid Signals completeness")
+    if value["contract_change"] not in CONTRACT_CHANGES:
+        raise StoryLoopError("Invalid Signals contract_change")
     risks = value["risks"]
     if not isinstance(risks, dict) or set(risks) != set(RISK_FIELDS):
         raise StoryLoopError("Invalid routing risk fields")
@@ -176,6 +183,12 @@ def _apply_size_rules(signals: dict, policy: dict, tier: str, reasons: list) -> 
 def _apply_risk_rules(signals: dict, tier: str, reasons: list) -> str:
     heavy = [f"risks.{field}" for field in HEAVY_RISKS if signals["risks"][field] == "yes"]
     standard = [f"risks.{field}" for field in STANDARD_RISKS if signals["risks"][field] == "yes"]
+    if signals["contract_change"] == "safe":
+        additive = [field for field in heavy if field.removeprefix("risks.") in INTERFACE_RISKS]
+        if additive:
+            heavy = [field for field in heavy if field not in additive]
+            tier = max_tier(tier, "standard")
+            reasons.append(_reason("ADDITIVE-CONTRACT", ["contract_change", *additive], signals))
     if standard:
         tier = max_tier(tier, "standard")
         reasons.append(_reason("STANDARD-FLOOR", standard, signals))
