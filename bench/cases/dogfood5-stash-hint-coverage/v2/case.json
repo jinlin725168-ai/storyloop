@@ -15,8 +15,8 @@
   "case_id": "dogfood5-stash-hint-coverage",
   "case_revision": "2.2",
   "case_version": 2,
-  "contract_sha256": "19a6bf3d5cc9d2b16982d9eb786480c87cf53ee70e99d7bbe826db16018ae06d",
-  "gold_sha256": "5dacf4b5f5d51ac4640ce619e729981242282ae34540e3fdc9c41c16d88e3ad7",
+  "contract_sha256": "4a73d1c54672905a1bfe265d7d056a00719ff42b5edc965d082505ce858d5f1b",
+  "gold_sha256": "2ffae596466fc3b76d311b4517cdaa0f5b00be119e774e4e172cb0117b107a61",
   "legacy_seam": false,
   "python": {
     "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",

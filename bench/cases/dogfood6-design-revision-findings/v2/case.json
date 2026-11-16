@@ -15,8 +15,8 @@
   "case_id": "dogfood6-design-revision-findings",
   "case_revision": "2.2",
   "case_version": 2,
-  "contract_sha256": "f8dd04b0e95861a3c5c95eec903072829a98db89ba91d97e596df24be1f26843",
-  "gold_sha256": "e7bfbaca1f49db686178b2757df4d4810032479009565b2773775d37e69e62be",
+  "contract_sha256": "b5292c98e96f8f7dee730a230669001738146c0850257b3f66ef8c7c5530d707",
+  "gold_sha256": "b24f17bc0b77af8c44031b986a348eb4eea40a18921056d129c89aed0b4e0cac",
   "legacy_seam": false,
   "python": {
     "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
