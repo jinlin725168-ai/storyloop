@@ -165,3 +165,30 @@ jobs:
           for r in $RESULTS; do
             case "$r" in success|skipped) ;; *) exit 1 ;; esac
           done
+
+  # main 或定时全量变红时开（或追加到）一个 ci-red issue，避免红灯无人看（2026-11-06～16 定时全量 10 次 8 次失败无人跟进）。
+  alert:
+    name: 红灯告警
+    if: always() && needs.result.result == 'failure' && github.event_name != 'pull_request'
+    needs: [result]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: 开或追加 ci-red issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.sha }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create ci-red --repo "$REPO" --color B60205 --description "main 或定时 CI 失败" --force
+          body="${EVENT} 运行失败：${RUN}（提交 ${SHA}）"
+          number=$(gh issue list --repo "$REPO" --label ci-red --state open --json number -q '.[0].number')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$REPO" --body "$body"
+          else
+            gh issue create --repo "$REPO" --title "CI 红灯：main 或定时全量失败" --label ci-red --body "$body"
+          fi

@@ -92,7 +92,14 @@ def retry_fixture_red(project: Path, change_id: str, services: LoopServices | No
             save_run(project, state)
             break
         save_run(project, state)
-        result = _repair_once(project, change_id, AUTO_REASON, services, automatic=True)
+        try:
+            result = _repair_once(project, change_id, AUTO_REASON, services, automatic=True)
+        except StoryLoopError as exc:
+            if not (exc.details or {}).get("unchanged_suite"):
+                raise
+            # The agent regenerated the identical suite: no progress, a recorded stop, not a crash.
+            state = load_json(run_path(project, change_id))
+            return _retry_stop(project, state, acceptance, "no_progress", finding_ids, round_limit)
         state = load_json(run_path(project, change_id))
         result = _current_retry_result(project, change_id, services, state, result)
     return result
@@ -305,7 +312,7 @@ def _commit_repair_paths(project: Path, paths: list[str], message: str) -> dict:
     except StoryLoopError as exc:
         if str(exc) == "目标路径没有可提交的改动":
             raise StoryLoopError("目标路径没有改动；请先修正判据文件，再重新运行修复命令",
-                                 code="GIT_BLOCKED") from exc
+                                 code="GIT_BLOCKED", details={"unchanged_suite": True}) from exc
         raise
 
 

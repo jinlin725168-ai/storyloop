@@ -160,6 +160,29 @@ class AcceptanceProgressRetryTests(unittest.TestCase):
         self.assertEqual(result["status"], "ACCEPTANCE_REPAIRED")
         self.assertEqual(len(calls), 1)
 
+    def test_identical_regenerated_suite_is_a_no_progress_stop(self):
+        # 2026-11-16: since #137 the nightly full suite failed in test_oracle_tiers because an
+        # automatic repair that regenerated the same suite raised GIT_BLOCKED out of the loop.
+        def unchanged(*args, **kwargs):
+            raise StoryLoopError("目标路径没有改动", code="GIT_BLOCKED",
+                                 details={"unchanged_suite": True})
+
+        state = {"repairs": [], "acceptance": blocked("A")["acceptance"]}
+
+        def pause(project, current, status, **details):
+            current.update(details)
+            return {"status": status, **details}
+
+        from storyloop.acceptance_repair import retry_fixture_red
+        with patch("storyloop.acceptance_repair.load_project_config", return_value={}), \
+             patch("storyloop.acceptance_repair.load_json", return_value=state), \
+             patch("storyloop.acceptance_repair.save_run"), \
+             patch("storyloop.acceptance_repair.pause", side_effect=pause), \
+             patch("storyloop.acceptance_repair._repair_once", side_effect=unchanged):
+            result = retry_fixture_red(Path("/tmp"), "C", None, blocked("A"))
+        self.assertEqual(result["status"], "ORACLE_DEFECT")
+        self.assertEqual(result["acceptance"]["retry_stop"]["reason"], "no_progress")
+
     def test_rerun_after_no_progress_resumes_when_findings_change_without_human_repair(self):
         # 2026-11-15 self-iteration C: after an engine fix a plain rerun replaced the stuck
         # entry finding with new precheck findings, yet the stale flag stopped without retrying.
