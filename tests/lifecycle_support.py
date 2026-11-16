@@ -216,7 +216,7 @@ def artifacts(root, state):
 
 
 def topology(root):
-    lines = git(root, "log", "--format=%H %P %s").splitlines()
+    lines = git(root, "log", "--topo-order", "--format=%H %P %s").splitlines()
     merges = [line for line in lines if len(line.split(" ", 3)) > 3 and
               re.fullmatch(r"[0-9a-f]{40}", line.split()[2])]
     return {"commits": lines, "merges": merges, "branch": git(root, "branch", "--show-current")}

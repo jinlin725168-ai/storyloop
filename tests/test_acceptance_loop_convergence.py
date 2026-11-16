@@ -73,31 +73,57 @@ class AcceptanceLoopConvergenceTests(unittest.TestCase):
         self.assertIn("criterion_spec", requests[1]["validation_errors"][0])
         self.assertEqual(requests[0]["precheck_round"], 3)
 
-    def test_new_third_round_finding_must_name_prior_edit(self):
-        state = {"routing": {"effective_tier": "standard"},
-                 "repairs": [{"automatic": True}, {"automatic": True,
-                              "changed_paths": ["acceptance/test.py"]}],
-                 "acceptance": {"precheck": {"findings": [finding("MUST_FIX")]}}}
-        valid = precheck_answer(new_id=True, full=True)
-        valid["findings"][0]["introduced_by"] = "acceptance/test.py:12 changed nested setup"
-        error, requests = self.assess([precheck_answer(new_id=True, full=True), valid], state)
-        self.assertEqual(error.code, "ORACLE_DEFECT")
-        self.assertEqual(len(requests), 2)
-        self.assertIn("introduced_by", requests[1]["validation_errors"][0])
+    def passed(self, responses, state):
+        requests = []
+        service = SimpleNamespace(review=lambda _project, context:
+                                  requests.append(context) or responses.pop(0))
+        change = deepcopy(CHANGE)
+        change["product"]["stories"][0]["acceptance"] = [{"id": "AC-1", "entry_ids": ["VE-1"]}]
+        with patch("storyloop.smoke.smoke_digests", return_value={}), \
+             patch("storyloop.oracle_strength_precheck._prior_suite_edits",
+                   return_value=["acceptance/test.py"]), \
+             patch("storyloop.oracle_strength_precheck.read_only_call", side_effect=lambda p, c, fn: fn()):
+            result = assess(Path("/tmp"), change, state, service, {"tests": []}, {})
+        return result, requests
 
-    def test_new_finding_cannot_claim_unrelated_prior_edit(self):
-        state = {"routing": {"effective_tier": "standard"},
-                 "repairs": [{"automatic": True}, {"automatic": True,
-                              "changed_paths": ["acceptance/test.py"]}],
+    def test_late_new_finding_without_a_prior_edit_is_advisory(self):
+        # 2026-11-16 plan B3: every blocking finding belongs in the first pass; a new one after
+        # a repair blocks only when that repair introduced it.
+        for repairs in ([{"automatic": True}],
+                        [{"automatic": True}, {"automatic": True}]):
+            for source in (None, "acceptance/other.py:12 changed setup"):
+                with self.subTest(round=len(repairs) + 1, source=source):
+                    state = {"routing": {"effective_tier": "standard"}, "repairs": repairs,
+                             "acceptance": {"precheck": {"findings": [finding("MUST_FIX")]}}}
+                    late = precheck_answer(new_id=True, full=True)
+                    if source:
+                        late["findings"][0]["introduced_by"] = source
+                    result, requests = self.passed([late], state)
+                    self.assertEqual(result["verdict"], "pass")
+                    self.assertEqual(len(requests), 1)
+                    row = result["findings"][0]
+                    self.assertEqual((row["disposition"], row["blocking"]), ("ADVISORY", False))
+                    self.assertEqual(row["downgraded"], "late_finding")
+                    self.assertIsInstance(row["required_change"], str)
+
+    def test_late_finding_introduced_by_the_repair_still_blocks(self):
+        state = {"routing": {"effective_tier": "standard"}, "repairs": [{"automatic": True}],
                  "acceptance": {"precheck": {"findings": [finding("MUST_FIX")]}}}
-        invalid = precheck_answer(new_id=True, full=True)
-        invalid["findings"][0]["introduced_by"] = "acceptance/other.py:12 changed setup"
-        valid = precheck_answer(new_id=True, full=True)
-        valid["findings"][0]["introduced_by"] = "acceptance/test.py:12 changed setup"
-        error, requests = self.assess([invalid, valid], state)
+        introduced = precheck_answer(new_id=True)
+        introduced["findings"][0]["introduced_by"] = "acceptance/test.py:12 changed nested setup"
+        with patch("storyloop.oracle_strength_precheck._prior_suite_edits",
+                   return_value=["acceptance/test.py"]):
+            error, requests = self.assess([introduced], state)
         self.assertEqual(error.code, "ORACLE_DEFECT")
-        self.assertEqual(len(requests), 2)
-        self.assertIn("prior repair", requests[1]["validation_errors"][0])
+        self.assertEqual(len(requests), 1)
+
+    def test_first_round_and_persisting_findings_still_block(self):
+        error, _ = self.assess([precheck_answer(new_id=True)])
+        self.assertEqual(error.code, "ORACLE_DEFECT")
+        state = {"routing": {"effective_tier": "standard"}, "repairs": [{"automatic": True}],
+                 "acceptance": {"precheck": {"findings": [finding("MUST_FIX")]}}}
+        error, _ = self.assess([precheck_answer()], state)
+        self.assertEqual(error.code, "ORACLE_DEFECT")
 
     def test_introduced_by_accepts_fullwidth_punctuation_after_line(self):
         # Self-iteration FIX-20261115-log-acceptance-rounds: the model wrote "path:80：reason";

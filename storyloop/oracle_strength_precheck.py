@@ -59,14 +59,16 @@ def assess(project: Path, change: dict, state: dict, services, manifest: dict,
                              "不得增加合同外断言", "夹具只使用获准资源"]}
     context["precheck_round"] = 1 + sum(item.get("automatic") is True for item in
                                         state.get("repairs") or [])
+    if context["precheck_round"] >= 2:
+        context["prior_suite_edits"] = _prior_suite_edits(project, state)
     if context["precheck_round"] >= 3:
         context["required_spec_fields"] = ["inputs", "preconditions", "entry", "expected",
                                            "negative_boundary", "contract_plan"]
-        context["prior_suite_edits"] = _prior_suite_edits(project, state)
     answer = answer_with_repair(
         lambda request: read_only_call(project, change["change_id"],
                                        lambda: services.review(project, request)),
         context, lambda value: _validate(value, context))
+    _downgrade_late_findings(answer, context)
     verdict = validate_review(answer)
     result = {"verdict": verdict, "summary": answer["summary"],
               "findings": answer["findings"], "questions": answer["questions"],
@@ -110,7 +112,6 @@ def _validate(value: object, context: dict | None = None) -> None:
     require(all(item.get("disposition") for item in value["findings"]),
             "Oracle strength review needs classified findings")
     context = context or {}
-    prior_ids = {item.get("id") for item in context.get("previous_findings") or []}
     entries = {criterion["id"]: set(criterion.get("entry_ids") or []) for criterion in
                context.get("criteria") or []}
     from .review_convergence import _missing_spec
@@ -121,21 +122,42 @@ def _validate(value: object, context: dict | None = None) -> None:
         require(isinstance(change, dict) and all(isinstance(change.get(key), str)
                 and change[key].strip() for key in ("input", "assertion", "expected")),
                 f"{item.get('id')} required_change needs input, assertion and expected")
-        if context.get("precheck_round", 1) < 3:
-            continue
+        if context.get("precheck_round", 1) < 3 or _late(item, context):
+            continue  # a late finding is downgraded, not sent back for a fuller spec
         missing = _missing_spec(item, entries)
         require(not missing, f"{item['id']} criterion_spec needs {', '.join(missing)}")
-        if item.get("id") not in prior_ids:
-            source = item.get("introduced_by") or ""
-            # "path:line reason"; any punctuation (including full-width "：，") may separate the reason.
-            match = re.search(r"([^\s:：]+):(\d+)[\s:：,，;；。.\-—]*(\S.*)", source)
-            require(match is not None,
-                    f"{item['id']} introduced_by needs the prior edit path:line and reason")
-            edits = context.get("prior_suite_edits") or []
-            if edits:
-                location = match.group(1)
-                require(any(path == location or path.endswith("/" + location) for path in edits),
-                        f"{item['id']} introduced_by must name a file changed in the prior repair")
+
+
+def _late(item: dict, context: dict) -> bool:
+    """A blocking finding first raised after a repair that it cannot attribute to that repair.
+
+    The review must report every blocking gap in its first pass; a later one blocks only when
+    introduced_by names a file the previous repair changed (2026-11-16 plan B3).
+    """
+    if context.get("precheck_round", 1) < 2:
+        return False
+    prior = {finding.get("id") for finding in context.get("previous_findings") or []}
+    if item.get("id") in prior:
+        return False
+    # "path:line reason"; any punctuation (including full-width "：，") may separate the reason.
+    match = re.search(r"([^\s:：]+):(\d+)[\s:：,，;；。.\-—]*(\S.*)", item.get("introduced_by") or "")
+    if match is None:
+        return True
+    location = match.group(1)
+    edits = context.get("prior_suite_edits") or []
+    return not any(path == location or path.endswith("/" + location) for path in edits)
+
+
+def _downgrade_late_findings(answer: dict, context: dict) -> None:
+    for item in answer["findings"]:
+        if item.get("disposition") != "MUST_FIX" or not _late(item, context):
+            continue
+        change = item.get("required_change")
+        if isinstance(change, dict):
+            change = "；".join(f"{key}: {change[key]}" for key in ("input", "assertion", "expected")
+                              if change.get(key))
+        item.update(disposition="ADVISORY", blocking=False, downgraded="late_finding",
+                    required_change=change or "见 message")
 
 
 def stamp_red(project: Path, change_id: str, precheck: dict) -> dict:
