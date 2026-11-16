@@ -1,4 +1,10 @@
 {
+  "approval": {
+    "approved_at": "2026-11-16",
+    "approved_by": "jinlin725168-ai",
+    "contract_sha256": "adf7b50eee821101197d666a97b2282acb4d71de573bc0a695bdc1d5604c7df4",
+    "note": "人确认 Case v2.2 可观察入口与判据覆盖"
+  },
   "change_id": "FIX-20261104-stash-git-safe",
   "product": {
     "assessment": {

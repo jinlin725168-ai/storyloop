@@ -61,11 +61,8 @@ class BenchV2DraftTests(unittest.TestCase):
                                                    "dogfood5-stash-hint-coverage",
                                                    "dogfood6-design-revision-findings"}
                 self.assertEqual(case["case_revision"], "2.2" if changed else "2.1")
-                if changed:
-                    self.assertNotIn("approval", contract)
-                else:
-                    self.assertEqual(contract["approval"]["contract_sha256"],
-                                     contract_digest(contract["product"]))
+                self.assertEqual(contract["approval"]["contract_sha256"],
+                                 contract_digest(contract["product"]))
                 prior = old_contract["product"]
                 derived = json.loads(json.dumps(contract["product"]))
                 if changed:
@@ -102,8 +99,7 @@ class BenchV2DraftTests(unittest.TestCase):
                                  case["contract_sha256"])
                 self.assertEqual(hashlib.sha256((draft / "gold.json").read_bytes()).hexdigest(),
                                  case["gold_sha256"])
-                self.assertEqual(load_case(draft, allow_unapproved_v2=True)["contract_approved"],
-                                 not changed)
+                self.assertTrue(load_case(draft)["contract_approved"])
 
     def test_approved_entry_locators_name_the_public_commands(self):
         expected = {

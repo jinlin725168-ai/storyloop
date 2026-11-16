@@ -6,7 +6,6 @@ import unittest
 from unittest.mock import Mock, patch
 
 from storyloop.bench_case import load_case
-from storyloop.models import StoryLoopError
 from storyloop.bench_run import compare_runs, run_bench
 from storyloop.bench_worker import _execute_change
 from tests.test_bench_case import case_fixture, v2_case_fixture
@@ -29,7 +28,7 @@ class BenchCaseRevisionTests(unittest.TestCase):
                                                  "dogfood5-stash-hint-coverage",
                                                  "dogfood6-design-revision-findings"}
                 self.assertEqual(case["manifest"]["case_revision"], "2.2" if changed else "2.1")
-                self.assertEqual(case["contract_approved"], not changed)
+                self.assertTrue(case["contract_approved"])
                 for story in case["contract"]["product"]["stories"]:
                     entry_ids = {entry["id"] for entry in story["verification_entries"]}
                     for criterion in story["acceptance"]:
@@ -37,15 +36,13 @@ class BenchCaseRevisionTests(unittest.TestCase):
                             self.assertTrue(criterion["entry_ids"])
                             self.assertTrue(set(criterion["entry_ids"]) <= entry_ids)
 
-    def test_v22_drafts_reject_run_until_human_approval(self):
+    def test_v22_cases_are_human_approved(self):
         root = Path(__file__).resolve().parents[1] / "bench/cases"
         for case_id in ("dogfood3-stash-git-safe", "dogfood5-stash-hint-coverage",
                         "dogfood6-design-revision-findings"):
             with self.subTest(case=case_id):
                 source = root / case_id / "v2"
-                self.assertFalse(load_case(source, allow_unapproved_v2=True)["contract_approved"])
-                with self.assertRaisesRegex(StoryLoopError, "approved v2 contract"):
-                    load_case(source)
+                self.assertTrue(load_case(source)["contract_approved"])
 
     def test_v21_and_v22_case_rows_share_a_v2_batch(self):
         cases_root = Path(__file__).resolve().parents[1] / "bench/cases"
