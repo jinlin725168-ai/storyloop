@@ -106,6 +106,17 @@ class SurveyUsesSkillTests(unittest.TestCase):
 
 
 class OracleCraftTests(unittest.TestCase):
+    def test_overspecified_oracle_is_advisory_not_weak(self):
+        # 2026-11-16 milestone bench dogfood3: precheck kept MUST_FIX on assertions fixing an
+        # unspecified Git argument spelling; five repairs loosened it and still stopped no_progress.
+        skill = packaged_skills()["review"]
+        self.assertEqual(skill["version"], "1.1.4")
+        text = (skill["root"] / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("过严不等于强度不足", text)
+        with tempfile.TemporaryDirectory() as folder:
+            review = instructions_for(Path(folder), "review")
+        self.assertIn("Over-specification is not weakness", review)
+
     def test_spec_craft_requires_entry_coverage_self_check(self):
         skill = packaged_skills()['spec-craft']
         self.assertEqual(skill['version'], '1.4.4')
