@@ -13,8 +13,7 @@
       "entry_ids": [
         "VE-BASE-STOP",
         "VE-RUN-STOP",
-        "VE-LOG",
-        "VE-REPORT"
+        "VE-LOG"
       ],
       "id": "linked-base-paths-red",
       "tier": "heavy",
@@ -36,8 +35,7 @@
       "entry_ids": [
         "VE-BASE-STOP",
         "VE-RUN-STOP",
-        "VE-LOG",
-        "VE-REPORT"
+        "VE-LOG"
       ],
       "id": "linked-base-existing-green",
       "tier": "fast",

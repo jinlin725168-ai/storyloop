@@ -115,46 +115,6 @@
       "ac5-public-run-stop"
     ]
   },
-  "VE-REPORT": {
-    "chain": [
-      {
-        "line": 302,
-        "path": "storyloop/cli.py",
-        "quote": "return dispatch(project, args, run_with_answers, _draft_result, load_run_state)"
-      },
-      {
-        "line": 136,
-        "path": "storyloop/product_cli.py",
-        "quote": "if args.command == \"report\":"
-      },
-      {
-        "line": 284,
-        "path": "storyloop/stop_report.py",
-        "quote": "def stop_of(project: Path | str, run: dict | None) -> dict | None:"
-      },
-      {
-        "line": 296,
-        "path": "storyloop/stop_report.py",
-        "quote": "if run[\"status\"] == \"BASE_CHANGE_REQUIRED\" and run.get(\"legacy_paths\"):"
-      }
-    ],
-    "criterion_ids": [
-      "AC-2",
-      "AC-5"
-    ],
-    "gold_check_ids": [
-      "F2P-acceptance-2",
-      "F2P-public-views",
-      "P2P-acceptance-5",
-      "P2P-public-run-stop"
-    ],
-    "manifest_test_ids": [
-      "ac2-view-parity",
-      "ac5-read-preserves-state",
-      "ac2-public-views",
-      "ac5-public-run-stop"
-    ]
-  },
   "VE-RUN-STOP": {
     "chain": [
       {

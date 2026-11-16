@@ -1,10 +1,4 @@
 {
-  "approval": {
-    "approved_at": "2026-11-13",
-    "approved_by": "jinlin725168-ai",
-    "contract_sha256": "b7b4a8ca945cd533cbd994f735839a30e148a235a52e496707c8290e7964742f",
-    "note": "人确认 Case v2.1 验证入口与判据覆盖"
-  },
   "change_id": "FIX-20261105-stash-hint-coverage",
   "product": {
     "assessment": {
@@ -74,10 +68,10 @@
                 "tests.test_stop_report"
               ]
             ],
-            "expected": "四个展示面使用相同的项目定位和字面路径命令，且均列出需保存的功能与测试路径；现有测试尚未覆盖扩展后的路径集合。",
+            "expected": "三个展示面使用相同的项目定位和字面路径命令，且均列出需保存的功能与测试路径；现有测试尚未覆盖扩展后的路径集合。",
             "steps": [
               "在临时仓库形成同时含功能路径、测试路径和已删除测试路径的关联底座停点。",
-              "读取同一停点的 run、status、log 与已保存停点报告，逐项比较 Git 命令及路径集合。"
+              "读取同一停点的 run、status 与 log，逐项比较 Git 命令及路径集合。"
             ]
           },
           "story_id": "ST-1"
@@ -178,7 +172,7 @@
             "expected": "读取展示面不改变运行状态、工作区或 stash 列表；现有测试仅覆盖部分展示路径。",
             "steps": [
               "记录展示前的持久化运行状态、Git 工作区及 stash 列表。",
-              "读取 status、log 和停点报告后逐项比较。"
+              "读取 status 与 log后逐项比较。"
             ]
           },
           "story_id": "ST-1"
@@ -571,8 +565,7 @@
             "entry_ids": [
               "VE-BASE-STOP",
               "VE-RUN-STOP",
-              "VE-LOG",
-              "VE-REPORT"
+              "VE-LOG"
             ],
             "given": "带前轮功能改动及 test_roots 测试改动的关联底座冲突已有运行结果及保存的停点报告",
             "id": "AC-2",
@@ -580,7 +573,7 @@
             "oracle_class": "auto-heavy",
             "reproduces_defect": true,
             "row_type": "form_parity",
-            "then": "run、status、log 和停点报告展示相同的项目定位与字面路径 Git 命令，命令均列出需保存的功能及测试路径",
+            "then": "run、status 和 log 展示相同的项目定位与字面路径 Git 命令，命令均列出需保存的功能及测试路径",
             "when": "读取该变更的各展示面"
           },
           {
@@ -624,8 +617,7 @@
             "entry_ids": [
               "VE-BASE-STOP",
               "VE-RUN-STOP",
-              "VE-LOG",
-              "VE-REPORT"
+              "VE-LOG"
             ],
             "given": "底座冲突的运行状态和仓库状态已保存",
             "id": "AC-5",
@@ -713,13 +705,6 @@
             "locator": "storyloop log <project> --change <id> --json",
             "observable": "日志中展示的停点动作",
             "reason": "公开诊断日志的停点视图"
-          },
-          {
-            "id": "VE-REPORT",
-            "kind": "cli",
-            "locator": "storyloop report <project> --change <id>",
-            "observable": "定位到的报告文件中的停点提示",
-            "reason": "公开报告定位入口"
           }
         ],
         "want": "获得列全需保存功能与测试改动的遗留路径清单"

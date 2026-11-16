@@ -1,10 +1,4 @@
 {
-  "approval": {
-    "approved_at": "2026-11-13",
-    "approved_by": "jinlin725168-ai",
-    "contract_sha256": "08bc1790f10f5c5f9421017a526a797b6483a6c42178e18af5ae1c7d8593c7d9",
-    "note": "人确认 Case v2.1 验证入口与判据覆盖"
-  },
   "change_id": "FIX-20261104-stash-git-safe",
   "product": {
     "assessment": {
@@ -74,10 +68,10 @@
                 "tests.test_stop_report"
               ]
             ],
-            "expected": "各展示面给出的 stash、status、switch 命令均指向同一项目，stash 均按字面路径匹配；已保存报告展示时也不露出旧命令。",
+            "expected": "各展示面给出的 stash、status、switch 命令均指向同一项目，stash 均按字面路径匹配；已保存停点经 status/log 展示时也不露出旧命令。",
             "steps": [
-              "构造带遗留文件的 BASE_CHANGE_REQUIRED 停点，同时读取 run 结果、status、log 和停点报告。",
-              "再读取修复前已保存、含旧命令的同类停点报告。"
+              "构造带遗留文件的 BASE_CHANGE_REQUIRED 停点，同时读取 run 结果、status 和 log。",
+              "再通过 status 和 log 读取修复前已保存、含旧命令的同类停点。"
             ]
           },
           "story_id": "ST-1"
@@ -176,7 +170,7 @@
             ],
             "expected": "读取提示前后的运行状态内容、Git 工作区和 stash 列表完全相同。",
             "steps": [
-              "记录已保存运行状态和临时仓库的状态，再读取 status、log 与停点报告。"
+              "记录已保存运行状态和临时仓库的状态，再读取 status 与 log。"
             ]
           },
           "story_id": "ST-1"
@@ -481,7 +475,7 @@
       ]
     },
     "errata": [],
-    "goal": "修复 BASE_CHANGE_REQUIRED 停点提示：其中的 Git 命令从任何当前目录执行都作用于项目仓库；stash 只按字面路径暂存列出的遗留文件；run、status、log 与停点报告展示一致。",
+    "goal": "修复 BASE_CHANGE_REQUIRED 停点提示：其中的 Git 命令从任何当前目录执行都作用于项目仓库；stash 只按字面路径暂存列出的遗留文件；run、status 和 log 展示一致。",
     "lessons_used": [],
     "nature": "fix",
     "non_goals": [
@@ -519,8 +513,7 @@
             "entry_ids": [
               "VE-BASE-STOP",
               "VE-RUN-STOP",
-              "VE-LOG",
-              "VE-REPORT"
+              "VE-LOG"
             ],
             "given": "带遗留文件的底座冲突已有运行结果及保存的停点报告",
             "id": "AC-2",
@@ -528,7 +521,7 @@
             "oracle_class": "auto-fast",
             "reproduces_defect": true,
             "row_type": "form_parity",
-            "then": "run、status、log 和停点报告展示相同的项目定位与字面路径 Git 命令",
+            "then": "run、status 和 log 展示相同的项目定位与字面路径 Git 命令",
             "when": "读取该变更的各展示面"
           },
           {
@@ -575,8 +568,7 @@
             "entry_ids": [
               "VE-BASE-STOP",
               "VE-RUN-STOP",
-              "VE-LOG",
-              "VE-REPORT"
+              "VE-LOG"
             ],
             "given": "底座冲突的运行状态和仓库状态已保存",
             "id": "AC-5",
@@ -644,13 +636,6 @@
             "locator": "storyloop log <project> --change <id> --json",
             "observable": "日志中展示的停点动作",
             "reason": "公开诊断日志的停点视图"
-          },
-          {
-            "id": "VE-REPORT",
-            "kind": "cli",
-            "locator": "storyloop report <project> --change <id>",
-            "observable": "定位到的报告文件中的停点提示",
-            "reason": "公开报告定位入口"
           }
         ],
         "want": "从任意目录安全地使用停点给出的 Git 命令"

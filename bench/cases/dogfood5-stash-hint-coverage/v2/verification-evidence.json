@@ -108,48 +108,6 @@
       "linked-base-existing-green"
     ]
   },
-  "VE-REPORT": {
-    "chain": [
-      {
-        "line": 302,
-        "path": "storyloop/cli.py",
-        "quote": "return dispatch(project, args, run_with_answers, _draft_result, load_run_state)"
-      },
-      {
-        "line": 136,
-        "path": "storyloop/product_cli.py",
-        "quote": "if args.command == \"report\":"
-      },
-      {
-        "line": 284,
-        "path": "storyloop/stop_report.py",
-        "quote": "def stop_of(project: Path | str, run: dict | None) -> dict | None:"
-      },
-      {
-        "line": 296,
-        "path": "storyloop/stop_report.py",
-        "quote": "if run[\"status\"] == \"BASE_CHANGE_REQUIRED\" and run.get(\"legacy_paths\"):"
-      }
-    ],
-    "criterion_ids": [
-      "AC-1",
-      "AC-2",
-      "AC-3",
-      "AC-4",
-      "AC-5",
-      "AC-6",
-      "AC-7"
-    ],
-    "gold_check_ids": [
-      "F2P-acceptance-1",
-      "F2P-reference",
-      "P2P-acceptance-2"
-    ],
-    "manifest_test_ids": [
-      "linked-base-paths-red",
-      "linked-base-existing-green"
-    ]
-  },
   "VE-RUN-STOP": {
     "chain": [
       {

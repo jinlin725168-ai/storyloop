@@ -19,6 +19,23 @@ CASES = Path(__file__).resolve().parents[1] / "bench/cases"
 
 
 class BenchV2DraftTests(unittest.TestCase):
+    def test_v22_removes_unavailable_report_and_uses_public_status(self):
+        for case_id in ("dogfood3-stash-git-safe", "dogfood5-stash-hint-coverage"):
+            with self.subTest(case=case_id):
+                source = CASES / case_id / "v2"
+                contract = json.loads((source / "contract.json").read_text(encoding="utf-8"))
+                entries = contract["product"]["stories"][0]["verification_entries"]
+                self.assertNotIn("VE-REPORT", {entry["id"] for entry in entries})
+                for criterion in contract["product"]["stories"][0]["acceptance"]:
+                    self.assertNotIn("VE-REPORT", criterion["entry_ids"])
+                suite = next(source.glob("checks/acceptance/changes/*/test_core.py"))
+                self.assertNotIn("public('report'", suite.read_text(encoding="utf-8"))
+        source = CASES / "dogfood6-design-revision-findings/v2"
+        suite = next(source.glob("checks/acceptance/changes/*/test_findings.py"))
+        text = suite.read_text(encoding="utf-8")
+        self.assertIn("'storyloop', 'status'", text)
+        self.assertIn("stop = result['status']['stop']", text)
+
     def test_frozen_case_bytes_are_not_rewritten_by_checkout(self):
         attributes = (CASES.parents[1] / ".gitattributes").read_text(encoding="utf-8")
         rules = (line.split() for line in attributes.splitlines()
@@ -40,15 +57,39 @@ class BenchV2DraftTests(unittest.TestCase):
                 self.assertFalse(case["legacy_seam"])
                 for key in ("case_id", "repository_id", "base_commit", "solution_commit"):
                     self.assertEqual(case[key], old_case[key])
-                self.assertEqual(case["case_revision"], "2.1")
-                self.assertEqual(contract["approval"]["contract_sha256"],
-                                 contract_digest(contract["product"]))
+                changed = original.parent.name in {"dogfood3-stash-git-safe",
+                                                   "dogfood5-stash-hint-coverage",
+                                                   "dogfood6-design-revision-findings"}
+                self.assertEqual(case["case_revision"], "2.2" if changed else "2.1")
+                if changed:
+                    self.assertNotIn("approval", contract)
+                else:
+                    self.assertEqual(contract["approval"]["contract_sha256"],
+                                     contract_digest(contract["product"]))
                 prior = old_contract["product"]
                 derived = json.loads(json.dumps(contract["product"]))
+                if changed:
+                    if original.parent.name == "dogfood3-stash-git-safe":
+                        derived["goal"] = prior["goal"]
+                    changed_assessment_ids = ({"AC-2", "AC-5"} if original.parent.name.startswith(
+                        ("dogfood3", "dogfood5")) else {"AC-1"})
+                    for row in derived["assessment"]["criteria"]:
+                        if row["criterion_id"] in changed_assessment_ids:
+                            row["method"] = next(old["method"] for old in prior["assessment"]["criteria"]
+                                                 if old["criterion_id"] == row["criterion_id"])
                 for story in derived["stories"]:
                     del story["verification_entries"]
                     for criterion in story["acceptance"]:
                         del criterion["entry_ids"]
+                        if changed and criterion["id"] == "AC-2" and original.parent.name.startswith("dogfood3"):
+                            criterion["then"] = next(item["then"] for old_story in prior["stories"]
+                                                     for item in old_story["acceptance"] if item["id"] == "AC-2")
+                        if changed and criterion["id"] == "AC-2" and original.parent.name.startswith("dogfood5"):
+                            criterion["then"] = next(item["then"] for old_story in prior["stories"]
+                                                     for item in old_story["acceptance"] if item["id"] == "AC-2")
+                        if changed and criterion["id"] == "AC-1" and original.parent.name.startswith("dogfood6"):
+                            criterion["then"] = next(item["then"] for old_story in prior["stories"]
+                                                     for item in old_story["acceptance"] if item["id"] == "AC-1")
                         if (original.parent.name == "dogfood9-scratch-glob"
                                 and criterion["id"] == "AC-4"):
                             criterion["then"] = next(item["then"] for old_story in prior["stories"]
@@ -61,7 +102,8 @@ class BenchV2DraftTests(unittest.TestCase):
                                  case["contract_sha256"])
                 self.assertEqual(hashlib.sha256((draft / "gold.json").read_bytes()).hexdigest(),
                                  case["gold_sha256"])
-                self.assertTrue(load_case(draft)["contract_approved"])
+                self.assertEqual(load_case(draft, allow_unapproved_v2=True)["contract_approved"],
+                                 not changed)
 
     def test_approved_entry_locators_name_the_public_commands(self):
         expected = {

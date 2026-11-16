@@ -13,10 +13,10 @@
   },
   "base_commit": "535c5e95ff04ba4456b9646e664207db538e6280",
   "case_id": "dogfood3-stash-git-safe",
-  "case_revision": "2.1",
+  "case_revision": "2.2",
   "case_version": 2,
-  "contract_sha256": "f1b323fc5be7eba270b42864e14b02a9941a6424d82792856b6d70f4d7872e97",
-  "gold_sha256": "5e32c8d1c57d17ed4b623f98bab1babd6818739084ca40f2b2459c984a001edf",
+  "contract_sha256": "7eaef948752819707f7ef94953ae229c8e15ab8a95a19c8be0fec48cb6f35486",
+  "gold_sha256": "f8c92c135e8511b7bd96a99d9dd4a35e23c09f91624288fcb2d18c88f2821628",
   "legacy_seam": false,
   "python": {
     "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
@@ -28,52 +28,52 @@
   "suite_files": [
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_ac1_literal_stash.py",
-      "sha256": "3bb322aa57c563ac652e61a0a19493ec857474b4f58544459a069bf967d1a6cb"
+      "sha256": "02162eb41cc9729ee20f701479d7e36d7c0563f5369e9dd8a6f18d8800e7191d"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_ac2_view_parity.py",
-      "sha256": "ad678a01d0725509bb7ec50e97cb0e126b7699fbdd7f423d28efb612354a1e61"
+      "sha256": "c573f48081d12ab2d75e6dda1650462b8911819d63c703d05363c0a23bff496c"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_ac3_no_legacy_paths.py",
-      "sha256": "f29a31c3fb0bc4bdd0598c7ca94ae47d1d5faf52bff3705273509617919934b7"
+      "sha256": "e868d7904d8bb589f6f7a3d026d7033b1f7029361e0cd43432ff63c5183e8bd2"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_ac4_approval_order.py",
-      "sha256": "64e05279f652b6ab1f56b2a5b632dba8d2a03579179a7d7cb49058615c770b2a"
+      "sha256": "718b4de4464bdbcf7f28391376ac3511e1892f17613adbfada194861de1a3cc6"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_ac5_read_preserves_state.py",
-      "sha256": "690141b5e79be58a95ef507be5334aef7306810b5c2b3b9bd7d1db15836147ba"
+      "sha256": "0ba0c4f7b14a4104a01089a23921a08be9c4d1054b855f557ed6b35d896882a6"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_ac6_no_automatic_stash.py",
-      "sha256": "35f1ca7dd810e1bb381820fe9d8d8868699dab09df5280933c408c2186672785"
+      "sha256": "49d44e194665dadf3e94c3c85cb84280751a74c92d336233048b5b2a11955299"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_public_green.py",
-      "sha256": "0788b8b573265c09e04f63c6041dd6df17ab9353093b721d4d5f7f39c1cfba57"
+      "sha256": "54394b64c137c7cb0b477e39c84bdc0cf48c076f7729c2dd56ed983d99f7aef8"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/bench_public_red.py",
-      "sha256": "8bb1e8dce87549f4b5f4b8369cc98171dcd9ce389c7047deca6b8964816527f8"
+      "sha256": "18386e40b550a4d96cc98bad4955f56bd4dd6e61c75dbaedd090790d57529dd4"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/manifest.json",
-      "sha256": "91a49980154b502c7040b43175519fb8c6ed182d80e9241ec039b4dda3025284"
+      "sha256": "e434bae701e69728191b776a816da4ed738086d50bfb5d01100a374838c082ef"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_core.py",
-      "sha256": "ee398361f808c0eb347ca44e9a652ad0c4a2bbb30926be373fb291ce8f92aea9"
+      "sha256": "f7655212ac1ea350e8f58e53db36914db7c261cf4b5823ce44c34e523a2cb927"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261104-stash-git-safe/test_public_run.py",
-      "sha256": "f5d49df9fb5edc717ce84251b7536d3f441f150b13d11d2a7b18deb8bd042059"
+      "sha256": "b067d8808920743e99ece22ee5ae93f951f9e5538e4bdc29b5f200e696db3102"
     },
     {
       "path": "checks/tests/test_failure_routing.py",
       "sha256": "578520460f2ca139c83818b6352c05eaad9e489677c81fbe8dc477921dcc12c9"
     }
   ],
-  "suite_sha256": "89d265c1c29feb9073541102ea4390294ad4ea85542c843ef72cb251163c1eac"
+  "suite_sha256": "eea42b2726d3271940eb839f775c053c0ce7acbb3d2efb8732ada7738dc7a7d5"
 }

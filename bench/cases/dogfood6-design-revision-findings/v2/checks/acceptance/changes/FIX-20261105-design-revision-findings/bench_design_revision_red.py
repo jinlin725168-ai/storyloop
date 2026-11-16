@@ -4,7 +4,7 @@ from pathlib import Path
 import types
 
 SOURCE = 'test_findings.py'
-SHA256 = 'ac96f07279a56f2cce281717076b6e0210f896bb19cac3a7a3d020ceec30c1e5'
+SHA256 = '167b343746fba540b486244c2e9d93a1ca6d25a5358624f45be41e6c9097b29f'
 SELECTOR = 'RedBehavior'
 
 

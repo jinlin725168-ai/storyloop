@@ -13,13 +13,11 @@ import io
 import json
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 import sys
 import subprocess
 from storyloop.baseline import bootstrap_project
 from storyloop.change_log import change_log, render_log
 from storyloop.cli_output import display
-from storyloop.product_cli import dispatch
 from storyloop.run_stops import pause
 from storyloop.stop_report import build_stop, render_stop
 from storyloop.storage import load_json, write_json
@@ -56,12 +54,15 @@ with tempfile.TemporaryDirectory() as folder:
                 phase='planning', findings=findings)
     run_path = project / '.storyloop/state/runs' / (change_id + '.json')
     before = load_json(run_path)
-    args = SimpleNamespace(command='status', change_id=change_id)
-    status = dispatch(project, args, None, lambda *a: None,
-                      lambda p, c: load_json(run_path))
+    status_call = subprocess.run([sys.executable, '-m', 'storyloop', 'status', str(project),
+                                  '--change', change_id, '--json'], cwd=Path.cwd(),
+                                 capture_output=True, text=True, encoding="utf-8", timeout=20)
+    if not status_call.stdout.strip():
+        raise RuntimeError('status CLI failed: ' + status_call.stderr[-1000:])
+    status = json.loads(status_call.stdout)
     log_call = subprocess.run([sys.executable, '-m', 'storyloop', 'log', str(project),
                                '--change', change_id, '--json'], cwd=Path.cwd(),
-                              capture_output=True, text=True, timeout=20)
+                              capture_output=True, text=True, encoding="utf-8", timeout=20)
     if not log_call.stdout.strip():
         raise RuntimeError('log CLI failed: ' + log_call.stderr[-1000:])
     log = json.loads(log_call.stdout)
@@ -93,7 +94,7 @@ def probe(findings):
     try:
         child = subprocess.run([sys.executable, '-B', '-c', PROBE],
                                input=json.dumps({'findings': findings}),
-                               cwd=Path.cwd(), capture_output=True, text=True,
+                               cwd=Path.cwd(), capture_output=True, text=True, encoding="utf-8",
                                timeout=20)
         if child.returncode:
             raise HarnessError('Business subprocess failed: ' + child.stderr[-1000:])
@@ -130,9 +131,9 @@ def summaries(stop):
 
 
 class RedBehavior(unittest.TestCase):
-    def test_ac1_run_and_structured_stop(self):
+    def test_ac1_public_status_structured_stop(self):
         result = probe(findings())
-        stop = result['run']['stop']
+        stop = result['status']['stop']
         items = summaries(stop)
         self.assertEqual(len(items), 2)
         for item, message, location in zip(items,
@@ -141,7 +142,6 @@ class RedBehavior(unittest.TestCase):
             shown = str(item)
             for expected in ('design', '阻塞', message, location):
                 self.assertIn(expected, shown)
-                self.assertIn(expected, result['texts']['run'])
         self.assertNotIn('非阻塞建议 C', str(items))
 
     def test_ac2_status_and_log_match_run(self):
