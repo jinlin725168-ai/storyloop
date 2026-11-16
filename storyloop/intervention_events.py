@@ -10,6 +10,9 @@ KINDS = frozenset({"contract_approval", "design_approval", "manual_acceptance", 
                    "acceptance_repair", "replan", "overrule", "reset", "supersede",
                    "knowledge_approval"})
 CORRECTIONS = frozenset({"replan", "overrule", "reset", "supersede"})
+# Planning history written by the engine itself; older states lack the "automatic" flag.
+ENGINE_REPLAN_REASONS = frozenset({"L3 scope or risk expansion", "Base upgrade changed plan inputs",
+                                   "Characterization changed binding"})
 
 
 def append_event(state: dict, kind: str, *, source: str, stop: str | None = None,
@@ -109,6 +112,8 @@ def _classify(events: list[dict] | None, change_id: str) -> tuple[Counter, Count
         kind = event["kind"]
         if kind == "acceptance_repair" and event.get("automatic") is True:
             automatic_repair += 1
+        elif kind == "replan" and event.get("automatic") is True:
+            continue  # the engine re-planned; any human approval it needs is its own event
         elif kind in CORRECTIONS or kind == "acceptance_repair" or event.get("repeated") is True:
             nonroutine[kind] += 1
         elif kind == "answer" and event.get("planned") is not True:
@@ -160,7 +165,8 @@ def _legacy_events(record: dict) -> list[dict] | None:
                         ("planning_history", "replan")):
         value = record.get(field)
         if isinstance(value, list):
-            events.extend({"kind": kind, "automatic": item.get("automatic") is True}
+            events.extend({"kind": kind, "automatic": item.get("automatic") is True or (
+                              kind == "replan" and item.get("reason") in ENGINE_REPLAN_REASONS)}
                           for item in value if isinstance(item, dict))
     return [{**event, "inferred": True} for event in events]
 
