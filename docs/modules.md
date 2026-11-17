@@ -184,6 +184,7 @@
 |  | `memory_cli` | 可变区 | 仓库经验命令的接线与呈现 | `add_memory_arguments`、`dispatch_memory`、`render_memory` |
 |  | `next_steps` | 可变区 | 为命令面保留变更与草案提示的兼容导出 | `append_pending_memory`、`draft_next`、`next_step`、`supersede_revision_next` |
 |  | `onboarding_cli` | 可变区 | 保留 init 原签名并编排烟测预检、采纳与代理检查 | `add_init_arguments`、`bootstrap_with_project_checks`、`initialize` |
+|  | `testing.nested` | 可变区 | 为 StoryLoop 自身机制的验收测试建嵌套项目并以脚本化角色运行 | — |
 |  | `routing_cli` | 可变区 | 校验并分发显式分流命令，批准接口只记录决策 | `dispatch_routing` |
 
 随包技能数据见 `storyloop/skills/` 与 `pyproject.toml` 的 `package-data`。

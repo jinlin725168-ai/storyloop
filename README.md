@@ -283,6 +283,8 @@ storyloop metrics PATH --save
 
 从源码工作树验收时，CLI 和 command 适配器必须使用同一份引擎。共享 venv 若 editable 安装指向另一工作树，直接执行示例 `.py` 会导入那份代码；请在专用环境安装当前工作树，或显式设置适配器 Python 的模块搜索路径。真实验收使用显式 `sys.path.insert(0, WORKTREE)` 的 `python -c` 包装，并记录 `storyloop.__file__` 与 HEAD；没有把旧安装的结果当成新实现证据。
 
+某个角色的代理没能作答（登录失效、额度用尽、网络或超时，即 `AGENT_UNAVAILABLE`）时，可以让它改用另一个已配置的适配器重试一次：`roles` 里写 `"default_fallback_adapter": "codex"` 对所有角色生效，或在单个角色下写 `"fallback_adapter"`。备用适配器必须是另一个已配置的适配器；已经作答但不合格的答案不会转给备用适配器。实际走了哪个适配器记在调用账本里（`degraded: "fallback"`、`fallback_from`），报告的 `fallback_routes` 逐条列出。审查的跨厂商策略（`cross_vendor_review`）照旧优先。
+
 `COST_LIMIT_REACHED` 在下一次调用前停止；提高 limits 后 `run` 恢复。失败调用也计成本；没有费用回报时只展示已知费用覆盖，不估价、不把未知当作零。无画像的旧配置继续工作，已有报告与回执保持原字节；缺少旧诊断的历史报告不会凭空补齐新状态。
 
 ## 经验与勘误

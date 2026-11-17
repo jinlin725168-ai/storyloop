@@ -2,7 +2,7 @@
 from .report_items import item
 
 
-NEW_FIELDS = {'tier_requested', 'adapter', 'degraded', 'path_guard', 'subagents_applied'}
+NEW_FIELDS = {'tier_requested', 'adapter', 'degraded', 'fallback_from', 'path_guard', 'subagents_applied'}
 
 
 def calls(evidence):
@@ -83,4 +83,8 @@ def conclusion_items(evidence):
                             'review_vendor': second, 'status': status})
     if comparisons:
         result.append(item('cross_vendor', comparisons, reason='ADAPTER_REPORTED_NOT_VERIFIED'))
+    fallbacks = [{'call': row.get('call'), 'role': row.get('role'), 'from': row.get('fallback_from'),
+                  'to': row.get('adapter')} for row in rows if row.get('degraded') == 'fallback']
+    if fallbacks:
+        result.append(item('fallback_routes', fallbacks))
     return result

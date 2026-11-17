@@ -122,6 +122,8 @@ rank = 7
 "semantic_repair" = { module = "role_content", zone = "mutable" }
 "testing" = { module = "role_content", zone = "mutable" }
 "testing.mock_adapter" = { module = "role_content", zone = "mutable" }
+# The nested-project kit drives whole runs (bootstrap, run_change), so it sits with the commands.
+"testing.nested" = { module = "command", zone = "mutable" }
 "changes" = { module = "contract", zone = "mutable", split = "D" }
 "approvals" = { module = "contract", zone = "mutable" }
 "requirement_checklist" = { module = "contract", zone = "mutable" }
