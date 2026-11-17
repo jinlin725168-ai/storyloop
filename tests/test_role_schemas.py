@@ -81,3 +81,17 @@ class FindingTargetTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FindingErrorTests(unittest.TestCase):
+    def test_one_error_names_every_missing_or_empty_tracking_field(self):
+        # 2026-11-17 L3: "lacks tracking fields" gave a repair round nothing to act on.
+        from storyloop.models import StoryLoopError
+        from storyloop.role_schemas import validate_finding
+
+        finding = {"id": "R-1", "criterion_id": "AC-1", "target": "implementation",
+                   "disposition": "ADVISORY", "blocking": False, "evidence": "cli.py:1",
+                   "message": "rename", "required_change": " "}
+        with self.assertRaises(StoryLoopError) as caught:
+            validate_finding(finding)
+        self.assertIn("R-1 needs nonempty location, required_change", str(caught.exception))

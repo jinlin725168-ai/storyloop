@@ -206,6 +206,13 @@ class ReviewPerspectiveTests(unittest.TestCase):
         self.assertNotIn(adapter.LEAD_MARK, calls[0])
         self.assertEqual(json.loads(out.getvalue())["verdict"], "pass")
 
+    def test_lead_merge_asks_for_every_tracking_field(self):
+        # 2026-11-17 L3: the lead's return shape omitted tracking fields, so merged findings
+        # carried a disposition without id/location and failed the engine's finding check.
+        for field in ("id,criterion_id,target,disposition,blocking,location,evidence,message",
+                      "required_change", "none empty"):
+            self.assertIn(field, adapter.LEAD_RULES)
+
     def test_schema_repair_round_is_one_session_that_fixes_the_previous_answer(self):
         # 2026-11-17 L3: repairing a merged review must not rerun all four perspectives.
         calls = []

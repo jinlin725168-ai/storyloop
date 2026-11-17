@@ -27,9 +27,14 @@ def validate_finding(item: dict) -> None:
         return
     require(isinstance(item["disposition"], str) and item["disposition"] in REVIEW_LEVELS,
             "Invalid review disposition")
-    required = {"id", "criterion_id", "target", "disposition", "blocking",
-                "location", "evidence", "message", "required_change"}
-    require(required <= item.keys(), "Review finding lacks tracking fields")
+    required = ("id", "criterion_id", "target", "disposition", "blocking",
+                "location", "evidence", "message", "required_change")
+    # Name every gap at once so a schema-repair round can fill them all (2026-11-17 L3: a
+    # generic message left the repaired answer with another empty field).
+    missing = [field for field in required if item.get(field) is None
+               or (isinstance(item[field], str) and not item[field].strip())]
+    require(not missing, f"Review finding {item.get('id') or '?'} needs nonempty "
+            + ", ".join(missing))
     identifier(item["id"], "review finding id")
     for field in ("criterion_id", "target", "location", "evidence", "message"):
         text(item[field], f"review finding {field}")
