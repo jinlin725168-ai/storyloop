@@ -206,6 +206,30 @@ class ReviewPerspectiveTests(unittest.TestCase):
         self.assertNotIn(adapter.LEAD_MARK, calls[0])
         self.assertEqual(json.loads(out.getvalue())["verdict"], "pass")
 
+    def test_schema_repair_round_is_one_session_that_fixes_the_previous_answer(self):
+        # 2026-11-17 L3: repairing a merged review must not rerun all four perspectives.
+        calls = []
+        request = self._request()
+        request["payload"].update(previous_response={"verdict": "fail", "findings": [{"message": "x"}]},
+                                  validation_errors=["$.findings[0]: Review finding lacks tracking fields"])
+
+        def fake_run(command, **kwargs):
+            calls.append(kwargs.get("input", ""))
+            result = {"verdict": "pass", "summary": "fixed", "findings": [], "questions": []}
+            return Completed(envelope("success", json.dumps(result), "one", 0.3, 5))
+
+        with patch.object(adapter.subprocess, "run", fake_run), \
+                patch.object(adapter.shutil, "which", return_value="/usr/bin/claude"), \
+                patch("sys.stdin", io.StringIO(json.dumps(request))), \
+                patch("sys.stdout", new_callable=io.StringIO), \
+                patch("sys.stderr", new_callable=io.StringIO):
+            code = adapter.main_with_args([])
+        self.assertEqual(code, 0)
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn(adapter.LEAD_MARK, calls[0])
+        self.assertIn("lacks tracking fields", calls[0])
+        self.assertIn("previous_response", calls[0])
+
     def test_a_failing_perspective_fails_the_whole_review_call(self):
         def fake_run(command, **kwargs):
             prompt = kwargs.get("input", "")

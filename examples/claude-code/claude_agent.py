@@ -163,7 +163,9 @@ def _dispatch(request, base, prompt, args, model):
         telemetry.update(profile_telemetry(request, model))
         telemetry['subagents_applied'] = {'mode': 'sequential', 'perspectives': 0, 'explore': 0, 'lanes': 0}
         return _emit(result, telemetry, role)
-    if role == "review" and perspectives and request.get("payload", {}).get("mode") != "verify":
+    repairing = bool(request.get("payload", {}).get("validation_errors"))
+    if (role == "review" and perspectives and not repairing
+            and request.get("payload", {}).get("mode") != "verify"):
         return _review_with_perspectives(request, base, args, perspectives)
     lanes = _parse_lanes(args.implement_lanes)
     if 'role_profile' in request and not requested.get('lanes'):
@@ -431,6 +433,12 @@ def _prompt(request: dict, role: str, guides: list[str], extra: str = "", schema
             parts.append(f"Project guidance ({path.name}):\n{path.read_text(encoding='utf-8')}")
         else:
             print(f"guide file not found, ignored: {guide}", file=sys.stderr)
+    errors = (request.get("payload") or {}).get("validation_errors")
+    if errors:
+        # Engine repair round: fix the shape of payload.previous_response, do not redo the work.
+        parts.append("Your previous answer (payload.previous_response) did not match the response "
+                     "schema: " + "; ".join(str(item) for item in errors) + ". Return the same "
+                     "answer corrected to the schema; keep its conclusions and fill every missing field.")
     parts.append("Request:\n" + json.dumps(request, ensure_ascii=False))
     return "\n".join(parts)
 

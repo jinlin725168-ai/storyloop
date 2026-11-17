@@ -198,9 +198,10 @@ class ReportCallProvenanceTests(unittest.TestCase):
                 invoke_project_agent(root, "review", {"change": {"change_id": "FEAT-2"}})
 
             result = summarize(root, "FEAT-2")
+            # One failed call: the answer and its schema-repair round, both billed.
             self.assertEqual(result["failed"], 1)
-            self.assertEqual(result["cost_usd"], 0.4)
-            self.assertEqual(result["input_tokens"], 9)
+            self.assertEqual(result["cost_usd"], 0.8)
+            self.assertEqual(result["input_tokens"], 18)
             self.assertEqual(result["models"], ["reported"])
 
 
