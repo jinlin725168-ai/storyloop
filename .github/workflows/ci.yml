@@ -72,7 +72,7 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"
 
   tests:
-    name: 测试（${{ matrix.os }}）
+    name: 测试（${{ matrix.os }} ${{ matrix.shard }}）
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
@@ -81,10 +81,16 @@ jobs:
       BASE: ${{ github.event.pull_request.base.sha }}
     # Windows full takes longer than 90 minutes (204/210 modules had finished at cancellation).
     timeout-minutes: ${{ matrix.os == 'windows-latest' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'full')) && 120 || 90 }}
+    # Windows is 3–4x slower at the process/Git-heavy lifecycle tests (a core-module PR ran 122
+    # modules for 50+ min on one runner), so it runs as interleaved shards in parallel.
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - {os: ubuntu-latest, shard: 1/1}
+          - {os: windows-latest, shard: 1/3}
+          - {os: windows-latest, shard: 2/3}
+          - {os: windows-latest, shard: 3/3}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -110,7 +116,7 @@ jobs:
         run: |
           args=()
           if [ -n "$BASE" ]; then args=(--base "$BASE"); fi
-          python tests/run.py --suite "$SUITE" --workers 4 "${args[@]}"
+          python tests/run.py --suite "$SUITE" --workers 4 --shard "${{ matrix.shard }}" "${args[@]}"
 
   lint:
     name: 代码规范

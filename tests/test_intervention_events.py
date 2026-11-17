@@ -25,6 +25,23 @@ class InterventionEventTests(unittest.TestCase):
         self.assertEqual(row["wall_ms"], 180000)
         self.assertEqual(row["cost_coverage"], 1.0)
 
+    def test_nonroutine_interventions_are_counted_by_stop_class(self):
+        # 2026-11-17 B4: L3 #478 had 4 non-routine interventions, all recoveries from engine or
+        # workspace stops; the accounting had to separate them from contract stops by hand.
+        record = {"change_id": "C-2", "intervention_events": [
+            {"kind": "reset", "at": "2026-01-01T00:00:00+00:00",
+             "stop": "WORKSPACE_TAINTED", "change_id": "C-2", "source": "reset"},
+            {"kind": "replan", "at": "2026-01-01T00:01:00+00:00",
+             "stop": "CHARACTERIZATION_FAILED", "change_id": "C-2", "source": "run"},
+            {"kind": "contract_approval", "at": "2026-01-01T00:02:00+00:00",
+             "stop": "DRAFT", "change_id": "C-2", "source": "approve"},
+        ], "started_at": "2026-01-01T00:00:00+00:00", "ended_at": "2026-01-01T00:03:00+00:00",
+                  "ledger": []}
+        summary = summarize_interventions([record])
+        self.assertEqual(summary["by_change"]["C-2"]["nonroutine_by_class"],
+                         {"infrastructure": 1, "oracle": 1})
+        self.assertEqual(summary["summary"]["nonroutine_by_class"], {"infrastructure": 1, "oracle": 1})
+
     def test_legacy_dogfood_samples_are_inferred_without_guessing(self):
         root = Path(__file__).parent / "fixtures/intervention_dogfood"
         rows = summarize_interventions(collect(root)["changes"])["by_change"]

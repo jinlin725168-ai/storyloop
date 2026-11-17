@@ -97,6 +97,15 @@ flowchart LR
     D --> E["E 真实开源项目落地（L3）"]
 ```
 
+**进展（2026-11-17）**：B1～B3 已合并（[#171](https://github.com/jinlin725168-ai/storyloop/pull/171)、[#172](https://github.com/jinlin725168-ai/storyloop/pull/172)）。E 选定 sqlite-utils（纯 Python CLI，约 1500 个测试），用 Claude 适配器跑真实需求：
+
+| 需求 | 结果 | 调用 | 代理耗时 | 非例行 | 暴露的引擎缺陷 |
+|---|---|---|---|---|---|
+| #478 `tables` 按表名过滤 | `PASSED` | 25（无缺陷路径约 7） | 31.6 分钟 | 4（均为缺陷恢复） | 6 |
+| #516 `insert`/`upsert --summary` | `PASSED` | 13 | 19.2 分钟 | 1（缺陷恢复，L1 未记录） | 2 |
+
+两项都按 ADDITIVE-CONTRACT 分流为 standard，跳过判据预审，上游测试全绿。8 个缺陷都只在"非 StoryLoop 项目 + Claude 适配器"下出现（入口解析、追加测试判定、验收收集、文档特征化、修复轮、主审格式、入口描述前缀、代理找不到 pytest），均已修复。C 已开始：停点类别与 L1 按类别计数、代理不可用原因（登录 / 额度 / 网络 / 超时 / 缺失 / 崩溃）、bench 遇登录失效立即止损、合并后沿用测试基础缺口批准。B4 的 ≤8 次调用尚未在真实项目上达成，主要差在一轮审查返修与特征化重试。
+
 审查角色在此期间由开发者直接完成（Codex 暂停派发）；base 人工通道不变（[决策 0018](decisions/0018-base-human-only.md)）。
 
 ## 明确不做

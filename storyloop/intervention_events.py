@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime, timezone
 import math
+import re
 
 KINDS = frozenset({"contract_approval", "design_approval", "manual_acceptance", "answer",
                    "acceptance_repair", "replan", "overrule", "reset", "supersede",
@@ -46,6 +47,7 @@ def summarize_interventions(records: list[dict]) -> dict:
               for key in ("routine", "nonroutine", "unknown", "automatic_repair")}
     totals["routine_types"] = _merge_types(known, "routine_types")
     totals["nonroutine_types"] = _merge_types(known, "nonroutine_types")
+    totals["nonroutine_by_class"] = _merge_types(known, "nonroutine_by_class")
     totals["agent_ms"] = sum(row["agent_ms"] for row in known) if all(
         row["agent_ms"] is not None for row in known) else None
     costs = [row["known_cost_usd"] for row in known if row["known_cost_usd"] is not None]
@@ -73,6 +75,7 @@ def _row(record: dict) -> dict:
             "nonroutine": sum(nonroutine.values()) if not missing else None,
             "unknown": unknown + int(missing), "routine_types": dict(sorted(routine.items())),
             "nonroutine_types": dict(sorted(nonroutine.items())), "automatic_repair": automatic_repair,
+            "nonroutine_by_class": _by_stop_class(events, record["change_id"]),
             "human_wait_ms": sum(wait) if wait and all(v is not None for v in wait) else None,
             "wall_ms": _duration(record.get("started_at"), record.get("ended_at")), **usage}
 
@@ -113,6 +116,13 @@ def _classify(events: list[dict] | None, change_id: str) -> tuple[Counter, Count
         elif category == "routine":
             routine[event["kind"]] += 1
     return routine, nonroutine, unknown, automatic_repair
+
+
+def _by_stop_class(events: list[dict] | None, change_id: str) -> dict:
+    """Who a non-routine intervention answered: infrastructure, contract, oracle, ... (C3)."""
+    counts = Counter(stop_class(str(event.get("stop"))) for event in events or []
+                     if _event_class(event, change_id) == "nonroutine")
+    return dict(sorted(counts.items()))
 
 
 def _event_class(event: object, change_id: str) -> str:
@@ -241,3 +251,66 @@ def _merge_types(rows: list[dict], key: str) -> dict:
     for row in rows:
         counter.update(row[key])
     return dict(sorted(counter.items()))
+
+
+# Stop classes and agent-unavailability reasons (roadmap C1/C3). The class says who acts on a
+# stop: infrastructure and configuration stops are fixed outside the change (login, quota,
+# workspace, readiness); contract and oracle stops revise what is verified; implementation stops
+# spend the attempt budget; human stops are planned checkpoints. L1 metrics and the B4
+# accounting read the class instead of re-deriving it from each status.
+STOP_CLASSES = {
+    "infrastructure": ("AGENT_UNAVAILABLE", "AGENT_CONTRACT_INVALID", "COST_LIMIT_REACHED",
+                       "RED_ENVIRONMENT_ERROR", "INTERRUPTED", "HARNESS_SHADOWED", "WORKSPACE_TAINTED"),
+    "configuration": ("READINESS_APPROVAL_REQUIRED", "CI_PROTECTED", "BASE_CHANGE_REQUIRED",
+                      "BASE_REVIEW_REQUIRED", "BASE_AGENT_REMOVED"),
+    "contract": ("NEEDS_SPEC_FIX", "NEEDS_INPUT", "EXPLORATION_RECOMMENDED"),
+    "oracle": ("ORACLE_DEFECT", "ORACLE_STRENGTH_PRECHECK", "CHARACTERIZATION_FAILED"),
+    "implementation": ("BUDGET_EXHAUSTED", "NO_PROGRESS", "BOUNDARY_VIOLATION",
+                       "DESIGN_REVISION_REQUIRED", "FAILED"),
+    "human": ("DESIGN_APPROVAL_REQUIRED", "MANUAL_ACCEPTANCE_REQUIRED", "HUMAN_IMPLEMENTATION_REQUIRED"),
+}
+CLASS_LABELS = {"infrastructure": "基础设施", "configuration": "配置", "contract": "契约",
+                "oracle": "判据质量", "implementation": "实现", "human": "需要人工", "other": "其他"}
+_BY_STATUS = {status: name for name, members in STOP_CLASSES.items() for status in members}
+
+# First match wins; quota before network because rate-limit messages often mention HTTP.
+_REASONS = (
+    ("missing", r"executable is unavailable|command not found|No such file or directory"),
+    ("auth", r"authenticat|oauth|not logged in|/login|unauthori[sz]ed|\b401\b|invalid api key"),
+    ("quota", r"usage limit|quota|rate.?limit|\b429\b|too many requests|credit|insufficient.balance"),
+    ("network", r"ENOTFOUND|ECONNRE|ETIMEDOUT|getaddrinfo|network|connection (?:refused|reset)|\b50[234]\b"),
+    ("timeout", r"timed_out|timed out|timeout"),
+)
+REASON_HINTS = {"auth": "代理登录已失效：重新登录代理（如 claude /login、codex login）后再 run",
+                "quota": "代理额度或限流：等额度恢复后再 run，或配置备用适配器",
+                "network": "网络不可达：恢复网络连接后再 run",
+                "timeout": "代理超时：检查 agent_timeout_seconds 或任务规模后再 run",
+                "missing": "找不到代理程序：检查 agent_command 或安装后再 run",
+                "crash": "代理进程异常退出：查看调用日志 stderr 后再 run"}
+
+
+def stop_class(status: str) -> str:
+    return _BY_STATUS.get(status, "other")
+
+
+def unavailable_reason(message: str) -> str:
+    """Classify an AGENT_UNAVAILABLE message; `crash` when nothing more specific matches."""
+    for reason, pattern in _REASONS:
+        if re.search(pattern, message, re.IGNORECASE):
+            return reason
+    return "crash"
+
+
+def classify(status: str, details: dict) -> dict:
+    """The fields a stop report adds: its class and, for an unavailable agent, the reason."""
+    fields = {"class": stop_class(status)}
+    if status == "AGENT_UNAVAILABLE":
+        fields["reason"] = details.get("reason") or unavailable_reason(str(details.get("error") or ""))
+    return fields
+
+
+def render_class(stop: dict) -> list[str]:
+    """One line only where the class changes what to do next (an unavailable agent)."""
+    hint = REASON_HINTS.get(stop.get("reason") or "")
+    label = CLASS_LABELS.get(stop.get("class") or "", "")
+    return [f"停点类别：{label}（{hint}）"] if hint and label else []

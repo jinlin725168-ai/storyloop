@@ -1,6 +1,7 @@
 """Prove characterization against committed old code plus declared lock artifacts."""
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -73,3 +74,19 @@ def _baseline(project, candidate, commit):
         target.chmod(0o755 if mode == b'100755' else 0o644)
         paths.add(relative)
     return paths
+
+
+_FAILURE = re.compile(r"^(?:FAILED|ERROR)\b|^\d+ (?:failed|error)|^FAIL: |^ERROR: |^FAILED \(")
+
+
+def failure_lines(unit: dict, limit: int = 12) -> list[str]:
+    """The failing tests' summary lines (pytest and unittest), else each red command's tail."""
+    lines = []
+    for result in unit.get("results") or []:
+        if result.get("status") == "PASS":
+            continue
+        output = [line.rstrip() for line in
+                  f"{result.get('stdout') or ''}\n{result.get('stderr') or ''}".splitlines() if line.strip()]
+        picked = [line for line in output if _FAILURE.search(line)] or output[-3:]
+        lines += [f"{result.get('id')}: {line[:300]}" for line in picked]
+    return lines[:limit]

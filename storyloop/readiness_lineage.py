@@ -71,8 +71,11 @@ def _layers(project, config, supplied):
                     and item.get('timed_out') is False, 'Unproven command success')
             if name in COUNTED:
                 counts = item.get('counts') or {}
+                # A parser that reports no failed count (pytest's "N passed") means none, as in
+                # readiness itself; the zero returncode above already proves success.
+                failed = counts.get('failed')
                 require(type(counts.get('executed')) is int and counts['executed'] > 0
-                        and type(counts.get('failed')) is int and counts['failed'] == 0,
+                        and (failed is None or (type(failed) is int and failed == 0)),
                         'Unproven execution counts')
         collected[name] = _summarize(layer, commands, name)
     return collected

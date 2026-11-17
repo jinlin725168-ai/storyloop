@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import io
 import json
 from pathlib import Path
@@ -205,6 +206,19 @@ class ReviewPerspectiveTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertNotIn(adapter.LEAD_MARK, calls[0])
         self.assertEqual(json.loads(out.getvalue())["verdict"], "pass")
+
+    def test_session_names_the_preapproved_commands_and_finds_the_engine_tools(self):
+        # 2026-11-17 L3 #516: implement and characterize reported "Bash was denied except
+        # pytest, and pytest isn't on PATH", so no test ran before the engine's gate; the
+        # characterization asserted empty stdout where CSV insert prints a newline.
+        command = ["claude", "-p", "--allowedTools", "Read", "Bash(/v/bin/python -m pytest -q tests:*)",
+                   "Bash(pytest:*)", "--disallowedTools", "Edit(/.git/**)"]
+        hint = adapter._bash_hint(command)
+        self.assertIn("`/v/bin/python -m pytest -q tests`", hint)
+        self.assertIn("`pytest`", hint)
+        self.assertEqual(adapter._bash_hint(["claude", "--allowedTools", "Read"]), "")
+        env = adapter._session_env({"PATH": "/usr/bin"})
+        self.assertEqual(env["PATH"].split(os.pathsep)[0], os.path.dirname(sys.executable))
 
     def test_lead_merge_asks_for_every_tracking_field(self):
         # 2026-11-17 L3: the lead's return shape omitted tracking fields, so merged findings

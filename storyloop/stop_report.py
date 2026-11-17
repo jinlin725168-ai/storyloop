@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import shlex
+from .intervention_events import classify, render_class
 from .cost_limits import stop_fields, render_usage
 from .processutil import redact
 from .routing_report import STATUSES, routing_options, routing_view  # noqa: F401  # 兼容再导出：保留旧模块导入路径
@@ -360,6 +361,7 @@ def build_stop(project: Path | str, state: dict, status: str, details: dict) -> 
     result = {
         **stop_fields(project, change_id, details),
         "status": status,
+        **classify(status, details),
         "routing": routing_view(state),
         "phase": _phase(state, status, details),
         "completed": _completed(state),
@@ -417,7 +419,7 @@ def stop_of(project: Path | str, run: dict | None) -> dict | None:
 
 def render_stop(stop: dict) -> list[str]:
     """Render the report in the decision order defined by the design."""
-    lines = [f"阻塞点：{stop['blocker']}"] + render_usage(stop)
+    lines = [f"阻塞点：{stop['blocker']}"] + render_class(stop) + render_usage(stop)
     convergence = stop.get("convergence") or {}
     if convergence.get("exhausted"):
         missing = "、".join(convergence.get("missing_spec_fields") or []) or "无"

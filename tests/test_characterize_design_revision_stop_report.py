@@ -7,7 +7,7 @@ from storyloop.stop_report import build_stop, render_stop, stop_of
 
 
 EXISTING_FIELDS = {
-    "status", "phase", "completed", "last_verdict", "attempts", "blocker",
+    "class", "status", "phase", "completed", "last_verdict", "attempts", "blocker",
     "evidence", "facts", "questions", "options", "resume", "routing",
 }
 
