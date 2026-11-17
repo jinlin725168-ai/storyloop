@@ -225,8 +225,8 @@ def _command_sources(command: list[str], parsed: dict[str, ast.AST]) -> dict[str
 
 def _uses_entry(entry: dict, tree: ast.AST) -> bool:
     if entry["kind"] in {"cli", "stop_json"}:
-        subcommand = _cli_subcommand(entry["locator"])
-        return bool(subcommand and _calls_cli(tree, subcommand))
+        target = _cli_target(entry["locator"])
+        return bool(target and _calls_cli(tree, *target))
     # Locators may show a call signature, e.g. "pkg.mod.fn(project, role)"; match the dotted name.
     choices = [re.sub(r"\s*\(.*$", "", part.strip()) for part in entry["locator"].split(" / ")]
     module, dot, first = choices[0].rpartition(".")
@@ -234,21 +234,28 @@ def _uses_entry(entry: dict, tree: ast.AST) -> bool:
                             for symbol in [first, *choices[1:]]))
 
 
-def _cli_subcommand(locator: str) -> str | None:
-    """Name the storyloop subcommand a CLI locator describes.
+def _cli_target(locator: str) -> tuple[str, str | None] | None:
+    """Name the program and subcommand a CLI locator describes.
 
-    Locators are prose; approval accepts ones that omit the program name (e.g.
-    "公开 CLI 的 bench report <run-id> 入口"), so fall back to the first known command word.
+    `storyloop <command>` first; then a locator that starts with a command line, such as
+    "`sqlite-utils tables PATH`" (any project's program); finally prose that omits the program
+    name, matched to a known storyloop command (e.g. "公开 CLI 的 bench report <run-id> 入口").
     """
     match = re.search(r"\bstoryloop\s+([a-z][a-z0-9-]*)", locator)
     if match:
-        return match.group(1)
+        return "storyloop", match.group(1)
+    match = re.match(r"\s*`?(?:python3?\s+-m\s+)?([A-Za-z0-9_][A-Za-z0-9_.-]*)"
+                     r"(?:\s+([a-z][a-z0-9_-]*))?", locator)
+    # Only a quoted command line or "program subcommand" counts; "CLI 的 bench 输出" is prose.
+    if match and (locator.lstrip().startswith("`") or match.group(2)):
+        return match.group(1), match.group(2)
     commands = _cli_commands()
-    return next((word for word in re.findall(r"(?<![\w-])[a-z][a-z0-9-]*", locator)
+    word = next((word for word in re.findall(r"(?<![\w-])[a-z][a-z0-9-]*", locator)
                  if word in commands), None)
+    return ("storyloop", word) if word else None
 
 
-def _calls_cli(tree: ast.AST, subcommand: str) -> bool:
+def _calls_cli(tree: ast.AST, program: str, subcommand: str | None) -> bool:
     modules = {alias.asname or alias.name for node in ast.walk(tree)
                if isinstance(node, ast.Import) for alias in node.names if alias.name == "subprocess"}
     functions = {alias.asname or alias.name for node in ast.walk(tree)
@@ -266,9 +273,24 @@ def _calls_cli(tree: ast.AST, subcommand: str) -> bool:
             continue
         tokens = [value.value if isinstance(value, ast.Constant) and isinstance(value.value, str)
                   else None for value in node.args[0].elts]
-        if any(tokens[i:i + 2] == ["storyloop", subcommand] or
-               tokens[i:i + 3] == ["-m", "storyloop", subcommand]
-               for i in range(len(tokens) - 1)):
+        if _runs_program(tokens, program, subcommand):
+            return True
+    return False
+
+
+def _runs_program(tokens: list[str | None], program: str, subcommand: str | None) -> bool:
+    """argv runs the program (bare or by path) or `-m module`, followed by the subcommand."""
+    modules = {program, program.replace("-", "_")}
+    for index, token in enumerate(tokens):
+        if token is None:
+            continue
+        if token.replace("\\", "/").rsplit("/", 1)[-1] == program:
+            rest = tokens[index + 1:]
+        elif token == "-m" and index + 1 < len(tokens) and tokens[index + 1] in modules:
+            rest = tokens[index + 2:]
+        else:
+            continue
+        if subcommand is None or rest[:1] == [subcommand]:
             return True
     return False
 
