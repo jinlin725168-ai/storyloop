@@ -73,8 +73,9 @@ class RoutedSupersedeTests(unittest.TestCase):
         checkout = next(shlex.split(line) for line in new['next'].splitlines() if line.startswith('git '))
         git(self.root, *checkout[1:])
         source_head = git(self.root, 'rev-parse', 'HEAD')
-        with self.assertRaisesRegex(StoryLoopError, 'intake evidence is stale'):
+        with self.assertRaisesRegex(StoryLoopError, 'intake evidence is stale') as caught:
             approve_change(self.root, new['change_id'])
+        self.assertIn('storyloop change', caught.exception.details['reasons'][0])
         self.assertFalse((self.root / '.storyloop/state/runs' / f"{new['change_id']}.json").exists())
         seen = []
         with patch('storyloop.cli.invoke_project_agent', side_effect=lambda p, r, c:

@@ -90,5 +90,8 @@ def draft_stop(project, change):
         if intake['status'] == 'NEEDS_INPUT' and isinstance(change.get('product'), dict):
             from .intake import needs_input_reasons
             details['reasons'] = needs_input_reasons(change['product'], intake.get('decision'))
+        elif intake['status'] == 'ORACLE_INFEASIBLE' and isinstance(change.get('product'), dict):
+            from .intake import infeasible_reasons
+            details['reasons'] = infeasible_reasons(project, intake.get('source_commit'), change['product'])
         return build_entry_stop(project, intake['status'], details)
     return None

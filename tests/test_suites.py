@@ -29,8 +29,21 @@ class SuiteListTests(unittest.TestCase):
         parts = [_run("--suite", "core", "--shard", f"{index}/3", "--list").stdout.split()
                  for index in (1, 2, 3)]
         self.assertEqual(sorted(sum(parts, [])), sorted(whole))
-        self.assertTrue(all(len(part) >= len(whole) // 3 for part in parts))
+        self.assertTrue(all(parts))
         self.assertNotEqual(_run("--suite", "core", "--shard", "4/3", "--list").returncode, 0)
+
+    def test_shards_are_balanced_by_recorded_duration(self):
+        # 2026-11-17 #179: interleaved shards ran 18, 6 and 12 min on Windows; greedy assignment
+        # by the durations recorded from a Windows full run keeps the slowest shard near the mean.
+        import json
+        seconds = json.loads((ROOT / "tests/durations.json").read_text(encoding="utf-8"))["seconds"]
+        for suite in ("platform", "core", "full"):
+            with self.subTest(suite=suite):
+                whole = _run("--suite", suite, "--list").stdout.split()
+                loads = [sum(seconds.get(name, 0) for name in
+                             _run("--suite", suite, "--shard", f"{index}/3", "--list").stdout.split())
+                         for index in (1, 2, 3)]
+                self.assertLess(max(loads), 1.1 * sum(seconds.get(name, 0) for name in whole) / 3)
 
     def test_i8_runs_as_one_core_test_id(self):
         self.assertIn(

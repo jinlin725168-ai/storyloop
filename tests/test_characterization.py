@@ -457,6 +457,10 @@ class CharacterizationGateTests(unittest.TestCase):
             self.assertEqual(state["characterization"]["status"], "GREEN")
             self.assertEqual(state["characterization"]["touched"], ["modules/orders/service.py"])
             self.assertNotIn("pending_characterization", state)
+            # 2026-11-17 L3 #516: the in-place fix is a human correction; L1 counted none.
+            fixes = [event for event in state["intervention_events"] if event["kind"] == "manual_fix"]
+            self.assertEqual([(event["stop"], event["source"]) for event in fixes],
+                             [("CHARACTERIZATION_FAILED", "run")])
             subjects = git(root, "log", "--format=%s", "-8").splitlines()
             self.assertIn(f"test({change_id}): characterize touched paths", subjects)
             committed = git(root, "log", "--format=%H", "--grep", "characterize touched paths", "-1").strip()
