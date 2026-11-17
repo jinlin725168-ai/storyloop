@@ -219,7 +219,7 @@ def characterize_paths(project: Path, change: dict, state: dict, services: LoopS
             "Characterization agent returned an invalid result")
     require(not response.get("questions"), "Characterization asks no questions; it locks what exists")
     boundary = audit_project_changes(project, change_id)
-    require_git_visible(written, boundary)
+    require_git_visible(written, boundary, project)
     # Judge only what this call wrote: in extend mode the implementation's own edits are already present.
     changed = sorted({item.path for item in written if not item.path.endswith("/")})
     violating = {item["path"] for item in boundary["violations"]}

@@ -104,7 +104,13 @@ def _fast_checks(config: dict, role: str) -> list[list[str]]:
     if role not in WRITERS:
         return []
     profile = config.get("profile") or {}
-    return _commands(profile.get("check_commands") or [])
+    # Writers practise test-first, so they may run the project's own unit commands as well.
+    rows = _commands(profile.get("check_commands") or []) + _commands(profile.get("unit_commands") or [])
+    unique = []
+    for row in rows:
+        if row not in unique:
+            unique.append(row)
+    return unique
 
 
 def _commands(value: object) -> list[list[str]]:

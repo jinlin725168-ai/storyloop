@@ -45,10 +45,10 @@ def diagnose_core_boundary(root):
             evidence["core_snapshots"].append({name: getattr(core, name) for name in fields})
         return result
 
-    def check(touched, boundary):
+    def check(touched, boundary, project=None):
         evidence["touched"] = [asdict(item) for item in touched]
         evidence["boundary"] = {key: boundary[key] for key in ("allowed", "violations")}
-        return visible(touched, boundary)
+        return visible(touched, boundary, project)
 
     with patch.object(project_loop_guards, "capture_snapshot", snapshot), \
             patch.object(project_loop, "require_git_visible", check):
