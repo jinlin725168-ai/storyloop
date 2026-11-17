@@ -205,7 +205,7 @@ def characterize_paths(project: Path, change: dict, state: dict, services: LoopS
             if state.get('routing', {}).get('version') == 1 else design_plan(state))
     if plan and state.get("routing", {}).get("version") == 1:
         plan['touched'] = [p for p in plan['touched']
-                           if not matches_test_root(p, profile.get('test_roots', []))]
+                           if needs_characterization(p, profile.get('test_roots', []))]
     context = {"change": change, "test_roots": profile["test_roots"], "extend": list(extend or []),
                "characterization": previous if previous.get("status") == "GREEN" else None,
                "design": plan,
@@ -410,5 +410,12 @@ def uncharacterized_paths(project: Path, state: dict, boundary: dict, config: di
     touched = (set(verified_locks(project, state, config)) if routed
                else set(characterization.get("touched", [])))
     return sorted(item["path"] for item in boundary["allowed"]
-                  if item["path"] not in touched and not matches_test_root(item["path"], roots)
+                  if item["path"] not in touched and needs_characterization(item["path"], roots)
                   and exists_at(project, state["contract_commit"], item["path"]))
+
+
+def needs_characterization(path: str, test_roots: list[str]) -> bool:
+    """Code a change may break; tests and documentation have no behaviour to lock."""
+    from .routing_evidence import _is_document
+
+    return not matches_test_root(path, test_roots) and not _is_document(path)
