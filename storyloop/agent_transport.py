@@ -91,6 +91,34 @@ def _command(project: Path, request: dict, config: dict, schema: dict, trace: di
     require(Path(executable).suffix.lower() not in {".cmd", ".bat", ".ps1"},
             "Use a native executable or explicit interpreter for the agent")
     argv[0] = str(executable)
+    parsed = _command_once(project, argv, request, config, trace)
+    body, errors = conform(parsed, schema)
+    if errors:
+        # One repair round with the errors, as the Codex transport does; a second miss is final.
+        payload = {**(request.get("payload") or {}), "previous_response": parsed,
+                   "validation_errors": errors}
+        first = trace.get("telemetry")
+        parsed = _command_once(project, argv, {**request, "payload": payload}, config, trace)
+        trace["telemetry"] = _combined_telemetry(first, trace.get("telemetry"))
+        if isinstance(parsed.get("_telemetry"), dict):
+            parsed["_telemetry"] = trace["telemetry"]
+    return _require_conforming(parsed, schema, trace)
+
+
+def _combined_telemetry(first: dict | None, second: dict | None) -> dict | None:
+    """The repair round is part of the same call: add its cost, turns and tokens."""
+    if not isinstance(first, dict) or not isinstance(second, dict):
+        return second if isinstance(second, dict) else first
+    combined = {**first, **second}
+    for key in ("cost_usd", "turns", "input_tokens", "output_tokens", "segments"):
+        values = [item.get(key) for item in (first, second)
+                  if isinstance(item.get(key), (int, float)) and not isinstance(item.get(key), bool)]
+        if values:
+            combined[key] = round(sum(values), 6) if key == "cost_usd" else sum(values)
+    return combined
+
+
+def _command_once(project: Path, argv: list[str], request: dict, config: dict, trace: dict) -> dict:
     result = run_process(
         argv, project, config["agent_timeout_seconds"],
         input_text=json.dumps({**request, "instructions": trace["instructions"]},
@@ -106,7 +134,7 @@ def _command(project: Path, request: dict, config: dict, schema: dict, trace: di
     parsed = _parse(trace["raw"])
     _capture_telemetry(parsed, trace)
     trace["raw"] = None
-    return _require_conforming(parsed, schema, trace)
+    return parsed
 
 
 def _codex(project: Path, request: dict, config: dict, schema: dict, trace: dict) -> dict:

@@ -154,6 +154,9 @@ class ReportsEndToEndTests(unittest.TestCase):
         calls = [
             {"role": "review", "nth": 1, "result": {"summary": "intentionally invalid fixture response"},
              "telemetry": {**telemetry, "cost_usd": 0.25}},
+            # The command transport's one schema-repair round gets a second invalid answer.
+            {"role": "review", "nth": 2, "result": {"summary": "still invalid after repair"},
+             "telemetry": telemetry},
             {"role": "acceptance", "result": {"files": [{"path": "flow.py", "content": source}],
              "manifest": {"version": 1, "tests": [{"id": "SMOKE-REPORT", "criteria": ["AC-1"],
                  "command": ["{python}", f"acceptance/changes/{change_id}/flow.py"], "timeout_seconds": 10}]}},
@@ -162,7 +165,7 @@ class ReportsEndToEndTests(unittest.TestCase):
              "result": {"summary": "deterministic fixture implementation", "questions": [],
                         "facts": [{"statement": "service value written", "location": "modules/orders/service.py:1"}]},
              "telemetry": telemetry},
-            {"role": "review", "nth": 2, "result": {"verdict": "pass", "summary": "deterministic fixture review",
+            {"role": "review", "nth": 3, "result": {"verdict": "pass", "summary": "deterministic fixture review",
                                                    "findings": [], "questions": [], "facts": []},
              "telemetry": telemetry},
         ]
