@@ -145,6 +145,33 @@ class SemanticRepairIntegrationTests(unittest.TestCase):
                     self.assertEqual(len(requests), 2)
                     self.assertIn('validation_errors', requests[1])
 
+    def test_option_label_as_recommendation_needs_no_repair_round(self):
+        # 2026-11-17 L3 #444: options read "A: ...", "B: ..." and recommended was "A"; the
+        # schema repair round cost one more product call ($0.8) for an unambiguous answer.
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            from tests.routing_support import readiness_repository
+            from tests.test_intake import assessed_product
+            from storyloop.product_cli import product_answer
+            readiness_repository(root)
+            labelled = assessed_product()
+            labelled['questions'] = [{'id': 'Q1', 'text': 'Which?', 'recommended': 'A',
+                                      'options': ['A: keep it', 'B: drop it']},
+                                     {'id': 'Q2', 'text': 'Which?', 'recommended': 'B)',
+                                      'options': ['A) keep', 'B) drop']}]
+            requests = []
+            def call(request):
+                requests.append(request)
+                return labelled
+            product = product_answer(root, {'idea': 'x'}, call, None)
+            self.assertEqual(len(requests), 1)
+            self.assertEqual([q['recommended'] for q in product['questions']], ['A: keep it', 'B) drop'])
+        from storyloop.product_cli import normalize_recommended
+        ambiguous = {'questions': [{'id': 'Q1', 'text': 't', 'recommended': 'A',
+                                    'options': ['A: x', 'A: y']}]}
+        normalize_recommended(ambiguous)
+        self.assertEqual(ambiguous['questions'][0]['recommended'], 'A')
+
     def test_product_answer_uses_repair_marker_not_error_text(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
