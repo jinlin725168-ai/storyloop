@@ -12,6 +12,7 @@ a module is the unit of parallelism, so the slowest module bounds the wall time.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -81,12 +82,35 @@ def main(argv: list[str] | None = None) -> int:
             names, changed = modules(args.root, "full"), []
     if changed is not None:
         names = with_affected(names, affected_modules(args.root, changed))
-    index, count = args.shard
-    names = names[index - 1::count]
+    names = shard(names, *args.shard, durations(args.root))
     if args.list:
         print("\n".join(names))
         return 0
     return _run_suite(args, names)
+
+
+def durations(root: Path) -> dict[str, float]:
+    """Per-module seconds recorded from a Windows full run (tests/durations.json), if present."""
+    path = root / "tests" / "durations.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))["seconds"]
+    except (OSError, ValueError, KeyError):
+        return {}
+
+
+def shard(names: list[str], index: int, count: int, seconds: dict[str, float]) -> list[str]:
+    """The index-th of `count` parts, balanced by recorded duration (longest first, each to the
+    lightest part); unknown entries weigh the median. Every name lands in exactly one part."""
+    known = sorted(seconds.values())
+    default = known[len(known) // 2] if known else 1.0
+    weight = {name: seconds.get(name, default) for name in names}
+    parts = [[] for _ in range(count)]
+    loads = [0.0] * count
+    for name in sorted(names, key=lambda item: (-weight[item], item)):
+        lightest = loads.index(min(loads))
+        parts[lightest].append(name)
+        loads[lightest] += weight[name]
+    return [name for name in names if name in set(parts[index - 1])]
 
 
 def _shard(value: str) -> tuple[int, int]:

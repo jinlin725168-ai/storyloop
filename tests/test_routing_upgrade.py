@@ -16,6 +16,19 @@ class UpgradeTests(unittest.TestCase):
         self.assertFalse(scope_expanded(planned, planned))
         self.assertTrue(scope_expanded(planned, {**planned, 'unknown_fields': ['interfaces']}))
 
+    def test_a_new_test_file_is_not_scope_growth(self):
+        # 2026-11-17 L3 #474: the implementer wrote tests/test_cli_insert_headers.py test-first;
+        # the plan listed no creates, so the run re-planned twice (2 design + 1 implement calls)
+        # for a file that cannot change product behaviour or raise risk.
+        from storyloop.routing_upgrade import new_scope_paths, scope_expanded
+        planned = {'touched': ['app/a.py'], 'creates': [], 'interfaces': []}
+        actual = {**planned, 'creates': ['tests/test_a.py']}
+        self.assertFalse(scope_expanded(planned, actual, test_roots=['tests']))
+        self.assertTrue(scope_expanded(planned, actual))
+        self.assertEqual(new_scope_paths(planned, {**actual, 'touched': ['app/a.py', 'tests/test_old.py']},
+                                         ['tests']), ['tests/test_old.py'])
+        self.assertTrue(scope_expanded(planned, {**planned, 'creates': ['app/b.py']}, test_roots=['tests']))
+
     def test_budget_provenance_monotonic_and_guard_reentry(self):
         from storyloop.routing_state import advance_tier
         change = {'approval': {'tier': 'light'}, 'intake': {'decision': {'reasons': []}},

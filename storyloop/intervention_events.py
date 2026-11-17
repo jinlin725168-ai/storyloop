@@ -9,8 +9,9 @@ import re
 
 KINDS = frozenset({"contract_approval", "design_approval", "manual_acceptance", "answer",
                    "acceptance_repair", "replan", "overrule", "reset", "supersede",
-                   "knowledge_approval"})
-CORRECTIONS = frozenset({"replan", "overrule", "reset", "supersede"})
+                   "knowledge_approval", "manual_fix"})
+# manual_fix: a red gate re-verified green with no agent call, i.e. a human edited the files in place.
+CORRECTIONS = frozenset({"replan", "overrule", "reset", "supersede", "manual_fix"})
 # Planning history written by the engine itself; older states lack the "automatic" flag.
 ENGINE_REPLAN_REASONS = frozenset({"L3 scope or risk expansion", "Base upgrade changed plan inputs",
                                    "Characterization changed binding"})

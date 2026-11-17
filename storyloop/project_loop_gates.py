@@ -34,6 +34,7 @@ from .changes import load_change
 from .oracle_counts import removal_paths, sample_layer
 from .smoke_runner import run_commands_at_commit
 from .project_profile import layer_commands, matches_test_root
+from .intervention_events import append_event
 from .characterization_baseline import failure_lines, run_characterization_baseline
 from .storage import load_json
 from .state_format import criterion_expects_red
@@ -383,6 +384,8 @@ def resume_characterization(project: Path, change: dict, state: dict, config: di
     paused = _verify_characterization(project, change_id, state, config, pending)
     if paused is not None:
         return paused
+    # Red at the stop and green now without an agent call: the human fixed the tests (L1, C3).
+    append_event(state, "manual_fix", source="run", stop="CHARACTERIZATION_FAILED")
     transition(project, state, "IMPLEMENTING", event="characterization_resumed")
     if pending.get("extend") and state.get("planning", {}).get("origin") != "L3":
         state["failures"].append({"attempt": state["attempt"],

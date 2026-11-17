@@ -35,12 +35,14 @@ class InterventionEventTests(unittest.TestCase):
              "stop": "CHARACTERIZATION_FAILED", "change_id": "C-2", "source": "run"},
             {"kind": "contract_approval", "at": "2026-01-01T00:02:00+00:00",
              "stop": "DRAFT", "change_id": "C-2", "source": "approve"},
+            {"kind": "manual_fix", "at": "2026-01-01T00:02:30+00:00",
+             "stop": "CHARACTERIZATION_FAILED", "change_id": "C-2", "source": "run"},
         ], "started_at": "2026-01-01T00:00:00+00:00", "ended_at": "2026-01-01T00:03:00+00:00",
                   "ledger": []}
         summary = summarize_interventions([record])
         self.assertEqual(summary["by_change"]["C-2"]["nonroutine_by_class"],
-                         {"infrastructure": 1, "oracle": 1})
-        self.assertEqual(summary["summary"]["nonroutine_by_class"], {"infrastructure": 1, "oracle": 1})
+                         {"infrastructure": 1, "oracle": 2})
+        self.assertEqual(summary["summary"]["nonroutine_by_class"], {"infrastructure": 1, "oracle": 2})
 
     def test_legacy_dogfood_samples_are_inferred_without_guessing(self):
         root = Path(__file__).parent / "fixtures/intervention_dogfood"

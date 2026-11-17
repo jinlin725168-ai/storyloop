@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import sys
 from pathlib import Path
 from .change_types import definition_for, type_of
 from .errors import require_role_evidence, role_evidence_error
@@ -136,6 +137,19 @@ def _manual_only_automation(product: dict) -> bool:
                for item in product['assessment']['criteria'])
 
 
+def infeasible_reasons(project: Path, commit: str, product: dict) -> list[str]:
+    """Name each criterion that makes intake ORACLE_INFEASIBLE, so the stop says what to fix."""
+    reasons = []
+    for item in product['assessment']['criteria']:
+        if item['feasibility'] == 'infeasible':
+            reasons.append(f"{item['criterion_id']}: 判据标为 infeasible")
+        elif item['feasibility'] == 'local_automated':
+            missing = sorted({command[0] for command in item['method']['commands']
+                              if not _executable_available(project, commit, command[0])})
+            reasons += [f"{item['criterion_id']}: 找不到可执行程序 {name}" for name in missing]
+    return reasons
+
+
 def _unavailable(project: Path, commit: str, item: dict) -> bool:
     if item['feasibility'] != 'local_automated':
         return False
@@ -148,7 +162,10 @@ def _executable_available(project: Path, commit: str, executable: str) -> bool:
         return True
     if '/' not in executable and "\\" not in executable:
         # Relative PATH entries would accidentally bind availability to controller cwd.
-        search = os.pathsep.join(p for p in os.get_exec_path() if Path(p).is_absolute())
+        # The engine's own interpreter directory counts too: project tools installed in the
+        # same venv (e.g. a console script) run there without the venv being activated.
+        search = os.pathsep.join([str(Path(sys.executable).parent),
+                                  *(p for p in os.get_exec_path() if Path(p).is_absolute())])
         return shutil.which(executable, path=search) is not None
     candidate = Path(executable)
     if candidate.is_absolute():
@@ -220,11 +237,16 @@ def require_intake(project: Path, change: dict) -> dict:
         details = {'intake': current}
         if current['status'] == 'NEEDS_INPUT':
             details['reasons'] = needs_input_reasons(change['product'], current['decision'])
+        elif current['status'] == 'ORACLE_INFEASIBLE':
+            details['reasons'] = infeasible_reasons(project, current['source_commit'], change['product'])
         raise StoryLoopError(current['status'], code=current['status'], details=details)
     previous = change.get('intake')
     if previous != current:
+        # 2026-11-17 L3 #474: the stop read only "NEEDS_INPUT" with no reason or way forward.
         raise StoryLoopError('NEEDS_INPUT: intake evidence is stale; revise the draft',
-                             code='NEEDS_INPUT', details={'intake': current})
+                             code='NEEDS_INPUT', details={'intake': current, 'reasons': [
+                                 '草案的分流证据已过期（代码、环境或判定规则变化后重新评估的结果不同），'
+                                 '用 storyloop change --message 刷新草案后再批准']})
     approval = change.get('approval')
     if approval:
         require(approval.get('intake_digest') == digest(current), 'Approved intake is stale')

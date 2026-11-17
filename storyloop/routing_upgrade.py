@@ -12,11 +12,20 @@ from .routing_state import advance_tier, is_routed
 from .smoke_runner import implementation_digest
 
 
-def scope_expanded(planned: dict, actual: dict) -> bool:
+def new_scope_paths(planned: dict, actual: dict, test_roots=()) -> list[str]:
+    """Touched or created paths beyond the plan. A newly created test file is not growth: written
+    test-first it cannot change product behaviour or raise risk (2026-11-17 L3 #474); edits to
+    existing tests stay governed by regression_updates and still count here."""
+    grown = set(actual.get('touched', [])) - set(planned.get('touched', []))
+    grown |= {path for path in set(actual.get('creates', [])) - set(planned.get('creates', []))
+              if not matches_test_root(path, list(test_roots))}
+    return sorted(grown)
+
+
+def scope_expanded(planned: dict, actual: dict, test_roots=()) -> bool:
     """Any new path/interface or explicitly unknown field requires a fresh plan."""
-    return bool(actual.get('unknown_fields') or any(
-        set(actual.get(key, [])) - set(planned.get(key, []))
-        for key in ('touched', 'creates', 'interfaces')))
+    return bool(actual.get('unknown_fields') or new_scope_paths(planned, actual, test_roots)
+                or set(actual.get('interfaces', [])) - set(planned.get('interfaces', [])))
 
 
 def invalidate_planning(state: dict, reason: str) -> None:
@@ -44,7 +53,7 @@ def observed_scope(project: Path, state: dict, config: dict) -> dict:
         actual[key] = [p for p in actual[key] if p not in protected_tests and
                        _category(p, baseline, state['change_id'], roots) in {'FEATURE', 'TEST'}]
     planned = state['routing']['scope']
-    if not any(set(actual[k]) - set(planned[k]) for k in ('touched', 'creates')):
+    if not new_scope_paths(planned, actual, roots):
         actual['unknown_fields'] = []
     actual['interfaces'] = deepcopy(planned['interfaces'])
     actual['symbols'] = [s for s in planned['symbols'] if s['path'] in actual['touched']]
@@ -60,7 +69,8 @@ def check_l3(project: Path, change: dict, state: dict, config: dict) -> dict | N
     risks = {r['risk'] for r in routing.get('risk_updates', [])}
     previous = routing.get('assessed_risks', {})
     new_risks = risks - {key for key, value in previous.items() if value == 'yes'}
-    if not scope_expanded(routing['scope'], actual) and not new_risks:
+    if (not scope_expanded(routing['scope'], actual, config['profile'].get('test_roots', []))
+            and not new_risks):
         return None
     measured = measure_scope(project, state['contract_commit'],
                              {k: actual[k] for k in ('touched', 'creates', 'interfaces', 'symbols')},

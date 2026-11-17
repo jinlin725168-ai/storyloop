@@ -316,6 +316,24 @@ class IntakeTests(unittest.TestCase):
             finally:
                 os.chdir(before)
 
+    def test_tool_beside_the_engine_interpreter_is_available_without_an_activated_venv(self):
+        # 2026-11-17 L3 #474: methods ran `sqlite-utils ...`, installed only in the project venv
+        # that also holds the engine; PATH lacked that venv, so approval stopped ORACLE_INFEASIBLE.
+        import sys
+        from unittest.mock import patch
+        item = assessed_product()
+        item['assessment']['criteria'][0]['method']['commands'] = [[Path(sys.executable).name, '--version']]
+        with patch('os.get_exec_path', return_value=['/nonexistent-storyloop-path']):
+            self.assertNotEqual(self.assess(item)['status'], 'ORACLE_INFEASIBLE')
+            item['assessment']['criteria'][0]['method']['commands'] = [['no-such-tool-xyz']]
+            result = self.assess(item)
+            from storyloop.intake import infeasible_reasons
+            reasons = infeasible_reasons(self.root, self.commit, item)
+        self.assertEqual(result['status'], 'ORACLE_INFEASIBLE')
+        # The stop names the criterion and the missing program instead of only the status.
+        criterion = item['assessment']['criteria'][0]['criterion_id']
+        self.assertEqual(reasons, [f"{criterion}: 找不到可执行程序 no-such-tool-xyz"])
+
     def test_symlink_and_non_executable_source_oracles_are_unavailable(self):
         item = assessed_product()
         script = self.root / 'check.sh'
