@@ -23,6 +23,12 @@ class LateCharacterizationTests(unittest.TestCase):
         self.addCleanup(folder.cleanup)
         root = Path(folder.name)
         change, services = routed_case(root, 'standard')
+        # Standard now locks the plan's existing paths before the first attempt (#182); these tests
+        # cover the late lock still used when the plan names none (and by light), so disable it.
+        from unittest.mock import patch
+        upfront = patch('storyloop.project_loop_gates._planned_existing_code', return_value=[])
+        upfront.start()
+        self.addCleanup(upfront.stop)
         original = services.implement
         def implement(project, context):
             response = original(project, context)
