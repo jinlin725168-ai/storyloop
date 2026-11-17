@@ -80,8 +80,14 @@ LEAD_RULES = (
     "keep each retained finding's perspective, message, severity, confidence, introduced, trigger, impact "
     "and fix. Include coverage and the requested decision checklist. Give a one-line conclusion per "
     "perspective in the summary. Return ONLY {verdict:'pass'|'fail'|'needs_input', summary:string, "
-    "findings:[{perspective,message,severity,confidence,introduced,trigger,impact,fix}], "
+    "findings:[{id,criterion_id,target,disposition,blocking,location,evidence,message,"
+    "required_change,perspective,severity,confidence,introduced,trigger,impact,fix}], "
     "coverage:[string], checklist:[{decision,status}], questions:[string]}."
+    " Every finding you keep needs all tracking fields, none empty: id (stable, reuse the previous "
+    "review's ID for the same issue), criterion_id, target (contract, oracle, design, implementation "
+    "or out_of_scope), disposition (MUST_FIX, DECISION_NEEDED or ADVISORY), blocking (false only for "
+    "ADVISORY), location (path:line), evidence, message and required_change (nonempty text; for an "
+    "oracle MUST_FIX an object with input, assertion and expected)."
 )
 
 def main() -> int:
