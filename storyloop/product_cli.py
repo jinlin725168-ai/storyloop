@@ -1,6 +1,7 @@
 """Product change creation and product command orchestration."""
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 import sys
 
 from .acceptance_repair import repair_smoke
@@ -191,6 +192,26 @@ def revise_with_agent(project: Path, change_id: str, message: str, answers: list
                          clarifications=[{"question": a["question"], "answer": a["answer"]} for a in answers])
 
 
+def normalize_recommended(value: object) -> None:
+    """Expand a recommendation given as an option's label ("A" for "A: ...") to that option.
+
+    Only an unambiguous label is expanded; anything else is left for validation to reject
+    (2026-11-17 L3 #444: a repair round was spent on recommended "A").
+    """
+    questions = value.get("questions") if isinstance(value, dict) else None
+    for item in questions if isinstance(questions, list) else []:
+        if not isinstance(item, dict) or not isinstance(item.get("options"), list):
+            continue
+        label = item.get("recommended")
+        if not isinstance(label, str) or label in item["options"] or not label.strip():
+            continue
+        key = label.strip().rstrip(":.)").strip()
+        matches = [option for option in item["options"] if isinstance(option, str)
+                   and re.match(re.escape(key) + r"\s*[:.)]", option.strip())]
+        if len(matches) == 1:
+            item["recommended"] = matches[0]
+
+
 def product_answer(project: Path, payload: dict, call, invoke_project_agent) -> dict:
     """Get one semantically valid product answer, allowing one corrective call."""
     from .baseline import _git
@@ -205,6 +226,7 @@ def product_answer(project: Path, payload: dict, call, invoke_project_agent) -> 
         if isinstance(value, dict) and "current_product" not in payload and "slug" in value:
             if not isinstance(value["slug"], str) or not SLUG.fullmatch(value["slug"]):
                 value.pop("slug")
+        normalize_recommended(value)
         validate_product(value)
         require(isinstance(value.get("assessment"), dict), "Product assessment is required")
         source = "intake"

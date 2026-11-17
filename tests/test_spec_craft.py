@@ -39,8 +39,16 @@ def section(text: str, title: str) -> str:
 class SpecCraftPackageTests(unittest.TestCase):
     def test_spec_craft_is_packaged_with_exactly_its_references(self):
         skill = packaged_skills()["spec-craft"]
-        self.assertEqual(skill["version"], "1.4.6")
+        self.assertEqual(skill["version"], "1.4.7")
         self.assertEqual(skill["files"], sorted(["SKILL.md", *(f"references/{n}" for n in REFERENCES)]))
+
+    def test_guard_risk_means_a_protective_mechanism_not_input_validation(self):
+        # 2026-11-17 L3 #444: the product role read new "--x can only be used with --y" usage
+        # errors as risks.guard=yes, routing an additive CLI option to heavy (2 prechecks and a
+        # design approval, about $8.7 more).
+        text = read("SKILL.md")
+        self.assertIn("guard 指", text)
+        self.assertIn("新增选项的用法校验", text)
 
     def test_frontmatter_names_product_role(self):
         meta = _frontmatter(read("SKILL.md"))
