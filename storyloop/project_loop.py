@@ -303,7 +303,7 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
     if response.get("design"):
         state["design"] = response["design"]
     boundary = audit_project_changes(project, change_id)
-    require_git_visible(touched, boundary)
+    require_git_visible(touched, boundary, project)
     boundary = mark_undeclared_existing_tests(project, state, config, boundary,
                                               design_plan(state) or {})
     enforce_forbidden_paths(state, boundary)

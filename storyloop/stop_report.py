@@ -77,6 +77,7 @@ def _options(status: str, project: str, change_id: str, routed: bool,
             "--verdict", "pass", "--note", "<核对内容>")}],
         "NEEDS_SPEC_FIX": [supersede, *([overrule] if routed else [])],
         "AGENT_UNAVAILABLE": [run],
+        "AGENT_CONTRACT_INVALID": [run],
     }
     if status == "BASE_CHANGE_REQUIRED" and ci_requires_human_proposal:
         return [{"action": "人工授权 CI 底座改动", "command": _command(

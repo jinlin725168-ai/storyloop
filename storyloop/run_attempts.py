@@ -38,7 +38,9 @@ def attempts(project: Path, change: dict, state: dict, services, config: dict,
             if not exc.details.get("review_semantic"):
                 state.pop("cost_candidate", None)
             save_run(project, state)
-            if exc.code == "AGENT_UNAVAILABLE" or exc.details.get("review_semantic"):
+            unjudged_review = (exc.code == "AGENT_CONTRACT_INVALID"
+                               and exc.details.get("role") == "review")
+            if exc.code == "AGENT_UNAVAILABLE" or exc.details.get("review_semantic") or unjudged_review:
                 hand_back_attempt(project, state, exc)
             raise
         state.pop("cost_candidate", None)
@@ -119,7 +121,8 @@ def perform_review(project: Path, change: dict, state: dict, services,
         from .review_disposition import perform_review as review
         return review(project, state, services, context, load_project_config(project))
     except StoryLoopError as exc:
-        if exc.code == "AGENT_UNAVAILABLE":
+        # The reviewer, not the implementation, gave no judgeable answer: hand the attempt back.
+        if exc.code in ("AGENT_UNAVAILABLE", "AGENT_CONTRACT_INVALID"):
             exc.details.setdefault("role", "review")
         raise
 

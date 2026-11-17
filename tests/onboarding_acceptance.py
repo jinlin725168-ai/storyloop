@@ -17,6 +17,7 @@ from storyloop.readiness import inspect_readiness
 from storyloop.system_smoke import run_system_smoke_isolated
 from tests.onboarding_support import commit, repository
 
+# Cold Windows runners need well over 30 s for the first javac/java start (#175 timed out).
 CASE = '''import json
 import subprocess
 import sys
@@ -26,7 +27,7 @@ from storyloop.testing.smoke_harness.v1 import HarnessError
 class Contract(unittest.TestCase):
     def test_business_response(self):
         try:
-            result = subprocess.run(COMMAND, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(COMMAND, capture_output=True, text=True, timeout=120)
             if result.returncode != 0:
                 raise HarnessError("Business process did not complete")
             value = json.loads(result.stdout)
@@ -105,7 +106,7 @@ def complete(root, mixed):
         write(root, case, case_source(commands[stack]))
         write(root, f"acceptance/smoke/unselected_{stack}.py", case_source(commands[stack], 8))
         tests.append({"id": stack, "description": "Real native business process returns value 7",
-                      "command": ["{storyloop_harness}", relative, case], "timeout_seconds": 30})
+                      "command": ["{storyloop_harness}", relative, case], "timeout_seconds": 150})
     write(root, "acceptance/onboarding.json", json.dumps(manifest))
     write(root, "acceptance/storyloop-settings.json", json.dumps(settings(mixed)))
     write(root, "acceptance/smoke/manifest.json", json.dumps({"version": 1, "tests": tests}))

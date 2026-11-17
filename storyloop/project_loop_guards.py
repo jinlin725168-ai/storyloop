@@ -165,11 +165,16 @@ def _without_scratch(changes: list, scratch: list[str],
     return result
 
 
-def require_git_visible(touched: list, boundary: dict) -> None:
+def require_git_visible(touched: list, boundary: dict, project: Path | None = None) -> None:
     visible = {item["path"] for key in ("allowed", "violations")
                for item in boundary[key]}
     invisible = [item for item in touched
                  if not item.path.endswith("/") and item.path not in visible]
+    if invisible and project is not None:
+        # A tracked file restored to its committed content changed on disk but not in Git; it
+        # carries no write to hide (2026-11-17 L3: an implementer reverted tests/test_cli.py).
+        restored = _restored_tracked(project, [item.path for item in invisible])
+        invisible = [item for item in invisible if item.path not in restored]
     if invisible:
         shown = [item.path for item in invisible[:_VISIBILITY_MESSAGE_LIMIT]]
         suffix = (f" (+{len(invisible) - len(shown)} more)"
@@ -199,3 +204,11 @@ def _require_drafts_unchanged(changes):
                 or item.path.startswith('.storyloop/drafts/') for item in changes),
         'Agent modified protected drafts',
     )
+
+
+def _restored_tracked(project: Path, paths: list[str]) -> set[str]:
+    """Paths that are tracked, present and identical to HEAD in the work tree and index."""
+    tracked = set(_git(project, "ls-files", "-z", "--", *paths).split("\0")) - {""}
+    dirty = {line[3:] for line in _git(project, "status", "--porcelain", "--untracked-files=no",
+                                       "--", *paths).splitlines() if len(line) > 3}
+    return {path for path in tracked - dirty if (project / path).is_file()}

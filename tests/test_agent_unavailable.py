@@ -98,6 +98,36 @@ class LoopBudgetTests(unittest.TestCase):
         finally:
             temporary.cleanup()
 
+    def test_a_reviewer_answer_that_breaks_the_schema_does_not_spend_the_attempt(self):
+        # 2026-11-17 L3: an unjudgeable review answer (AGENT_CONTRACT_INVALID) consumed the last
+        # attempt, so resuming stopped at BUDGET_EXHAUSTED with the implementation never reviewed;
+        # the stop also offered no recovery option.
+        temporary, root, change_id = approved_change()
+        reviews: list = []
+
+        def review(project, context):
+            reviews.append(context["attempt"])
+            if len(reviews) == 1:
+                raise StoryLoopError("Agent answer does not match the role's response schema",
+                                     code="AGENT_CONTRACT_INVALID")
+            return passing_review(project, context)
+
+        services = LoopServices(generate_smoke=lambda project, state: smoke_payload(change_id),
+                                implement=implement_after(0, []), review=review)
+        try:
+            single_attempt(root)
+            with self.assertRaises(StoryLoopError) as caught:
+                run_change(root, change_id, services)
+            self.assertEqual(caught.exception.code, "AGENT_CONTRACT_INVALID")
+            state = load_run_state(root, change_id)
+            self.assertEqual(state["agent_failures"][0]["role"], "review")
+            self.assertIn("storyloop run", str(state["stop"]["options"]))
+            result = run_change(root, change_id, services)
+            self.assertEqual(result["status"], "PASSED", result)
+            self.assertEqual(reviews, [1, 1])
+        finally:
+            temporary.cleanup()
+
     def test_a_judged_failure_still_spends_the_attempt(self):
         """Only unanswered calls are handed back; a real verdict keeps costing the budget."""
         temporary, root, change_id = approved_change()
