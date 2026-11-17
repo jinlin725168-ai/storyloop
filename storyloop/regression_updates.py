@@ -1,6 +1,7 @@
 """Plan-bound updates to existing regression tests and snapshots."""
 
-from pathlib import Path
+import ast
+from pathlib import Path, PurePosixPath
 
 from .baseline import _git, load_baseline, load_project_config
 from .models import require, text
@@ -49,7 +50,56 @@ def undeclared_existing_tests(project: Path, state: dict, config: dict,
     return sorted(item["path"] for item in boundary["allowed"]
                   if matches_test_root(item["path"], roots)
                   and exists_at(project, state["contract_commit"], item["path"])
-                  and item["path"] not in declared)
+                  and item["path"] not in declared
+                  and not _appended_tests(project, state["contract_commit"], item["path"]))
+
+
+def _appended_tests(project: Path, commit: str, path: str) -> bool:
+    try:
+        old = _git(project, "show", f"{commit}:{path}")
+        new = (project / path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError, ValueError):
+        return False
+    return append_only_test(path, old, new)
+
+
+ADDABLE = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Import, ast.ImportFrom)
+
+
+def append_only_test(path: str, old: str, new: str) -> bool:
+    """New tests beside unchanged old ones cannot weaken them, so need no declaration.
+
+    Every old top-level statement keeps its exact source; additions are only functions,
+    classes and imports with new names, and none is an autouse fixture. Fixture files
+    (conftest.py) and non-Python files such as snapshots stay declared updates.
+    """
+    name = PurePosixPath(path).name
+    if not name.endswith(".py") or name == "conftest.py":
+        return False
+    try:
+        before, after = ast.parse(old), ast.parse(new)
+    except SyntaxError:
+        return False
+    old_parts = [_segment(old, node) for node in before.body]
+    new_parts = [_segment(new, node) for node in after.body]
+    remaining = list(new_parts)
+    for part in old_parts:
+        if part not in remaining:
+            return False
+        remaining.remove(part)
+    names = [node.name for node in after.body if isinstance(node, ADDABLE[:3])]
+    if len(names) != len(set(names)):
+        return False
+    added = [node for node, part in zip(after.body, new_parts) if part in remaining]
+    return all(isinstance(node, ADDABLE) for node in added) and not any(
+        "autouse" in _segment(new, node) for node in added)
+
+
+def _segment(source: str, node: ast.stmt) -> str:
+    """A statement's source including its decorators (ast segments omit them)."""
+    lines = source.splitlines()
+    start = min([item.lineno for item in getattr(node, "decorator_list", [])] + [node.lineno])
+    return "\n".join(lines[start - 1:node.end_lineno])
 
 
 def mark_undeclared_existing_tests(project: Path, state: dict, config: dict,
