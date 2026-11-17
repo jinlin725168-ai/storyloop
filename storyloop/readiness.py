@@ -153,6 +153,15 @@ def _collect_layer(project: Path, binding: dict, config: dict, name: str) -> dic
         layer_commands(config['profile'], name))
     if not commands:
         return _summarize({'status': 'MISSING', 'results': []}, commands, name)
+    if name in ('unit', 'integration'):
+        configured = _pytest_testpaths(project, binding['source_commit'])
+        unscoped = [command for command in commands
+                    if unscoped_pytest(command, configured_testpaths=configured)]
+        if unscoped:
+            return _summarize({'status': 'FAILED', 'results': [
+                {'id': f'{name}-{index:03d}', 'status': 'FAILED', 'command': command,
+                 'output_tail': {'message': UNSCOPED_PYTEST}}
+                for index, command in enumerate(unscoped, 1)]}, commands, name)
     try:
         outcome = (run_system_smoke_isolated(project, capture_output_tail=True) if name == 'smoke'
                    else run_commands_at_commit(project, binding['source_commit'], commands,
@@ -166,6 +175,61 @@ def _collect_layer(project: Path, binding: dict, config: dict, name: str) -> dic
              'output_tail': {'message': '无可用输出'}}
             for index, command in enumerate(commands, 1)], 'error_code': exc.code}
     return _summarize(outcome, commands, name)
+
+
+UNSCOPED_PYTEST = ("pytest 未限定路径会同时收集 acceptance/ 下实现前应红的验收套件，单元层因而必红；"
+                   "请在命令末尾写测试目录（如 pytest tests），或加 --ignore=acceptance，"
+                   "或在 pytest 配置中设置 testpaths")
+# pytest options that consume the next argument, so it is not a test path.
+_PYTEST_VALUE_OPTIONS = {"-p", "-k", "-m", "-c", "-o", "-W", "--rootdir", "--deselect",
+                         "--confcutdir", "--basetemp", "--junitxml", "--log-file",
+                         "--override-ini", "--maxfail", "--durations", "--tb"}
+
+
+def unscoped_pytest(command: list[str], *, configured_testpaths: bool) -> bool:
+    """A pytest run that would also collect the acceptance/ suites (2026-11-16 L3)."""
+    tokens = [str(item) for item in command]
+    for index, token in enumerate(tokens):
+        name = token.replace("\\", "/").rsplit("/", 1)[-1]
+        if name in ("pytest", "py.test"):
+            rest = tokens[index + 1:]
+            break
+        if token == "-m" and tokens[index + 1:index + 2] in (["pytest"], ["py.test"]):
+            rest = tokens[index + 2:]
+            break
+    else:
+        return False
+    if configured_testpaths:
+        return False
+    paths, skip, ignoring = [], False, False
+    for token in rest:
+        if ignoring:
+            if "acceptance" in token:
+                return False
+            ignoring = False
+        elif skip:
+            skip = False
+        elif token == "--ignore":
+            ignoring = True
+        elif token.startswith("--ignore="):
+            if "acceptance" in token:
+                return False
+        elif token in _PYTEST_VALUE_OPTIONS:
+            skip = True
+        elif not token.startswith("-") and token not in (".", "./"):
+            paths.append(token)
+    return not paths or any(path.startswith("acceptance") for path in paths)
+
+
+def _pytest_testpaths(project: Path, commit: str) -> bool:
+    for name in ("pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini"):
+        try:
+            text = _git(project, "show", f"{commit}:{name}")
+        except StoryLoopError:
+            continue
+        if "testpaths" in text:
+            return True
+    return False
 
 
 def _summarize(outcome: dict, commands: list, name: str) -> dict:
