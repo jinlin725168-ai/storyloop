@@ -57,11 +57,29 @@ def role_settings(config: dict, role: str, routing_tier: str | None) -> dict:
     if role in DECISION_ROLES and tier == "standard" and reason is None:
         require(False, f"roles.{role} lowering requires a reason")
     result = {"adapter": adapter, "tier": tier}
+    fallback = _fallback_adapter(roles, override, adapter, adapters)
+    if fallback is not None:
+        result["fallback_adapter"] = fallback
     if reason is not None:
         result["reason"] = reason
     if "fast_checks" in override:
         result["fast_checks"] = _commands(override["fast_checks"])
     return result
+
+
+def _fallback_adapter(roles: dict, override: dict, adapter: str, adapters: dict) -> str | None:
+    """A role's own fallback must name another known adapter; the default one applies only
+    where it differs from the role's adapter (roadmap C2)."""
+    if "fallback_adapter" in override:
+        value = override["fallback_adapter"]
+        require(isinstance(value, str) and value in adapters and value != adapter,
+                "Role fallback_adapter must name another known adapter")
+        return value
+    value = roles.get("default_fallback_adapter")
+    if value is None:
+        return None
+    require(isinstance(value, str) and value in adapters, "default_fallback_adapter names an unknown adapter")
+    return value if value != adapter else None
 
 
 def _tier(role: str, routing: str, configured: object) -> str:

@@ -57,7 +57,8 @@ def record_call(project: Path, role: str, change_id: str | None, telemetry: obje
             value = engine_fields.get(key)
             if isinstance(value, str) and SHA256.fullmatch(value):
                 entry[key] = value
-        for key in ("tier_requested", "adapter", "degraded", "subagents_applied", "path_guard"):
+        for key in ("tier_requested", "adapter", "degraded", "fallback_from", "subagents_applied",
+                    "path_guard"):
             value = engine_fields.get(key)
             if isinstance(value, (str, bool, dict)):
                 entry[key] = value

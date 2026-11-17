@@ -71,6 +71,20 @@ I12在B守护唯一迁移入口与阶段跳层，类型定义来源在C集中。
 | 命令面与技能 | `test_cli`、`test_product_cli`、`test_core`、`test_skills`、`test_spec_craft`、`test_foundation_survey` |
 | 分层记忆 | `test_lessons`、`test_lesson_store`、`test_lesson_retrieval`、`test_drafts`、`test_lesson_landing`、`test_errata`、`test_retrospective`、`test_report_memory`；共用经验夹具在 `lesson_support.py` |
 
+### 嵌套项目夹具（StoryLoop 自身机制的验收）
+
+改 StoryLoop 自身机制（重试、门禁、停点、分流、特征化）的验收测试，需要一个真实的嵌套项目和模拟的代理角色。用 `storyloop.testing.nested.nested_case` 一次建好：带已提交应用、单元测试、受保护冒烟和已批准合同的仓库，以及每个角色都合法的默认回答。测试只替换与它相关的那个角色：
+
+```python
+from storyloop.testing.nested import nested_case, passing_review
+
+case = nested_case(tmp_path, "standard", review=my_review)   # 其余角色用默认回答
+result = case.run()                                          # 运行或续跑
+state = case.state()                                         # 运行状态，用于断言
+```
+
+可替换的角色是 `acceptance`、`implement`、`review`、`characterize`、`design`，签名都是 `(project, context) -> dict`；`case.run(implement=...)` 只在这一次运行里替换。默认回答也可单独取用（`product()`、`plan()`、`acceptance()`、`implement`、`characterize`、`passing_review`）。夹具不依赖仓库的 `tests/` 目录，候选副本里可直接导入；复盘调用由离线脚本回答，不会碰真实代理。
+
 ## 二、CI
 
 `.github/workflows/ci.yml`，push 到 main、PR、每天定时（UTC 19:00）与手动触发：

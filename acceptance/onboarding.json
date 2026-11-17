@@ -197,6 +197,7 @@
         "storyloop/telemetry_summary.py",
         "storyloop/testing/__init__.py",
         "storyloop/testing/mock_adapter.py",
+        "storyloop/testing/nested.py",
         "storyloop/testing/smoke_harness/__init__.py",
         "storyloop/testing/smoke_harness/cases.py",
         "storyloop/testing/smoke_harness/health.py",

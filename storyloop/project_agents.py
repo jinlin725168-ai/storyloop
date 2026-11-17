@@ -169,7 +169,11 @@ def _execute_call(project, role, payload, schema, request, adapter_config, setti
                                        "schema_sha256": schema_sha256,
                                        **({"tier_requested": settings["tier"], "adapter": adapter_name,
                                         **({"degraded": degraded} if degraded else {})}
-                                       if profile is not None else {})})
+                                       if profile is not None else {}),
+                                       # The actual route of a fallback call is always recorded (C2).
+                                       **({"adapter": adapter_name, "degraded": degraded,
+                                           "fallback_from": settings.get("fallback_from")}
+                                          if degraded == "fallback" else {})})
         except Exception:
             if error is None:
                 raise

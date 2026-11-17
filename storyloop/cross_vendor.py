@@ -36,7 +36,8 @@ def require_distinct(config: dict, capabilities: dict) -> None:
 
 
 def invoke(project, role, payload, config, ledger, call):
-    """Route a call and, only by explicit policy, retry review on the implement adapter."""
+    """Route a call; retry review on the implement adapter by explicit policy, and any role's
+    unanswered call once on its configured fallback adapter."""
     from .adapter_capabilities import ensure_checked
     settings = role_settings(config, role, payload.get('routing_tier') or payload.get('tier'))
     from .review_context import verification_active
@@ -62,9 +63,28 @@ def invoke(project, role, payload, config, ledger, call):
     try:
         return call(settings, None)
     except StoryLoopError as error:
-        if not active or error.code != 'AGENT_UNAVAILABLE':
+        if error.code != 'AGENT_UNAVAILABLE':
             raise
-        return _fallback(project, role, payload, config, settings, call, error)
+        if active:
+            return _fallback(project, role, payload, config, settings, call, error)
+        if settings.get('fallback_adapter'):
+            return _second_adapter(project, role, config, settings, call, error)
+        raise
+
+
+def _second_adapter(project, role, config, settings, call, error):
+    """Retry an unanswered call once on the role's configured fallback adapter (roadmap C2)."""
+    from .adapter_capabilities import require_role_target
+    fallback = {**settings, 'adapter': settings['fallback_adapter'], 'fallback_from': settings['adapter']}
+    fallback.pop('fallback_adapter')
+    require_role_target(project, config, role, fallback)
+    try:
+        return call(fallback, 'fallback')
+    except StoryLoopError as fallback_error:
+        if fallback_error.code == 'AGENT_UNAVAILABLE':
+            fallback_error.details.update(fallback_adapter=fallback['adapter'],
+                                          primary_error=str(error)[:600])
+        raise
 
 
 def _fallback(project, role, payload, config, settings, call, error):
