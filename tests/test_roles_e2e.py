@@ -106,6 +106,16 @@ class RolesEndToEndTests(unittest.TestCase):
                   'checklist': []}
         common = [{'role': 'acceptance', 'result': routed_acceptance(identifier)},
                   {'role': 'design', 'result': design},
+                  # Standard locks the planned existing path before the first attempt.
+                  {'role': 'characterize', 'result': {
+                      'summary': 'Preserve serve behavior', 'touched': ['app/service.py'],
+                      'tests': ['tests/test_lock.py'], 'questions': [], 'claims': [
+                          {'test': 'tests/test_lock.py', 'behavior': 'serve still returns the original value',
+                           'symbols': [], 'criterion_ids': []}]},
+                   'creates': [{'path': 'tests/test_lock.py', 'content': (
+                       'import unittest\nfrom app.service import serve\n'
+                       'class Lock(unittest.TestCase):\n'
+                       '    def test_serve(self): self.assertEqual(serve(), "ok")\n')}]},
                   {'role': 'implement', 'result': {'summary': 'write value', 'questions': []},
                    'creates': [{'path': 'modules/orders/service.py', 'content': 'VALUE = 1\n'}]}]
         reviews = [{'role': 'review', 'nth': 1, 'result': {**review, 'findings': [finding(90), finding(65)]}},

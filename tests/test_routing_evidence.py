@@ -117,6 +117,21 @@ class EvidenceTests(unittest.TestCase):
         with self.assertRaises(StoryLoopError):
             measure_scope(self.root, self.head, scope, validate_policy(None))
 
+    def test_a_symbol_named_for_a_document_is_dropped_not_rejected(self):
+        # 2026-11-17 L3 #352: every design answer named "insert/upsert documentation" for
+        # docs/cli.rst; the absent symbol cost a repair round per plan (three in one run).
+        self.root.joinpath('docs').mkdir()
+        self.root.joinpath('docs/guide.md').write_text('# Guide\n')
+        git(self.root, 'add', 'docs/guide.md')
+        git(self.root, 'commit', '-qm', 'docs')
+        commit = git(self.root, 'rev-parse', 'HEAD').strip()
+        result = measure_scope(self.root, commit, {
+            'touched': ['app/service.py', 'docs/guide.md'], 'creates': [], 'interfaces': [],
+            'symbols': [{'path': 'app/service.py', 'symbol': 'serve'},
+                        {'path': 'docs/guide.md', 'symbol': 'guide documentation'}]}, validate_policy(None))
+        self.assertEqual(result['scope']['symbols'], [{'path': 'app/service.py', 'symbol': 'serve'}])
+        self.assertTrue(result['signals']['complete'])
+
     def test_unknown_symbol_association_cannot_complete_scope(self):
         scope = {"touched": ["app/service.py"], "creates": [], "interfaces": [],
                  "symbols": [{"path": "app/service.py", "symbol": "serve"}]}

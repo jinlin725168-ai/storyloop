@@ -59,7 +59,9 @@ class RoutedEndToEndTests(unittest.TestCase):
             self.assertIn('Decisions', str(result['stop']))
 
     def test_light_standard_heavy_real_gates_and_call_counts(self):
-        for tier, design_calls, lock_calls in [('light', 0, 0), ('standard', 1, 0), ('heavy', 1, 1)]:
+        # Standard locks the existing code its plan touches before the first attempt (2026-11-17
+        # L3: deferring cost each run a discarded implementation); light still defers.
+        for tier, design_calls, lock_calls in [('light', 0, 0), ('standard', 1, 1), ('heavy', 1, 1)]:
             with self.subTest(tier=tier):
                 root, identifier, services = self.case(tier)
                 result = run_change(root, identifier, services)
@@ -85,7 +87,7 @@ class RoutedEndToEndTests(unittest.TestCase):
                 self.assertEqual(modes.count('consistency'), int(tier == 'heavy'))
                 self.assertGreater(len(modes), int(tier == 'heavy'))
                 self.assertEqual(state['characterization']['status'],
-                                 'GREEN' if tier == 'heavy' else 'DEFERRED')
+                                 'DEFERRED' if tier == 'light' else 'GREEN')
                 from storyloop.storage import load_json
                 layers = load_json(Path(state['report']))['layers']
                 for layer in ('unit', 'smoke', 'acceptance'):
@@ -227,7 +229,9 @@ class RoutedEndToEndTests(unittest.TestCase):
         self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
         self.assertEqual(services.implement.call_count, 1)
 
-    def test_deferred_locks_run_only_after_first_existing_path_edit(self):
+    def test_standard_locks_planned_existing_path_before_the_first_attempt(self):
+        # 2026-11-17 L3 #516/#474/#352: deferring the lock until after the first edit discarded one
+        # implementation per run; the plan already names the existing path, so lock it first.
         root, identifier, services = self.case('standard')
         events = []
         original_implement, original_lock = services.implement, services.characterize
@@ -243,8 +247,8 @@ class RoutedEndToEndTests(unittest.TestCase):
             return original_lock(project, context)
         services = replace(services, implement=implement, characterize=characterize)
         self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
-        self.assertEqual(events, ['implement', 'characterize', 'implement'])
-        self.assertEqual(load_run_state(root, identifier)['attempt'], 2)
+        self.assertEqual(events, ['characterize', 'implement'])
+        self.assertEqual(load_run_state(root, identifier)['attempt'], 1)
 
     def test_deferred_missing_service_rejects_before_restoring_candidate(self):
         root, identifier, services = self.case('standard')
@@ -401,8 +405,13 @@ class RoutedEndToEndTests(unittest.TestCase):
             return result
         services = replace(services, implement=implement)
         self.assertEqual(run_change(root, identifier, services)['status'], 'PASSED')
-        self.assertEqual(services.characterize.call_count, 1)
-        self.assertEqual(load_run_state(root, identifier)['attempt'], 2)
+        # The first run locks the planned path before its attempt; the stale SKIPPED status makes
+        # the second run lock it again instead of skipping, so the edited file stays covered.
+        from storyloop.characterization_locks import verified_locks
+        from storyloop.baseline import load_project_config
+        self.assertEqual(services.characterize.call_count, 2)
+        state = load_run_state(root, identifier)
+        self.assertIn('app/service.py', verified_locks(root, state, load_project_config(root)))
 
 class E3EndToEndTests(unittest.TestCase):
     def test_human_base_then_original_feature_both_pass_with_new_red(self):

@@ -187,8 +187,12 @@ class PlanningTests(unittest.TestCase):
         response['options'][0]['creates'] = ['app/generated/new.py']
         response['options'][0]['forbidden_paths'] = ['app/generated/**']
 
-        with self.assertRaisesRegex(StoryLoopError, 'Forbidden path overlaps plan scope'):
+        with self.assertRaisesRegex(StoryLoopError, 'Forbidden path overlaps plan scope') as caught:
             self.plan(response)
+        # 2026-11-17 L3 #352: the design role listed its own new test file as forbidden; the
+        # error stopped the run BLOCKED with no option instead of reaching the repair round.
+        self.assertIs(caught.exception.details.get('repairable'), True)
+        self.assertIn('app/generated', str(caught.exception))
 
     def test_terminal_recursive_forbidden_path_is_stored_as_literal_root(self):
         response = answer()

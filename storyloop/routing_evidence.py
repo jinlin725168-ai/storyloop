@@ -136,6 +136,10 @@ def _symbols(project: Path, commit: str, values: list, touched: list[str],
         require_role_evidence(isinstance(item, dict) and set(item) == {"path", "symbol"},
                               "Invalid symbol entry")
         path = _paths(project, [item["path"]], "symbol path")[0]
+        if _is_document(path) and path in touched:
+            # Documents need no symbol; a named section is not a code symbol, so drop it rather
+            # than spend a repair round (2026-11-17 L3 #352).
+            continue
         require_role_evidence(path in existing and path in touched
                               and (_is_business(path, profile) or _is_test(path, profile)),
                               "Symbol path must be an existing touched business or test file")
