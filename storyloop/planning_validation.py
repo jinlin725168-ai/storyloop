@@ -5,6 +5,7 @@ from pathlib import Path
 from .assessment import _evidence
 from .baseline import load_baseline, load_project_config
 from .intake import digest, _validate_locations
+from .errors import require_role_evidence
 from .models import require, text
 from .principles import check_principles, load_principles
 from .path_security import forbidden_path_root, repository_relative, safe_target
@@ -103,9 +104,12 @@ def _paths_and_constraints(project: Path, change: dict, option: dict) -> None:
     option['forbidden_paths'] = sorted(set(forbidden))
     for path in paths:
         safe_target(project, path, 'plan path')
-        require(not any(_inside(path, root) for root in forbidden), 'Forbidden path overlaps plan scope')
-        require(_category(path, baseline, change['change_id'], roots) in {'FEATURE', 'TEST', 'REPORT'},
-                f'Plan path outside approved write boundary: {path}')
+        # Role-authored plan content: a contradiction goes back to the design role for one repair.
+        overlap = [root for root in forbidden if _inside(path, root)]
+        require_role_evidence(not overlap, f'Forbidden path overlaps plan scope: {path} is in touched/creates '
+                              f'and under forbidden_paths {", ".join(overlap)}')
+        require_role_evidence(_category(path, baseline, change['change_id'], roots) in {'FEATURE', 'TEST', 'REPORT'},
+                              f'Plan path outside approved write boundary: {path}')
         # Reject a regular file used as a parent, including a parent being created by this option.
         require(not any(_inside(path, other) and path != other for other in paths),
                 'Plan scope contains conflicting file and descendant paths')

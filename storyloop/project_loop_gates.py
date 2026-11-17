@@ -159,10 +159,13 @@ def ensure_characterization(project: Path, change: dict, state: dict, services: 
                 return characterize_paths(project, change, state, services, config, extend=missing)
             require_saved_coverage(project, state, config, required)
         return None
+    planned = _planned_existing_code(project, state, config)
     if (state.get('routing', {}).get('version') == 1
             and state['routing']['effective_tier'] != 'heavy'
             and not required_by_type
-            and not _mandatory_locks(change, state, config)):
+            and not _mandatory_locks(change, state, config)
+            and not (planned and services.characterize is not None
+                     and state['routing']['effective_tier'] == 'standard')):
         state['characterization'] = {'status': 'DEFERRED', 'touched': [], 'tests': []}
         save_run(project, state)
         return None
@@ -183,7 +186,23 @@ def ensure_characterization(project: Path, change: dict, state: dict, services: 
         return None
     extend = (_mandatory_locks(change, state, config)
               if state.get('planning', {}).get('origin') == 'L3' else None)
+    if (extend is None and planned and state.get('routing', {}).get('version') == 1
+            and state['routing']['effective_tier'] == 'standard'):
+        # The plan already names the existing code it changes: lock it before the first attempt
+        # rather than after it. Deferring cost every L3 standard run one discarded implementation
+        # (2026-11-17 sqlite-utils #516/#474/#352: implement, late characterize, implement again).
+        extend = planned
     return characterize_paths(project, change, state, services, config, extend=extend)
+
+
+def _planned_existing_code(project: Path, state: dict, config: dict) -> list[str]:
+    """Existing non-test, non-document paths the selected plan says it will touch."""
+    plan = plan_projection(state)
+    if not plan or not state.get('contract_commit'):
+        return []
+    roots = config['profile'].get('test_roots', [])
+    return sorted(p for p in plan['touched'] if needs_characterization(p, roots)
+                  and exists_at(project, state['contract_commit'], p))
 
 
 def _mandatory_locks(change: dict, state: dict, config: dict) -> list[str]:
