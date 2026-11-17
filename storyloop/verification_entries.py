@@ -237,17 +237,21 @@ def _uses_entry(entry: dict, tree: ast.AST) -> bool:
 def _cli_target(locator: str) -> tuple[str, str | None] | None:
     """Name the program and subcommand a CLI locator describes.
 
-    `storyloop <command>` first; then a locator that starts with a command line, such as
-    "`sqlite-utils tables PATH`" (any project's program); finally prose that omits the program
+    `storyloop <command>` first; then the first quoted command line, such as
+    "`sqlite-utils tables PATH`" (any project's program), or a locator that starts with
+    "program subcommand"; finally prose that omits the program
     name, matched to a known storyloop command (e.g. "公开 CLI 的 bench report <run-id> 入口").
     """
     match = re.search(r"\bstoryloop\s+([a-z][a-z0-9-]*)", locator)
     if match:
         return "storyloop", match.group(1)
-    match = re.match(r"\s*`?(?:python3?\s+-m\s+)?([A-Za-z0-9_][A-Za-z0-9_.-]*)"
-                     r"(?:\s+([a-z][a-z0-9_-]*))?", locator)
+    # The first quoted command line wins over leading prose ("Public console command `x y`").
+    quoted = re.search(r"`([^`]+)`", locator)
+    text = quoted.group(1) if quoted else locator
+    match = re.match(r"\s*(?:python3?\s+-m\s+)?([A-Za-z0-9_][A-Za-z0-9_.-]*)"
+                     r"(?:\s+([a-z][a-z0-9_-]*))?", text)
     # Only a quoted command line or "program subcommand" counts; "CLI 的 bench 输出" is prose.
-    if match and (locator.lstrip().startswith("`") or match.group(2)):
+    if match and (quoted or match.group(2)):
         return match.group(1), match.group(2)
     commands = _cli_commands()
     word = next((word for word in re.findall(r"(?<![\w-])[a-z][a-z0-9-]*", locator)

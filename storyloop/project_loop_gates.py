@@ -34,7 +34,7 @@ from .changes import load_change
 from .oracle_counts import removal_paths, sample_layer
 from .smoke_runner import run_commands_at_commit
 from .project_profile import layer_commands, matches_test_root
-from .characterization_baseline import run_characterization_baseline
+from .characterization_baseline import failure_lines, run_characterization_baseline
 from .storage import load_json
 from .state_format import criterion_expects_red
 from .semantic_repair import answer_with_repair
@@ -336,6 +336,7 @@ def _verify_characterization(project: Path, change_id: str, state: dict, config:
                                          config["check_timeout_seconds"], pending)
     if unit["status"] != "PASSED":
         return pause(project, state, "CHARACTERIZATION_FAILED", unit=unit, pending_characterization=pending,
+                     criteria_summary=failure_lines(unit),
                      error="Characterization tests must be green on the current code before implementation")
     if locks is not None:
         require(locks == capture_locks(project, config, pending), 'Characterization artifacts changed during checks')

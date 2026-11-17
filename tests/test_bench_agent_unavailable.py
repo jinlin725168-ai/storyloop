@@ -52,6 +52,15 @@ class BenchAgentUnavailableTests(unittest.TestCase):
         verdicts = [item["verdict"] for item in result["cases"][0]["attempts"]]
         self.assertEqual(verdicts, ["NOT_COMPARABLE", "PASSED", "PASSED", "PASSED"])
 
+    def test_an_expired_login_aborts_at_the_first_attempt(self):
+        # 2026-11-17 L3: an expired OAuth session never recovers on its own; retrying the next
+        # attempt only spends wall time before the same failure.
+        expired = {**UNAVAILABLE, "reason": "Project agent process failed safely "
+                   "(exit 1 | Failed to authenticate: OAuth session expired)"}
+        result, calls = self.run_sequence([expired, PASSED])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(result["aborted"]["agent_reason"], "auth")
+
     def test_worker_reports_agent_unavailable_over_saved_phase(self):
         def run(*_):
             raise StoryLoopError(UNAVAILABLE["reason"], code="AGENT_UNAVAILABLE")

@@ -85,6 +85,24 @@ class ReceiptIntegrationTests(unittest.TestCase):
         self.assertIsNone(advance_readiness(root, state))
         self.assertEqual(load_json(root / PATH), original)
 
+    def test_parser_without_failed_count_still_forms_certificate(self):
+        # 2026-11-17 L3 sqlite-utils: pytest's "1506 passed" has no failed count, so the report
+        # recorded failed=None; lineage required failed == 0 and every merge forced a re-approval
+        # of the same gaps, although readiness itself treats a missing count as no failures.
+        from storyloop.readiness_lineage import _layers
+        from storyloop.baseline import load_project_config
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            readiness_repository(root)
+            config = load_project_config(root)
+            unit = {'status': 'PASSED', 'results': [
+                {'status': 'PASS', 'returncode': 0, 'timed_out': False,
+                 'counts': {'executed': 1506, 'failed': None, 'skipped': None},
+                 'command': [__import__('sys').executable, '-m', 'unittest', 'discover', '-s', 'tests']}]}
+            layers = {'unit': unit, **{name: {'status': 'SKIPPED', 'results': []}
+                                        for name in ('integration', 'checks', 'smoke')}}
+            self.assertEqual(_layers(root, config, layers)['unit']['status'], 'PASSED')
+
     def test_partial_unknown_or_failed_results_cannot_form_certificate(self):
         from copy import deepcopy
         from storyloop.readiness_lineage import _layers

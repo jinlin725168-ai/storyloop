@@ -156,6 +156,19 @@ class GoldenNormalizerTests(unittest.TestCase):
                                      {'status': 'valid', 'kind': kind, 'id': identifier})
 
 
+def _drop_stop_class(value):
+    if isinstance(value, dict):
+        if "blocker" in value:
+            value.pop("class", None)
+            if value.get("status") == "AGENT_UNAVAILABLE":
+                value.pop("reason", None)
+        for item in value.values():
+            _drop_stop_class(item)
+    elif isinstance(value, list):
+        for item in value:
+            _drop_stop_class(item)
+
+
 class LifecycleGoldenTests(unittest.TestCase):
     def test_reports_run_states_cli_and_git_match_the_pre_refactor_main(self):
         for name in ("success", "manual", "boundary", "repair", "supersede", "routed", "cost"):
@@ -176,6 +189,8 @@ class LifecycleGoldenTests(unittest.TestCase):
                 # The additive-contract signal is covered by test_routing_policy and test_intake.
                 (actual["state"].get("planning", {}).get("assessment", {})
                  .get("signals") or {}).pop("contract_change", None)
+                # Stop classes (C3) are additive and covered by test_stop_classes.
+                _drop_stop_class(actual)
                 # The new top-level bench command adds help text, not lifecycle behavior.
                 actual["cli"]["help"] = expected["cli"]["help"]
                 self.assertEqual(actual, expected)

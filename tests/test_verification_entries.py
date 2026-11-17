@@ -197,6 +197,10 @@ class ManifestEntryTests(unittest.TestCase):
         from storyloop.verification_entries import _cli_target
         self.assertEqual(_cli_target("CLI 的 bench report 输出"), ("storyloop", "bench"))
         self.assertEqual(_cli_target("`mytool --json`"), ("mytool", None))
+        # 2026-11-17 L3 #516: prose before the quoted command made "Public console" the program.
+        self.assertEqual(_cli_target(
+            "Public console command `sqlite-utils insert PATH TABLE FILE|- [--summary]`, also "
+            "used to read `sqlite-utils bulk --help`"), ("sqlite-utils", "insert"))
 
     def test_cli_locator_without_program_name_uses_its_known_command(self):
         # 2026-11-15 self-iteration C: approval accepted this prose locator, then every

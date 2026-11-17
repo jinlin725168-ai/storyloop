@@ -22,6 +22,16 @@ class SuiteListTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.split(), sorted(set(PLATFORM + SAFETY + RUNNER_MODULES)))
 
+    def test_shards_partition_the_suite(self):
+        # 2026-11-17: Windows platform+affected ran 122 modules in 50+ min on one runner; CI
+        # splits it across parallel jobs, which must together run every module exactly once.
+        whole = _run("--suite", "core", "--list").stdout.split()
+        parts = [_run("--suite", "core", "--shard", f"{index}/3", "--list").stdout.split()
+                 for index in (1, 2, 3)]
+        self.assertEqual(sorted(sum(parts, [])), sorted(whole))
+        self.assertTrue(all(len(part) >= len(whole) // 3 for part in parts))
+        self.assertNotEqual(_run("--suite", "core", "--shard", "4/3", "--list").returncode, 0)
+
     def test_i8_runs_as_one_core_test_id(self):
         self.assertIn(
             "tests.test_completion_resilience.CompletionResilienceTests."

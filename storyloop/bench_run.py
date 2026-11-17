@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import uuid
 
+from .intervention_events import unavailable_reason
 from .bench_case import load_case
 from .intervention_events import CORRECTIONS, KINDS
 from .models import StoryLoopError, require
@@ -97,11 +98,14 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
                     outcome = invoke(side, case, attempt, simulate_human)
                 row["attempts"].append(_attempt(outcome, side, attempt, case, check_gold))
                 unavailable = unavailable + 1 if outcome.get("status") == "AGENT_UNAVAILABLE" else 0
-                if unavailable >= UNAVAILABLE_ABORT and "aborted" not in result:
+                reason = unavailable_reason(str(outcome.get("reason") or "")) if unavailable else None
+                # An expired login needs a human; a rate limit may clear, so it gets one more try.
+                if (unavailable >= UNAVAILABLE_ABORT or reason == "auth") and "aborted" not in result:
                     # A persistent outage (e.g. exhausted quota) would turn every remaining
                     # attempt into noise; stop instead of spending the run.
                     result["aborted"] = {"reason": "AGENT_UNAVAILABLE", "case_id": row["case_id"],
-                                         "attempt": attempt, "detail": outcome.get("reason")}
+                                         "attempt": attempt, "detail": outcome.get("reason"),
+                                         "agent_reason": reason}
         comparison = _comparison(row["attempts"])
         if scope == "base-only" and comparison["status"] == "COMPARABLE":
             comparison = {**comparison, "status": "BASE_ONLY"}

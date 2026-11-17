@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -202,6 +203,24 @@ def _emit(result: dict, telemetry: dict, role: str) -> int:
     return 0
 
 
+def _bash_hint(command: list[str]) -> str:
+    """Name the pre-approved shell prefixes, so the agent runs them instead of guessing."""
+    prefixes = [item[len("Bash("):-len(":*)")] for item in command
+                if item.startswith("Bash(") and item.endswith(":*)")]
+    if not prefixes:
+        return ""
+    return ("\nPre-approved shell commands (run them exactly, as plain single commands; you may "
+            "append arguments such as a test path): " + ", ".join(f"`{p}`" for p in prefixes) + "\n")
+
+
+def _session_env(environ) -> dict:
+    """Put the engine's interpreter directory first on PATH: an approved `pytest` (or other
+    tool from the project venv) then resolves even when the venv is not activated."""
+    env = dict(environ)
+    env["PATH"] = os.path.dirname(sys.executable) + os.pathsep + env.get("PATH", "")
+    return env
+
+
 def _new_telemetry() -> dict:
     return {"cost_usd": 0.0, "turns": 0, "duration_ms": 0, "input_tokens": 0,
             "output_tokens": 0, "segments": 0, "models": set(), "sessions": []}
@@ -215,10 +234,15 @@ def _run_session(base: list[str], prompt: str, role: str, args, cwd,
     next_prompt = prompt
     repairs = 0
     structured = ["--json-schema", json.dumps(schema, ensure_ascii=False)] if schema else []
+    # The hint goes before the request JSON, which stays the prompt's last part.
+    head, mark, request_json = next_prompt.rpartition("Request:\n")
+    if mark:
+        next_prompt = head + _bash_hint(base) + mark + request_json
     for segment in range(1, args.max_segments + 1):
         command = base + structured + (["--resume", session] if session else [])
         completed = subprocess.run(command, input=next_prompt, capture_output=True, text=True,
-                                   encoding="utf-8", errors="replace", cwd=cwd)
+                                   encoding="utf-8", errors="replace", cwd=cwd,
+                                   env=_session_env(os.environ))
         next_prompt = RESUME_PROMPT
         # claude exits 1 on error_max_turns but still prints the JSON envelope on stdout, so the
         # envelope is authoritative and the exit code only matters when there is no envelope.

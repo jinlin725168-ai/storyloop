@@ -26,6 +26,9 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertIn("BASE: ${{ github.event.pull_request.base.sha }}", tests)
         self.assertIn('args=(--base "$BASE")', tests)
         self.assertIn("fetch-depth: 0", tests)
+        for shard in ("1/3", "2/3", "3/3"):
+            self.assertIn(f"{{os: windows-latest, shard: {shard}}}", tests)
+        self.assertIn('--shard "${{ matrix.shard }}"', tests)
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ from storyloop.run_hints import next_step
 
 
 KEYS = {
-    "status", "phase", "completed", "last_verdict", "attempts", "blocker",
+    "class", "status", "phase", "completed", "last_verdict", "attempts", "blocker",
     "evidence", "facts", "questions", "options", "resume", "routing",
 }
 
@@ -156,6 +156,7 @@ class StopReportTests(unittest.TestCase):
         for status in STOP_STATUSES:
             stop = build_stop("/tmp/project with space", state_for(status), status, {})
             expected = KEYS | ({"review_findings"} if status == "DESIGN_REVISION_REQUIRED" else set())
+            expected |= {"reason"} if status == "AGENT_UNAVAILABLE" else set()
             self.assertEqual(set(stop), expected, status)
             self.assertTrue(stop["blocker"], status)
             if "--supersede" not in stop["resume"] and "--overrule" not in stop["resume"]:

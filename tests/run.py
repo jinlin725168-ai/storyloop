@@ -65,6 +65,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workers", type=int, default=os.cpu_count() or 1)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--list", action="store_true", help="print the suite's modules and exit")
+    parser.add_argument("--shard", type=_shard, default=(1, 1), metavar="K/N",
+                        help="run only the K-th of N interleaved parts (parallel CI jobs)")
     args = parser.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):  # Windows consoles default to a legacy code page (cf. cli.py)
         sys.stdout.reconfigure(encoding="utf-8")
@@ -79,10 +81,19 @@ def main(argv: list[str] | None = None) -> int:
             names, changed = modules(args.root, "full"), []
     if changed is not None:
         names = with_affected(names, affected_modules(args.root, changed))
+    index, count = args.shard
+    names = names[index - 1::count]
     if args.list:
         print("\n".join(names))
         return 0
     return _run_suite(args, names)
+
+
+def _shard(value: str) -> tuple[int, int]:
+    match = re.fullmatch(r"(\d+)/(\d+)", value)
+    if not match or not 1 <= int(match[1]) <= int(match[2]):
+        raise argparse.ArgumentTypeError("expected K/N with 1 <= K <= N")
+    return int(match[1]), int(match[2])
 
 
 def _run_suite(args, names: list[str]) -> int:
