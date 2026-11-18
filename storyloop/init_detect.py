@@ -19,7 +19,9 @@ TEST_DIRECTORIES = ("tests", "test", "spec", "__tests__")
 SCRATCH = {"python": ["*.egg-info", ".hypothesis", ".pytest_cache", "__pycache__", "build"],
            "node": ["coverage", "node_modules"], "maven": ["target"], "gradle": [".gradle", "build"]}
 SOURCE_DIRECTORIES = ("src", "lib", "app")
-AGENTS = {"claude": {"adapter": "command", "agent_command": ["{python}", "-m", "storyloop.claude_agent"]},
+# -P: never import from the current directory, which is the project being changed (a StoryLoop
+# checkout would otherwise shadow the installed adapter).
+AGENTS = {"claude": {"adapter": "command", "agent_command": ["{python}", "-P", "-m", "storyloop.claude_agent"]},
           "codex": {"adapter": "codex", "agent_command": []}}
 
 

@@ -86,7 +86,7 @@ class InitDetectTests(unittest.TestCase):
         self.assertIn("storyloop change", result["next"])
         config = json.loads((self.root / ".storyloop/config.json").read_text(encoding="utf-8"))
         self.assertEqual(config["adapter"], "command")
-        self.assertEqual(config["agent_command"], ["{python}", "-m", "storyloop.claude_agent"])
+        self.assertEqual(config["agent_command"], ["{python}", "-P", "-m", "storyloop.claude_agent"])
         self.assertEqual(config["profile"]["module_roots"], ["app"])
 
     def test_explicit_readiness_measures_again_after_the_environment_is_fixed(self):

@@ -41,6 +41,7 @@ def add_bench_arguments(sub) -> None:
                      help="已准备依赖的隔离 venv Python")
     run.add_argument("--gold-python", type=Path)
     run.add_argument("--agent-command", nargs="+", help="Claude 使用的 StoryLoop command 适配器 argv")
+    run.add_argument("--agent-command-json", help='同上，写成 JSON 数组（argv 含 "-m" 等以 - 开头的参数时用这个）')
     run.add_argument("--max-calls", type=int, default=20)
     run.add_argument("--max-wall-seconds", type=int, default=14400)
     run.add_argument("--cases-root", type=Path, default=Path("bench/cases"))
@@ -89,6 +90,23 @@ def _summarize_run(record: dict) -> dict:
             "stage_gate_passed": gate["passed"] if gate is not None else None}
 
 
+def agent_command(args) -> list[str] | None:
+    """--agent-command, or --agent-command-json when the argv has dash-leading items.
+
+    nargs="+" stops at the first "-m"/"--model", so a real adapter argv needs the JSON form.
+    """
+    if not getattr(args, "agent_command_json", None):
+        return args.agent_command
+    require(not args.agent_command, "--agent-command 与 --agent-command-json 只能给一个")
+    try:
+        value = json.loads(args.agent_command_json)
+    except ValueError:
+        value = None
+    require(isinstance(value, list) and bool(value) and all(isinstance(item, str) for item in value),
+            "--agent-command-json 必须是字符串数组")
+    return value
+
+
 def _run(args) -> dict:
     from .bench_case import load_case
     from .bench_real_exec import run_isolated_attempt
@@ -99,6 +117,7 @@ def _run(args) -> dict:
     require(args.i_accept_cost, f"真实评测默认关闭；预计 {count} 次，{estimate}；需 --i-accept-cost")
     require(args.scope == "base-only" or args.candidate_engine_commit,
             "paired 需要 --candidate-engine-commit")
+    args.agent_command = agent_command(args)
     require(args.adapter != "claude" or args.agent_command and "{model}" in args.agent_command,
             "Claude 需要含 {model} 的 --agent-command（StoryLoop JSON transport）")
     repositories = {}

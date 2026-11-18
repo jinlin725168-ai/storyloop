@@ -276,7 +276,7 @@ storyloop metrics PATH --save
 ```json
 {
   "adapters": {
-    "claude": {"kind": "command", "agent_command": ["{python}", "-m", "storyloop.claude_agent", "--tier-model", "strong=opus", "--tier-model", "standard=sonnet"]},
+    "claude": {"kind": "command", "agent_command": ["{python}", "-P", "-m", "storyloop.claude_agent", "--tier-model", "strong=opus", "--tier-model", "standard=sonnet"]},
     "codex": {"kind": "codex", "models": {"strong": "<本机已核实可用模型>", "standard": "<本机已核实可用模型>"}}
   },
   "roles": {"default_adapter": "claude", "review": {"adapter": "codex"}},

@@ -32,7 +32,7 @@ storyloop init ~/work/my-project --detect --agent claude
 storyloop init ~/work/my-project --detect --yes --agent claude
 ```
 
-它会锁定底座、写好 Claude Code 适配器（`["{python}", "-m", "storyloop.claude_agent"]`）、跑一次准备度，并打印下一步。建议不对时，把输出的 `settings` 存成 JSON、改好后用 `storyloop init ~/work/my-project --settings settings.json --agent claude`。
+它会锁定底座、写好 Claude Code 适配器（`["{python}", "-P", "-m", "storyloop.claude_agent"]`）、跑一次准备度，并打印下一步。建议不对时，把输出的 `settings` 存成 JSON、改好后用 `storyloop init ~/work/my-project --settings settings.json --agent claude`。
 
 准备度常见结果：
 

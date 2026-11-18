@@ -70,8 +70,12 @@ def _require_tier(role: str, setting: dict, adapter: dict, capability: dict) -> 
     if adapter.get("kind") == "manual" or not capability["known"]:
         return
     if setting["tier"] not in capability["tiers"]:
-        raise StoryLoopError("ADAPTER_PROFILE_UNSUPPORTED", code="ADAPTER_PROFILE_UNSUPPORTED",
-                             details={"role": role, "tier": setting["tier"], "adapter": setting["adapter"]})
+        raise StoryLoopError(
+            f"ADAPTER_PROFILE_UNSUPPORTED: adapter {setting['adapter']} does not advertise tier "
+            f"{setting['tier']} needed by role {role} (advertised: {', '.join(capability['tiers']) or 'none'}); "
+            "map it explicitly, e.g. Claude Code: --tier-model strong=MODEL --tier-model standard=MODEL",
+            code="ADAPTER_PROFILE_UNSUPPORTED",
+            details={"role": role, "tier": setting["tier"], "adapter": setting["adapter"]})
 
 
 def _response(raw: object) -> dict:
