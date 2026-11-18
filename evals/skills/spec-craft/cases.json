@@ -10,6 +10,11 @@
    "key": "self-heavy-internal",
    "name": "StoryLoop 自身的 heavy 档内部机制变更（自迭代，嵌套项目夹具验收）",
    "expected": "PASSED，非例行介入不超过 1"
+  },
+  {
+   "key": "product-draft-replay",
+   "name": "同一组真实需求意图，在需求合入前的项目状态上由 product 角色起草合同（新旧版本对比）",
+   "expected": "5/5 结构合规；提问、规则、例子数与清单错误不劣于上一版本"
   }
  ]
 }

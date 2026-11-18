@@ -112,10 +112,18 @@ class ProductSpecTests(unittest.TestCase):
             self.assertEqual(len(final["product"]["questions"]), 1)
 
     def test_product_instructions_carry_the_spec_discipline(self):
-        text = INSTRUCTIONS["product"]
+        # spec-craft batch 5: the method moved into the skill; the role receives both, bundled.
+        import tempfile
+        from pathlib import Path
+        from storyloop.project_agents import _instruction_bundle
+        with tempfile.TemporaryDirectory() as folder:
+            text, snapshots = _instruction_bundle(Path(folder), "product", [])
+        self.assertIn("spec-craft", [item["name"] for item in snapshots])
         for token in ("EARS", "SHALL", "Given", "5", "recommended", "priority", "P1", "clarifications",
                       "API", "core flow", "at most three"):
             self.assertIn(token, text)
+        # The role description keeps only the engine's shape and rules, not the method.
+        self.assertNotIn("Gherkin discipline", INSTRUCTIONS["product"])
 
 
 if __name__ == "__main__":

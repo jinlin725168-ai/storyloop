@@ -1,0 +1,13 @@
+{
+ "version": "1.5.0",
+ "skill_sha256": "d3175298cf191401d398a3a7f468e32b4a1da28f49fdb4ab0d9f354937151a28",
+ "results": [
+  {
+   "case": "product-draft-replay",
+   "verdict": "passed",
+   "evidence": "sqlite-utils #516/#474/#444/#352/#481 各在合入前提交上起草；1.4.8 对 1.5.0：合规 5/5 对 5/5，提问 20 对 20，规则 48 对 50，例子 61 对 63，清单错误 41 对 41；原始数据见 docs/validation/2026-11-18-spec-craft-第5批对比.md",
+   "reviewed_by": "jinlin725168-ai",
+   "date": "2026-11-18"
+  }
+ ]
+}
