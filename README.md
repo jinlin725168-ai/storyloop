@@ -105,6 +105,7 @@ python3 -m venv .venv && .venv/bin/pip install .
 # 终端里会逐条提出澄清问题（回车选推荐项）；满意后批准，闭环自动跑到底或停在明确的人工停点
 .venv/bin/storyloop approve ~/work/my-project --change FEAT-20260916-001
 .venv/bin/storyloop status ~/work/my-project   # 跨变更总览：需要你决定 / 进行中 / 已完成
+.venv/bin/storyloop inbox ~/work/my-project ~/work/other   # 只看待你决定的事项，可跨项目
 ```
 
 第一次用从 [快速上手](docs/quickstart.md) 开始。

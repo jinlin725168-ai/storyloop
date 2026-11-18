@@ -46,6 +46,10 @@ def summarize_interventions(records: list[dict]) -> dict:
     known = list(by_change.values())
     totals = {key: sum(row[key] for row in known if row[key] is not None)
               for key in ("routine", "nonroutine", "unknown", "automatic_repair")}
+    # Roadmap G core metric: commands a person typed, per change (from the touch ledger).
+    counted = [row["touches"] for row in known if isinstance(row.get("touches"), int)]
+    totals["touches"] = sum(counted) if counted else None
+    totals["touches_per_change"] = round(sum(counted) / len(counted), 2) if counted else None
     totals["routine_types"] = _merge_types(known, "routine_types")
     totals["nonroutine_types"] = _merge_types(known, "nonroutine_types")
     totals["nonroutine_by_class"] = _merge_types(known, "nonroutine_by_class")
@@ -72,7 +76,8 @@ def _row(record: dict) -> dict:
     usage = _usage(record)
     wait = [_duration(event.get("stopped_at"), event.get("at")) for event in events or []
             if isinstance(event, dict) and event.get("source") != "engine"]
-    return {"source": source, "routine": sum(routine.values()) if events is not None else None,
+    return {"source": source, "touches": (record.get("touches") or {}).get("total"),  # None: no ledger
+            "routine": sum(routine.values()) if events is not None else None,
             "nonroutine": sum(nonroutine.values()) if not missing else None,
             "unknown": unknown + int(missing), "routine_types": dict(sorted(routine.items())),
             "nonroutine_types": dict(sorted(nonroutine.items())), "automatic_repair": automatic_repair,

@@ -68,6 +68,8 @@ storyloop status ~/work/my-project
 
 按"需要你决定 / 进行中 / 已完成"列出所有变更，每个待你决定的变更附下一步命令。单个变更的细节用 `status --change <ID>`，全过程用 `log --change <ID>`。
 
+同时推进几个项目时，`storyloop inbox ~/work/a ~/work/b` 只列需要你决定的事项，最早的在前。想在需要你时收到提醒，在 `.storyloop/config.json` 加 `"notify_command": ["notify-send", "StoryLoop"]`（或任何读 stdin JSON 的脚本）：只在停到需要你决定或完成时运行，例行停点（引擎能自己修的阻断项、一次网络失败）不会打扰你。每个变更你敲过的命令按"决定 / 草案修订 / 续跑 / 修复"计数，见 `log` 和报告摘要的"人工触达"。
+
 ## 5. 看报告
 
 合并后报告在 `reports/storyloop/<变更 ID>/`：`report.md` 是一页摘要（结论、验收追溯、各层结果、判据自证、审查、成本），`report.json` 是完整证据。分节的完整报告（命令、过程、时间线）按需生成，不入库：

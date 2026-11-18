@@ -117,6 +117,8 @@ def _record(root: Path, change_id: str, change: dict | None, run: dict | None,
     _preferred_fields(record, gaps, change_id, report, run, discrepancies)
     _run_fields(record, gaps, root, change_id, run, missing)
     record["intervention_events"] = _intervention_events(change, run, root, change_id)
+    from .touch_ledger import touches
+    record["touches"] = touches(root, change_id)
     record["planning_history"] = _nested(run, "planning", "history") if run else None
     record["started_at"] = _nested(run, "started_at") if run else None
     record["ended_at"] = _first(_nested(run, "ended_at"), _nested(report, "generated_at"))

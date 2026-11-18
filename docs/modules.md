@@ -34,6 +34,7 @@
 |  | `testing.smoke_harness` | 底座 | 汇总13个版本化冒烟执行器模块，受支持接口由 v1 导入 | `case_bytes`、`case_directory`、`evidence`、`free_port`、`protected_cases`、`python_cases`、`run_command`、`run_hooks`、`source_list`、`source_path`、`validate_cases`、`wait_http` |
 | 证据内核 | `baseline` | 底座 | 管理既有 Git 仓库的逻辑底座基线 | `advance_repository_head`、`bootstrap_project`、`load_baseline`、`load_project_config`、`verify_baseline` |
 |  | `intervention_events` | 可变区 | 记录人工介入事实，并保守分类新旧运行 | `append_event`、`summarize_interventions` |
+|  | `touch_ledger` | 可变区 | 人工触达账：命令入口按决定/草案修订/续跑/修复记一行，报告、log、metrics 读取 | `record_touch`、`touches`、`render_touches` |
 |  | `characterization_locks` | 底座 | 以证据支持分流特征化门的覆盖声明 | `capture_locks`、`require_saved_coverage`、`routed_coverage`、`verified_locks` |
 |  | `evidence_locations` | 底座 | 安全校验候选或合同提交中的仓库证据位置 | `evidence_location_exists` |
 |  | `harness_command` | 底座 | 通过可信当前安装解析可移植冒烟执行器标记 | `expand_command`、`harness_counts` |
@@ -191,6 +192,7 @@
 |  | `onboarding_cli` | 可变区 | 保留 init 原签名并编排烟测预检、采纳与代理检查 | `add_init_arguments`、`bootstrap_with_project_checks`、`initialize` |
 |  | `init_detect` | 可变区 | 一键接入：从仓库布局推断工程画像与代理配置，只建议不写，确认后锁定并跑准备度 | `propose_settings`、`agent_config` |
 |  | `status_overview` | 可变区 | 跨变更总览：按“需要你决定 / 进行中 / 已完成”分组，并给每个待决变更下一步命令 | `overview`、`change_next`、`render_overview` |
+|  | `attention` | 可变区 | 注意力预算的命令面：跨项目决策收件箱、只在需要人时运行 notify_command | `inbox`、`notify`、`render_inbox` |
 |  | `testing.nested` | 可变区 | 为 StoryLoop 自身机制的验收测试建嵌套项目并以脚本化角色运行 | — |
 |  | `routing_cli` | 可变区 | 校验并分发显式分流命令，批准接口只记录决策 | `dispatch_routing` |
 

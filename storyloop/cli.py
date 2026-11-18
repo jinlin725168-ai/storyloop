@@ -24,6 +24,7 @@ from .routing_cli import dispatch_routing, BLOCKED
 from .ci_command import run_ci_command
 from .memory_cli import add_memory_arguments, dispatch_memory
 from .cli_output import display
+from .attention import add_inbox_arguments, inbox, notify, record_touch
 from .bench_cli import add_bench_arguments, dispatch_bench
 
 
@@ -78,6 +79,7 @@ def parser() -> argparse.ArgumentParser:
     check.add_argument("project", type=Path)
     check.add_argument("--json", action="store_true", help="输出完整 JSON")
     add_bench_arguments(sub)
+    add_inbox_arguments(sub)
     return root
 
 
@@ -201,6 +203,8 @@ def _since_date(value: str) -> date:
 def dispatch(args) -> dict:
     if args.command == "bench":
         return dispatch_bench(args)
+    if args.command == "inbox":
+        return inbox(args.projects, _draft_result)
     project = args.project.resolve()
     if args.command == "adapters":
         from .adapter_capabilities import check
@@ -399,14 +403,14 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
     args = parser().parse_args(argv)
+    record_touch(args)  # roadmap G: count what a person typed
     try:
         result = dispatch(args)
         display(result, args.json)
+        notify(args, result)
         failures = {
-            "FAILED", "BLOCKED", "NEEDS_INPUT", "INTERRUPTED",
-            "UNSAFE_CONTAINMENT", "WORKSPACE_TAINTED",
-            "BUDGET_EXHAUSTED", "BASE_CHANGE_REQUIRED",
-            "BOUNDARY_VIOLATION", "ERROR", "CHARACTERIZATION_FAILED",
+            "FAILED", "BLOCKED", "NEEDS_INPUT", "INTERRUPTED", "UNSAFE_CONTAINMENT", "WORKSPACE_TAINTED",
+            "BUDGET_EXHAUSTED", "BASE_CHANGE_REQUIRED", "BOUNDARY_VIOLATION", "ERROR", "CHARACTERIZATION_FAILED",
             "SCAFFOLD_SELECTION_REQUIRED", "SMOKE_UPDATE_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_SPEC_FIX", "NO_PROGRESS",
         }
         return 2 if result.get("status") in failures | BLOCKED else 0
@@ -426,10 +430,12 @@ def main(argv: list[str] | None = None) -> int:
             if reason:
                 hint_details["init_failure_reason"] = reason
         hint = stop["resume"] if stop else (None if args.command == "bench" else
-                                            next_step(exc.code, change_id, args.project.resolve(), hint_details))
+                                            next_step(exc.code, change_id, getattr(args, "project", Path(".")).resolve(), hint_details))
         if hint:
             error["next"] = hint
         print(json.dumps(_redact_value(error), ensure_ascii=False), file=sys.stderr)
+        if stop is not None:  # a real stop, not a typo such as an unknown change
+            notify(args, {**error, "change_id": change_id})
         return 2
     except (OSError, ValueError, TypeError) as exc:
         print(json.dumps({"status": "BLOCKED", "message": "Operation could not complete: " + type(exc).__name__}), file=sys.stderr)

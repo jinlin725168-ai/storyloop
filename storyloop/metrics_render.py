@@ -67,6 +67,9 @@ def _metric_row(metric_id: str, metric: dict) -> str:
             shown = (f"非例行 {_number(summary.get('nonroutine'))}，"
                      f"例行 {_number(summary.get('routine'))}，"
                      f"自动修复 {_number(summary.get('automatic_repair'))}")
+            if summary.get("touches") is not None:  # only changes with a touch ledger (roadmap G)
+                shown += (f"，人工触达 {_number(summary['touches'])}"
+                          f"（每变更 {_number(summary.get('touches_per_change'))}）")
     sample = f"{_number(metric.get('numerator'))}/{_number(metric.get('denominator'))}；n={_number(metric.get('n'))}"
     details = []
     changes = _list(metric.get("changes"))
@@ -99,7 +102,8 @@ def _intervention_changes(metric: object) -> list[str]:
         nonroutine = _intervention_category(row, "nonroutine", "非例行")
         routine = _intervention_category(row, "routine", "例行")
         repair = _number(row.get("automatic_repair"))
-        lines.append(f"{_safe(change_id)}：{nonroutine}；{routine}；自动修复 {repair}")
+        touched = f"；触达 {_number(row['touches'])}" if isinstance(row.get("touches"), int) else ""
+        lines.append(f"{_safe(change_id)}：{nonroutine}；{routine}；自动修复 {repair}{touched}")
     return lines
 
 

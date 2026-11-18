@@ -231,15 +231,21 @@ def auto_repair(project: Path, state: dict, revise_with_agent) -> dict:
     """One engine-initiated revision for blockers the product role can fix on its own.
 
     Trial F: a mislabeled example polarity and a wrong `existence` each cost a person a round.
-    Clarity items (open questions, unconfirmed assumptions) stay with the person.
+    Clarity items (open questions, unconfirmed assumptions) and the intake reasons a person owns
+    (risks, manual feasibility) stay with the person.
     """
     if state["product"].get("questions"):
         return state
-    fixable = [item for item in draft_blockers(project, state) if item["dimension"] != "Clarity"]
+    fixable = [f"{item['id']} {item['text']}" for item in draft_blockers(project, state)
+               if item["dimension"] != "Clarity"]
+    intake = state.get("intake") or {}
+    if intake.get("status") == "NEEDS_INPUT" and isinstance(state["product"].get("assessment"), dict):
+        from .intake import role_fixable_reasons
+        fixable += role_fixable_reasons(state["product"], intake.get("decision"))
     if not fixable:
         return state
     message = (AUTO_REPAIR_PREFIX + "：修正以下需求质量门阻断项，不改动已确认的目标、规则、假设与澄清："
-               + "；".join(f"{item['id']} {item['text']}" for item in fixable))
+               + "；".join(fixable))
     try:
         revise_with_agent(project, state["change_id"], message, [])
     except StoryLoopError:
