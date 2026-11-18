@@ -61,7 +61,7 @@ project: /tmp/todo-demo
 ```json
 {
   "adapter": "command",
-  "agent_command": ["{python}", "-m", "storyloop.claude_agent"],
+  "agent_command": ["{python}", "-P", "-m", "storyloop.claude_agent"],
   "max_attempts": 3,
   "design_min_stories": 2
 }

@@ -1,7 +1,7 @@
 """Compatibility entry point: the Claude Code adapter ships as `storyloop.claude_agent`.
 
 Existing configurations that run this file keep working; new ones use
-`["{python}", "-m", "storyloop.claude_agent", ...]` (what `storyloop init --agent claude` writes).
+`["{python}", "-P", "-m", "storyloop.claude_agent", ...]` (what `storyloop init --agent claude` writes).
 """
 import sys
 

@@ -51,6 +51,8 @@ generated 模式下，引擎对确定性的验收缺陷与预审 `MUST_FIX` 按�
 显示次数、适配器、模型和预计累计耗时，按 Case 数 × 每侧两次 × 单次 40～65 分钟
 估算。例如单 Case base-only 为 2 次、约 1.3～2.2 小时。Claude 须另给包含 `{model}`
 占位的 `--agent-command`，且该命令需符合 StoryLoop command 适配器 JSON 协议。
+argv 中有以 `-` 开头的参数时用 `--agent-command-json '["...","-P","-m","storyloop.claude_agent","--tier-model","strong={model}","--tier-model","standard={model}"]'`。
+`-P` 让适配器不从当前目录（被测项目）导入；`--tier-model` 显式声明两档，只给 `--model` 时适配器不声明任何档位，握手会以 `ADAPTER_PROFILE_UNSUPPORTED` 拒绝。
 合同要求人工验收而 Case 无冻结自动处理规则时，该次尝试记不可比较。设计批准
 由模拟人自动处理；非计划回答停在 `NEEDS_HUMAN`。超时及预算
 终止记录原因。阶段门槛只接受 generated 模式；v2 的 base-only 要求 5 Case 中至少 4 个各有两次
