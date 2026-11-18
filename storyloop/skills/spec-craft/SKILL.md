@@ -1,6 +1,6 @@
 ---
 name: spec-craft
-version: 1.4.7
+version: 1.4.8
 roles: [product]
 description: 与人共创需求和规格，产出需求文档和规格文档交给 StoryLoop；适用于“写需求”“需求共创”“帮我把这个想法写成规格”、write a spec、co-create requirements。AI 只引导和起草，值不值得做及例子的预期结果由人拍板。
 ---

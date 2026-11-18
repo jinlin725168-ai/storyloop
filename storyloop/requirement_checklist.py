@@ -85,6 +85,9 @@ def evaluate_checklist(product: dict, project: Path | None = None,
             add("Clarity", "warning",
                 f"risks.{key} is unknown: judge yes/no from repository evidence or ask it as a question")
     _nature_items(add, product, project)
+    _cocreation_items(add, product)
+    if project is not None:
+        _module_items(add, product, project)
     if inherited_constraints is not None:
         resolutions = {item["constraint_id"]: item for item in
                        product.get("constraint_resolutions") or []}
@@ -305,3 +308,46 @@ def origin_candidates(project: Path, locations: list[str]) -> list[str]:
         if match and match.group(1) not in found:
             found.append(match.group(1))
     return found
+
+
+CONCRETE = re.compile(r"\d|[\"'“”「」]|\b[A-Z]{2,}-\d")
+
+
+def _cocreation_items(add, product: dict) -> None:
+    """spec-craft batch 3 (design §8). Errors only where the contract opted in by linking examples
+    to rules, plus unconfirmed assumptions; the rest are warnings (risk-proportional, roadmap B)."""
+    for item in product.get("assumptions") or []:
+        add("Clarity", "error" if item.get("status") != "confirmed" else "ok",
+            f"Assumption {item.get('id')} is confirmed by a human or removed before approval")
+    stories = product.get("stories") or []
+    criteria = [c for story in stories for c in story.get("acceptance") or []]
+    abstract = [c["id"] for c in criteria if c.get("kind") == "automated"
+                and not CONCRETE.search(str(c.get("given") or ""))]
+    add("Measurability", "warning" if abstract else "ok",
+        "Examples state their given with a concrete value (number, quoted text, date or ID)"
+        + (f" (check: {', '.join(abstract[:3])})" if abstract else ""))
+    if not any("rule" in c for c in criteria):
+        return
+    for story in stories:
+        for criterion in story.get("acceptance") or []:
+            add("Traceability", "ok" if isinstance(criterion.get("rule"), int) else "error",
+                f"{criterion['id']} names the rule it illustrates")
+        for number, _ in enumerate(story.get("rules") or [], 1):
+            linked = [c for c in story.get("acceptance") or [] if c.get("rule") == number]
+            label = f"{story.get('id')} rule {number}"
+            add("Coverage", "ok" if any(c.get("polarity", "positive") == "positive" for c in linked) else "error",
+                f"{label} has a positive example")
+            add("Coverage", "ok" if any(c.get("polarity") == "negative" for c in linked) else "warning",
+                f"{label} has a negative example")
+
+
+def _module_items(add, product: dict, project: Path) -> None:
+    """With a requirements map, a contract names one of its active modules (design §8)."""
+    from .requirements_map import module_ids
+    modules = module_ids(project)
+    if modules is None or nature_of(product) == "base":
+        return
+    capability = product.get("capability")
+    add("Traceability", "ok" if capability in modules else "error",
+        "The contract names an active module of the requirements map in capability"
+        + (f" (got {capability})" if capability and capability not in modules else ""))

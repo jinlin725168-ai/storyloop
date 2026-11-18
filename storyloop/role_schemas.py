@@ -107,6 +107,7 @@ CRITERION = _obj({"id": STRING, "given": STRING, "when": STRING, "then": STRING,
                   "kind": {"type": "string", "enum": ["automated", "manual"]},
                   "entry_ids": _nullable(STRINGS),
                   "rule": _nullable({"type": "integer"}), "example": _nullable(STRING),
+                  "polarity": _nullable({"type": "string", "enum": ["positive", "negative"]}),
                   "observation": _nullable(STRING),
                   "new_output": _nullable({"type": "boolean"}),
                   "output_contract": _nullable(OUTPUT_CONTRACT),
@@ -219,6 +220,10 @@ SCHEMAS = {
         "clarifications": _nullable({"type": "array", "items": _obj(
             {"session": STRING, "question": STRING, "answer": STRING})}),
         "retire": _nullable(STRINGS),
+        "assessment_ref": _nullable(STRING),
+        "assumptions": _nullable({"type": "array", "items": _obj({
+            "id": STRING, "statement": STRING,
+            "status": {"type": "string", "enum": ["assumed", "confirmed"]}})}),
         "constraint_resolutions": _nullable({"type": "array", "items": _obj({
             "constraint_id": STRING,
             "resolution": {"type": "string", "enum": ["keep", "conflict"]},
@@ -355,8 +360,18 @@ def schema_for(role: str, payload: dict) -> dict:
     return schema
 
 
+REQUIREMENTS_MAP = _obj({
+    "modules": {"type": "array", "items": _obj({
+        "id": STRING, "name": STRING, "responsibility": STRING, "boundaries": STRING,
+        "code_areas": STRINGS})},
+    "assignments": {"type": "array", "items": _obj({"spec": STRING, "title": STRING, "module": STRING})},
+    "questions": STRINGS})
+
+
 def _selected_schema(role: str, payload: dict) -> dict:
     """The engine-side schema of one call (acceptance changes shape in smoke-maintenance mode)."""
+    if role == "survey" and payload.get("mode") == "requirements-map":
+        return REQUIREMENTS_MAP
     if role == "review" and payload.get("mode") == "knowledge-propose":
         return KNOWLEDGE_PROPOSAL
     if role == "review" and payload.get("mode") == "retrospective":

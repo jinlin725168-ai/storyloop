@@ -70,7 +70,7 @@ def _acceptance(value: object, seen: set, consumers: set) -> None:
     for criterion in value:
         fields(criterion, {"id", "given", "when", "then", "kind"},
                {"row_type", "oracle_class", "consumers", "reproduces_defect", "entry_ids",
-                "observation", "new_output", "output_contract", "rule", "example"})
+                "observation", "new_output", "output_contract", "rule", "example", "polarity"})
         key = identifier(criterion["id"], "criterion id")
         require(key not in seen, "Duplicate acceptance id")
         seen.add(key)
@@ -112,7 +112,11 @@ def validate_product(value: object) -> dict:
     fields(value, {"version", "goal", "non_goals", "questions", "stories"},
            {"capability", "clarifications", "nature", "defect", "refactor", "base", "consumers",
             "coverage_exemptions", "test_removals", "assessment", "lessons_used", "errata", "slug",
-            "constraint_resolutions", "retire"})
+            "constraint_resolutions", "retire", "assumptions", "assessment_ref"})
+    if "assumptions" in value:
+        _assumptions(value["assumptions"])
+    if "assessment_ref" in value:
+        identifier(value["assessment_ref"], "assessment_ref")
     if "retire" in value:
         require(isinstance(value["retire"], list) and all(
             any(stable_id(item, kind) for kind in ("requirements", "rules", "examples")) for item in value["retire"]),
@@ -215,6 +219,22 @@ def _defect(value: object) -> None:
                 "escape_class must be one of " + ", ".join(ESCAPE_CLASSES))
 
 
+ASSUMPTION_STATUSES = ("assumed", "confirmed")
+
+
+def _assumptions(value: object) -> None:
+    """spec-craft batch 3: the AI's guesses, each confirmed by a human (or removed) before approval."""
+    require(isinstance(value, list), "assumptions must be a list")
+    seen = set()
+    for item in value:
+        fields(item, {"id", "statement", "status"})
+        key = identifier(item["id"], "assumption id")
+        require(key not in seen, "Duplicate assumption id")
+        seen.add(key)
+        text(item["statement"], "assumption statement")
+        require(item["status"] in ASSUMPTION_STATUSES, "assumption status is assumed or confirmed")
+
+
 def _registry_references(story: dict) -> None:
     """Optional requirement-registry references (link skeleton batch 2); absent means new."""
     if "requirement" in story:
@@ -230,6 +250,8 @@ def _registry_references(story: dict) -> None:
                     "criterion rule is the 1-based number of one of its story's rules")
         if "example" in criterion:
             require(stable_id(criterion["example"], "examples"), "criterion example must be a registry example ID")
+        if "polarity" in criterion:
+            require(criterion["polarity"] in {"positive", "negative"}, "criterion polarity is positive or negative")
 
 
 def _refactor(value: object) -> None:

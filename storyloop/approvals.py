@@ -11,7 +11,7 @@ from . import __version__
 from .baseline import load_baseline, load_project_config
 from .changes import (contract_digest, draft_directory, load_change,  # noqa: F401  # 兼容再导出：保留旧模块导入路径
                       write_change_preview)
-from .models import require, text
+from .models import StoryLoopError, require, text
 from .product_contract import nature_of
 from .project_profile import base_commands_digest, effective_base_profile
 from .path_security import safe_target
@@ -166,7 +166,39 @@ def materialize_approved_change(project: Path, change_id: str) -> Path:
         else:
             _write_bytes(target, content)
     write_json(destination / "approval.json", deepcopy(state["approval"]), max_bytes=64_000)
+    if "routing_version" in state:
+        # Historical changes keep their artifacts byte for byte; new ones carry how they were made.
+        write_json(destination / "cocreation.json", cocreation_record(project, state), max_bytes=256_000)
     return destination
+
+
+def cocreation_record(project: Path, state: dict) -> dict:
+    """spec-craft batch 3 (design §11): how the contract was co-created. The engine writes it;
+    an agent's own account from a chat draft is kept apart and marked source: agent."""
+    product = state["product"]
+    source = state.get("cocreation") or {"entry": "cli"}
+    assessment = None
+    if product.get("assessment_ref"):
+        from .assessments import load_assessment
+        try:
+            assessment = load_assessment(project, product["assessment_ref"])
+        except StoryLoopError:
+            assessment = {"id": product["assessment_ref"], "missing": True}
+    assumptions = product.get("assumptions") or []
+    skills = {item.get("name"): item.get("version")
+              for item in (state["approval"].get("versions") or {}).get("skills") or []}
+    record = {"version": 1, "entry": source.get("entry", "cli"),
+              "tier": ((state.get("intake") or {}).get("decision") or {}).get("tier"),
+              "assessment": assessment,
+              "clarifications": len(product.get("clarifications") or []),
+              "assumptions": {"total": len(assumptions),
+                              "confirmed": sum(1 for item in assumptions if item.get("status") == "confirmed")},
+              "spec_craft": skills.get("spec-craft"),
+              "created_at": state["created_at"], "approved_at": state["approval"]["approved_at"],
+              "revisions": state["revision"]}
+    if source.get("agent_record") is not None:
+        record["agent_record"] = {"source": "agent", "content": source["agent_record"]}
+    return record
 
 
 def _write_state(project: Path, state: dict) -> None:

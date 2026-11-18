@@ -100,6 +100,9 @@ def _invoke_once(project, role, payload, config, settings, degraded):
     if role == 'review' and payload.get('mode') == 'retrospective':
         from .role_instructions import RETROSPECTIVE_NOTE
         instructions = RETROSPECTIVE_NOTE
+    if role == 'survey' and payload.get('mode') == 'requirements-map':
+        from .role_instructions import REQUIREMENTS_MAP_NOTE
+        instructions = REQUIREMENTS_MAP_NOTE
     if role == 'review' and payload.get('mode') == 'knowledge-propose':
         from .role_instructions import KNOWLEDGE_PROPOSAL_NOTE
         instructions = KNOWLEDGE_PROPOSAL_NOTE

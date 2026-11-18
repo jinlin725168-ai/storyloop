@@ -1,5 +1,6 @@
 """Frozen public outputs reject status, verdict, budget and evidence drift."""
 import json
+import re
 from pathlib import Path
 from pathlib import PureWindowsPath
 import os
@@ -156,6 +157,27 @@ class GoldenNormalizerTests(unittest.TestCase):
                                      {'status': 'valid', 'kind': kind, 'id': identifier})
 
 
+def _drop_path(value, suffix):
+    if isinstance(value, dict):
+        for key, item in list(value.items()):
+            if isinstance(item, str) and key != "path" and suffix in item and "\n" in item:
+                # Inline lists ("a、b、c") lose just the path; a bullet or table row naming it goes away.
+                text = re.sub(r"[^\s、`]*" + re.escape(suffix) + r"`?、", "", item)
+                value[key] = "\n".join(line for line in text.split("\n")
+                                       if not (suffix in line and line.lstrip()[:1] in {"-", "|"}))
+            elif isinstance(item, list):
+                value[key] = [entry for entry in item if not (
+                    (isinstance(entry, str) and entry.endswith(suffix))
+                    or (isinstance(entry, dict) and str(entry.get("path", "")).endswith(suffix)))]
+                for entry in value[key]:
+                    _drop_path(entry, suffix)
+            else:
+                _drop_path(item, suffix)
+    elif isinstance(value, list):
+        for entry in value:
+            _drop_path(entry, suffix)
+
+
 def _drop_stop_class(value):
     if isinstance(value, dict):
         if "blocker" in value:
@@ -191,6 +213,8 @@ class LifecycleGoldenTests(unittest.TestCase):
                  .get("signals") or {}).pop("contract_change", None)
                 # Registry IDs (link skeleton 2) are additive and covered by test_requirements_registry.
                 actual["change"].pop("registry", None)
+                # The co-creation record (spec-craft batch 3) is a new file next to the contract.
+                _drop_path(actual, "/cocreation.json")
                 # Stop classes (C3) are additive and covered by test_stop_classes.
                 _drop_stop_class(actual)
                 # The new top-level bench command adds help text, not lifecycle behavior.

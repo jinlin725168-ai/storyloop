@@ -55,12 +55,22 @@ def change(project: Path, args, product_answer, revise_with_agent,
                                inherited_constraints=state.get("inherited_constraints")))
         return draft_result(project, state, draft_next(project, state) if pending else created["next"])
     require(not args.reason, "--reason is only valid with --supersede")
+    if getattr(args, "from_draft", None):
+        return _from_draft(project, args, product_answer, revise_with_agent, clarify_interactively,
+                           draft_result, interactive)
     if args.idea:
         require(not args.change_id and not args.message,
                 "Use --idea for a new change, or --change with --message for a revision")
         from .readiness import require_readiness
         require_readiness(project)
-        product = product_answer(project, {"idea": args.idea})
+        assessment = None
+        if getattr(args, "assessment", None):
+            from .assessments import require_do
+            assessment = require_do(project, args.assessment)
+        product = product_answer(project, {"idea": args.idea, **(
+            {"assessment_record": assessment} if assessment else {})})
+        if assessment:
+            product["assessment_ref"] = assessment["id"]
         from .change_types import definition_for
         from .product_contract import nature_of
         prefix = definition_for(nature_of(product)).id_prefix
@@ -68,7 +78,8 @@ def change(project: Path, args, product_answer, revise_with_agent,
                            prefix=prefix)
         created = create_change(project, args.idea, product, slug=slug,
                                 require_verification_entries=True, require_observation=True,
-                                require_entry_feasibility=True, require_output_contract=True)
+                                require_entry_feasibility=True, require_output_contract=True,
+                                cocreation={"entry": "cli"})
         adopt_pending(project, created["change_id"])
         state = clarify_interactively(project, created["change_id"], revise_with_agent, interactive)
         return draft_result(project, state)
@@ -76,6 +87,50 @@ def change(project: Path, args, product_answer, revise_with_agent,
             "Revision needs both --change and --message")
     revise_with_agent(project, args.change_id, args.message, [])
     state = clarify_interactively(project, args.change_id, revise_with_agent, interactive)
+    return draft_result(project, state)
+
+
+FROM_DRAFT_MESSAGE = (
+    "This contract was co-created with a human in a chat session (spec-craft). Keep its goal, "
+    "non_goals, stories, rules, examples and assumptions exactly as given; supply only the routing "
+    "assessment and verification entries the engine needs, and ask a question only for something "
+    "the draft leaves genuinely open.")
+# Fields the human confirmed in the chat; the product role may not rewrite them.
+DRAFT_FIELDS = ("goal", "non_goals", "stories", "assumptions", "nature", "defect", "refactor",
+                "capability", "slug")
+
+
+def _from_draft(project, args, product_answer, revise_with_agent, clarify_interactively,
+                draft_result, interactive) -> dict:
+    """spec-craft batch 3 (design §10): take over a contract drafted in a chat session."""
+    require(not args.idea and not args.change_id and not args.message,
+            "--from-draft starts a new change: no --idea, --change or --message")
+    from .readiness import require_readiness
+    require_readiness(project)
+    folder = Path(args.from_draft)
+    contract_path = folder / "contract.json"
+    require(contract_path.is_file(), f"Draft has no contract.json: {folder}")
+    import json
+    draft = json.loads(contract_path.read_text(encoding="utf-8"))
+    require(isinstance(draft, dict) and isinstance(draft.get("goal"), str) and draft.get("stories"),
+            "Draft contract.json needs a goal and stories")
+    record_path = folder / "record.json"
+    agent_record = json.loads(record_path.read_text(encoding="utf-8")) if record_path.is_file() else None
+    product = product_answer(project, {"idea": draft["goal"], "current_product": draft,
+                                       "message": FROM_DRAFT_MESSAGE})
+    for key in DRAFT_FIELDS:
+        if key in draft:
+            product[key] = draft[key]
+    from .change_types import definition_for
+    from .product_contract import nature_of
+    slug = choose_slug(args, product.get("slug"), interactive and sys.stdin.isatty(),
+                       prefix=definition_for(nature_of(product)).id_prefix)
+    created = create_change(project, draft["goal"], product, slug=slug,
+                            require_verification_entries=True, require_observation=True,
+                            require_entry_feasibility=True, require_output_contract=True,
+                            cocreation={"entry": "chat", "agent_record": agent_record, "source": "agent"})
+    adopt_pending(project, created["change_id"])
+    state = clarify_interactively(project, created["change_id"], revise_with_agent, interactive)
     return draft_result(project, state)
 
 
