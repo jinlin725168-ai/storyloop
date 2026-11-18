@@ -190,6 +190,7 @@ class ParallelLoopTests(unittest.TestCase):
             self.assertEqual((landed["status"], landed["verification"]), ("LANDED", "exact"))
             landed = dispatch(parser().parse_args(["workers", "land", str(root), "--change", second]))
             self.assertEqual((landed["status"], landed["verification"]), ("LANDED", "reverified"))
+            self.assertIn(f"Merge {second}", git(root, "log", "-1", "--format=%s"))
             self.assertTrue((root / "modules/first.py").is_file() and (root / "modules/second.py").is_file())
             self.assertEqual(git(root, "status", "--porcelain", "--untracked-files=all").strip(), "")
             for change_id in (first, second):

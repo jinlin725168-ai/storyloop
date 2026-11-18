@@ -152,6 +152,7 @@ H2 GitHub 事件（`gh` 轮询，不需要服务器）：
 - 允许作者的 `/storyloop <变更ID> <意见>` issue 评论修订 DRAFT 变更。StoryLoop 不 push、不建 PR，所以没有采用路线图原定的 PR 评论修订。
 - 事件只生成草稿，不替人花钱、不替人做决定；issue 与评论的文本只作数据。
 - 真实 `gh` 只读同步已在本仓库上跑通。
+- 真实验证：两个相邻需求（`indexes --name`、`triggers --name`）用 Claude Code 在两个 worker 里并行跑，13 分钟都 `PASSED`。一个快进落地，一个合并后复验落地；每个变更人工触达 3 次，均为决定（[验证记录](validation/2026-11-18-H-验证.md)）。
 
 审查角色在此期间由开发者直接完成（Codex 暂停派发）；base 人工通道不变（[决策 0018](decisions/0018-base-human-only.md)）。
 

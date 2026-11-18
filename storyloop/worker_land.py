@@ -75,7 +75,8 @@ def _reverify(project: Path, target: Path, change_id: str, worker_head: str) -> 
         value = subprocess.run(["git", "-C", str(project), "config", "--get", key],
                                capture_output=True, text=True).stdout.strip()
         identity += ["-c", f"{key}={value or fallback}"]
-    merge = subprocess.run(["git", *identity, "-C", str(clone), "merge", "--no-ff", "--no-edit", worker_head],
+    merge = subprocess.run(["git", *identity, "-C", str(clone), "merge", "--no-ff", "-m",
+                            f"Merge {change_id} (storyloop workers land, re-verified on the moved branch)", worker_head],
                            capture_output=True, text=True)
     if merge.returncode != 0:
         conflicts = subprocess.run(["git", "-C", str(clone), "diff", "--name-only", "--diff-filter=U"],
