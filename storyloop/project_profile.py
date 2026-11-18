@@ -15,7 +15,7 @@ from .storage import load_json
 CI_FILES = (
     ".gitlab-ci.yml", "Jenkinsfile", "azure-pipelines.yml", ".circleci/config.yml",
 )
-GENERATED_PATHS = ("openspec/changes", "openspec/specs", "acceptance/changes", "acceptance/smoke", "acceptance/ui",
+GENERATED_PATHS = ("openspec/changes", "openspec/specs", "openspec/requirements", "acceptance/changes", "acceptance/smoke", "acceptance/ui",
                    "reports/storyloop")
 CUSTOM_ROOT = "storyloop-custom"
 BASE_BUILD_SUPPLEMENT = ".storyloop/base-build-commands.json"

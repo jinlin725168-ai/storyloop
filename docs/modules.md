@@ -67,6 +67,7 @@
 | 合同 | `answers` | 可变区 | 按尝试记录人工回答，并传给后续尝试 | `load_answers`、`pending_questions`、`record_answers` |
 |  | `product_contract` | 可变区 | 校验产品合同中的故事、规则与验收条件 | `nature_of`、`validate_product` |
 |  | `approvals` | 可变区 | 人工批准与已批准 OpenSpec 合同的物化 | `approve_change`、`materialize_approved_change` |
+|  | `requirements_registry` | 底座 | 需求登记：分配需求/规则/例子稳定 ID，按合并顺序重放登记记录，合并前复核版本 | `apply_record`、`compact`、`conflicts`、`plan`、`registry_view`、`render_view`、`replay`、`stable_id`、`write_record` |
 |  | `changes` | 可变区 | 创建和修订 OpenSpec 形状的产品变更草案 | `contract_digest`、`create_change`、`draft_directory`、`load_change`、`revise_change`、`write_change_preview` |
 |  | `requirement_checklist` | 可变区 | 确定性检查需求质量 | `blocking_items`、`evaluate_checklist`、`render_checklist` |
 |  | `supersede` | 可变区 | 作废已停运行，以新变更 ID 重开修订合同 | `supersede_change` |

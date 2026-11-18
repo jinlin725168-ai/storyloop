@@ -23,6 +23,10 @@ def display(result: dict, complete_json: bool) -> None:
     if result.get("status") == "METRICS":
         print(render_metrics(result))
         return
+    if result.get("status") == "REQUIREMENTS":
+        from .requirements_registry import render_view
+        print(render_view(result))
+        return
     rendered = render_memory(result)
     if rendered is not None:
         print(rendered)

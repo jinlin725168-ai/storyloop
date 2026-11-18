@@ -30,11 +30,14 @@ def capability_of(product: dict, change_id: str) -> str:
     return product.get("capability") or change_id.lower()
 
 
-def render_delta_spec(product: dict, change_id: str, main_spec: str | None) -> str:
-    """Render the change's requirements as an OpenSpec delta against the current living spec."""
+def render_delta_spec(product: dict, change_id: str, main_spec: str | None, ids: dict | None = None) -> str:
+    """Render the change's requirements as an OpenSpec delta against the current living spec.
+
+    With registry `ids` (assigned at approval) each requirement and rule line carries its stable ID.
+    """
     added, modified = [], []
     for story in product["stories"]:
-        block = _requirement_block(story, change_id)
+        block = _requirement_block(story, change_id, ids)
         previous = _block_of(main_spec or "", story["title"])
         if previous is None:
             added.append(block)
@@ -137,17 +140,23 @@ def render_decisions(change: dict, answers: list[dict], manual: list[dict], rese
     return "\n".join(lines) + "\n"
 
 
-def _requirement_block(story: dict, change_id: str) -> str:
+def _requirement_block(story: dict, change_id: str, ids: dict | None = None) -> str:
     lines = [f"### Requirement: {story['title']}", ""]
     meta = f"_Story {story['id']}"
     if story.get("priority"):
         meta += f", priority {story['priority']}"
     lines.append(meta + f", from {change_id}_")
     lines.append("")
+    requirement = ((ids or {}).get("requirements") or {}).get(story["id"])
+    if requirement:
+        # A separate line: OWNER above stays parseable by the merge.
+        lines += [f"_Requirement {requirement}_", ""]
     lines.append(f"As {story['as_a']}, {story['want']}, so that {story['so_that']}.")
     lines.append("")
-    for rule in story["rules"]:
-        lines.append(rule if "SHALL" in rule.upper() else f"The system SHALL {rule}")
+    for index, rule in enumerate(story["rules"], 1):
+        line = rule if "SHALL" in rule.upper() else f"The system SHALL {rule}"
+        rule_id = ((ids or {}).get("rules") or {}).get(f"{story['id']}#{index}")
+        lines.append(f"[{rule_id}] {line}" if rule_id else line)
     lines.append("")
     for criterion in story["acceptance"]:
         # The scenario name is the criterion id: stable across revisions, so OpenSpec can match it.

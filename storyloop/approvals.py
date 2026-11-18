@@ -60,6 +60,13 @@ def _approve_locked(project, change_id, approved_by, now, tier) -> dict:
                 "Approved product contract is stale")
         return deepcopy(state)
     require(state["status"] == "DRAFT", "Only a draft can be approved")
+    if not base and "routing_version" in state:
+        # Stable requirement/rule/example IDs, assigned against the registry replayed at HEAD;
+        # numbers already given on an earlier approval of this change are kept (link skeleton 2).
+        # Historical (pre-routing) changes keep their artifacts byte for byte: no IDs, no backfill.
+        from .requirements_registry import plan, replay
+        state["registry"] = plan(product, change_id, replay(project),
+                                 previous=(state.get("registry") or {}).get("ids"))
     moment = (now or _utc_now)()
     state["status"] = "APPROVED"
     state["approval"] = {

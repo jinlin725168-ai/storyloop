@@ -287,6 +287,19 @@ storyloop metrics PATH --save
 
 `COST_LIMIT_REACHED` 在下一次调用前停止；提高 limits 后 `run` 恢复。失败调用也计成本；没有费用回报时只展示已知费用覆盖，不估价、不把未知当作零。无画像的旧配置继续工作，已有报告与回执保持原字节；缺少旧诊断的历史报告不会凭空补齐新状态。
 
+## 需求登记
+
+批准合同时，引擎给每个需求（用户故事）、规则和例子（验收条件）分配稳定 ID：`<变更 ID>.S<n>`、`.R<n>`、`.E<n>`。要修改已有功能时，合同里写已有 ID（故事的 `requirement`、`rule_ids`，验收条件的 `example`、`rule`，移除写 `retire`）；没写的就是新增。产品角色起草时会拿到已合入的登记摘要，可以直接引用。
+
+每个合入的变更在合并前写一份 `openspec/requirements/changes/<变更 ID>.json`，记录它新建、修改、退役了哪些条目，以及每处修改基于的版本。当前状态由引擎按合并顺序重放这些记录得到，并行分支在 Git 上不会冲突；合并前若发现同一条目已被别的变更改过，运行停下等人在新版本上修订合同。活规格里每个需求带 `_Requirement <ID>_`，每条规则带 `[<ID>]` 前缀。
+
+```bash
+storyloop requirements PROJECT            # 需求与规则、版本、状态、关联的 fix 数
+storyloop requirements PROJECT --id FEAT-20261118-rooms.R1   # 一条规则的版本历史
+```
+
+fix 合同的 `defect.rules` 写出缺陷违反的规则 ID，登记会把这次 fix 记到那条规则上，于是"这个功能出过几个 Bug"可以直接查到。旧合同不写这些字段也照常运行。
+
 ## 经验与勘误
 
 StoryLoop 把仓库经验放在 `openspec/lessons/`，把对底座知识库的更正追加到 `openspec/foundation/errata.md`。代理只能提出草案；人审批后才会落地。一次完整闭环如下，其中 `status` 会在有待批草案时给出 `drafts` 提示：

@@ -2,6 +2,7 @@
 from __future__ import annotations
 import re
 
+from .requirements_registry import stable_id
 from . import change_types
 from .change_types import type_of
 from .errors import require
@@ -69,7 +70,7 @@ def _acceptance(value: object, seen: set, consumers: set) -> None:
     for criterion in value:
         fields(criterion, {"id", "given", "when", "then", "kind"},
                {"row_type", "oracle_class", "consumers", "reproduces_defect", "entry_ids",
-                "observation", "new_output", "output_contract"})
+                "observation", "new_output", "output_contract", "rule", "example"})
         key = identifier(criterion["id"], "criterion id")
         require(key not in seen, "Duplicate acceptance id")
         seen.add(key)
@@ -111,7 +112,11 @@ def validate_product(value: object) -> dict:
     fields(value, {"version", "goal", "non_goals", "questions", "stories"},
            {"capability", "clarifications", "nature", "defect", "refactor", "base", "consumers",
             "coverage_exemptions", "test_removals", "assessment", "lessons_used", "errata", "slug",
-            "constraint_resolutions"})
+            "constraint_resolutions", "retire"})
+    if "retire" in value:
+        require(isinstance(value["retire"], list) and all(
+            any(stable_id(item, kind) for kind in ("requirements", "rules", "examples")) for item in value["retire"]),
+            "retire lists registry IDs")
     require(value["version"] == 1, "Unsupported product version")
     text(value["goal"], "goal")
     strings(value["non_goals"], "non_goals")
@@ -183,7 +188,7 @@ ESCAPE_CLASSES = ("oracle", "characterization", "review", "regression", "environ
 
 def _defect(value: object) -> None:
     fields(value, {"observed", "expected", "reproduction", "root_cause", "confirmed", "unconfirmed"},
-           {"reporter_hypothesis", "sibling_entries", "origin_change", "escape_class"})
+           {"reporter_hypothesis", "sibling_entries", "origin_change", "escape_class", "rules"})
     for key in ("observed", "expected"):
         text(value[key], key)
     require(bool(strings(value["reproduction"], "reproduction")), "reproduction needs steps")
@@ -202,9 +207,29 @@ def _defect(value: object) -> None:
         strings(value["sibling_entries"], "sibling_entries")
     if "origin_change" in value:
         identifier(value["origin_change"], "origin change")
+    if "rules" in value:
+        require(isinstance(value["rules"], list) and all(stable_id(rule, "rules") for rule in value["rules"]),
+                "defect.rules must list registry rule IDs")
     if "escape_class" in value:
         require(value["escape_class"] in ESCAPE_CLASSES,
                 "escape_class must be one of " + ", ".join(ESCAPE_CLASSES))
+
+
+def _registry_references(story: dict) -> None:
+    """Optional requirement-registry references (link skeleton batch 2); absent means new."""
+    if "requirement" in story:
+        require(stable_id(story["requirement"], "requirements"), "story requirement must be a registry requirement ID")
+    if "rule_ids" in story:
+        require(isinstance(story["rule_ids"], list) and len(story["rule_ids"]) == len(story["rules"]),
+                "rule_ids must give one entry per rule")
+        require(all(item == "new" or stable_id(item, "rules") for item in story["rule_ids"]),
+                "rule_ids entries are registry rule IDs or \"new\"")
+    for criterion in story["acceptance"]:
+        if "rule" in criterion:
+            require(type(criterion["rule"]) is int and 1 <= criterion["rule"] <= len(story["rules"]),
+                    "criterion rule is the 1-based number of one of its story's rules")
+        if "example" in criterion:
+            require(stable_id(criterion["example"], "examples"), "criterion example must be a registry example ID")
 
 
 def _refactor(value: object) -> None:
@@ -258,7 +283,7 @@ def _removals(value: object) -> None:
 def _story(story: dict, seen: set, criteria: set, consumers: set,
            entries: set, new_format: bool) -> None:
     fields(story, {"id", "title", "as_a", "want", "so_that", "rules", "out_of_scope", "depends_on", "acceptance"},
-           {"priority", "independent_test", "verification_entries"})
+           {"priority", "independent_test", "verification_entries", "requirement", "rule_ids"})
     key = identifier(story["id"], "story id")
     if "priority" in story:
         require(story["priority"] in PRIORITIES, "priority must be P1, P2 or P3")
@@ -283,4 +308,5 @@ def _story(story: dict, seen: set, criteria: set, consumers: set,
             for field in ("locator", "observable", "reason"):
                 text(entry[field], f"verification entry {field}")
     _acceptance(story["acceptance"], criteria, consumers)
+    _registry_references(story)
     seen.add(key)

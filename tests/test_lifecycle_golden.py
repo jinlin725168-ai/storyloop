@@ -189,6 +189,8 @@ class LifecycleGoldenTests(unittest.TestCase):
                 # The additive-contract signal is covered by test_routing_policy and test_intake.
                 (actual["state"].get("planning", {}).get("assessment", {})
                  .get("signals") or {}).pop("contract_change", None)
+                # Registry IDs (link skeleton 2) are additive and covered by test_requirements_registry.
+                actual["change"].pop("registry", None)
                 # Stop classes (C3) are additive and covered by test_stop_classes.
                 _drop_stop_class(actual)
                 # The new top-level bench command adds help text, not lifecycle behavior.
