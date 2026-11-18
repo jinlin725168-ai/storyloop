@@ -50,7 +50,7 @@ from .project_loop_guards import (require_control_unchanged, require_git_visible
 from .project_loop_failures import (apply_overrule, epoch_of, record_boundary, record_failure,
                                     require_routed_choice, route_review)
 from .project_loop_support import control_digest, run_path, save_run  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
-from .run_stops import pause
+from .run_stops import clear_blocked, pause, saving_blocked_stop
 from .oracle_counts import check_layers
 from .project_preparation import _prepare_acceptance, answered_precheck, reprove_after_base
 from .project_profile import layer_commands
@@ -94,7 +94,7 @@ def _run_change_locked(
         return run_base_change(project, change, implementer, _new_run_state)
     require(implementer is None, "--implementer is only for base changes")
     saved_path = run_path(project, change_id)
-    saved = load_json(saved_path) if saved_path.exists() else None
+    saved = clear_blocked(project, load_json(saved_path) if saved_path.exists() else None)
     if overrule:
         require(saved is not None, "--overrule 需要已有停点")
         require_routed_choice(saved, overrule)
@@ -116,21 +116,21 @@ def _run_change_locked(
     config = run_config(config, change, state)
     save_run(project, state)
     cost_resume.restore(project, state)
-    try:
-        paused = _resume_and_prepare(project, change, state, services, config, fresh, overrule)
-    except StoryLoopError as exc:
-        if exc.code == "COST_LIMIT_REACHED":
-            return cost_resume.stop(project, state, exc)
-        raise
-    if paused is not None:
-        return paused
-    return _attempts(project, change, state, services, config, start_attempt)
+    with saving_blocked_stop(project, change_id):  # BLOCKED inside the opened run keeps its status
+        try:
+            paused = _resume_and_prepare(project, change, state, services, config, fresh, overrule)
+        except StoryLoopError as exc:
+            if exc.code == "COST_LIMIT_REACHED":
+                return cost_resume.stop(project, state, exc)
+            raise
+        return paused if paused is not None else _attempts(project, change, state, services, config, start_attempt)
 
 
 def _resume_and_prepare(project: Path, change: dict, state: dict, services: LoopServices,
                         config: dict, fresh: bool, overrule: str | None) -> dict | None:
     change_id = change['change_id']
     state.pop("stop", None)
+    state.pop("blocked_from", None)
     if state['status'] == 'ORACLE_DEFECT' and not overrule:
         from .project_loop_failures import (characterization_conflict_evidence,
                                             characterization_workspace_digest,
