@@ -104,29 +104,42 @@ def _status(project: Path, commit: str, product: dict, decision: dict | None) ->
 
 def needs_input_reasons(product: dict, decision: dict | None) -> list[str]:
     """Name each rule that keeps a draft at NEEDS_INPUT, so a stop can say what to revise."""
+    return [text for text, _ in _owned_reasons(product, decision)]
+
+
+def role_fixable_reasons(product: dict, decision: dict | None) -> list[str]:
+    """The NEEDS_INPUT reasons the product role can settle by re-reading the repository (G2).
+
+    Trial F: an `existence` the role labeled `partial` for a behavior that did not exist yet cost
+    a person a revision round. Open questions, risks and manual feasibility stay with the person.
+    """
+    return [text for text, owner in _owned_reasons(product, decision) if owner == 'role']
+
+
+def _owned_reasons(product: dict, decision: dict | None) -> list[tuple[str, str]]:
     assessment = product.get('assessment')
     if not assessment or not decision:
-        return ['缺少产品评估或分流决定，请补充评估后重新起草']
+        return [('缺少产品评估或分流决定，请补充评估后重新起草', 'role')]
     criteria = assessment['criteria']
     reasons = []
     if product['questions']:
-        reasons.append(f"仍有 {len(product['questions'])} 个待决问题")
+        reasons.append((f"仍有 {len(product['questions'])} 个待决问题", 'human'))
     risks = [field for field in decision['unresolved'] if field.startswith('risks.')]
     if risks:
-        reasons.append('未决风险：' + ', '.join(risks))
+        reasons.append(('未决风险：' + ', '.join(risks), 'human'))
     if _manual_only_automation(product):
-        reasons.append('自动验收条件的可行性被评为 manual')
+        reasons.append(('自动验收条件的可行性被评为 manual', 'human'))
     unknown = [item['criterion_id'] for item in criteria
                if item['feasibility'] == 'unknown' or item['existence'] == 'unknown']
     if unknown:
-        reasons.append('验收条件的可行性或现状为 unknown：' + ', '.join(unknown))
+        reasons.append(('验收条件的可行性或现状为 unknown：' + ', '.join(unknown), 'role'))
     if definition_for(type_of(product)).requires_new_criteria:
         partial = [item['criterion_id'] for item in criteria if item['existence'] == 'partial']
         if partial:
-            reasons.append(f"{type_of(product)} 类变更要求验收新行为，但 existence 为 partial："
-                           + ', '.join(partial) + '（被验收的行为若尚不存在应为 absent）')
+            reasons.append((f"{type_of(product)} 类变更要求验收新行为，但 existence 为 partial："
+                            + ', '.join(partial) + '（被验收的行为若尚不存在应为 absent）', 'role'))
         elif all(item['existence'] == 'exists' for item in criteria):
-            reasons.append(f"{type_of(product)} 类变更要求验收新行为，但全部验收条件 existence 为 exists")
+            reasons.append((f"{type_of(product)} 类变更要求验收新行为，但全部验收条件 existence 为 exists", 'role'))
     return reasons
 
 

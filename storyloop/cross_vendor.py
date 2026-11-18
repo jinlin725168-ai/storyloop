@@ -61,7 +61,7 @@ def invoke(project, role, payload, config, ledger, call):
                     engine_fields={'adapter': settings['adapter'], 'tier_requested': settings['tier']})
         return _fallback(project, role, payload, config, settings, call, error)
     try:
-        return call(settings, None)
+        return _with_network_retry(call, settings, config)
     except StoryLoopError as error:
         if error.code != 'AGENT_UNAVAILABLE':
             raise
@@ -70,6 +70,23 @@ def invoke(project, role, payload, config, ledger, call):
         if settings.get('fallback_adapter'):
             return _second_adapter(project, role, config, settings, call, error)
         raise
+
+
+def _with_network_retry(call, settings, config):
+    """A network failure is routine: retry the same adapter once before anyone is asked (G2).
+
+    Auth and quota need a person; timeouts and crashes are too costly or too likely to repeat.
+    """
+    from .intervention_events import unavailable_reason
+    try:
+        return call(settings, None)
+    except StoryLoopError as error:
+        reason = error.details.get('reason') or unavailable_reason(str(error))
+        if error.code != 'AGENT_UNAVAILABLE' or reason != 'network':
+            raise
+        delay = config.get('agent_network_retry_seconds', 30)
+        time.sleep(delay if isinstance(delay, (int, float)) and 0 <= delay <= 600 else 30)
+        return call(settings, None)
 
 
 def _second_adapter(project, role, config, settings, call, error):

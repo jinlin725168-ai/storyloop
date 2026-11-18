@@ -216,6 +216,7 @@ rank = 7
 "metrics_render" = { module = "outer_loop", zone = "mutable" }
 "metrics_rules" = { module = "outer_loop", zone = "mutable" }
 "intervention_events" = { module = "evidence_kernel", zone = "mutable" }
+"touch_ledger" = { module = "evidence_kernel", zone = "mutable" }
 "ci_results" = { module = "outer_loop", zone = "mutable" }
 "change_report" = { module = "reporting", zone = "mutable" }
 "change_log" = { module = "reporting", zone = "mutable" }
@@ -247,6 +248,7 @@ rank = 7
 "onboarding_cli" = { module = "command", zone = "mutable" }
 "init_detect" = { module = "command", zone = "mutable" }
 "status_overview" = { module = "command", zone = "mutable" }
+"attention" = { module = "command", zone = "mutable" }
 "ci_command" = { module = "command", zone = "mutable" }
 "__main__" = { module = "command", zone = "mutable" }
 

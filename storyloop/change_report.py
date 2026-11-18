@@ -12,6 +12,7 @@ from .baseline import _git
 from .routing_report import report_routing, routing_markdown
 from .changes import load_change
 from .models import require
+from .touch_ledger import touches
 from .report_markdown import render_presentation
 from .report_presentation import build_presentation
 from .smoke import RESULT_EVIDENCE, load_smoke_manifest, smoke_digests
@@ -65,6 +66,9 @@ def generate_change_report(
         "oracle": _oracle_view(layers, oracle, skills_used),
         "correction": correction or {"failures": [], "overrules": [], "supersedes": None},
     }
+    attention = touches(project, change_id)
+    if attention is not None:  # roadmap G: commands a person typed, by kind; absent = no ledger
+        report["attention"] = attention
     root = project / "reports" / "storyloop" / change_id
     path = root / "report.json"
     write_json(path, report, max_bytes=8_000_000)

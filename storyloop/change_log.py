@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .touch_ledger import render_touches, touches
 from .call_log import call_folder, load_meta
 from .changes import load_change
 from .intervention_events import intervention_view
@@ -47,6 +48,7 @@ def change_log(project: Path, change_id: str) -> dict:
         "acceptance_rounds": acceptance_rounds,
         "acceptance_retry_stop": acceptance_retry_stop,
         "interventions": interventions,
+        "touches": touches(project, change_id),
         "next": append_pending_memory(project, next_step(status, change_id, project, run or {})),
     }
 
@@ -126,6 +128,8 @@ def render_log(result: dict) -> str:
     if "interventions" in result:
         lines.append("")
         lines.extend(_render_interventions(result["interventions"]))
+        if result.get("touches"):
+            lines.append(render_touches(result["touches"]))
     if result.get("acceptance_rounds"):
         lines.append("")
         lines.append("验收自动修复")

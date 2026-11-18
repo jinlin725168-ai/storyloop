@@ -24,6 +24,10 @@ def display(result: dict, complete_json: bool) -> None:
         from .init_detect import render_proposal
         print(render_proposal(result))
         return
+    if result.get("status") == "INBOX":
+        from .attention import render_inbox
+        print(render_inbox(result))
+        return
     if result.get("status") == "OVERVIEW":
         from .status_overview import render_overview
         print(render_overview(result))

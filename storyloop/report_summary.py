@@ -45,6 +45,9 @@ def render_summary(report: dict) -> str:
               f"- 代理调用 {telemetry.get('calls', '—')} 次，实现尝试 {telemetry.get('attempts', '—')} 轮",
               f"- 代理耗时 {_minutes(telemetry.get('agent_ms'))}，已知费用 "
               + (f"${cost:.2f}" if isinstance(cost, (int, float)) else "未知")]
+    if report.get("attention"):
+        from .touch_ledger import render_touches
+        lines.append(f"- {render_touches(report['attention'])}")
     lines += ["", "完整报告（分节证据、命令、过程与时间线）不入库，按需生成：",
               f"`storyloop report <项目> --change {change_id} --full`", ""]
     return "\n".join(lines)

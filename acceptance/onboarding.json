@@ -45,6 +45,8 @@
         "storyloop/base_review.py",
         "storyloop/base_run_open.py",
         "storyloop/base_upgrade.py",
+        "storyloop/attention.py",
+        "storyloop/touch_ledger.py",
         "storyloop/baseline.py",
         "storyloop/boundaries.py",
         "storyloop/call_context.py",

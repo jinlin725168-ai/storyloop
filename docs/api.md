@@ -22,6 +22,7 @@
 | `run` | `--change ID [--implementer human] [--overrule TEXT] [--no-interactive]` | 运行状态；base 仅由人实现，`--implementer human` 可省略 |
 | `status` | `--change ID` | 变更状态，附 `run`、`telemetry`、`next`、`stop` |
 | `status`（不带 --change） | — | `OVERVIEW`：所有变更按 `waiting`（human / running / done）分组，待决变更附 `next` |
+| `inbox` | `PROJECT [PROJECT ...]` | `INBOX`：跨变更、跨项目只列需要人决定的事项（最早的在前），每项附 `next` 命令 |
 | `log` | `--change ID` | `LOG` |
 | `answer` | `--change ID --answer TEXT [--answer TEXT …]` | `ANSWERED` |
 | `accept` | `--change ID --criterion ID [--criterion ID …] --note TEXT` | `ACCEPTED`，或仍有未确认条件时 `MANUAL_ACCEPTANCE_REQUIRED` |
@@ -214,6 +215,8 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 | `acceptance_auto_retry_round_limit` | `10` | 每变更验收自动修复总轮次上限；整数 0–50。保持性条件实现前失败、用例/清单越界、未调用声明入口及判据强度预审 `MUST_FIX` 按阻断签名的进展继续，不受夹具预算限制；相邻两轮签名相同停 `no_progress`，达到总上限停 `round_limit`，均保留 `ORACLE_DEFECT` 与可追溯证据。旧配置缺键时按默认 10 处理。 |
 | `oracle_strength_precheck` | `true` | 新格式合同在 RED 前由 review 审查判据强度；standard/heavy 始终开启，light 可设为 `false`。`MUST_FIX` 按进展自动退回；`DECISION_NEEDED` 仍停 `NEEDS_INPUT`。 |
 | `agent_timeout_seconds` | `14400` | 代理进程挂死保护 |
+| `notify_command` | 无 | argv 列表（不经 shell）。`change`/`approve`/`run`/`answer`/`accept`/`reset`/`acceptance-repair` 结束在需要人决定的停点或 `PASSED` 时运行一次，stdin 是 `{"event":"decision"\|"passed","project","change_id","status","next"}`；30 秒超时，失败不影响命令 |
+| `agent_network_retry_seconds` | `30` | 代理因网络不可用时，等待这么久后在同一适配器上自动重试一次（0～600）；登录、额度、超时、崩溃不重试 |
 | `check_timeout_seconds` | `300` | 单元、集成、静态检查与特征化回归的单条命令上限 |
 | `design_min_stories` | `2` | 故事数少于它时跳过 design；必须是 ≥1 的整数 |
 | `metrics.thresholds` | `{}` | 按 R1–R12 覆盖 `threshold`、`min_sample`；R8 也可覆盖 `low`。未知规则/字段、布尔、负数、非有限数值报错 |
