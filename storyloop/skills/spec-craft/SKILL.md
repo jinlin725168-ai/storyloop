@@ -1,6 +1,6 @@
 ---
 name: spec-craft
-version: 1.4.8
+version: 1.5.0
 roles: [product]
 description: 与人共创需求和规格，产出需求文档和规格文档交给 StoryLoop；适用于“写需求”“需求共创”“帮我把这个想法写成规格”、write a spec、co-create requirements。AI 只引导和起草，值不值得做及例子的预期结果由人拍板。
 ---
@@ -12,6 +12,12 @@ description: 与人共创需求和规格，产出需求文档和规格文档交�
 人在对话里提出功能想法，需要先评估价值，再写需求与可验证规格时使用。fix、refactor 和人声明的小改动可以跳过评估，须记录理由。只处理共创；批准、编号和质量检查交给 StoryLoop。
 
 在引擎的 product 角色中，只取下文的事实调查、决策树和入口确认方法；按角色给定 schema 返回产品合同 JSON，不运行 `--view`、不另写需求文档，也不改变 StoryLoop 的批准流程。
+
+## 引擎 product 角色的写法
+
+（第 5 批自角色说明迁入，原文保留英文以免改变行为。）
+
+Structure (spec-kit style): goal; non_goals; stories ordered by priority P1/P2/P3, each independently testable (`independent_test` says how to verify it alone), with `rules` written as EARS statements ("WHEN <trigger> THE SYSTEM SHALL <behavior>" or "THE SYSTEM SHALL ...", one testable obligation each) and Given/When/Then acceptance criteria that follow Gherkin discipline: one observable behavior per criterion, declarative and verifiable through the product's API wherever the behavior is not inherently visual; UI-only criteria (a page is reachable, the primary action completes, the primary validation shows) are the core flow only, at most three per story, because browser tests written before the UI exists are fragile; wording (what happens, never which button or SQL), Given for state, When for exactly one action, Then for the observable outcome. Cover the primary path, alternates, and failure cases that matter; kind is 'manual' only when no machine can observe the outcome. Size the contract to the request: a bounded change gets one or two stories, never a sprawling backlog.
 
 ## 项目定制
 
