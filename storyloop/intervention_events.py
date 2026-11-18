@@ -283,7 +283,7 @@ _BY_STATUS = {status: name for name, members in STOP_CLASSES.items() for status 
 _REASONS = (
     ("missing", r"executable is unavailable|command not found|No such file or directory"),
     ("auth", r"authenticat|oauth|not logged in|/login|unauthori[sz]ed|\b401\b|invalid api key"),
-    ("quota", r"usage limit|quota|rate.?limit|\b429\b|too many requests|credit|insufficient.balance"),
+    ("quota", r"usage limit|hit your [\w -]*limit|quota|rate.?limit|\b429\b|too many requests|credit|insufficient.balance"),
     ("network", r"ENOTFOUND|ECONNRE|ETIMEDOUT|getaddrinfo|network|connection (?:refused|reset)|\b50[234]\b"),
     ("timeout", r"timed_out|timed out|timeout"),
 )

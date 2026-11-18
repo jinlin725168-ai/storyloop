@@ -31,6 +31,14 @@ class BenchAdapterCliTests(unittest.TestCase):
         self.assertIn("--tier-model strong=", str(refused.exception))
         self.assertIn("advertised: none", str(refused.exception))
 
+    def test_the_claude_five_hour_limit_is_a_quota_stop(self):
+        # The guardrail bench stopped on this message; it was classified as a crash.
+        from storyloop.intervention_events import unavailable_reason
+        message = ("Project agent process failed safely (exit 1 | claude implement ended with success: "
+                   "You've hit your 5-hour limit · resets 1:10pm (America/Los_Angeles))")
+        self.assertEqual(unavailable_reason(message), "quota")
+        self.assertEqual(unavailable_reason("Segmentation fault"), "crash")
+
     def test_init_writes_an_adapter_command_that_ignores_the_project_directory(self):
         from storyloop.init_detect import agent_config
         self.assertEqual(agent_config("claude")[1]["agent_command"][:3], ["{python}", "-P", "-m"])
