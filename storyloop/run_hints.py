@@ -144,7 +144,14 @@ def draft_next(project: Path | str, change: dict) -> str:
         require_observation=change.get("observation_required") is True,
         require_output_contract=change.get("output_contract_required") is True,
         inherited_constraints=change.get("inherited_constraints"))))
-    if not questions and not blocking:
+    intake = change.get("intake") or {}
+    others = []
+    if intake.get("status") == "NEEDS_INPUT" and isinstance(change["product"].get("assessment"), dict):
+        from .intake import needs_input_reasons
+        # Questions are counted above; other intake rules refuse approval just the same.
+        others = [reason for reason in needs_input_reasons(change["product"], intake.get("decision"))
+                  if not reason.startswith("仍有 ")]
+    if not questions and not blocking and not others:
         return next_step("DRAFT", change_id, project)
     drafts = f".storyloop/drafts/{change_id}"
     found = []
@@ -152,6 +159,7 @@ def draft_next(project: Path | str, change: dict) -> str:
         found.append(f"{questions} 个待决问题（见 {drafts}/proposal.md 的“待决问题”）")
     if blocking:
         found.append(f"{blocking} 个阻断项（见 {drafts}/checklist.md）")
+    found += others
     return (f"草案还有{'、'.join(found)}，approve 会被拒绝：storyloop change {where} "
             f"--message \"Q1 选推荐项；Q2 …\" 回答或修订，清零后再 storyloop approve {where}")
 

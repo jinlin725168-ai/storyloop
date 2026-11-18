@@ -79,6 +79,8 @@ def _options(status: str, project: str, change_id: str, routed: bool,
         "NEEDS_SPEC_FIX": [supersede, *([overrule] if routed else [])],
         "AGENT_UNAVAILABLE": [run],
         "AGENT_CONTRACT_INVALID": [run],
+        "BLOCKED": [{"action": "查看该变更的代理调用记录", "command": _command("storyloop", "log", *where)},
+                    {**run, "action": "处理后重试"}],
     }
     if status == "BASE_CHANGE_REQUIRED" and ci_requires_human_proposal:
         return [{"action": "人工授权 CI 底座改动", "command": _command(
@@ -399,6 +401,9 @@ def stop_of(project: Path | str, run: dict | None) -> dict | None:
         return None
     saved = run.get("stop")
     if isinstance(saved, dict) and saved.get("status") == "AGENT_UNAVAILABLE":
+        return saved
+    if (isinstance(saved, dict) and saved.get("status") == "BLOCKED"
+            and run.get("blocked_from") == run.get("status")):
         return saved
     if run.get("status") not in STOP_STATUSES:
         return None
