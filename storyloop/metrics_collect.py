@@ -247,6 +247,8 @@ def _link_fields(record: dict, change: dict | None, run: dict | None,
     nature = record["nature"]
     origin = _string(_nested(change, "product", "defect", "origin_change"))
     record["origin_change"] = _none_if_missing(origin) if nature == "fix" else None
+    escape = _string(_nested(change, "product", "defect", "escape_class"))
+    record["escape_class"] = _none_if_missing(escape) if nature == "fix" else None
 
 
 def _commit_fields(record: dict, gaps: dict, change_id: str, report: dict | None,

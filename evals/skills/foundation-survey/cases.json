@@ -1,0 +1,10 @@
+{
+ "version": 1,
+ "cases": [
+  {
+   "key": "survey-new-project",
+   "name": "新接入项目的底座知识调研",
+   "expected": "调研产出被批准为底座知识库"
+  }
+ ]
+}

@@ -178,6 +178,7 @@ def _fix_items(add, product: dict, automated: list, project: Path | None) -> Non
     defect = product["defect"]
     add("Coverage", "ok" if any(c.get("reproduces_defect") for c in automated) else "error",
         "An automated criterion reproduces the defect")
+    _traceability_items(add, defect, project)
     for cause in defect["root_cause"]:
         found = project is None or _location_exists(project, cause["location"])
         add("Traceability", "ok" if found else "error",
@@ -265,3 +266,42 @@ def _all_texts(product: dict):
 def _find_marker(text: str) -> str:
     match = NEEDS_CLARIFICATION.search(text)
     return match.group(0) if match else ""
+
+
+# A StoryLoop change's engine commits are "<type>(<CHANGE-ID>): ..."; the ID names the change.
+_CHANGE_COMMIT = re.compile(r"^[a-z]+\(([A-Z]+-\d{8}-[a-z0-9-]+)\):")
+
+
+def _traceability_items(add, defect: dict, project: Path | None) -> None:
+    """D3: a named origin needs the gate that missed it; a root-cause line last changed by a
+    StoryLoop change suggests that change as the origin."""
+    origin, escape = defect.get("origin_change"), defect.get("escape_class")
+    if origin:
+        # A warning, not an error: contracts written before D3 (frozen bench cases) name only the origin.
+        add("Traceability", "ok" if escape else "warning",
+            f"origin_change {origin} names its escape_class (which gate missed the defect)")
+    if project is None or origin or escape == "preexisting":
+        return
+    candidates = origin_candidates(project, [cause["location"] for cause in defect["root_cause"]])
+    if candidates:
+        add("Traceability", "warning",
+            "Root cause lines were last changed by " + ", ".join(candidates)
+            + ": set defect.origin_change and escape_class, or escape_class preexisting if it predates them")
+
+
+def origin_candidates(project: Path, locations: list[str]) -> list[str]:
+    """StoryLoop change IDs whose commits last touched the given path:line locations at HEAD."""
+    import subprocess
+    found = []
+    for location in locations:
+        path, _, line = location.rpartition(":")
+        if not path or not line.isdigit():
+            continue
+        result = subprocess.run(["git", "blame", "--porcelain", "-L", f"{line},{line}", "HEAD", "--", path],
+                                cwd=project, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        summary = next((row[len("summary "):] for row in result.stdout.splitlines()
+                        if row.startswith("summary ")), "") if result.returncode == 0 else ""
+        match = _CHANGE_COMMIT.match(summary)
+        if match and match.group(1) not in found:
+            found.append(match.group(1))
+    return found

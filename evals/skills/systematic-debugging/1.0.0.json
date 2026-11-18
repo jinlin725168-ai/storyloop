@@ -1,0 +1,13 @@
+{
+ "version": "1.0.0",
+ "skill_sha256": "fee213691bb03c2c672276b31165299a4907b8155d292e77422ddfd7175d8b23",
+ "results": [
+  {
+   "case": "retry-after-failure",
+   "verdict": "passed",
+   "evidence": "sqlite-utils FEAT-20261117-insert-extract（#352），引擎 0f23976：审查 MUST_FIX（测试未验证类型覆盖）后第 3 轮实现通过",
+   "reviewed_by": "jinlin725168-ai",
+   "date": "2026-11-17"
+  }
+ ]
+}

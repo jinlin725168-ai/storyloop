@@ -1,0 +1,20 @@
+{
+ "version": 1,
+ "cases": [
+  {
+   "key": "l3-standard-cli",
+   "name": "非 StoryLoop 的 Python 项目上的 standard 档 CLI 新增功能（L3）",
+   "expected": "PASSED，非例行介入 0，上游测试全绿"
+  },
+  {
+   "key": "self-heavy-internal",
+   "name": "StoryLoop 自身的 heavy 档内部机制变更（自迭代，嵌套项目夹具验收）",
+   "expected": "PASSED，非例行介入不超过 1"
+  },
+  {
+   "key": "retry-after-failure",
+   "name": "实现被审查打回后的返修轮（L3）",
+   "expected": "返修后 PASSED，不出现同一意见重复"
+  }
+ ]
+}
