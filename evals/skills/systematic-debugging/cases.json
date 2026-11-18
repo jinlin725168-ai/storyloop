@@ -1,0 +1,10 @@
+{
+ "version": 1,
+ "cases": [
+  {
+   "key": "retry-after-failure",
+   "name": "实现被审查打回后的返修轮（L3）",
+   "expected": "返修后 PASSED，不出现同一意见重复"
+  }
+ ]
+}

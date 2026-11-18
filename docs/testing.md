@@ -85,6 +85,10 @@ state = case.state()                                         # 运行状态，�
 
 可替换的角色是 `acceptance`、`implement`、`review`、`characterize`、`design`，签名都是 `(project, context) -> dict`；`case.run(implement=...)` 只在这一次运行里替换。默认回答也可单独取用（`product()`、`plan()`、`acceptance()`、`implement`、`characterize`、`passing_review`）。夹具不依赖仓库的 `tests/` 目录，候选副本里可直接导入；复盘调用由离线脚本回答，不会碰真实代理。
 
+### 技能发布门
+
+技能（`storyloop/skills/*`）的版本只有带评测证据才算“已验证”。每个技能在 `evals/skills/<技能>/cases.json` 声明代表性用例；`evals/skills/<技能>/<版本>.json` 记录该版本**确切内容**（技能全部文件的 sha256，换行统一为 LF）在每个用例上的结论、证据（真实运行的变更 ID、引擎提交、调用数与非例行介入）和审核人。`tests/test_skill_release_gate.py`（core）检查：每个技能都声明了用例；当前版本的结果文件与当前内容一致——改了技能却沿用旧结果会失败，须升版本并补新结果；结果只引用已声明用例且带证据。状态由 `tests/skill_release.py` 的 `status()` 给出：全部用例通过为 verified，声明了但未全部通过为 pending，未声明为 undeclared。目前 `foundation-survey` 为 pending（还没有新项目底座调研的真实样本）。
+
 ## 二、CI
 
 `.github/workflows/ci.yml`，push 到 main、PR、每天定时（UTC 19:00）与手动触发：
@@ -129,3 +133,4 @@ Q8 补验在新的隔离 todo-demo 上进行：初始产品合同与套件来自
 - 测试默认分支名不能假定为 `master`；CI 设置了 `init.defaultBranch main`，本地也建议设置。
 - Windows 上 `autocrlf` 会改变检出字节：套件指纹按 LF 规范化，新增指纹逻辑也要这样做。
 - Python 3.12 的 `unittest` 在没有用例时退出码为 5：夹具仓库里要放至少一个单元测试。
+- Windows runner 的临时目录可能以 8.3 短名返回（`C:\Users\RUNNER~1\...`），引擎会解析成长路径（`runneradmin`）。比较路径或拼接含路径的命令前两边都 `resolve()`，命令按 `shlex.join` 构造，别手拼字符串（2026-11-18 #186）。

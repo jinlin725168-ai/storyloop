@@ -1,0 +1,20 @@
+{
+ "version": "1.4.7",
+ "skill_sha256": "3837e31e239b37638db1a062f702a5c8cc91a860de657a4c815bcceeb8d31d8b",
+ "results": [
+  {
+   "case": "l3-standard-cli",
+   "verdict": "passed",
+   "evidence": "sqlite-utils FEAT-20261117-create-table-sql（#481），引擎 9a0c085：7 次调用、11.2 分钟、非例行 0，上游 1626 测试全绿",
+   "reviewed_by": "jinlin725168-ai",
+   "date": "2026-11-17"
+  },
+  {
+   "case": "self-heavy-internal",
+   "verdict": "passed",
+   "evidence": "storyloop dogfood15 FEAT-20261117-blocked-stop-options，引擎 91170e8：heavy，16 次调用，非例行 1（一致性审查发现两处设计缺陷后重规划），合入 #186",
+   "reviewed_by": "jinlin725168-ai",
+   "date": "2026-11-17"
+  }
+ ]
+}

@@ -312,7 +312,7 @@ design、implement、review 可选返回 `facts: [{statement, location}]`（缺�
 | 字段 | 规则 |
 |---|---|
 | `nature` | `feature`（缺省）/ `fix` / `refactor` |
-| `defect` | fix 必填：`observed`、`expected`、`reproduction`、`root_cause`（1–5 条 `{statement, location: "path:line"}`）、`confirmed`、`unconfirmed`；可选 `reporter_hypothesis`、`sibling_entries`、`origin_change` |
+| `defect` | fix 必填：`observed`、`expected`、`reproduction`、`root_cause`（1–5 条 `{statement, location: "path:line"}`）、`confirmed`、`unconfirmed`；可选 `reporter_hypothesis`、`sibling_entries`、`origin_change`（引入缺陷的变更 ID）、`escape_class`（漏过缺陷的门：`oracle`、`characterization`、`review`、`regression`、`environment`、`contract`，或不是 StoryLoop 变更引入的 `preexisting`）。写了 `origin_change` 应同时写 `escape_class`（缺失时需求清单警告，旧合同不受阻）；根因行最近由某个 StoryLoop 变更提交改过而 `origin_change` 为空时，需求清单给出警告并点名该变更。`metrics` 的逃逸指标按 `escape_class` 计数（`by_escape_class`） |
 | `refactor` | refactor 必填：`subtype`（`structure` / `dependency-swap`）、`scope`、`invariants`、`structural_goals`（至少 1 条）；dependency-swap 必有 `migration_map: [{from, to, assertion}]` |
 | `consumers` | `[{id, consumer, trigger, path, in_scope, verification}]` |
 | `coverage_exemptions` | `[{row_type, reason}]` |

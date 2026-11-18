@@ -117,7 +117,8 @@ DEFECT = _obj({"observed": STRING, "expected": STRING, "reproduction": STRINGS,
                "reporter_hypothesis": _nullable(STRING),
                "root_cause": {"type": "array", "items": _obj({"statement": STRING, "location": STRING})},
                "confirmed": STRINGS, "unconfirmed": STRINGS,
-               "sibling_entries": _nullable(STRINGS), "origin_change": _nullable(STRING)})
+               "sibling_entries": _nullable(STRINGS), "origin_change": _nullable(STRING),
+               "escape_class": _nullable(STRING)})
 REFACTOR = _obj({"subtype": {"type": "string", "enum": ["structure", "dependency-swap"]},
                  "scope": STRINGS, "invariants": STRINGS, "structural_goals": STRINGS,
                  "migration_map": _nullable({"type": "array", "items": _obj(

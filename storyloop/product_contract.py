@@ -175,9 +175,15 @@ def _base(value: object) -> None:
             "Base contract must keep full regression, system smoke and build green")
 
 
+# Which gate should have caught a defect (roadmap D3); "preexisting" means no StoryLoop change
+# introduced it, so origin_change stays empty.
+ESCAPE_CLASSES = ("oracle", "characterization", "review", "regression", "environment", "contract",
+                  "preexisting")
+
+
 def _defect(value: object) -> None:
     fields(value, {"observed", "expected", "reproduction", "root_cause", "confirmed", "unconfirmed"},
-           {"reporter_hypothesis", "sibling_entries", "origin_change"})
+           {"reporter_hypothesis", "sibling_entries", "origin_change", "escape_class"})
     for key in ("observed", "expected"):
         text(value[key], key)
     require(bool(strings(value["reproduction"], "reproduction")), "reproduction needs steps")
@@ -196,6 +202,9 @@ def _defect(value: object) -> None:
         strings(value["sibling_entries"], "sibling_entries")
     if "origin_change" in value:
         identifier(value["origin_change"], "origin change")
+    if "escape_class" in value:
+        require(value["escape_class"] in ESCAPE_CLASSES,
+                "escape_class must be one of " + ", ".join(ESCAPE_CLASSES))
 
 
 def _refactor(value: object) -> None:

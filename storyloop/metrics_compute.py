@@ -203,7 +203,15 @@ def escapes(records: list[dict]) -> dict:
     by = {tier: metric("M5", sum(flag for _, flag in rows), len(rows),
                        [change_id for change_id, flag in rows if flag])
           for tier, rows in sorted(by_rows.items(), key=lambda item: TIER_ORDER[item[0]])}
-    return metric("M5", len(escaped), len(passed), escaped, missing, by)
+    result = metric("M5", len(escaped), len(passed), escaped, missing, by)
+    # D3: which gate each escape slipped past, as named by the fix that found it.
+    classes: dict[str, int] = {}
+    for record in records:
+        if record.get("nature") == "fix" and isinstance(record.get("origin_change"), str):
+            key = record.get("escape_class") if isinstance(record.get("escape_class"), str) else "unclassified"
+            classes[key] = classes.get(key, 0) + 1
+    result["by_escape_class"] = dict(sorted(classes.items()))
+    return result
 
 
 def forced_heavy(records: list[dict]) -> dict:
