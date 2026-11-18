@@ -24,7 +24,8 @@ class ReportCommandTests(unittest.TestCase):
         path.write_text('# Report\n', encoding='utf-8')
         result = dispatch(parser().parse_args(['report', str(self.root), '--change', 'FEAT-1']))
         self.assertEqual((result['status'], result['change_id']), ('REPORT', 'FEAT-1'))
-        self.assertEqual(Path(result['report']), path)
+        # Resolved on both sides: Windows temp paths may come back as 8.3 short names.
+        self.assertEqual(Path(result['report']).resolve(), path.resolve())
 
     def test_report_without_change_or_report_says_why(self):
         with self.assertRaisesRegex(StoryLoopError, 'needs --change'):

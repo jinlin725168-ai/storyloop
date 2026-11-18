@@ -1,6 +1,7 @@
 """Characterize what must hold when BLOCKED stops gain recovery options."""
 
 from pathlib import Path
+import shlex
 import tempfile
 import unittest
 
@@ -24,15 +25,16 @@ class BlockedStopCharacterization(unittest.TestCase):
     def test_boundary_violation_stop_options_are_unchanged(self):
         from storyloop.testing.nested import nested_case
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            # Resolved like the engine does: Windows temp paths may be 8.3 short names.
+            root = Path(folder).resolve()
             case = nested_case(root, "standard", characterize=_writes_extra)
             case.run()
             stop = case.state()["stop"]
             self.assertEqual(stop["status"], "BOUNDARY_VIOLATION")
             commands = [item["command"] for item in stop["options"]]
             self.assertEqual(len(commands), 2)
-            self.assertEqual(commands[0], f"storyloop run {root} --change {case.change_id}")
-            self.assertTrue(commands[1].startswith(f"storyloop base-propose {root} --path "))
+            self.assertEqual(commands[0], shlex.join(["storyloop", "run", str(root), "--change", case.change_id]))
+            self.assertTrue(commands[1].startswith(shlex.join(["storyloop", "base-propose", str(root), "--path"])))
 
     def test_rerun_after_a_blocked_error_reaches_passed(self):
         from storyloop.testing.nested import nested_case
