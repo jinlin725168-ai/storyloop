@@ -29,6 +29,12 @@ class TrialViewTests(unittest.TestCase):
         self.assertNotIn("## 假设", text)
         self.assertTrue(text.endswith("## 待决问题\n\n- 无\n"))
 
+    def test_dict_evidence_of_a_readiness_stop_still_renders(self):
+        # Trial H: `storyloop readiness` crashed with TypeError after the evidence cap.
+        lines = render_stop({"blocker": "READINESS_APPROVAL_REQUIRED", "resume": "storyloop approve",
+                             "evidence": {"unit": {"status": "PASSED"}, "checks": {"status": "MISSING"}}})
+        self.assertEqual([line for line in lines if line.startswith("  - ")], ["  - unit", "  - checks"])
+
     def test_routing_evidence_is_one_short_line_each_and_capped(self):
         evidence = [{"field": f"risks.r{index}", "value": "no", "source": "role",
                      "locations": ["sqlite_utils/cli.py:1"], "commit": "c" * 40} for index in range(28)]

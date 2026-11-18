@@ -439,7 +439,7 @@ def render_stop(stop: dict) -> list[str]:
     for key, heading in (("evidence", "证据"), ("facts", "代理陈述事实"), ("questions", "问题")):
         if stop.get(key):
             lines.append(f"{heading}：")
-            items = stop[key]
+            items = list(stop[key])  # readiness stops carry a dict of layers: list its names
             shown = items[:EVIDENCE_SHOWN] if key == "evidence" else items
             lines += [f"  - {_render_item(item)}" for item in shown]
             if len(items) > len(shown):

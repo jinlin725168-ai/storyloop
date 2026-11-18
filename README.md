@@ -106,6 +106,8 @@ python3 -m venv .venv && .venv/bin/pip install .
 .venv/bin/storyloop approve ~/work/my-project --change FEAT-20260916-001
 .venv/bin/storyloop status ~/work/my-project   # 跨变更总览：需要你决定 / 进行中 / 已完成
 .venv/bin/storyloop inbox ~/work/my-project ~/work/other   # 只看待你决定的事项，可跨项目
+.venv/bin/storyloop workers start ~/work/my-project --change FEAT-20260916-002   # 在独立 clone 里并行跑，完成后 workers land
+.venv/bin/storyloop github sync ~/work/my-project   # 带标签的 issue、变红的 CI → 事件草稿（进 inbox）
 ```
 
 第一次用从 [快速上手](docs/quickstart.md) 开始。

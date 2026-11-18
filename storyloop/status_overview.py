@@ -42,6 +42,14 @@ def _row(project: Path, change_id: str, draft_result) -> dict:
     run = load_run_state(project, change_id) if run_file.exists() else None
     status = (run or {}).get("status") or change["status"]
     waiting = "done" if status in DONE else "running" if status in ACTIVE_STATUSES else "human"
+    from .workers import worker_note
+    note = worker_note(project, change_id)
+    if note is not None:  # roadmap H: the change runs (or stopped) in its own worker clone
+        waiting = "running" if note["alive"] else "human"
+        return {"change_id": change_id, "status": "IN_WORKER", "waiting": waiting, "class": None,
+                "goal": (change.get("product") or {}).get("goal") or change.get("idea") or "",
+                "updated_at": change.get("updated_at"), "worker": note["worker"],
+                "next": f"storyloop workers status {project}"}
     return {"change_id": change_id, "status": status, "waiting": waiting,
             "class": stop_class(status) if waiting == "human" else None,
             "goal": (change.get("product") or {}).get("goal") or change.get("idea") or "",

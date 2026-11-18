@@ -24,11 +24,25 @@ def inbox(projects: list[Path], draft_result) -> dict:
     items = []
     for project in projects:
         project = Path(project).resolve()
-        if not (project / ".storyloop/state/changes").is_dir():
+        if not (project / ".storyloop").is_dir():
             continue
+        from .workers import workers_status
+        workers = {row["change_id"]: row for row in workers_status(project)["workers"]}
         for row in overview(project, draft_result)["changes"]:
-            if row["waiting"] == "human":
-                items.append({**row, "project": str(project)})
+            worker = workers.get(row["change_id"])
+            if worker and (row["waiting"] == "human" or worker["flags"]):
+                # Roadmap H: a worker waits for a person, or the watchdog flagged a running one.
+                row = {**row, "status": worker["run_status"], "next": worker["next"],
+                       "flags": worker["flags"], "worker": worker["worker"]}
+            elif row["waiting"] != "human":
+                continue
+            items.append({**row, "project": str(project)})
+        from .github_events import pending_events
+        for event in pending_events(project):  # roadmap H: GitHub events waiting for an assessment
+            items.append({"project": str(project), "change_id": event["id"],
+                          "status": "EVENT_CI_RED" if event["kind"] == "ci_red" else "EVENT_ISSUE",
+                          "class": None, "goal": event["title"], "updated_at": event["at"],
+                          "next": event["next"] + f"；不处理：storyloop github dismiss {project} --event {event['id']}"})
     items.sort(key=lambda item: item.get("updated_at") or "")
     return {"status": "INBOX", "projects": [str(Path(item).resolve()) for item in projects], "items": items}
 
@@ -43,8 +57,9 @@ def render_inbox(result: dict, now: datetime | None = None) -> str:
     for number, item in enumerate(items, 1):
         label = CLASS_LABELS.get(item.get("class") or "", "")
         waited = _age(item.get("updated_at"), now or datetime.now(timezone.utc))
+        flagged = f" ⚠ {'、'.join(item['flags'])}" if item.get("flags") else ""
         lines += ["", f"[{number}] {Path(item['project']).name}  {item['change_id']}  {item['status']}"
-                      + (f"（{label}）" if label else "") + (f" · 已等待 {waited}" if waited else ""),
+                      + (f"（{label}）" if label else "") + (f" · 已等待 {waited}" if waited else "") + flagged,
                   f"    {item['goal'][:80]}"]
         if item.get("next"):
             lines.append(f"    下一步：{item['next']}")

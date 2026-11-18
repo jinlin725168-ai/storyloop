@@ -193,6 +193,10 @@
 |  | `init_detect` | 可变区 | 一键接入：从仓库布局推断工程画像与代理配置，只建议不写，确认后锁定并跑准备度 | `propose_settings`、`agent_config` |
 |  | `status_overview` | 可变区 | 跨变更总览：按“需要你决定 / 进行中 / 已完成”分组，并给每个待决变更下一步命令 | `overview`、`change_next`、`render_overview` |
 |  | `attention` | 可变区 | 注意力预算的命令面：跨项目决策收件箱、只在需要人时运行 notify_command | `inbox`、`notify`、`render_inbox` |
+|  | `workers` | 可变区 | 并行：每个变更在独立 clone（worker）里后台跑闭环；status 含 Watchdog（无活动、超墙钟、超费用） | `start_worker`、`workers_status`、`stop_worker`、`dispatch_workers` |
+|  | `worker_land` | 可变区 | 把 worker 的已验证结果带回项目：未分叉快进；已分叉在临时 clone 合并后复验验收、冒烟与单元/集成层 | `land_worker` |
+|  | `worker_registry` | 可变区 | worker 登记、进程存活与控制面复制 | `save_entry`、`_entries`、`_alive` |
+|  | `github_events` | 可变区 | GitHub 事件（gh 轮询）：带标签 issue 与 main 上变红的 CI 生成事件草稿，允许作者的 `/storyloop ID 意见` 评论修订 DRAFT；文本只作数据 | `sync`、`pending_events`、`dismiss_event` |
 |  | `testing.nested` | 可变区 | 为 StoryLoop 自身机制的验收测试建嵌套项目并以脚本化角色运行 | — |
 |  | `routing_cli` | 可变区 | 校验并分发显式分流命令，批准接口只记录决策 | `dispatch_routing` |
 

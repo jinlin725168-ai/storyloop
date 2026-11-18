@@ -23,9 +23,11 @@ from .stop_report import build_stop, build_entry_stop, stop_of
 from .routing_cli import dispatch_routing, BLOCKED
 from .ci_command import run_ci_command
 from .memory_cli import add_memory_arguments, dispatch_memory
-from .cli_output import display
+from .cli_output import FAILURE_STATUSES, display
 from .attention import add_inbox_arguments, inbox, notify, record_touch
 from .bench_cli import add_bench_arguments, dispatch_bench
+from .github_events import add_github_arguments, dispatch_github
+from .workers import add_workers_arguments, dispatch_workers
 
 
 def parser() -> argparse.ArgumentParser:
@@ -80,6 +82,8 @@ def parser() -> argparse.ArgumentParser:
     check.add_argument("--json", action="store_true", help="输出完整 JSON")
     add_bench_arguments(sub)
     add_inbox_arguments(sub)
+    add_workers_arguments(sub)
+    add_github_arguments(sub)
     return root
 
 
@@ -203,8 +207,9 @@ def _since_date(value: str) -> date:
 def dispatch(args) -> dict:
     if args.command == "bench":
         return dispatch_bench(args)
-    if args.command == "inbox":
-        return inbox(args.projects, _draft_result)
+    if args.command in {"inbox", "workers", "github"}:  # roadmap G/H surfaces
+        return {"inbox": lambda: inbox(args.projects, _draft_result), "workers": lambda: dispatch_workers(args),
+                "github": lambda: dispatch_github(args, _revise_with_agent)}[args.command]()
     project = args.project.resolve()
     if args.command == "adapters":
         from .adapter_capabilities import check
@@ -408,12 +413,7 @@ def main(argv: list[str] | None = None) -> int:
         result = dispatch(args)
         display(result, args.json)
         notify(args, result)
-        failures = {
-            "FAILED", "BLOCKED", "NEEDS_INPUT", "INTERRUPTED", "UNSAFE_CONTAINMENT", "WORKSPACE_TAINTED",
-            "BUDGET_EXHAUSTED", "BASE_CHANGE_REQUIRED", "BOUNDARY_VIOLATION", "ERROR", "CHARACTERIZATION_FAILED",
-            "SCAFFOLD_SELECTION_REQUIRED", "SMOKE_UPDATE_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_SPEC_FIX", "NO_PROGRESS",
-        }
-        return 2 if result.get("status") in failures | BLOCKED else 0
+        return 2 if result.get("status") in FAILURE_STATUSES | BLOCKED else 0
     except StoryLoopError as exc:
         error = {"status": exc.code, "message": redact(str(exc))}
         change_id = getattr(args, "change_id", None)

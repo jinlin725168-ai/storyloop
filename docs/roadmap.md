@@ -137,6 +137,22 @@ flowchart LR
 - `notify_command`：只在需要人决定或完成时通知。
 - 真实验证（sqlite-utils，`indexes --unique`）：`PASSED`，人工触达 2 次，都是决定（回答问题、批准合同）；草案中 1 轮、验收中 2 轮由引擎自动续跑。F 试用是 7 次，其中 4 次是决定（[验证记录](validation/2026-11-18-G-验证.md)）。
 
+**H 进展（2026-11-18）**：H1 并行与 Watchdog。
+
+- `workers start` 让每个变更在独立 clone（worker）里后台跑完整闭环，并发上限 `workers_max`。各道门在 worker 里原样执行。
+- `workers land` 落地方式：
+  - 项目分支未动过：快进，落地的就是验证过的提交；
+  - 已有别的变更落地：先在临时 clone 合并，再复验该变更的验收、系统冒烟和单元/集成层，绿了才落地；
+  - 冲突或复验失败：停下交给人，项目分支不动。
+- `workers status` 内置 Watchdog（无活动、超墙钟、超费用）。停下的 worker 进入 `inbox` 和 `status` 总览。
+- 用模拟适配器跑真实子进程：两个变更并行通过，一个快进落地，一个复验后落地。
+
+H2 GitHub 事件（`gh` 轮询，不需要服务器）：
+- 带标签的 issue、main 上变红的 CI 生成事件草稿，进入 `inbox`，附建议的 `assess` 命令。
+- 允许作者的 `/storyloop <变更ID> <意见>` issue 评论修订 DRAFT 变更。StoryLoop 不 push、不建 PR，所以没有采用路线图原定的 PR 评论修订。
+- 事件只生成草稿，不替人花钱、不替人做决定；issue 与评论的文本只作数据。
+- 真实 `gh` 只读同步已在本仓库上跑通。
+
 审查角色在此期间由开发者直接完成（Codex 暂停派发）；base 人工通道不变（[决策 0018](decisions/0018-base-human-only.md)）。
 
 ## 明确不做

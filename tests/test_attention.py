@@ -218,5 +218,25 @@ class NotifyTests(unittest.TestCase):
             run.assert_not_called()
 
 
+class ReadinessBindingTests(unittest.TestCase):
+    def test_settings_outside_the_test_layers_do_not_void_a_readiness_approval(self):
+        # Trial H: adding a `github` section to config.json sent two new drafts back to
+        # READINESS_APPROVAL_REQUIRED although nothing about the tests had changed.
+        import json
+        import tempfile
+        from storyloop.readiness import _binding
+        with tempfile.TemporaryDirectory() as folder:
+            root = _project(Path(folder).resolve())
+            before = _binding(root)[0]["test_config_digest"]
+            path = root / ".storyloop/config.json"
+            config = json.loads(path.read_text(encoding="utf-8"))
+            path.write_text(json.dumps({**config, "github": {"repo": "o/r"}, "notify_command": ["x"],
+                                        "workers_max": 2}), encoding="utf-8")
+            self.assertEqual(_binding(root)[0]["test_config_digest"], before)
+            config["check_timeout_seconds"] = 1
+            path.write_text(json.dumps(config), encoding="utf-8")
+            self.assertNotEqual(_binding(root)[0]["test_config_digest"], before)
+
+
 if __name__ == "__main__":
     unittest.main()
