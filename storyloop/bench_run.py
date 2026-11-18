@@ -22,9 +22,9 @@ SCORE_CONTRACT = {"version": 3, "pass_requires": ["PASSED", "gold_passed"],
 UNAVAILABLE_ABORT = 2
 
 
-def estimate_duration(case_count: int, scope: str) -> str:
+def estimate_duration(case_count: int, scope: str, attempts_per_side: int = 2) -> str:
     """Return cumulative 40–65 minute per attempt estimate."""
-    attempts = case_count * 2 * (1 if scope == "base-only" else 2)
+    attempts = case_count * attempts_per_side * (1 if scope == "base-only" else 2)
     return f"约 {attempts * 40 / 60:.1f}～{attempts * 65 / 60:.1f} 小时"
 
 
@@ -32,8 +32,10 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
               adapter_name: str, model: str, budget: dict, invoke, check_gold,
               output_root: Path, *, i_accept_cost: bool = False,
               gold_python: Path | None = None, scope: str = "paired",
-              confirmed: bool = False, suite_source: str = "generated") -> dict:
+              confirmed: bool = False, suite_source: str = "generated",
+              attempts_per_side: int = 2) -> dict:
     """Run one frozen comparison; invoke/check_gold are explicit runtime adapters."""
+    require(attempts_per_side in (1, 2), "attempts_per_side is 1 or 2")
     if adapter_name != "test" and not i_accept_cost:
         attempts = len(sources) * 2 * (1 if scope == "base-only" else 2)
         raise StoryLoopError(f"Real bench runs require --i-accept-cost; "
@@ -81,7 +83,8 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
               "base_engine_commit": base_engine_commit,
               "candidate_engine_commit": candidate_engine_commit, "adapter": adapter_name,
               "model": model, "budget": budget, "gold_python": interpreter,
-              "scoring_contract": SCORE_CONTRACT, "cases": []}
+              # One attempt per side is a spot check: recorded in the contract, never a stage gate.
+              "scoring_contract": {**SCORE_CONTRACT, "attempts_per_side": attempts_per_side}, "cases": []}
     unavailable = 0
     for case in cases:
         row = {"case_id": case["manifest"]["case_id"], "case_version": case["manifest"]["case_version"],
@@ -90,7 +93,7 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
                "case_hash": case["case_hash"], "contract_sha256": case["manifest"]["contract_sha256"],
                "suite_sha256": case["manifest"]["suite_sha256"],
                "gold_sha256": case["gold_hash"], "attempts": []}
-        for attempt in (1, 2):
+        for attempt in range(1, attempts_per_side + 1):
             for side in (("base",) if scope == "base-only" else ("base", "candidate")):
                 if "aborted" in result:
                     outcome = {"status": "NOT_RUN", "events": [], "reason": "aborted_agent_unavailable"}
@@ -112,7 +115,7 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
         row["comparison"] = comparison
         result["cases"].append(row)
     if (result["case_version"] == 2 and scope == "base-only" and suite_source == "generated"
-            and "aborted" not in result):
+            and "aborted" not in result and attempts_per_side == 2):
         from .bench_real_exec import STAGE_CASE_IDS, stage_gate
         if {row["case_id"] for row in result["cases"]} == STAGE_CASE_IDS:
             result["stage_gate"] = stage_gate(result)

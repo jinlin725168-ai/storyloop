@@ -42,6 +42,8 @@ def add_bench_arguments(sub) -> None:
     run.add_argument("--gold-python", type=Path)
     run.add_argument("--agent-command", nargs="+", help="Claude 使用的 StoryLoop command 适配器 argv")
     run.add_argument("--agent-command-json", help='同上，写成 JSON 数组（argv 含 "-m" 等以 - 开头的参数时用这个）')
+    run.add_argument("--attempts-per-side", type=int, choices=(1, 2), default=2,
+                     help="每侧尝试次数；1 为抽查，记入评分合同，不计阶段门槛")
     run.add_argument("--max-calls", type=int, default=20)
     run.add_argument("--max-wall-seconds", type=int, default=14400)
     run.add_argument("--cases-root", type=Path, default=Path("bench/cases"))
@@ -112,8 +114,8 @@ def _run(args) -> dict:
     from .bench_real_exec import run_isolated_attempt
     from .bench_run import estimate_duration, run_bench
 
-    estimate = estimate_duration(len(args.case_id), args.scope)
-    count = len(args.case_id) * 2 * (1 if args.scope == "base-only" else 2)
+    estimate = estimate_duration(len(args.case_id), args.scope, args.attempts_per_side)
+    count = len(args.case_id) * args.attempts_per_side * (1 if args.scope == "base-only" else 2)
     require(args.i_accept_cost, f"真实评测默认关闭；预计 {count} 次，{estimate}；需 --i-accept-cost")
     require(args.scope == "base-only" or args.candidate_engine_commit,
             "paired 需要 --candidate-engine-commit")
@@ -151,4 +153,5 @@ def _run(args) -> dict:
     return run_bench(sources, args.base_engine_commit, args.candidate_engine_commit or "",
                      args.adapter, args.model, budget, invoke, None, args.output_root,
                      i_accept_cost=True, gold_python=args.gold_python, scope=args.scope,
-                     confirmed=True, suite_source=args.suite_source)
+                     confirmed=True, suite_source=args.suite_source,
+                     attempts_per_side=args.attempts_per_side)
