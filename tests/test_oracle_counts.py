@@ -85,6 +85,13 @@ class ParserTests(unittest.TestCase):
         counts = count_tests(["x"], output)
         self.assertEqual((counts["executed"], counts["parser"]), (9, "pytest"))
 
+    def test_pytest_quiet_summary_without_borders_is_counted(self):
+        # Trial F on sqlite-utils: `pytest -q` readiness was EXECUTION_NOT_PROVEN without a custom pattern.
+        counts = count_tests(["python", "-m", "pytest", "-q"], "...\n1494 passed, 19 skipped, 33 warnings in 12.78s\n")
+        self.assertEqual((counts["executed"], counts["skipped"], counts["parser"]), (1494, 19, "pytest"))
+        self.assertEqual(count_tests(["pytest"], "=== no tests ran in 0.01s ===\n")["executed"], 0)
+        self.assertIsNone(count_tests(["x"], "copied 3 files in 0.2s\n")["executed"])
+
     def test_project_patterns_win_for_their_command(self):
         patterns = validate_patterns([{"match": "bazel", "executed": r"Executed (?P<executed>\d+) out of"}])
         counts = count_tests(["bazel", "test", "//..."], "Executed 14 out of 14 tests\nRan 2 tests in 1s\n", patterns)

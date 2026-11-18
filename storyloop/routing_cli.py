@@ -44,7 +44,8 @@ def dispatch_routing(project: Path, args) -> dict | None:
     """Dispatch routing modes; return None for commands owned by the original CLI."""
     validate_routing_args(args)
     if args.command == 'readiness':
-        result = inspect_readiness(project)
+        # Asked explicitly (typically after fixing tests or the environment): measure again.
+        result = inspect_readiness(project, refresh=True)
         return _entry(project, result)
     if args.command == 'approve' and getattr(args, 'readiness', None):
         return _entry(project, approve_readiness(project, args.readiness, args.reason))

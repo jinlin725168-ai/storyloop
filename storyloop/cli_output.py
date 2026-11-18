@@ -20,6 +20,10 @@ def display(result: dict, complete_json: bool) -> None:
     if result.get("status") == "LOG":
         print(render_log(result))
         return
+    if result.get("status") == "SETTINGS_PROPOSED" and "settings" in result:
+        from .init_detect import render_proposal
+        print(render_proposal(result))
+        return
     if result.get("status") == "OVERVIEW":
         from .status_overview import render_overview
         print(render_overview(result))
@@ -36,7 +40,8 @@ def display(result: dict, complete_json: bool) -> None:
         print(rendered)
         return
     print(result.get("status", "REPORT"))
-    for key in ("change_id", "project", "next", "report", "pending", "accepted", "paths", "written"):
+    for key in ("change_id", "project", "agent", "readiness", "next", "report", "pending", "accepted",
+                "paths", "written"):
         if key in result and result[key] is not None:
             print(f"{key}: {result[key]}")
     if result.get("readiness_status") or ("layers" in result and "binding" in result):

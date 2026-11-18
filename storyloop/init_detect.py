@@ -7,6 +7,7 @@ build files; anything it cannot infer is left out, never guessed into the baseli
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import shlex
 import shutil
 
@@ -29,10 +30,14 @@ def propose_settings(project: Path) -> dict:
     kinds = detected["kinds"]
     tests = [name for name in TEST_DIRECTORIES if (project / name).is_dir()]
     sources = _source_roots(project, kinds, set(tests))
+    read_by_tests = _read_by_tests(project, tests, set(sources))
+    sources = sorted(set(sources) | set(read_by_tests))
     settings = {"unit_commands": _unit_commands(project, kinds, detected["unit_commands"], tests),
                 "module_roots": sources, "test_roots": tests,
                 "scratch_paths": sorted({path for kind in kinds for path in SCRATCH.get(kind, [])})}
-    evidence = {"stacks": kinds, "module_roots": "含源码的顶层目录（排除测试目录）",
+    evidence = {"stacks": kinds, "module_roots": "含源码的顶层目录（排除测试目录）" + (
+                    f"；{', '.join(f'{name}（{where}）' for name, where in read_by_tests.items())}"
+                    "被测试按路径读取，同一变更通常要一起改" if read_by_tests else ""),
                 "test_roots": "按惯例命名的测试目录", "unit_commands": "由构建文件推断"}
     gaps = [key for key in ("unit_commands", "module_roots") if not settings[key]]
     return {"settings": settings, "evidence": evidence, "gaps": gaps}
@@ -50,6 +55,24 @@ def _source_roots(project: Path, kinds: list[str], tests: set[str]) -> list[str]
         elif name in SOURCE_DIRECTORIES:
             roots.append(name)
     return roots
+
+
+def _read_by_tests(project: Path, tests: list[str], sources: set[str]) -> dict[str, str]:
+    """Top-level directories test code opens by path (e.g. docs checked against --help)."""
+    candidates = [path.name for path in project.iterdir() if path.is_dir() and not path.is_symlink()
+                  and not path.name.startswith(".") and path.name not in SKIP_DIRECTORIES
+                  and path.name not in sources and path.name not in tests]
+    found: dict[str, str] = {}
+    for test in tests:
+        for file in sorted((project / test).rglob("*"))[:2000]:
+            if not file.is_file() or file.suffix not in {".py", ".js", ".ts", ".java"}:
+                continue
+            text = file.read_text(encoding="utf-8", errors="replace")
+            for name in candidates:
+                # `parent / "docs"` or "docs/...": a path, not a word such as a table name.
+                if name not in found and re.search(rf"""/\s*["']{re.escape(name)}["']|["']{re.escape(name)}/""", text):
+                    found[name] = file.relative_to(project).as_posix()
+    return found
 
 
 def _unit_commands(project: Path, kinds: list[str], detected: list, tests: list[str]) -> list:
@@ -103,3 +126,18 @@ def readiness_next(project: Path, readiness: dict) -> str:
             ["storyloop", "approve", where, "--readiness", readiness.get("digest", "<digest>"),
              "--reason", "<缺口理由>"]) + f"，然后 {start}")
     return start
+
+
+def render_proposal(result: dict) -> str:
+    """What a person needs to decide: each proposed value and where it came from."""
+    lines = ["SETTINGS_PROPOSED（未写任何文件）", f"project: {result['project']}",
+             f"技术栈：{', '.join(result['evidence']['stacks'])}"]
+    for key in ("module_roots", "test_roots", "unit_commands", "scratch_paths"):
+        value = result["settings"][key]
+        shown = "; ".join(shlex.join(command) for command in value) if key == "unit_commands" else ", ".join(value)
+        note = result["evidence"].get(key)
+        lines.append(f"  {key}: {shown or '（未推断出）'}" + (f"  ← {note}" if note else ""))
+    if result["gaps"]:
+        lines.append("未推断出：" + ", ".join(result["gaps"]) + "；请写 settings JSON 并用 --settings")
+    lines.append(f"next: {result['next']}")
+    return "\n".join(lines)
