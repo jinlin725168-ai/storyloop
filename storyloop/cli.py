@@ -34,6 +34,7 @@ def parser() -> argparse.ArgumentParser:
     descriptions = {
         "readiness": "检查项目测试准备度",
         "init": "一键锁定现有 Git 工程底座",
+        "assess": "建变更前的评估：回答三问（谁的什么问题、凭什么知道解决了、不做会怎样），由人决定做、需澄清或放弃",
         "change": "用一句产品意图与 AI 共创 OpenSpec 用户故事和验收条件",
         "approve": "批准产品合同，并自动完成实现、验收、报告和本地合并",
         "run": "执行或继续已批准的产品变更",
@@ -61,6 +62,8 @@ def parser() -> argparse.ArgumentParser:
         "drafts": "列出或驳回待批草案",
         "metrics": "跨变更汇总指标与调整建议（只读）",
         "requirements": "需求登记：列出需求与规则的稳定 ID、版本历史和关联的 fix（只读）",
+        "map-propose": "为已有项目起草需求地图（模块）并把活规格中的现有需求分到模块；只写控制面草稿",
+        "map-apply": "人确认后安装需求地图与现有需求的登记迁移记录并提交",
     }
     for command, help_text in descriptions.items():
         child = sub.add_parser(command, help=help_text)
@@ -83,7 +86,17 @@ def _product_arguments(child, command):
         child.add_argument("--change", dest="change_id")
     elif command == "init":
         add_init_arguments(child)
+    elif command == "assess":
+        child.add_argument("--idea", required=True)
+        child.add_argument("--problem", help="谁遇到了什么问题（讲一次真实发生的情况）")
+        child.add_argument("--success", help="凭什么知道问题解决了")
+        child.add_argument("--if-not", dest="if_not", help="不做会怎样")
+        child.add_argument("--decision", choices=("do", "clarify", "drop"))
+        child.add_argument("--no-interactive", action="store_true", help="缺项时报错，不在终端提问")
     elif command == "change":
+        child.add_argument("--assessment", help="storyloop assess 结论为“做”的评估记录 ID")
+        child.add_argument("--from-draft", dest="from_draft", type=Path,
+                           help="对话入口写出的草稿目录（含 contract.json，可选 record.json）")
         child.add_argument("--idea")
         child.add_argument("--slug", help="新变更 ID 中的功能短名（3–40 个小写字母、数字、连字符）")
         child.add_argument("--change", dest="change_id")
@@ -130,6 +143,8 @@ def _product_arguments(child, command):
 def _maintenance_arguments(child, command):
     if command == "requirements":
         child.add_argument("--id", dest="registry_id", help="只看一个需求、规则或例子的版本历史")
+    if command == "map-apply":
+        child.add_argument("--proposal", required=True, help="map-propose 给出的草稿摘要")
     if command == "metrics":
         child.add_argument("--since", type=_since_date, metavar="YYYY-MM-DD")
         child.add_argument("--ci-results", type=Path, metavar="DIR")
@@ -236,6 +251,14 @@ def dispatch(args) -> dict:
         return dispatch_memory(project, args)
     if args.command == "ci":
         return run_ci_command(project, args.change_id, args.record)
+    if args.command == "assess":
+        from .assessments import assess_command
+        return assess_command(project, args)
+    if args.command in {"map-propose", "map-apply"}:
+        require(_is_product_project(project), "Run storyloop init on this Git project first")
+        from .requirements_map import apply_map, propose_map
+        return (propose_map(project, invoke_project_agent) if args.command == "map-propose"
+                else apply_map(project, args.proposal))
     if args.command == "requirements":
         from .requirements_registry import registry_view
         return registry_view(project, args.registry_id)

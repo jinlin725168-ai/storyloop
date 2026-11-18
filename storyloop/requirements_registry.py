@@ -21,6 +21,7 @@ import subprocess
 from .models import StoryLoopError, require
 
 RECORDS = "openspec/requirements/changes"
+MAP_PATH = "openspec/requirements/map.json"
 STABLE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}\.[SRE][1-9][0-9]{0,3}$")
 KINDS = {"requirements": "S", "rules": "R", "examples": "E"}
 
@@ -220,8 +221,19 @@ def render_view(result: dict) -> str:
     return "\n".join(lines)
 
 
-def compact(project: Path, limit: int = 200) -> list[dict]:
-    """Active requirements with their rules, for the product role to reference (bounded)."""
+def compact(project: Path, limit: int = 200) -> list[dict] | dict:
+    """Active requirements with their rules (bounded) and, when a map exists, its modules."""
+    rows = _compact_rows(project, limit)
+    path = Path(project) / MAP_PATH
+    if not path.is_file():
+        return rows
+    value = json.loads(path.read_text(encoding="utf-8"))
+    return {"modules": [{key: module[key] for key in ("id", "name", "responsibility")}
+                        for module in value["modules"] if module.get("status", "active") == "active"],
+            "requirements": rows}
+
+
+def _compact_rows(project: Path, limit: int) -> list[dict]:
     view = registry_view(project)["requirements"]
     rows = [{"id": item["id"], "version": item["version"], "title": item["title"],
              "module": item.get("module"),

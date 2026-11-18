@@ -29,6 +29,7 @@ def create_change(
     require_entry_feasibility: bool = False,
     require_output_contract: bool = False,
     inherited_constraints: list[dict] | None = None,
+    cocreation: dict | None = None,
 ) -> dict:
     """Create a local ignored draft from one short product idea."""
     project = Path(project).resolve()
@@ -72,6 +73,8 @@ def create_change(
         state["supersedes"] = _supersedes(supersedes)
     if inherited_constraints is not None:
         state["inherited_constraints"] = deepcopy(inherited_constraints)
+    if cocreation is not None:
+        state["cocreation"] = deepcopy(cocreation)
     from .intake import project_intake
     state["intake"] = project_intake(project, canonical)
     _save(project, state)
@@ -94,12 +97,15 @@ def load_change(project: Path, change_id: str) -> dict:
                 "base_proposal_sha256", "blocked_by", "intervention_events",
                 "verification_entries_required", "entry_coverage_required", "observation_required",
                 "entry_feasibility_required", "output_contract_required", "inherited_constraints",
-                "registry"}
+                "registry", "cocreation"}
     require(required <= set(value) <= required | optional and value["version"] == 1,
             "Invalid change state")
     require(value["change_id"] == change_id, "Change state identity mismatch")
     if "intervention_events" in value:
         require(isinstance(value["intervention_events"], list), "Invalid intervention events")
+    if "cocreation" in value:
+        require(isinstance(value["cocreation"], dict) and value["cocreation"].get("entry") in {"cli", "chat"},
+                "Invalid co-creation entry")
     if "registry" in value:
         require(isinstance(value["registry"], dict) and isinstance(value["registry"].get("ids"), dict)
                 and isinstance(value["registry"].get("record"), dict), "Invalid registry assignment")

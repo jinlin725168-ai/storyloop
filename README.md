@@ -287,6 +287,21 @@ storyloop metrics PATH --save
 
 `COST_LIMIT_REACHED` 在下一次调用前停止；提高 limits 后 `run` 恢复。失败调用也计成本；没有费用回报时只展示已知费用覆盖，不估价、不把未知当作零。无画像的旧配置继续工作，已有报告与回执保持原字节；缺少旧诊断的历史报告不会凭空补齐新状态。
 
+## 先评估、再共创
+
+新功能值不值得做，先由人回答三问再决定：
+
+```bash
+storyloop assess PROJECT --idea "<一句意图>" --problem "<谁遇到了什么问题，讲一次真实发生的情况>" \
+  --success "<凭什么知道解决了>" --if-not "<不做会怎样>" --decision do|clarify|drop
+```
+
+不带参数时在终端逐项提问。结论是 `drop` 就不创建变更；是 `do` 时用给出的命令 `storyloop change PROJECT --idea ... --assessment <ID>` 开始，评估记录会进入变更的共创记录。
+
+在 Claude Code / Codex 对话里用 spec-craft 技能共创需求时，技能把合同草稿写到 `.storyloop/drafts/spec/<slug>/contract.json`，再用 `storyloop change PROJECT --from-draft .storyloop/drafts/spec/<slug>` 交给 StoryLoop：草稿里人确认过的目标、故事、规则、例子和假设原样保留，product 角色只补分流评估与验证入口。批准时每个变更写一份 `openspec/changes/<ID>/cocreation.json`（入口、档位、评估、澄清次数、假设确认情况、时间）；对话里代理自述的经过单独标为 `source: agent`。
+
+合同里可以写 `assumptions`（AI 替人做的猜测，`assumed` / `confirmed`）：还有未确认的假设时批准会被拒。验收条件可以用 `rule` 标出它例证第几条规则、用 `polarity` 标正例或反例；写了 `rule` 的合同要求每个例子都关联规则、每条规则至少一个正例，缺反例和 `given` 没有具体数据只给警告。
+
 ## 需求登记
 
 批准合同时，引擎给每个需求（用户故事）、规则和例子（验收条件）分配稳定 ID：`<变更 ID>.S<n>`、`.R<n>`、`.E<n>`。要修改已有功能时，合同里写已有 ID（故事的 `requirement`、`rule_ids`，验收条件的 `example`、`rule`，移除写 `retire`）；没写的就是新增。产品角色起草时会拿到已合入的登记摘要，可以直接引用。
@@ -297,6 +312,8 @@ storyloop metrics PATH --save
 storyloop requirements PROJECT            # 需求与规则、版本、状态、关联的 fix 数
 storyloop requirements PROJECT --id FEAT-20261118-rooms.R1   # 一条规则的版本历史
 ```
+
+已有项目第一次用登记时，先起草需求地图：`storyloop map-propose PROJECT` 让只读的调研角色把代码分成业务模块（ID、名称、职责、边界、代码区域），并把活规格里已有的需求逐条分到模块，结果只写成 `.storyloop/drafts/requirements-map/proposal.json`；人检查后 `storyloop map-apply PROJECT --proposal <摘要>` 安装 `openspec/requirements/map.json`，并以迁移变更 `REQ-<日期>-requirements-bootstrap` 给已有需求和规则编上稳定 ID，一起提交。有地图之后，合同的 `capability` 必须是地图里的模块。
 
 fix 合同的 `defect.rules` 写出缺陷违反的规则 ID，登记会把这次 fix 记到那条规则上，于是"这个功能出过几个 Bug"可以直接查到。旧合同不写这些字段也照常运行。
 

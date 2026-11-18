@@ -39,7 +39,7 @@ def section(text: str, title: str) -> str:
 class SpecCraftPackageTests(unittest.TestCase):
     def test_spec_craft_is_packaged_with_exactly_its_references(self):
         skill = packaged_skills()["spec-craft"]
-        self.assertEqual(skill["version"], "1.4.7")
+        self.assertEqual(skill["version"], "1.4.8")
         self.assertEqual(skill["files"], sorted(["SKILL.md", *(f"references/{n}" for n in REFERENCES)]))
 
     def test_guard_risk_means_a_protective_mechanism_not_input_validation(self):
@@ -206,13 +206,16 @@ class ClarifyAndHandoffTests(unittest.TestCase):
 
     def test_handoff_names_the_draft_folder_and_the_command(self):
         text = read("references/handoff.md")
-        for phrase in (".storyloop/drafts/spec/", "requirements.md", "spec.md", "storyloop change --idea"):
+        # Batch 3: the chat draft is handed over with --from-draft after a human assessment.
+        for phrase in (".storyloop/drafts/spec/", "requirements.md", "spec.md", "contract.json",
+                       "storyloop assess .", "storyloop change . --from-draft"):
             self.assertIn(phrase, text)
 
     def test_handoff_keeps_approval_in_storyloop(self):
         text = read("references/handoff.md")
         self.assertIn("批准", text)
-        self.assertIn("storyloop approve --change", text)
+        self.assertIn("storyloop approve . --change", text)
+        self.assertIn("技能不替人批准", text)
 
 
 class DocumentationTests(unittest.TestCase):
