@@ -9,6 +9,8 @@ import subprocess
 import tempfile
 import unittest
 
+from tests.report_support import with_presentation
+
 from storyloop.approvals import approve_change
 from storyloop.baseline import bootstrap_project, load_project_config
 from storyloop.models import StoryLoopError
@@ -43,8 +45,9 @@ class ReportsEndToEndTests(unittest.TestCase):
 
             result = run_change(root, change_id)
             report_path = Path(result["report"])
-            report = load_json(report_path)
-            markdown = report_path.with_suffix(".md").read_text(encoding="utf-8")
+            report = with_presentation(root, load_json(report_path))
+            from storyloop.change_report import render_full_report  # v2: sections live in --full
+            markdown = render_full_report(root, report["change_id"]).read_text(encoding="utf-8")
             entries = ledger_entries(root, change_id)
 
             self.assertEqual(result["status"], "PASSED")
@@ -133,7 +136,9 @@ class ReportsEndToEndTests(unittest.TestCase):
         receipt_parent = git(root, "show", f"{result['integration_commit']}^:"
                              f"reports/storyloop/{change_id}/report.json")
         pre_receipt = json.loads(receipt_parent)
-        self.assertEqual(report["presentation"], pre_receipt["presentation"])
+        # The receipt only adds the merge commit; every evidence field is the pre-merge report.
+        strip = lambda value: {k: v for k, v in value.items() if k not in {"merge_commit", "presentation"}}  # noqa: E731
+        self.assertEqual(strip(report), strip(pre_receipt))
         self.assertEqual(report["merge_commit"], result["merge_commit"])
         self.assertEqual(git(root, "rev-parse", "HEAD"), result["integration_commit"])
         self.assertEqual(git(root, "status", "--porcelain=v1", "--untracked-files=all"), "")

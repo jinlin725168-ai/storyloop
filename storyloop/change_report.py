@@ -46,7 +46,8 @@ def generate_change_report(
         change, manifest, layers["acceptance"].get("results", []), evidence_digest, manual_acceptance or []
     )
     report = {
-        "version": 1,
+        # v2 (#64): no stored presentation; report.md is the summary, --full renders the rest.
+        "version": 2,
         "routing": report_routing(project, change),
         "status": "PASSED",
         "change_id": change_id,
@@ -64,7 +65,6 @@ def generate_change_report(
         "oracle": _oracle_view(layers, oracle, skills_used),
         "correction": correction or {"failures": [], "overrules": [], "supersedes": None},
     }
-    report["presentation"] = build_presentation(project, change, report)
     root = project / "reports" / "storyloop" / change_id
     path = root / "report.json"
     write_json(path, report, max_bytes=8_000_000)
@@ -191,7 +191,10 @@ def _write_markdown(path: Path, report: dict) -> None:
 
 def _render_markdown(report: dict) -> str:
     if report.get("presentation"):
-        return render_presentation(report)
+        return render_presentation(report)  # v1 reports keep their exact receipt bytes
+    if report.get("version") == 2:
+        from .report_summary import render_summary
+        return render_summary(report)
     lines = [
         f"# StoryLoop 验收报告：{report['change_id']}", "",
         f"- 状态：{report['status']}",
@@ -322,3 +325,16 @@ def _markdown(value: object) -> str:
 
 def _write_text(path: Path, content: str) -> None:
     write_text_atomic(path, content)
+
+
+def render_full_report(project: Path, change_id: str) -> Path:
+    """Rebuild the sectioned report from the committed evidence, outside Git (`report --full`)."""
+    project = Path(project).resolve()
+    report = load_json(project / "reports" / "storyloop" / change_id / "report.json")
+    full = dict(report)
+    if not full.get("presentation"):
+        full["presentation"] = build_presentation(project, load_change(project, change_id), report)
+    path = project / ".storyloop" / "state" / "reports" / f"{change_id}.full.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_text(path, render_presentation(full))
+    return path

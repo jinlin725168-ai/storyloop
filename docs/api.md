@@ -9,6 +9,7 @@
 | 命令 | 参数 | 返回状态 |
 |---|---|---|
 | `init` | `[--settings FILE]` | `BASELINE_LOCKED` |
+| `init --detect` | `[--yes] [--agent claude\|codex\|auto]`；不得合用 --settings | 无 `--yes`：`SETTINGS_PROPOSED`，不写文件；有 `--yes`：`BASELINE_LOCKED`，附 `agent`、`readiness`、`next`（`--agent` 也可单独配合原 init） |
 | `init --scaffold` | `[--stack maven\|node\|python\|generic …]`；不得合用 --settings | `SCAFFOLD_CREATED` / `SCAFFOLD_UNCHANGED`（0），`SCAFFOLD_SELECTION_REQUIRED`（2）；均未初始化 |
 | `adapters check` | `[--json]` | 能力握手结果 |
 | `skills` | — | `SKILLS_INSTALLED` |
@@ -20,6 +21,7 @@
 | `approve` | `--change ID [--no-interactive]` 或 `--draft KIND/ID`（二者互斥） | 运行状态（见第二节）或 `APPLIED` |
 | `run` | `--change ID [--implementer human] [--overrule TEXT] [--no-interactive]` | 运行状态；base 仅由人实现，`--implementer human` 可省略 |
 | `status` | `--change ID` | 变更状态，附 `run`、`telemetry`、`next`、`stop` |
+| `status`（不带 --change） | — | `OVERVIEW`：所有变更按 `waiting`（human / running / done）分组，待决变更附 `next` |
 | `log` | `--change ID` | `LOG` |
 | `answer` | `--change ID --answer TEXT [--answer TEXT …]` | `ANSWERED` |
 | `accept` | `--change ID --criterion ID [--criterion ID …] --note TEXT` | `ACCEPTED`，或仍有未确认条件时 `MANUAL_ACCEPTANCE_REQUIRED` |
@@ -33,7 +35,7 @@
 | `base-review` | `--change BASE-ID --verdict pass\|fail --note TEXT` | `REVIEW_RECORDED`；审查人须独立于全部候选作者和提交者 |
 | `ci` | `--change ID` | `PASSED` 或 `FAILED` |
 | `metrics` | `[--since YYYY-MM-DD] [--ci-results DIR] [--save]` | `METRICS` |
-| `report` | `--change ID` | `REPORT`（报告路径） |
+| `report` | `--change ID [--full]` | `REPORT`（报告路径；`--full` 在 `.storyloop/state/reports/` 按需生成分节完整报告，不入库） |
 | `drafts` | `[--reject KIND/ID --reason TEXT]` | `DRAFTS` 清单或状态为 `rejected` 的草案；`--reason` 只与 `--reject` 同用 |
 | `lessons` | `[--confirm ID \| --retire ID --reason TEXT]` | 经验清单或 `COMMITTED`；确认与退休互斥，退休必须给理由 |
 | `lessons-propose` | `--change ID` | `DONE`、`FAILED`、`SKIPPED_NO_SIGNAL` 或 `SKIPPED_COST_LIMIT` 的复盘结果 |

@@ -35,7 +35,7 @@
 
 | 积木 | 路径 | 用途 |
 |---|---|---|
-| Claude Code 适配器 | `examples/claude-code/claude_agent.py` | 驱动 `claude -p`：按角色收窄工具、Bash 前缀白名单、项目规范文件、圈数到上限续会话、review 多视角子代理、implement 分通道、回报成本 |
+| Claude Code 适配器 | `storyloop/claude_agent.py` | 驱动 `claude -p`：按角色收窄工具、Bash 前缀白名单、项目规范文件、圈数到上限续会话、review 多视角子代理、implement 分通道、回报成本 |
 | `smoke_harness.py` | `examples/tools/smoke_harness.py` | 验收执行器积木（无依赖，复制到执行器旁边用）：把候选副本同步到 scratch（`sync_scratch`）、找空闲端口、等 HTTP 就绪（`wait_http`）、跑用例文件、停进程、按 0 通过 / 1 行为失败 / 2 环境错误映射退出码 |
 | `scratch_build.py` | `examples/tools/scratch_build.py` | 代理需要构建或跑测试时，在 Git 可见文件的一次性副本里执行（`-- <命令>`，`--reuse NAME` 复用增量构建），避免 `target/`、`dist/` 等被忽略文件出现在工作区而判 `WORKSPACE_TAINTED` |
 | `foundation-survey` 技能包 | `storyloop/skills/foundation-survey/` | 底座摸底的方法与八份文档模板；`storyloop skills` 装进目标仓库 |

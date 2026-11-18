@@ -116,6 +116,7 @@ rank = 7
 "claude_contract" = { module = "role_content", zone = "mutable" }
 "claude_permissions" = { module = "role_content", zone = "mutable" }
 "claude_profiles" = { module = "role_content", zone = "mutable" }
+"claude_agent" = { module = "role_content", zone = "mutable" }
 "adapter_profiles" = { module = "role_content", zone = "mutable" }
 "cross_vendor" = { module = "role_content", zone = "mutable" }
 "project_contracts" = { module = "role_content", zone = "mutable" }
@@ -225,6 +226,7 @@ rank = 7
 "report_git" = { module = "reporting", zone = "mutable" }
 "report_items" = { module = "reporting", zone = "mutable" }
 "report_markdown" = { module = "reporting", zone = "mutable" }
+"report_summary" = { module = "reporting", zone = "mutable" }
 "report_markdown_sections" = { module = "reporting", zone = "mutable" }
 "report_memory" = { module = "reporting", zone = "mutable" }
 "report_presentation" = { module = "reporting", zone = "mutable" }
@@ -243,6 +245,8 @@ rank = 7
 "memory_cli" = { module = "command", zone = "mutable" }
 "routing_cli" = { module = "command", zone = "mutable" }
 "onboarding_cli" = { module = "command", zone = "mutable" }
+"init_detect" = { module = "command", zone = "mutable" }
+"status_overview" = { module = "command", zone = "mutable" }
 "ci_command" = { module = "command", zone = "mutable" }
 "__main__" = { module = "command", zone = "mutable" }
 

@@ -100,7 +100,7 @@ def _load_report(root: Path, change_id: str, missing: list[dict]) -> dict | None
     if value is None or value.get("change_id") != change_id:
         _add_missing(missing, change_id, "UNREADABLE")
         return None
-    if value.get("version") != 1:
+    if value.get("version") not in (1, 2):  # v2 (#64) only drops the stored presentation
         _add_missing(missing, change_id, "UNKNOWN_REPORT_VERSION")
         return None
     return value

@@ -79,7 +79,7 @@
 |---|---|---|---|---|
 | 三种适配器：codex（默认）、command、manual | `.storyloop/config.json` 的 `adapter` | `project_agents` | — | `test_project_agents`、`test_codex_adapter` |
 | 角色返回结构由 JSON Schema 原生约束，不符时同一会话修复 | 每次调用 | `role_schemas`、`project_agents._codex` | — | `test_role_schemas`、`test_structured_output` |
-| Claude Code 适配器：按角色收窄工具、续会话、review 多视角、implement 分通道 | `agent_command` | `examples/claude-code/claude_agent.py` | [0016](decisions/0016-roles-by-authority.md) | `test_claude_adapter` |
+| Claude Code 适配器：按角色收窄工具、续会话、review 多视角、implement 分通道 | `agent_command` | `storyloop/claude_agent.py` | [0016](decisions/0016-roles-by-authority.md) | `test_claude_adapter` |
 | 进程树回收：Windows Job Object、Linux subreaper，失败即 fail-closed | 所有子进程 | `processutil`、`windows_job`、`linux_job`、`linux_supervisor` | — | `test_process_containment` |
 
 ## 七、尚不具备

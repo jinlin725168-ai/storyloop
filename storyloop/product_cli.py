@@ -13,10 +13,11 @@ from .product_contract import SLUG
 from .guarded_calls import read_only_call
 from .manual_acceptance import record_manual_acceptance
 from .models import StoryLoopError, require
-from .next_steps import append_pending_memory, draft_next, next_step, supersede_revision_next
+from .next_steps import draft_next, supersede_revision_next
 from .openspec_docs import document_change
 from .routing_report import draft_stop, report_routing
 from .run_recovery import reset_run
+from .status_overview import change_next
 from .stop_report import stop_of
 from .telemetry import adopt_pending, summarize
 from .product_contract import validate_product
@@ -179,7 +180,9 @@ def dispatch(project: Path, args, run_with_answers, draft_result, load_run_state
     if args.command == "answer":
         return record_answers(project, change_id, args.answers)
     if args.command == "status":
-        require(change_id, "Product status needs --change")
+        if not change_id:
+            from .status_overview import overview
+            return overview(project, draft_result)
         change = load_change(project, change_id)
         run_path = project / ".storyloop/state/runs" / f"{change_id}.json"
         run = load_run_state(project, change_id) if run_path.exists() else None
@@ -188,10 +191,7 @@ def dispatch(project: Path, args, run_with_answers, draft_result, load_run_state
                 "stop": stop_of(project, run) if run else draft_stop(project, change),
                 "routing": report_routing(project, change),
                 "telemetry": summarize(project, change_id),
-                "next": append_pending_memory(project,
-                    draft_result(project, change)["next"] if run is None and change["status"] == "DRAFT"
-                    else (next_step((run or {}).get("status") or change["status"], change_id, project, run)
-                          or ((run or {}).get("stop") or {}).get("resume")))}
+                "next": change_next(project, change, run, draft_result)}
     if args.command == "log":
         return change_log(project, change_id)
     if args.command == "reset":
@@ -208,6 +208,9 @@ def dispatch(project: Path, args, run_with_answers, draft_result, load_run_state
         require(change_id, "Product report needs --change")
         path = project / "reports" / "storyloop" / change_id / "report.md"
         require(path.is_file(), "Acceptance report is not available")
+        if getattr(args, "full", False):
+            from .change_report import render_full_report
+            path = render_full_report(project, change_id)
         return {"status": "REPORT", "change_id": change_id, "report": str(path)}
     raise StoryLoopError(f"Unknown command {args.command}")
 

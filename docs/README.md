@@ -8,7 +8,7 @@
 
 | 你是 | 先读 | 再读 |
 |---|---|---|
-| 第一次接触的人 | [concepts.md](concepts.md) | [tutorial.md](tutorial.md) |
+| 第一次接触的人 | [concepts.md](concepts.md) | [quickstart.md](quickstart.md)、[tutorial.md](tutorial.md) |
 | 要把自己的仓库接进来 | [onboarding-a-repository.md](onboarding-a-repository.md) | [smoke-harness.md](smoke-harness.md)、[api.md](api.md) 的配置一节、[faq.md](faq.md) |
 | 日常使用者 | [product-iteration-guide.md](product-iteration-guide.md) | [faq.md](faq.md)（按停点组织） |
 | 写适配器或接 CI | [api.md](api.md) | [roles.md](roles.md) |
@@ -23,6 +23,7 @@
 | 文档 | 用途 |
 |---|---|
 | [concepts.md](concepts.md) | 解决什么问题、术语表、停点、一次迭代的时序、十条设计理由 |
+| [quickstart.md](quickstart.md) | 在自己的仓库从接入到第一个需求 PASSED：`init --detect`、`status` 总览、摘要报告 |
 | [tutorial.md](tutorial.md) | 用 `examples/todo-demo/` 在 30 分钟内跑完一次闭环 |
 | [product-iteration-guide.md](product-iteration-guide.md) | 每个命令、每个停点、每个产物的完整说明 |
 | [roles.md](roles.md) | 七个角色：权限、输入、输出、是否是门 |

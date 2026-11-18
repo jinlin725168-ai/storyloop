@@ -20,6 +20,10 @@ def display(result: dict, complete_json: bool) -> None:
     if result.get("status") == "LOG":
         print(render_log(result))
         return
+    if result.get("status") == "OVERVIEW":
+        from .status_overview import render_overview
+        print(render_overview(result))
+        return
     if result.get("status") == "METRICS":
         print(render_metrics(result))
         return

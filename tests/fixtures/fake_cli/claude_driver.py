@@ -3,8 +3,8 @@ import importlib.util
 from pathlib import Path
 import sys
 
-source = Path(__file__).resolve().parents[3] / 'examples/claude-code/claude_agent.py'
-sys.path.insert(0, str(source.parents[2]))
+source = Path(__file__).resolve().parents[3] / 'storyloop/claude_agent.py'
+sys.path.insert(0, str(source.parents[1]))
 spec = importlib.util.spec_from_file_location('claude_adapter', source)
 adapter = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(adapter)

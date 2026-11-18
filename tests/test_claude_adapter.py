@@ -19,7 +19,7 @@ from tests.test_baseline_behavior import repository
 from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location(
-    "claude_agent", Path(__file__).resolve().parents[1] / "examples/claude-code/claude_agent.py")
+    "claude_agent", Path(__file__).resolve().parents[1] / "storyloop/claude_agent.py")
 adapter = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(adapter)
 

@@ -8,6 +8,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+
+from tests.report_support import with_presentation
 from unittest.mock import patch
 
 from storyloop.approvals import approve_change
@@ -56,7 +58,7 @@ class CompletionResilienceTests(unittest.TestCase):
             root = Path(folder)
             change_id = _approved(root, with_ui_asset=False)
             done = run_change(root, change_id, _services(change_id))
-            report = json.loads(Path(done["report"]).read_text(encoding="utf-8"))
+            report = with_presentation(root, json.loads(Path(done["report"]).read_text(encoding="utf-8")))
             process = report["presentation"]["sections"]["4"]["items"]
             facts = [item["data"]["statement"] for item in process if item["id"].startswith("facts:")]
             self.assertEqual(facts, ["implementation fact", "review fact"])

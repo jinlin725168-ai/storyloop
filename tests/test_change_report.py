@@ -69,7 +69,12 @@ class ChangeReportTests(unittest.TestCase):
             self.assertEqual(trace["tests"][0]["result"]["status"], "PASS")
             self.assertEqual(trace["evidence_sha256"], smoke["evidence_sha256"])
             self.assertEqual(report["implementation_commit"], head)
-            self.assertEqual(set(report["presentation"]["sections"]), set("0123456"))
+            # v2 (#64): the sectioned presentation is rebuilt on demand, not stored.
+            self.assertNotIn("presentation", report)
+            from storyloop.change_report import render_full_report
+            full = render_full_report(root, change_id).read_text(encoding="utf-8")
+            for section in ("## 0.", "## 1.", "## 2.", "## 3.", "## 4.", "## 5.", "## 6."):
+                self.assertIn(section, full)
             self.assertTrue(path.with_suffix(".md").is_file())
         finally:
             temporary.cleanup()
