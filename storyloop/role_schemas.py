@@ -106,6 +106,7 @@ OUTPUT_CONTRACT = _obj({"location": _nullable(STRING),
 CRITERION = _obj({"id": STRING, "given": STRING, "when": STRING, "then": STRING,
                   "kind": {"type": "string", "enum": ["automated", "manual"]},
                   "entry_ids": _nullable(STRINGS),
+                  "rule": _nullable({"type": "integer"}), "example": _nullable(STRING),
                   "observation": _nullable(STRING),
                   "new_output": _nullable({"type": "boolean"}),
                   "output_contract": _nullable(OUTPUT_CONTRACT),
@@ -118,7 +119,7 @@ DEFECT = _obj({"observed": STRING, "expected": STRING, "reproduction": STRINGS,
                "root_cause": {"type": "array", "items": _obj({"statement": STRING, "location": STRING})},
                "confirmed": STRINGS, "unconfirmed": STRINGS,
                "sibling_entries": _nullable(STRINGS), "origin_change": _nullable(STRING),
-               "escape_class": _nullable(STRING)})
+               "escape_class": _nullable(STRING), "rules": _nullable(STRINGS)})
 REFACTOR = _obj({"subtype": {"type": "string", "enum": ["structure", "dependency-swap"]},
                  "scope": STRINGS, "invariants": STRINGS, "structural_goals": STRINGS,
                  "migration_map": _nullable({"type": "array", "items": _obj(
@@ -130,6 +131,7 @@ STORY = _obj({
     "priority": _nullable({"type": "string", "enum": ["P1", "P2", "P3"]}),
     "independent_test": _nullable(STRING),
     "as_a": STRING, "want": STRING, "so_that": STRING, "rules": STRINGS,
+    "requirement": _nullable(STRING), "rule_ids": _nullable(STRINGS),
     "out_of_scope": STRINGS, "depends_on": STRINGS,
     "acceptance": {"type": "array", "items": CRITERION},
     "verification_entries": _nullable({"type": "array", "items": _obj({
@@ -216,6 +218,7 @@ SCHEMAS = {
         "slug": _nullable(STRING),
         "clarifications": _nullable({"type": "array", "items": _obj(
             {"session": STRING, "question": STRING, "answer": STRING})}),
+        "retire": _nullable(STRINGS),
         "constraint_resolutions": _nullable({"type": "array", "items": _obj({
             "constraint_id": STRING,
             "resolution": {"type": "string", "enum": ["keep", "conflict"]},

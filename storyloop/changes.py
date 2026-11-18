@@ -93,12 +93,16 @@ def load_change(project: Path, change_id: str) -> dict:
     optional = {"supersedes", "superseded_by", "routing_version", "intake",
                 "base_proposal_sha256", "blocked_by", "intervention_events",
                 "verification_entries_required", "entry_coverage_required", "observation_required",
-                "entry_feasibility_required", "output_contract_required", "inherited_constraints"}
+                "entry_feasibility_required", "output_contract_required", "inherited_constraints",
+                "registry"}
     require(required <= set(value) <= required | optional and value["version"] == 1,
             "Invalid change state")
     require(value["change_id"] == change_id, "Change state identity mismatch")
     if "intervention_events" in value:
         require(isinstance(value["intervention_events"], list), "Invalid intervention events")
+    if "registry" in value:
+        require(isinstance(value["registry"], dict) and isinstance(value["registry"].get("ids"), dict)
+                and isinstance(value["registry"].get("record"), dict), "Invalid registry assignment")
     if "verification_entries_required" in value:
         require(value["verification_entries_required"] is True, "Invalid verification entry requirement")
     if "entry_coverage_required" in value:

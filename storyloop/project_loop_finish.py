@@ -178,11 +178,22 @@ def _write_openspec_artifacts(project: Path, change: dict, state: dict, manual: 
                                  state.get("repairs") or [], overrules=state.get("overrules") or [])
     (base / "decisions.md").write_text(decisions, encoding="utf-8")
     written.append(f"openspec/changes/{change_id}/decisions.md")
+    registry = change.get("registry")
+    if registry:
+        # Rechecked against the branch it merges into, so a concurrent edit stops here.
+        from .requirements_registry import write_record
+        written.append(write_record(project, registry["record"], state["source_branch"]))
     capability = capability_of(change["product"], change_id)
     delta_path = base / "specs" / capability / "spec.md"
     if delta_path.is_file():
         main_path = project / "openspec" / "specs" / capability / "spec.md"
         current = main_path.read_text(encoding="utf-8") if main_path.is_file() else None
+        if registry:
+            # The draft's delta predates the IDs; render it again with them before merging.
+            from .openspec_docs import render_delta_spec
+            delta_path.write_text(render_delta_spec(change["product"], change_id, current,
+                                                    registry["ids"]), encoding="utf-8")
+            written.append(f"openspec/changes/{change_id}/specs/{capability}/spec.md")
         merged, replaced = merge_into_main_spec(current, delta_path.read_text(encoding="utf-8"),
                                                 capability, change_id)
         main_path.parent.mkdir(parents=True, exist_ok=True)

@@ -142,6 +142,7 @@
         "storyloop/project_receipt.py",
         "storyloop/readiness.py",
         "storyloop/readiness_lineage.py",
+        "storyloop/requirements_registry.py",
         "storyloop/regression_updates.py",
         "storyloop/report_commands.py",
         "storyloop/report_evidence.py",

@@ -126,6 +126,8 @@ rank = 7
 "testing.nested" = { module = "command", zone = "mutable" }
 "changes" = { module = "contract", zone = "mutable", split = "D" }
 "approvals" = { module = "contract", zone = "mutable" }
+# Registry format and ID rules are contract-layer base (link skeleton D12); added 2026-11-18 as user-authorized.
+"requirements_registry" = { module = "contract", zone = "base" }
 "requirement_checklist" = { module = "contract", zone = "mutable" }
 "answers" = { module = "contract", zone = "mutable" }
 "supersede" = { module = "contract", zone = "mutable" }

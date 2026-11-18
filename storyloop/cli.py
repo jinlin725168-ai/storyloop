@@ -60,6 +60,7 @@ def parser() -> argparse.ArgumentParser:
         "authorize-knowledge": "人批准知识提案中的精确 foundation 路径；空路径表示拒绝",
         "drafts": "列出或驳回待批草案",
         "metrics": "跨变更汇总指标与调整建议（只读）",
+        "requirements": "需求登记：列出需求与规则的稳定 ID、版本历史和关联的 fix（只读）",
     }
     for command, help_text in descriptions.items():
         child = sub.add_parser(command, help=help_text)
@@ -127,6 +128,8 @@ def _product_arguments(child, command):
 
 
 def _maintenance_arguments(child, command):
+    if command == "requirements":
+        child.add_argument("--id", dest="registry_id", help="只看一个需求、规则或例子的版本历史")
     if command == "metrics":
         child.add_argument("--since", type=_since_date, metavar="YYYY-MM-DD")
         child.add_argument("--ci-results", type=Path, metavar="DIR")
@@ -233,6 +236,9 @@ def dispatch(args) -> dict:
         return dispatch_memory(project, args)
     if args.command == "ci":
         return run_ci_command(project, args.change_id, args.record)
+    if args.command == "requirements":
+        from .requirements_registry import registry_view
+        return registry_view(project, args.registry_id)
     if args.command == "metrics":
         from .metrics import build_metrics, save_metrics
         result = build_metrics(project, args.since, args.ci_results)

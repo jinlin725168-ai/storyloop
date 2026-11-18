@@ -32,6 +32,13 @@ KNOWLEDGE_PROPOSAL_NOTE = (
 
 INSTRUCTIONS = {
     "product": (
+        "payload.requirements_registry, when present, lists the stable requirement (.S), rule (.R) and "
+        "example (.E) IDs already merged, with their text and version. When the request changes one of "
+        "them, set the story's requirement to its ID and rule_ids (one per rule, an existing rule ID or "
+        "\"new\"), a criterion's example to its ID and rule to the 1-based number of the story rule it "
+        "illustrates; list IDs the change removes in retire; for a fix put the rule IDs the defect breaks "
+        "in defect.rules. Whether an edit keeps a rule's intent (modify) or makes a new rule is a product "
+        "question for the human. Anything not referenced is new. "
         "For routing_version=1 supply assessment: verifiable_goal, complete scope "
         "(touched, creates, interfaces, symbols with path and symbol), every risk judgment, and "
         "exactly one criterion judgment per story_id/criterion_id. Inspect sources read-only; "

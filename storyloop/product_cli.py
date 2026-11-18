@@ -217,6 +217,10 @@ def product_answer(project: Path, payload: dict, call, invoke_project_agent) -> 
     from .baseline import _git
     payload = {**payload, "routing_version": 1,
                "source_commit": _git(project, "rev-parse", "HEAD").strip()}
+    from .requirements_registry import compact
+    registry = compact(project)
+    if registry:
+        payload["requirements_registry"] = registry
     from .intake import project_intake
     source = "product"
 
