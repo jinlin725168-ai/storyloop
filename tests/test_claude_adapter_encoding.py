@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-ADAPTER = Path(__file__).resolve().parents[1] / "examples/claude-code/claude_agent.py"
+ADAPTER = Path(__file__).resolve().parents[1] / "storyloop/claude_agent.py"
 SPEC = importlib.util.spec_from_file_location("claude_agent_encoding", ADAPTER)
 adapter = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(adapter)

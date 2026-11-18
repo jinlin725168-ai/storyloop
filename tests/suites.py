@@ -12,7 +12,7 @@ FAST = [
     "tests.test_acceptance_layout", "tests.test_adapter_capabilities", "tests.test_adapter_conformance",
     "tests.test_baseline_api", "tests.test_baseline_behavior", "tests.test_baseline_cli",
     "tests.test_baseline_contract", "tests.test_candidate_allow", "tests.test_change_approval",
-    "tests.test_bench_case", "tests.test_bench_calibrate", "tests.test_bench_run", "tests.test_bench_report", "tests.test_command_schema_repair", "tests.test_characterization_documents", "tests.test_readiness_unscoped_pytest", "tests.test_append_only_tests", "tests.test_ci_workflow", "tests.test_coverage_manifest", "tests.test_skill_release_gate", "tests.test_fix_traceability", "tests.test_requirements_registry", "tests.test_spec_craft_batch3", "tests.test_requirements_map", "tests.test_report_command", "tests.test_exploration_stop", "tests.test_draft_next_reasons", "tests.test_blocked_stop_options", "tests.test_checklist_hints", "tests.test_bench_agent_unavailable", "tests.test_metrics_intervention_text", "tests.test_log_interventions",
+    "tests.test_bench_case", "tests.test_bench_calibrate", "tests.test_bench_run", "tests.test_bench_report", "tests.test_command_schema_repair", "tests.test_characterization_documents", "tests.test_readiness_unscoped_pytest", "tests.test_append_only_tests", "tests.test_ci_workflow", "tests.test_coverage_manifest", "tests.test_skill_release_gate", "tests.test_fix_traceability", "tests.test_requirements_registry", "tests.test_spec_craft_batch3", "tests.test_requirements_map", "tests.test_report_command", "tests.test_report_v2", "tests.test_exploration_stop", "tests.test_draft_next_reasons", "tests.test_blocked_stop_options", "tests.test_checklist_hints", "tests.test_bench_agent_unavailable", "tests.test_metrics_intervention_text", "tests.test_log_interventions",
     "tests.test_characterize_change_log_preserved", "tests.test_characterize_intervention_l1_preserved", "tests.test_metrics_render_characterization",
     "tests.test_characterize_bench_report_record", "tests.test_characterize_cli_output_nonbench",
     "tests.test_bench_real_exec",
@@ -40,7 +40,7 @@ FAST = [
     "tests.test_precheck_overrule",
     "tests.test_routing_policy", "tests.test_routing_risks", "tests.test_skill_custom", "tests.test_skill_selection",
     "tests.test_skills", "tests.test_spec_craft", "tests.test_smoke", "tests.test_state_format", "tests.test_stop_report",
-    "tests.test_onboarding", "tests.test_onboarding_source_files", "tests.test_onboarding_lock", "tests.test_smoke_harness",
+    "tests.test_onboarding", "tests.test_init_detect", "tests.test_status_overview", "tests.test_trial_f_views", "tests.test_onboarding_source_files", "tests.test_onboarding_lock", "tests.test_smoke_harness",
     "tests.test_output_contract",
     "tests.test_smoke_harness_protocol", "tests.test_smoke_harness_scratch",
 ]

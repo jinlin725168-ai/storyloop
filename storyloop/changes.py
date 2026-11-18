@@ -271,6 +271,22 @@ def supersede_view(project: Path, state: dict) -> dict:
             }}
 
 
+def _review_sections(product: dict) -> str:
+    """Show what the checklist asks a person to confirm (trial F: it was in state only)."""
+    text = ""
+    assumptions = product.get("assumptions") or []
+    if assumptions:
+        text += "\n## 假设（批准前须由人确认或删除）\n\n" + "\n".join(
+            f"- {item['id']} [{item.get('status', 'assumed')}] {item['statement']}" for item in assumptions) + (
+            "\n\n用 --message 确认或修改，例如 \"AS1 确认；AS2 改为……\"。\n")
+    consumers = product.get("consumers") or []
+    if consumers:
+        text += "\n## 使用方\n\n" + "\n".join(
+            f"- {item['id']} {'' if item.get('in_scope', True) else '[不在范围] '}{item['consumer']}"
+            f"（{item.get('path', '-')}；验证：{item.get('verification', '-')}）" for item in consumers) + "\n"
+    return text
+
+
 def draft_directory(project: Path, change_id: str) -> Path:
     return Path(project).resolve() / ".storyloop" / "drafts" / identifier(change_id, "change id")
 
@@ -311,6 +327,7 @@ def write_change_preview(project: Path, state: dict) -> None:
         f"## 用户故事\n\n{story_lines}\n\n"
         f"## 澄清记录\n\n{_clarification_lines(product.get('clarifications', []))}\n\n"
         f"## 待决问题\n\n{questions}\n"
+        + _review_sections(product)
     )
     if "inherited_constraints" in state:
         view = supersede_view(project, state)

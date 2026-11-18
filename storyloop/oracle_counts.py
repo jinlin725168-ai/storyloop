@@ -50,7 +50,9 @@ def _unittest(text: str) -> dict | None:
 
 
 def _pytest(text: str) -> dict | None:
-    line = _last(r"^=+ (.*?) in [\d.]+s(?: \([^)]*\))? =+$", text)
+    # `pytest -q` prints the same summary without the ===== borders.
+    line = _last(r"^(?:=+ )?(no tests ran|\d+ (?:passed|failed|errors?|skipped|xfailed|xpassed|"
+                 r"deselected|warnings?)\b.*?) in [\d.]+s(?: \([^)]*\))?(?: =+)?$", text)
     if not line:
         return None
     words = _words(line.group(1))

@@ -68,7 +68,7 @@ flowchart LR
 ```json
 {
   "adapter": "command",
-  "agent_command": ["{python}", "/abs/path/storyloop/examples/claude-code/claude_agent.py",
+  "agent_command": ["{python}", "-m", "storyloop.claude_agent",
                     "--bash", "mvn:*", "--bash", "pnpm:*", "--bash", "npx:*",
                     "--guide", "/abs/path/my-project/acceptance/AGENT_GUIDE.md",
                     "--implement-lanes", "backend=backend/ruoyi-modules/,frontend=frontend/src/,sql=sql/biz/"],

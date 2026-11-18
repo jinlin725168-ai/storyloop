@@ -78,7 +78,7 @@ flowchart TD
 
 ## 路线
 
-**①a 评测底座 ✅ → ①b 验证入口与审查收敛 ✅ → ①c 技能融合与知识维护 ✅ → 门槛 1～4 ✅ → 自迭代与里程碑评测 ✅ → A 收尾 → B 按风险分档减负 → C 可靠与可迭代 → D 充分性 → E 真实开源项目落地。** 详见 [路线图](docs/roadmap.md)。
+**①a 评测底座 ✅ → ①b 验证入口与审查收敛 ✅ → ①c 技能融合与知识维护 ✅ → 门槛 1～4 ✅ → 自迭代与里程碑评测 ✅ → A～E（减负、可靠、充分性、真实项目）✅ → F 可试用 → G 注意力预算 → H 并发与事件。** 详见 [路线图](docs/roadmap.md)。
 
 ## 不变的工程保证
 
@@ -97,14 +97,17 @@ Linux / WSL2：
 ```bash
 python3 -m venv .venv && .venv/bin/pip install .
 
-.venv/bin/storyloop init ~/work/my-project --settings ~/work/storyloop-settings.json
-.venv/bin/storyloop readiness ~/work/my-project --json
-# 若有缺口，先补基础或按报告用 --readiness DIGEST --reason 明确确认
+# 先看推断的工程画像（不写文件），确认后锁定底座、配置代理并跑准备度
+.venv/bin/storyloop init ~/work/my-project --detect --agent claude
+.venv/bin/storyloop init ~/work/my-project --detect --yes --agent claude
+# 若有准备度缺口，按输出的 approve --readiness 命令明确确认
 .venv/bin/storyloop change ~/work/my-project --idea "增加订单取消功能，已发货订单不能取消"
 # 终端里会逐条提出澄清问题（回车选推荐项）；满意后批准，闭环自动跑到底或停在明确的人工停点
 .venv/bin/storyloop approve ~/work/my-project --change FEAT-20260916-001
-.venv/bin/storyloop status ~/work/my-project --change FEAT-20260916-001 --json
+.venv/bin/storyloop status ~/work/my-project   # 跨变更总览：需要你决定 / 进行中 / 已完成
 ```
+
+第一次用从 [快速上手](docs/quickstart.md) 开始。
 
 PowerShell：
 
@@ -132,7 +135,7 @@ storyloop report C:\work\my-project --change FEAT-20260916-001
 
 新人从 [定位与概念手册](docs/concepts.md) 和 [入门教程](docs/tutorial.md) 开始；完整说明见 [使用指南](docs/product-iteration-guide.md)，接入自己的仓库见 [接入手册](docs/onboarding-a-repository.md)。`docs/` 是本项目的知识库，入口是 [docs/README.md](docs/README.md)：使用文档之外，按模块、架构、扩展、接口、能力、积木、测试组织了给贡献者和代理读的工程文档。
 
-新协议按 light / standard / heavy 分流，重档先审核方案再实现；完整命令、预算与恢复见 [分流指南](docs/routing-guide.md)。最终报告按读者分成 0–6 节，并在每条信息旁保留来源与可用性。
+新协议按 light / standard / heavy 分流，重档先审核方案再实现；完整命令、预算与恢复见 [分流指南](docs/routing-guide.md)。入库的 `report.md` 是一页摘要，按读者分成 0–6 节、每条信息旁标来源与可用性的完整报告用 `storyloop report --change ID --full` 按需生成。
 
 ## CI 入口
 
@@ -270,7 +273,7 @@ storyloop metrics PATH --save
 ```json
 {
   "adapters": {
-    "claude": {"kind": "command", "agent_command": ["{python}", "/abs/claude_agent.py", "--tier-model", "strong=opus", "--tier-model", "standard=sonnet"]},
+    "claude": {"kind": "command", "agent_command": ["{python}", "-m", "storyloop.claude_agent", "--tier-model", "strong=opus", "--tier-model", "standard=sonnet"]},
     "codex": {"kind": "codex", "models": {"strong": "<本机已核实可用模型>", "standard": "<本机已核实可用模型>"}}
   },
   "roles": {"default_adapter": "claude", "review": {"adapter": "codex"}},

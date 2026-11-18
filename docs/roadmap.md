@@ -113,6 +113,21 @@ flowchart LR
 
 **D 进行中**：D1 能力覆盖清单 `tests/coverage_manifest.py`，31 个命令各对应正向与报错测试、26 种停点各对应到达测试，核心套件中审计其与 CLI 和停点类别一致、引用的测试确实调用对应命令。首次审计发现的缺口按原因登记在清单里，已补 `report` 命令与 `EXPLORATION_RECOMMENDED` 停点。D2 技能发布门：每个技能声明代表性用例，`evals/skills/<技能>/<版本>.json` 按内容摘要记录各用例结论与证据，core 检查改了技能不能沿用旧结果；当前 7 个技能 verified（证据为 #481、#352 与自迭代），`foundation-survey` pending。D3 fix 溯源：缺陷新增 `escape_class`（漏过缺陷的门），根因行最近由 StoryLoop 变更改过时清单点名候选 `origin_change`，逃逸指标按类计数。需求登记（链路骨架第 2 批其余部分）：批准时分配需求/规则/例子稳定 ID，合并前写按变更追加的登记记录并对照目标分支复核版本，`storyloop requirements` 查询，活规格带 ID，fix 的 `defect.rules` 计入规则。spec-craft 第 3、4 批：`storyloop assess`（建变更前三问与人的结论，放弃不建变更）、`change --assessment` / `--from-draft`（对话草稿交接，人确认的内容原样保留）、合同 `assumptions` 与例子 `polarity`、清单新增项、批准时写共创记录；`map-propose` / `map-apply` 为已有项目起草并安装需求地图，现有需求以 `REQ-<日期>-requirements-bootstrap` 迁入登记，有地图后合同须声明模块。spec-craft 第 5 批：product 角色说明中的写作方法论（结构、EARS、Gherkin、UI 上限、规模）原文迁入技能，角色说明只留结构与引擎规则；5 样本对比两版等价（[对比记录](validation/2026-11-18-spec-craft-第5批对比.md)）。
 
+**A～E 完成后的重新规划（2026-11-18）**：对照两个内部参考项目与 Super-agent（Router/Worker、事件驱动、"人的注意力才是瓶颈"）的做法，核心判定（盲写验收、RED 证明、特征化、合同中的验证入口）是 StoryLoop 独有的，保持不变；差距在"用起来"：每个停点都要人敲命令、一次只能跑一个变更、没有事件入口、报告过大（一个一行级 CLI 改动入库约 8800 行）。路线据此定为 **F → G → H**：
+
+1. **F 可试用**（首要）：报告瘦身（入库一页摘要 + `report --full` 按需生成）；一键接入（`init --detect` 推断工程画像、`--agent` 配置代理、确认后自动跑准备度）；跨变更 `status` 总览；[快速上手](quickstart.md)。退出标准：另一个人在自己的仓库从接入跑到一个需求 `PASSED`，人只在做决定时介入。
+2. **G 注意力预算**：跨变更决策收件箱 `storyloop inbox`；例行停点自动续跑；只在需要决定时通知；"每个变更人工触达次数"成为核心指标。
+3. **H 并发与事件**：Router/Worker 式在隔离工作区并行多个变更；事件先只接 GitHub（issue 标签 → 评估草稿、CI 红 → 修复草稿、PR 评论 → 修订）；Watchdog 按墙钟与费用发现卡住的运行。
+
+```mermaid
+flowchart LR
+    AE["A～E ✅"] --> F["F 可试用<br/>报告瘦身 · 一键接入 · status 总览 · 快速上手"]
+    F --> G["G 注意力预算<br/>inbox · 例行自动续跑 · 只在决策时通知"]
+    G --> H["H 并发与事件<br/>并行变更 · GitHub 事件 · Watchdog"]
+```
+
+**F 进展（2026-11-18）**：报告 v2（`report.json` 不再存渲染副本，`report.md` 由约 2000 行降到约 60 行，旧报告的回执字节不变）；`init --detect --yes --agent claude|codex|auto`（在 sqlite-utils 上推断结果与手写设置一致）；Claude 适配器随包发布为 `python -m storyloop.claude_agent`（旧脚本路径保留）；`status <项目>` 跨变更总览；快速上手文档。试用（sqlite-utils 全新克隆，`rows --exclude`）`PASSED`，人工触达 7 次，其中 4 次是决定；暴露的 8 个问题已修复，修复后预计 5 次触达、4 次是决定，剩余一次（intake 停点自动退回）记入 G（[试用记录](validation/2026-11-18-F-试用.md)）。
+
 审查角色在此期间由开发者直接完成（Codex 暂停派发）；base 人工通道不变（[决策 0018](decisions/0018-base-human-only.md)）。
 
 ## 明确不做

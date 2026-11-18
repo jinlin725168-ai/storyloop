@@ -4,6 +4,8 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+
+from tests.report_support import with_presentation
 from unittest.mock import patch
 
 from storyloop.report_presentation import build_presentation
@@ -85,7 +87,7 @@ class RolesEndToEndTests(unittest.TestCase):
             self.install(root, change['change_id'])
             result = run_change(root, change['change_id'])
             self.assertEqual(result['status'], 'PASSED', result)
-            report = load_json(Path(result['report']))
+            report = with_presentation(root, load_json(Path(result['report'])))
             entries = ledger_entries(root, change['change_id'])
             self.assertEqual(sum(row['role'] == 'implement' for row in entries), 2)
             self.assertTrue(all(row.get('model') and row.get('vendor') and row.get('tier_applied') for row in entries))

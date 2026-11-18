@@ -52,6 +52,7 @@
 | 角色内容 | `adapter_profiles` | 可变区 | CLI 适配器的模型选择与如实报告单会话画像 | `diagnostic_fields`、`model_for`、`sequential_instructions`、`sequential_profile`、`tier_models` |
 |  | `project_agents` | 可变区 | 组装产品级代理上下文并记录调用与诊断 | `instructions_for`、`invoke_project_agent` |
 |  | `adapter_capabilities` | 可变区 | 编排角色配置、能力缓存与跨厂商检查 | `check`、`ensure_checked`、`ensure_for_run`、`require_role_target` |
+|  | `claude_agent` | 可变区 | Claude Code 命令适配器：驱动 claude -p，按角色收窄工具、续会话、审查多视角、实现分通道（python -m storyloop.claude_agent） | `main` |
 |  | `claude_contract` | 可变区 | Claude Code 示例适配器共用的提示合同 | — |
 |  | `claude_permissions` | 可变区 | Claude Code 画像权限及文件修改工具授权 | `profile_command` |
 |  | `claude_profiles` | 可变区 | 独立于 CLI 入口的 Claude 画像编排辅助 | — |
@@ -161,6 +162,7 @@
 |  | `report_git` | 可变区 | 以 NUL 分隔、有界时间及输出获取 Git 诊断事实 | `git_snapshot` |
 |  | `report_items` | 可变区 | 读者报告各节共用的有界呈现原语 | `effective_tier`、`item`、`recorded_statement`、`selected_plan` |
 |  | `report_markdown` | 可变区 | 纯函数渲染冻结报告的 Markdown | `render_presentation` |
+|  | `report_summary` | 可变区 | 报告 v2 入库摘要：只由报告原始证据渲染，合并回执可逐字节复现 | `render_summary` |
 |  | `report_markdown_sections` | 可变区 | 面向读者的决策、审查重点与过程报告模板 | `legend`、`render_reader_section` |
 |  | `report_memory` | 可变区 | 构造冻结验收报告的诊断记忆节 | `memory_items` |
 |  | `report_presentation` | 可变区 | 持久化报告前构造冻结的七节呈现快照 | `build_presentation` |
@@ -187,6 +189,8 @@
 |  | `memory_cli` | 可变区 | 仓库经验命令的接线与呈现 | `add_memory_arguments`、`dispatch_memory`、`render_memory` |
 |  | `next_steps` | 可变区 | 为命令面保留变更与草案提示的兼容导出 | `append_pending_memory`、`draft_next`、`next_step`、`supersede_revision_next` |
 |  | `onboarding_cli` | 可变区 | 保留 init 原签名并编排烟测预检、采纳与代理检查 | `add_init_arguments`、`bootstrap_with_project_checks`、`initialize` |
+|  | `init_detect` | 可变区 | 一键接入：从仓库布局推断工程画像与代理配置，只建议不写，确认后锁定并跑准备度 | `propose_settings`、`agent_config` |
+|  | `status_overview` | 可变区 | 跨变更总览：按“需要你决定 / 进行中 / 已完成”分组，并给每个待决变更下一步命令 | `overview`、`change_next`、`render_overview` |
 |  | `testing.nested` | 可变区 | 为 StoryLoop 自身机制的验收测试建嵌套项目并以脚本化角色运行 | — |
 |  | `routing_cli` | 可变区 | 校验并分发显式分流命令，批准接口只记录决策 | `dispatch_routing` |
 

@@ -113,6 +113,8 @@ def _product_arguments(child, command):
     elif command in {"approve", "status", "report", "ci"}:
         group = child.add_mutually_exclusive_group() if command == "approve" else child
         group.add_argument("--change", dest="change_id", required=command == "ci")
+        if command == "report":
+            child.add_argument("--full", action="store_true", help="按需生成完整分节报告（不入库）")
         if command == "ci":
             child.add_argument("--record", type=Path)
         if command == "approve":

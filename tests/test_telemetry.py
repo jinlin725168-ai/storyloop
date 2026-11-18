@@ -8,6 +8,8 @@ import sys
 import tempfile
 import unittest
 
+from tests.report_support import with_presentation
+
 from storyloop.baseline import bootstrap_project, load_project_config
 from storyloop.models import StoryLoopError
 from storyloop.project_agents import invoke_project_agent
@@ -116,12 +118,13 @@ class TelemetryTests(unittest.TestCase):
             self.assertEqual(done["status"], "PASSED", done)
             state = load_run_state(root, change_id)
             self.assertIn("started_at", state)
-            report = json.loads(Path(done["report"]).read_text(encoding="utf-8"))
+            report = with_presentation(root, json.loads(Path(done["report"]).read_text(encoding="utf-8")))
             telemetry = report["telemetry"]
             self.assertEqual(telemetry["calls"], 0)
             self.assertIsNone(telemetry["cost_usd"])
             self.assertGreaterEqual(telemetry["loop_ms"], 0)
-            markdown = Path(done["report"]).with_suffix(".md").read_text(encoding="utf-8")
+            from storyloop.change_report import render_full_report  # v2: sections live in --full
+            markdown = render_full_report(root, report["change_id"]).read_text(encoding="utf-8")
             self.assertIn("## 5. 成本", markdown)
             cost = next(item for item in report["presentation"]["sections"]["5"]["items"]
                         if item["id"] == "cost")

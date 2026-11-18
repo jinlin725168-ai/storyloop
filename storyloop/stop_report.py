@@ -439,7 +439,11 @@ def render_stop(stop: dict) -> list[str]:
     for key, heading in (("evidence", "证据"), ("facts", "代理陈述事实"), ("questions", "问题")):
         if stop.get(key):
             lines.append(f"{heading}：")
-            lines += [f"  - {_render_item(item)}" for item in stop[key]]
+            items = stop[key]
+            shown = items[:EVIDENCE_SHOWN] if key == "evidence" else items
+            lines += [f"  - {_render_item(item)}" for item in shown]
+            if len(items) > len(shown):
+                lines.append(f"  - ……另 {len(items) - len(shown)} 条（--json 查看全部）")
     if stop.get("options"):
         lines.append("可选操作：")
         lines += [f"  {number}. {option['action']}：{option['command']}"
@@ -448,9 +452,18 @@ def render_stop(stop: dict) -> list[str]:
     return lines
 
 
+EVIDENCE_SHOWN = 8  # trial F: 28 routing facts buried the four questions a person had to answer
+
+
 def _render_item(item: object) -> str:
     if isinstance(item, dict):
-        return str(item.get("statement") or item.get("question") or item.get("message") or item)
+        text = item.get("statement") or item.get("question") or item.get("message")
+        if not text and "field" in item:  # routing evidence: one line per fact, not the raw record
+            value = item.get("value")
+            shown = value if not isinstance(value, (dict, list)) else "…"
+            where = ", ".join((item.get("locations") or [])[:2])
+            text = f"{item['field']}={shown}" + (f"（{where}）" if where else "")
+        return str(text or item)
     return str(item)
 
 
