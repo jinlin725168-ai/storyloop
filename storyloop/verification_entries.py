@@ -199,7 +199,9 @@ def _test_line(tree: ast.AST | None) -> int:
 def _required_call(entry: dict) -> str:
     if entry["kind"] in {"cli", "stop_json"}:
         return (f"在执行与观察阶段用 subprocess 运行 {entry['locator']} 所声明的公开命令，"
-                "解析命令输出；内部 helper 仅可用于准备阶段。")
+                "解析命令输出；argv 写成字面列表，或本文件内定义的 argv 构造函数调用"
+                "（如 entry(\"程序\", \"子命令\", ...)，程序与子命令须为字面字符串）；"
+                "被测项目的内部 helper 仅可用于准备阶段。")
     return (f"在执行与观察阶段显式导入并调用 {entry['locator']}；"
             "内部 helper 仅可用于准备阶段。")
 
@@ -249,9 +251,10 @@ def _cli_target(locator: str) -> tuple[str, str | None] | None:
     quoted = re.search(r"`([^`]+)`", locator)
     text = quoted.group(1) if quoted else locator
     match = re.match(r"\s*(?:python3?\s+-m\s+)?([A-Za-z0-9_][A-Za-z0-9_.-]*)"
-                     r"(?:\s+([a-z][a-z0-9_-]*))?", text)
-    # Only a quoted command line or "program subcommand" counts; "CLI 的 bench 输出" is prose.
-    if match and (quoted or match.group(2)):
+                     r"(?:\s+([a-z][a-z0-9_-]*)|\s+(--?[a-z]))?", text)
+    # Only a quoted command line, "program subcommand" or "program --option" counts;
+    # "CLI 的 bench 输出" is prose.
+    if match and (quoted or match.group(2) or match.group(3)):
         return match.group(1), match.group(2)
     commands = _cli_commands()
     word = next((word for word in re.findall(r"(?<![\w-])[a-z][a-z0-9-]*", locator)
@@ -273,13 +276,33 @@ def _calls_cli(tree: ast.AST, program: str, subcommand: str | None) -> bool:
         qualified = (isinstance(call, ast.Attribute) and call.attr in
                      {"run", "Popen", "check_call", "check_output"}
                      and isinstance(call.value, ast.Name) and call.value.id in modules)
-        if not (direct or qualified) or not isinstance(node.args[0], (ast.List, ast.Tuple)):
+        if not (direct or qualified):
             continue
-        tokens = [value.value if isinstance(value, ast.Constant) and isinstance(value.value, str)
-                  else None for value in node.args[0].elts]
-        if _runs_program(tokens, program, subcommand):
+        if any(_runs_program(tokens, program, subcommand) for tokens in _argv_candidates(tree, node.args[0])):
             return True
     return False
+
+
+def _argv_candidates(tree: ast.AST, argv: ast.AST) -> list[list[str | None]]:
+    """String tokens of an argv: a literal list, or `helper("prog", "sub", ...)` for a helper
+    defined in the same file (trial F: it chose the console script or `python -m`), also through
+    one local `name = ...` assignment. An imported helper is not followed: its body is unseen."""
+    values = [argv]
+    if isinstance(argv, ast.Name):
+        values = [node.value for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                  and any(isinstance(target, ast.Name) and target.id == argv.id for target in node.targets)]
+    local = {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
+    candidates = []
+    for value in values:
+        if isinstance(value, (ast.List, ast.Tuple)):
+            elements = value.elts
+        elif isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id in local:
+            elements = value.args
+        else:
+            continue
+        candidates.append([item.value if isinstance(item, ast.Constant) and isinstance(item.value, str)
+                           else None for item in elements])
+    return candidates
 
 
 def _runs_program(tokens: list[str | None], program: str, subcommand: str | None) -> bool:

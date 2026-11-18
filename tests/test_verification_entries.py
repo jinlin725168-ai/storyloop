@@ -202,6 +202,29 @@ class ManifestEntryTests(unittest.TestCase):
             "Public console command `sqlite-utils insert PATH TABLE FILE|- [--summary]`, also "
             "used to read `sqlite-utils bulk --help`"), ("sqlite-utils", "insert"))
 
+    def test_argv_built_by_a_local_helper_counts_and_option_only_locators_parse(self):
+        # Trial F (rows --exclude): cases ran subprocess.run(entry("sqlite-utils", "rows", ...)) where
+        # entry() picks the console script or `python -m`; two repair rounds could not satisfy a
+        # literal-list-only check, and `cog --check docs/x.rst` did not parse at all.
+        value = new_product()
+        value["stories"] = value["stories"][:1]
+        value["stories"][0]["verification_entries"][0]["locator"] = "sqlite-utils rows PATH DBTABLE [--exclude COLUMN]..."
+        suite = {"tests": [{"id": "T-1", "criteria": ["AC-1"], "entry_ids": ["VE-CLI"],
+                            "command": ["{python}", "acceptance/changes/C/case.py"]}]}
+        helper = ("import subprocess\nimport sys\n"
+                  "def entry(program, *args):\n    return [program, *args]\n"
+                  "def test_x(path):\n    subprocess.run({argv}, capture_output=True)\n")
+        ok = {"case.py": helper.format(argv='entry("sqlite-utils", "rows", path, "dogs")')}
+        self.assertEqual(verification_entries.entry_use_findings(value, suite, ok), [])
+        wrong = {"case.py": helper.format(argv='entry("sqlite-utils", "tables", path)')}
+        self.assertEqual(len(verification_entries.entry_use_findings(value, suite, wrong)), 1)
+        imported = {"case.py": "import subprocess\nfrom util import entry\n"
+                               "def test_x(p):\n    subprocess.run(entry('sqlite-utils', 'rows', p))\n"}
+        self.assertEqual(len(verification_entries.entry_use_findings(value, suite, imported)), 1)
+        from storyloop.verification_entries import _cli_target
+        self.assertEqual(_cli_target("cog --check docs/cli-reference.rst（文档一致性检查）"), ("cog", None))
+        self.assertEqual(_cli_target("sqlite-utils rows PATH DBTABLE"), ("sqlite-utils", "rows"))
+
     def test_cli_locator_without_program_name_uses_its_known_command(self):
         # 2026-11-15 self-iteration C: approval accepted this prose locator, then every
         # acceptance round reported UNVERIFIED_ENTRY_USE although the case ran storyloop bench.

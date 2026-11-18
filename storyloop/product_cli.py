@@ -83,12 +83,12 @@ def change(project: Path, args, product_answer, revise_with_agent,
                                 cocreation={"entry": "cli"})
         adopt_pending(project, created["change_id"])
         state = clarify_interactively(project, created["change_id"], revise_with_agent, interactive)
-        return draft_result(project, state)
+        return draft_result(project, auto_repair(project, state, revise_with_agent))
     require(args.change_id and args.message,
             "Revision needs both --change and --message")
     revise_with_agent(project, args.change_id, args.message, [])
     state = clarify_interactively(project, args.change_id, revise_with_agent, interactive)
-    return draft_result(project, state)
+    return draft_result(project, auto_repair(project, state, revise_with_agent))
 
 
 FROM_DRAFT_MESSAGE = (
@@ -215,14 +215,41 @@ def dispatch(project: Path, args, run_with_answers, draft_result, load_run_state
     raise StoryLoopError(f"Unknown command {args.command}")
 
 
-def draft_result(project: Path, state: dict, next_action=None) -> dict:
-    stop = draft_stop(project, state)
-    blockers = blocking_items(evaluate_checklist(
+def draft_blockers(project: Path, state: dict) -> list[dict]:
+    return blocking_items(evaluate_checklist(
         state["product"], project,
         require_entries=state.get("verification_entries_required") is True,
         require_observation=state.get("observation_required") is True,
         require_output_contract=state.get("output_contract_required") is True,
         inherited_constraints=state.get("inherited_constraints")))
+
+
+AUTO_REPAIR_PREFIX = "引擎自动退回（无需人工）"
+
+
+def auto_repair(project: Path, state: dict, revise_with_agent) -> dict:
+    """One engine-initiated revision for blockers the product role can fix on its own.
+
+    Trial F: a mislabeled example polarity and a wrong `existence` each cost a person a round.
+    Clarity items (open questions, unconfirmed assumptions) stay with the person.
+    """
+    if state["product"].get("questions"):
+        return state
+    fixable = [item for item in draft_blockers(project, state) if item["dimension"] != "Clarity"]
+    if not fixable:
+        return state
+    message = (AUTO_REPAIR_PREFIX + "：修正以下需求质量门阻断项，不改动已确认的目标、规则、假设与澄清："
+               + "；".join(f"{item['id']} {item['text']}" for item in fixable))
+    try:
+        revise_with_agent(project, state["change_id"], message, [])
+    except StoryLoopError:
+        return state  # best effort: the person's draft stands and the checklist still names the items
+    return load_change(project, state["change_id"])
+
+
+def draft_result(project: Path, state: dict, next_action=None) -> dict:
+    stop = draft_stop(project, state)
+    blockers = draft_blockers(project, state)
     pending = state["product"].get("questions") or blockers
     hint = draft_next(project, state) if pending else (stop["resume"] if stop else next_action)
     details = ({"blocking_items": blockers} if state.get("observation_required") is True

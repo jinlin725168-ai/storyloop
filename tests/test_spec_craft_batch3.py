@@ -132,6 +132,12 @@ class HandoffTests(unittest.TestCase):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.root = Path(folder.name)
+        # The scripted product role answers once; the trial-F automatic repair round is tested in
+        # test_trial_f_views.
+        from unittest import mock
+        patcher = mock.patch("storyloop.product_cli.auto_repair", side_effect=lambda project, state, reviser: state)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         from tests.routing_support import readiness_repository
         from storyloop.readiness import approve_readiness, inspect_readiness
         readiness_repository(self.root)

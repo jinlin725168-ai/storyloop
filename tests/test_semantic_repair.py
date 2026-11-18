@@ -85,6 +85,14 @@ class AnswerWithRepairTests(unittest.TestCase):
 
 
 class SemanticRepairIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        # These cases count product calls exactly; the trial-F automatic repair round (one extra
+        # call for role-fixable checklist items) has its own tests in test_trial_f_views.
+        from unittest import mock
+        patcher = mock.patch("storyloop.product_cli.auto_repair", side_effect=lambda project, state, reviser: state)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_change_does_not_retry_git_validation_failure(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

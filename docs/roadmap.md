@@ -126,7 +126,7 @@ flowchart LR
     G --> H["H 并发与事件<br/>并行变更 · GitHub 事件 · Watchdog"]
 ```
 
-**F 进展（2026-11-18）**：报告 v2（`report.json` 不再存渲染副本，`report.md` 由约 2000 行降到约 60 行，旧报告的回执字节不变）；`init --detect --yes --agent claude|codex|auto`（在 sqlite-utils 上推断结果与手写设置一致）；Claude 适配器随包发布为 `python -m storyloop.claude_agent`（旧脚本路径保留）；`status <项目>` 跨变更总览；快速上手文档。
+**F 进展（2026-11-18）**：报告 v2（`report.json` 不再存渲染副本，`report.md` 由约 2000 行降到约 60 行，旧报告的回执字节不变）；`init --detect --yes --agent claude|codex|auto`（在 sqlite-utils 上推断结果与手写设置一致）；Claude 适配器随包发布为 `python -m storyloop.claude_agent`（旧脚本路径保留）；`status <项目>` 跨变更总览；快速上手文档。试用（sqlite-utils 全新克隆，`rows --exclude`）`PASSED`，人工触达 7 次，其中 4 次是决定；暴露的 8 个问题已修复，修复后预计 5 次触达、4 次是决定，剩余一次（intake 停点自动退回）记入 G（[试用记录](validation/2026-11-18-F-试用.md)）。
 
 审查角色在此期间由开发者直接完成（Codex 暂停派发）；base 人工通道不变（[决策 0018](decisions/0018-base-human-only.md)）。
 
