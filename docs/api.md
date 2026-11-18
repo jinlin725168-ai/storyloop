@@ -23,6 +23,12 @@
 | `status` | `--change ID` | 变更状态，附 `run`、`telemetry`、`next`、`stop` |
 | `status`（不带 --change） | — | `OVERVIEW`：所有变更按 `waiting`（human / running / done）分组，待决变更附 `next` |
 | `inbox` | `PROJECT [PROJECT ...]` | `INBOX`：跨变更、跨项目只列需要人决定的事项（最早的在前），每项附 `next` 命令 |
+| `workers start` | `PROJECT --change ID` | `WORKER_STARTED`：把项目分支 `git clone --no-local` 到 worker 目录并复制控制面，后台运行 `approve`（DRAFT）或 `run`；运行中的 worker 不超过 `workers_max` |
+| `workers status` | `PROJECT` | `WORKERS`：每个 worker 的状态、运行状态、墙钟分钟、费用、Watchdog 标记（`STALLED` / `OVER_TIME` / `OVER_BUDGET`）与下一步 |
+| `workers stop` | `PROJECT --change ID` | `WORKER_STOPPED`：向 worker 发 SIGINT（Windows 为 taskkill），状态已保存，再 `start` 续跑 |
+| `workers land` | `PROJECT --change ID` | `LANDED`（`verification`: `exact` 快进 / `reverified` 合并后复验验收、冒烟、单元与集成层）；`LAND_CONFLICT` / `LAND_REVERIFY_FAILED`（退出码 2，项目分支不动） |
+| `github sync` | `PROJECT [--repo owner/name]` | `GITHUB_SYNCED`：用 `gh` 拉取新事件（幂等）。带 `github.label`（默认 `storyloop`）的 open issue、`github.branch`（默认 `main`）上某工作流最新一次运行失败 → 事件草稿（附建议的 `assess` 命令，进 `inbox`）；`github.allowed_authors` 中作者的 issue 评论 `/storyloop <变更ID> <意见>` → 修订该 DRAFT 变更（计一次人工触达），其他作者的评论只报告不执行 |
+| `github dismiss` | `PROJECT --event EVT-...` | `EVENT_DISMISSED`；以同一 idea 建了评估的事件也自动视为已处理 |
 | `log` | `--change ID` | `LOG` |
 | `answer` | `--change ID --answer TEXT [--answer TEXT …]` | `ANSWERED` |
 | `accept` | `--change ID --criterion ID [--criterion ID …] --note TEXT` | `ACCEPTED`，或仍有未确认条件时 `MANUAL_ACCEPTANCE_REQUIRED` |
@@ -217,6 +223,12 @@ M1b 是 M1 的尝试次数补充；M12 含 `recurrence_rate` 和 `unclaimed_rate
 | `agent_timeout_seconds` | `14400` | 代理进程挂死保护 |
 | `notify_command` | 无 | argv 列表（不经 shell）。`change`/`approve`/`run`/`answer`/`accept`/`reset`/`acceptance-repair` 结束在需要人决定的停点或 `PASSED` 时运行一次，stdin 是 `{"event":"decision"\|"passed","project","change_id","status","next"}`；30 秒超时，失败不影响命令 |
 | `agent_network_retry_seconds` | `30` | 代理因网络不可用时，等待这么久后在同一适配器上自动重试一次（0～600）；登录、额度、超时、崩溃不重试 |
+| `workers_root` | 项目旁的 `.<项目名>-storyloop-workers/` | worker clone 所在目录 |
+| `workers_max` | `3` | 同时运行的 worker 上限 |
+| `watchdog_idle_minutes` | `30` | 运行中的 worker 这么久没有写入控制面即标 `STALLED` |
+| `watchdog_wall_minutes` | `180` | 运行超过这么久即标 `OVER_TIME` |
+| `watchdog_cost_usd` | 无 | 已知费用超过即标 `OVER_BUDGET` |
+| `github` | 无 | `{"repo": "owner/name", "label": "storyloop", "branch": "main", "allowed_authors": ["login"]}`；不配 `allowed_authors` 时评论一律不执行 |
 | `check_timeout_seconds` | `300` | 单元、集成、静态检查与特征化回归的单条命令上限 |
 | `design_min_stories` | `2` | 故事数少于它时跳过 design；必须是 ≥1 的整数 |
 | `metrics.thresholds` | `{}` | 按 R1–R12 覆盖 `threshold`、`min_sample`；R8 也可覆盖 `low`。未知规则/字段、布尔、负数、非有限数值报错 |

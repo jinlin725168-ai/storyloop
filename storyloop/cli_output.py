@@ -10,6 +10,15 @@ from .metrics_render import render_metrics
 from .stop_report import render_stop
 
 
+# Results that exit with code 2: the command ended somewhere a person has to look.
+FAILURE_STATUSES = frozenset({
+    "FAILED", "BLOCKED", "NEEDS_INPUT", "INTERRUPTED", "UNSAFE_CONTAINMENT", "WORKSPACE_TAINTED",
+    "BUDGET_EXHAUSTED", "BASE_CHANGE_REQUIRED", "BOUNDARY_VIOLATION", "ERROR", "CHARACTERIZATION_FAILED",
+    "SCAFFOLD_SELECTION_REQUIRED", "SMOKE_UPDATE_FAILED", "EXISTING_GREEN", "ORACLE_DEFECT", "NEEDS_SPEC_FIX",
+    "NO_PROGRESS", "LAND_CONFLICT", "LAND_REVERIFY_FAILED",
+})
+
+
 def display(result: dict, complete_json: bool) -> None:
     if complete_json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -23,6 +32,14 @@ def display(result: dict, complete_json: bool) -> None:
     if result.get("status") == "SETTINGS_PROPOSED" and "settings" in result:
         from .init_detect import render_proposal
         print(render_proposal(result))
+        return
+    if result.get("status") == "GITHUB_SYNCED":
+        from .github_events import render_sync
+        print(render_sync(result))
+        return
+    if result.get("status") == "WORKERS":
+        from .workers import render_workers
+        print(render_workers(result))
         return
     if result.get("status") == "INBOX":
         from .attention import render_inbox

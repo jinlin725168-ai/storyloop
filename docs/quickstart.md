@@ -70,6 +70,29 @@ storyloop status ~/work/my-project
 
 同时推进几个项目时，`storyloop inbox ~/work/a ~/work/b` 只列需要你决定的事项，最早的在前。想在需要你时收到提醒，在 `.storyloop/config.json` 加 `"notify_command": ["notify-send", "StoryLoop"]`（或任何读 stdin JSON 的脚本）：只在停到需要你决定或完成时运行，例行停点（引擎能自己修的阻断项、一次网络失败）不会打扰你。每个变更你敲过的命令按"决定 / 草案修订 / 续跑 / 修复"计数，见 `log` 和报告摘要的"人工触达"。
 
+## 并行跑几个需求
+
+多个合同都起草好之后，可以让它们各自在独立的 clone 里同时跑，项目本身不受影响：
+
+```bash
+storyloop workers start ~/work/my-project --change <ID-1>
+storyloop workers start ~/work/my-project --change <ID-2>
+storyloop workers status ~/work/my-project     # 运行状态、费用，以及 Watchdog 发现的卡住或超时的运行
+storyloop workers land ~/work/my-project --change <ID-1>
+```
+
+`land` 只带回已经 `PASSED` 的结果：项目分支没动过就直接快进；已经落地过别的变更，就先在临时 clone 里合并，再复验该变更的验收、系统冒烟和单元/集成层，绿了才落地，冲突或复验失败就停下交给你。某个 worker 停下等你决定时，会出现在 `inbox` 里。
+
+## 从 GitHub 接需求
+
+在 `.storyloop/config.json` 加 `"github": {"repo": "owner/name", "allowed_authors": ["你的 GitHub 用户名"]}`，然后定期（手动、cron 或 `/loop`）执行：
+
+```bash
+storyloop github sync ~/work/my-project
+```
+
+带 `storyloop` 标签的 issue 和 main 上变红的 CI 会变成事件草稿，出现在 `inbox` 里，附一条建议的 `assess` 命令；是否要做、怎么判断做成，仍由你回答。在 issue 里评论 `/storyloop <变更ID> <意见>` 可以修订还没批准的草案，但只认 `allowed_authors` 里的作者。事件只生成草稿，不会替你花钱，也不会替你做决定。
+
 ## 5. 看报告
 
 合并后报告在 `reports/storyloop/<变更 ID>/`：`report.md` 是一页摘要（结论、验收追溯、各层结果、判据自证、审查、成本），`report.json` 是完整证据。分节的完整报告（命令、过程、时间线）按需生成，不入库：

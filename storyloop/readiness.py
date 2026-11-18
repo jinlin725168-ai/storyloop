@@ -52,6 +52,16 @@ def readiness_status(layers: dict, approved_gaps: list[str]) -> str:
     return 'READY'
 
 
+# Settings that cannot change what the test layers run (roadmap G/H). Leaving them out keeps the
+# digest of a config without them identical to before, so no earlier approval lapses.
+NON_TEST_KEYS = frozenset({"github", "notify_command", "workers_root", "workers_max", "watchdog_idle_minutes",
+                           "watchdog_wall_minutes", "watchdog_cost_usd", "agent_network_retry_seconds"})
+
+
+def _test_config(config: dict) -> dict:
+    return {key: value for key, value in config.items() if key not in NON_TEST_KEYS}
+
+
 def _binding(project: Path) -> tuple[dict, dict]:
     require(not _git(project, 'status', '--porcelain=v1', '--untracked-files=all').strip(),
             'Readiness requires a clean committed source tree')
@@ -59,7 +69,7 @@ def _binding(project: Path) -> tuple[dict, dict]:
     suite = load_system_smoke(project)
     binding = {'baseline_version': load_baseline(project)['baseline_version'],
                'source_commit': _git(project, 'rev-parse', 'HEAD').strip(),
-               'test_config_digest': _digest(config),
+               'test_config_digest': _digest(_test_config(config)),
                'suite_digests': system_smoke_digests(project) if suite else {}}
     return binding, config
 

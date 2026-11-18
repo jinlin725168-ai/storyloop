@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 
 from .models import StoryLoopError
@@ -31,6 +32,10 @@ def touch_kind(args) -> str | None:
         if not (getattr(args, "change_id", None) and getattr(args, "message", None)):
             return None
         return "decision" if _has_open_questions(args.project, args.change_id) else "draft"
+    if command == "github":  # sync is automation; dismissing an event is a person's decision
+        return "decision" if getattr(args, "github_command", "") == "dismiss" else None
+    if command == "workers":  # roadmap H: starting or landing a worker decides; stopping repairs
+        return {"start": "decision", "land": "decision", "stop": "repair"}.get(getattr(args, "workers_command", ""))
     if command == "approve" and (getattr(args, "readiness", None) or getattr(args, "draft", None)):
         return "decision"  # project-level: readiness gaps and lesson drafts
     return KINDS.get(command)
@@ -50,8 +55,8 @@ def record_touch(args) -> None:
     """Append one line for a state-changing human command; never fails the command itself."""
     kind = touch_kind(args)
     project = getattr(args, "project", None)
-    if kind is None or not isinstance(project, Path):
-        return
+    if kind is None or not isinstance(project, Path) or os.environ.get("STORYLOOP_NO_TOUCH"):
+        return  # STORYLOOP_NO_TOUCH: a worker's own engine commands (roadmap H) are not touches
     try:
         project = project.resolve()
         if not (project / ".storyloop").is_dir():
