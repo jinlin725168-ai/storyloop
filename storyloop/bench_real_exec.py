@@ -67,7 +67,23 @@ def run_isolated_attempt(case: dict, repository: Path, engine_commit: str,
             gold = judge_gold(case["source"], tree, python=gold_python)
             outcome["gold_passed"] = gold["passed"]
             outcome["gold_checks"] = gold["checks"]
+            if not gold["passed"] and evidence_root is not None:
+                _preserve_candidate(tree, case["manifest"]["base_commit"], outcome, Path(evidence_root))
         return outcome
+
+
+def _preserve_candidate(tree: Path, base_commit: str, outcome: dict, output_root: Path) -> None:
+    """Keep what the engine passed but Gold failed, so a person can tell a false pass from a Gold
+    stricter than the contract (guardrail spot check 2026-11-18: the tree was gone)."""
+    patch = subprocess.run(["git", "-C", str(tree), "diff", "--binary", base_commit, "HEAD"],
+                           capture_output=True, check=False)
+    if patch.returncode != 0:
+        return
+    relative = Path(".storyloop/bench/evidence") / uuid.uuid4().hex / "candidate.patch"
+    target = output_root / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(patch.stdout[:20_000_000])
+    outcome["candidate_patch_path"] = relative.as_posix()
 
 
 def _safe_gold_tree(tree: Path) -> None:

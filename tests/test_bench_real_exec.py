@@ -179,6 +179,28 @@ Path(sys.argv[2]).write_text(json.dumps({'status': 'PASSED', 'engine_import': OR
             self.assertEqual(exhausted["verdict"], "NOT_COMPARABLE")
             self.assertEqual(exhausted["termination_reason"], "BUDGET_EXHAUSTED")
 
+    def test_a_gold_failure_keeps_the_candidate_changes_for_adjudication(self):
+        # Guardrail spot check 2026-11-18: dogfood6 passed the engine and failed Gold on a field
+        # name the contract never states; the candidate tree was gone, so nobody could tell which.
+        import subprocess
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source, repository = calibration_fixture(root)
+
+            def engine(tree, *_):
+                (tree / "candidate_change.py").write_text("VALUE = 1\n", encoding="utf-8")
+                subprocess.run(["git", "-C", str(tree), "add", "candidate_change.py"], check=True)
+                subprocess.run(["git", "-C", str(tree), "-c", "user.name=t", "-c", "user.email=t@e",
+                                "commit", "-q", "-m", "candidate"], check=True)
+                return {"status": "PASSED", "events": [], "calls": 1}
+            outcome = run_isolated_attempt(load_case(source), repository, "a" * 40, "test", "fixture",
+                                           {"max_calls": 10}, lambda event: "APPROVE", engine=engine,
+                                           evidence_root=root / "out")
+            self.assertIs(outcome["gold_passed"], False)
+            patch = (root / "out" / outcome["candidate_patch_path"]).read_text(encoding="utf-8")
+            self.assertIn("candidate_change.py", patch)
+            self.assertIn("+VALUE = 1", patch)
+
     def test_gold_rejects_candidate_link_before_copying(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

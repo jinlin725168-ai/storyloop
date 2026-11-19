@@ -158,6 +158,7 @@ def _attempt(outcome: dict, side: str, number: int, case: dict, check_gold) -> d
             "readiness_evidence_path": outcome.get("readiness_evidence_path"),
             "stops": outcome.get("stops"),
             "stop_evidence_path": outcome.get("stop_evidence_path"),
+            "candidate_patch_path": outcome.get("candidate_patch_path"),
             "termination_reason": ("AGENT_UNAVAILABLE" if status == "AGENT_UNAVAILABLE" else None)
             or outcome.get("termination_reason") or outcome.get("reason")
             or (status if status in {"BUDGET_EXHAUSTED", "COST_LIMIT_REACHED", "TIMEOUT"} else None),
