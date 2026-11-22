@@ -90,7 +90,8 @@
     "criterion_ids": [
       "AC-1",
       "AC-2",
-      "AC-5"
+      "AC-5",
+      "AC-6"
     ],
     "gold_check_ids": [
       "F2P-acceptance-1"

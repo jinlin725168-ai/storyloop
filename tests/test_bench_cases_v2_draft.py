@@ -18,6 +18,26 @@ from storyloop.smoke import _validate_manifest
 CASES = Path(__file__).resolve().parents[1] / "bench/cases"
 
 
+
+REVISIONS = {"dogfood3-stash-git-safe": "2.2", "dogfood5-stash-hint-coverage": "2.2",
+             "dogfood6-design-revision-findings": "2.3"}
+# v2.3 (2026-11-21): dogfood6's F2P-reference called the reference solution's internal build_stop
+# with empty details; its contract part (stops saved before the fix) is the public AC-6 now.
+REMOVED_GOLD_CHECKS = {"dogfood6-design-revision-findings": {"F2P-reference"}}
+V23_RULE_PREFIX = "WHEN 用户查看修复之前已保存"
+
+
+def _drop_v23_additions(case_id: str, product: dict) -> None:
+    """The registered v2.3 additions: one rule, AC-6 with its assessment row, existing_state."""
+    if case_id != "dogfood6-design-revision-findings":
+        return
+    for story in product["stories"]:
+        story["rules"] = [rule for rule in story["rules"] if not rule.startswith(V23_RULE_PREFIX)]
+        story["acceptance"] = [item for item in story["acceptance"] if item["id"] != "AC-6"]
+    product["assessment"]["criteria"] = [row for row in product["assessment"]["criteria"]
+                                         if row["criterion_id"] != "AC-6"]
+    product["defect"].pop("existing_state", None)
+
 class BenchV2DraftTests(unittest.TestCase):
     def test_v22_removes_unavailable_report_and_uses_public_status(self):
         for case_id in ("dogfood3-stash-git-safe", "dogfood5-stash-hint-coverage"):
@@ -60,11 +80,12 @@ class BenchV2DraftTests(unittest.TestCase):
                 changed = original.parent.name in {"dogfood3-stash-git-safe",
                                                    "dogfood5-stash-hint-coverage",
                                                    "dogfood6-design-revision-findings"}
-                self.assertEqual(case["case_revision"], "2.2" if changed else "2.1")
+                self.assertEqual(case["case_revision"], REVISIONS.get(original.parent.name, "2.1"))
                 self.assertEqual(contract["approval"]["contract_sha256"],
                                  contract_digest(contract["product"]))
                 prior = old_contract["product"]
                 derived = json.loads(json.dumps(contract["product"]))
+                _drop_v23_additions(original.parent.name, derived)
                 if changed:
                     if original.parent.name == "dogfood3-stash-git-safe":
                         derived["goal"] = prior["goal"]
@@ -94,6 +115,7 @@ class BenchV2DraftTests(unittest.TestCase):
                                                      if item["id"] == "AC-4")
                 self.assertEqual(derived, prior)
                 self.assertTrue({item["check_id"] for item in old_gold["checks"]}
+                                - REMOVED_GOLD_CHECKS.get(original.parent.name, set())
                                 <= {item["check_id"] for item in gold["checks"]})
                 self.assertEqual(hashlib.sha256((draft / "contract.json").read_bytes()).hexdigest(),
                                  case["contract_sha256"])

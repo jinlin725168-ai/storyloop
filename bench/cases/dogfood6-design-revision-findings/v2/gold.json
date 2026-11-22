@@ -39,7 +39,7 @@
     {
       "evidence_id": "derived-contract",
       "path": "contract.json",
-      "sha256": "72142e151a2ceb59d7f68b08d4c6dde03128c0b2f46cd99caa71a5793a30295e"
+      "sha256": "cb25169ec4b44c64f8fc266a137b14a8028f19273d5f622786def702791f8fa7"
     },
     {
       "evidence_id": "frozen-suite",
@@ -54,7 +54,7 @@
     {
       "evidence_id": "verification-entry-chain",
       "path": "verification-evidence.json",
-      "sha256": "540ee23437e5fc31ac19f0d62c91deba9202712379aedbb42e8f9210dc8d862c"
+      "sha256": "f3525d8f41e57affe97d491b277e0f9ab380c1a03455b5a41b60146bbf0b9be4"
     }
   ],
   "requirements": [

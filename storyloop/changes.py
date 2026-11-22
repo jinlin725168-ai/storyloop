@@ -279,6 +279,10 @@ def _review_sections(product: dict) -> str:
         text += "\n## 假设（批准前须由人确认或删除）\n\n" + "\n".join(
             f"- {item['id']} [{item.get('status', 'assumed')}] {item['statement']}" for item in assumptions) + (
             "\n\n用 --message 确认或修改，例如 \"AS1 确认；AS2 改为……\"。\n")
+    existing = (product.get("defect") or {}).get("existing_state")
+    if existing:
+        label = {"cover": "覆盖", "exclude": "不覆盖"}.get(existing.get("decision"), existing.get("decision"))
+        text += f"\n## 修复前已有的数据或状态\n\n- {label}：{existing.get('reason', '')}\n"
     consumers = product.get("consumers") or []
     if consumers:
         text += "\n## 使用方\n\n" + "\n".join(

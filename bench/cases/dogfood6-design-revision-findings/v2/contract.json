@@ -452,6 +452,10 @@
         "一致性意见 schema 有 blocking 字段，但没有严重度等级字段。",
         "storyloop/processutil.py:23 已提供 redact()，可用于新增意见摘要的展示前脱敏。"
       ],
+      "existing_state": {
+        "decision": "cover",
+        "reason": "受这个缺陷影响的用户手上正是修复前保存、看不到意见的停点；不覆盖就等于没修好他们的问题。"
+      },
       "expected": "这些展示面直接给出每条经过脱敏且长度受限的阻塞意见摘要，供用户填写方案修订理由。",
       "observed": "方案审查意见已保存，但 DESIGN_REVISION_REQUIRED 的 run、status、log 和停点报告未逐条展示意见。",
       "reporter_hypothesis": "审查意见保存在运行状态中，但停点展示链路遗漏了它们。",
