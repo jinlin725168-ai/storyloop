@@ -24,10 +24,10 @@ class BenchCaseRevisionTests(unittest.TestCase):
         for source in sorted(cases_root.glob("*/v2")):
             with self.subTest(case=source.parent.name):
                 case = load_case(source, allow_unapproved_v2=True)
-                changed = source.parent.name in {"dogfood3-stash-git-safe",
-                                                 "dogfood5-stash-hint-coverage",
-                                                 "dogfood6-design-revision-findings"}
-                self.assertEqual(case["manifest"]["case_revision"], "2.2" if changed else "2.1")
+                expected = {"dogfood3-stash-git-safe": "2.2", "dogfood5-stash-hint-coverage": "2.2",
+                            # 2.3 (2026-11-21): pre-fix saved stops stated; no `summary` field pinned.
+                            "dogfood6-design-revision-findings": "2.3"}.get(source.parent.name, "2.1")
+                self.assertEqual(case["manifest"]["case_revision"], expected)
                 self.assertTrue(case["contract_approved"])
                 for story in case["contract"]["product"]["stories"]:
                     entry_ids = {entry["id"] for entry in story["verification_entries"]}
@@ -74,7 +74,7 @@ class BenchCaseRevisionTests(unittest.TestCase):
             result = run_bench(sources, "a" * 40, "", "test", "fixture",
                                {"max_calls": 10}, lambda *_: outcome, lambda *_: True,
                                Path(folder), scope="base-only")
-        self.assertEqual(result["case_revision"], "2.2")
+        self.assertEqual(result["case_revision"], "2.3")  # a mixed batch records its highest revision
         self.assertEqual(len(result["cases"]), 5)
         self.assertTrue(result["stage_gate"]["passed"])
 

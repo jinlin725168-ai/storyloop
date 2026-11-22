@@ -1,9 +1,9 @@
 {
   "approval": {
-    "approved_at": "2026-11-16",
+    "approved_at": "2026-11-22",
     "approved_by": "jinlin725168-ai",
-    "contract_sha256": "4f64c8ab3f9522e7399efc8e8fa708e6bf0618c7fd08f273c0a9a4723206e1a9",
-    "note": "人确认 Case v2.2 可观察入口与判据覆盖"
+    "contract_sha256": "cb8f56934bae415b3bd82536d2438baad645f2470dd37f712e669ea6516de9ee",
+    "note": "人确认 Case v2.3：修复前已保存的停点也要展示意见（AC-6），不要求 summary 字段名"
   },
   "change_id": "FIX-20261105-design-revision-findings",
   "product": {
@@ -179,6 +179,39 @@
             "steps": [
               "构造包含凭证形式文本、带用户信息的 URL、长内容及长位置的阻塞方案意见。",
               "读取结构化停点摘要及 run、status、log 的停点文本，逐条核对脱敏值、300 字符上限和摘要字段。"
+            ]
+          },
+          "story_id": "S1"
+        },
+        {
+          "criterion_id": "AC-6",
+          "evidence": {
+            "locations": [
+              "storyloop/consistency.py:162",
+              "storyloop/stop_report.py:264",
+              "storyloop/stop_report.py:314"
+            ],
+            "search_scope": [
+              "storyloop/consistency.py",
+              "storyloop/stop_report.py",
+              "tests/test_consistency.py"
+            ]
+          },
+          "existence": "absent",
+          "feasibility": "local_automated",
+          "method": {
+            "commands": [
+              [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_design_revision_findings"
+              ]
+            ],
+            "expected": "修复前保存、缺少意见列表的停点，经 status 读取时也展示已保存审查结果中的阻塞意见，且不写回运行状态；修复前没有展示。",
+            "steps": [
+              "以修复前的形态保存 DESIGN_REVISION_REQUIRED 停点：停点没有意见列表，运行状态保存了一致性审查结果。",
+              "执行 status --json，核对 stop.review_findings 与运行状态文件读取前后是否一致。"
             ]
           },
           "story_id": "S1"
@@ -425,6 +458,10 @@
         "一致性意见 schema 有 blocking 字段，但没有严重度等级字段。",
         "storyloop/processutil.py:23 已提供 redact()，可用于新增意见摘要的展示前脱敏。"
       ],
+      "existing_state": {
+        "decision": "cover",
+        "reason": "受这个缺陷影响的用户手上正是修复前保存、看不到意见的停点；不覆盖就等于没修好他们的问题。"
+      },
       "expected": "这些展示面直接给出每条经过脱敏且长度受限的阻塞意见摘要，供用户填写方案修订理由。",
       "observed": "方案审查意见已保存，但 DESIGN_REVISION_REQUIRED 的 run、status、log 和停点报告未逐条展示意见。",
       "reporter_hypothesis": "审查意见保存在运行状态中，但停点展示链路遗漏了它们。",
@@ -552,6 +589,23 @@
             "row_type": "positive",
             "then": "每条摘要经 redact() 脱敏且不超过 300 字符，并且不含凭证原值或原始调用记录",
             "when": "查看停点意见摘要"
+          },
+          {
+            "consumers": [
+              "status",
+              "log"
+            ],
+            "entry_ids": [
+              "VE-DESIGN-STOP"
+            ],
+            "given": "修复之前保存的 DESIGN_REVISION_REQUIRED 停点没有意见列表，运行状态中保存的一致性审查结果含两条阻塞意见",
+            "id": "AC-6",
+            "kind": "automated",
+            "oracle_class": "auto-fast",
+            "reproduces_defect": true,
+            "row_type": "positive",
+            "then": "stop.review_findings 列出这两条意见的目标、阻塞严重度、内容和位置，且运行状态文件读取前后逐字节不变",
+            "when": "用户执行 status --json 查看该停点"
           }
         ],
         "as_a": "需要修订方案的用户",
@@ -570,7 +624,8 @@
           "THE SYSTEM SHALL 将每条新增展示摘要限制在 300 字符以内。",
           "THE SYSTEM SHALL 从新增意见摘要中排除原始代理调用记录。",
           "WHEN 用户查看该停点的 run、status 或 log 输出，THE SYSTEM SHALL 展示同一份阻塞意见摘要。",
-          "WHEN 用户查看其他状态的停点，THE SYSTEM SHALL 保持其既有展示内容。"
+          "WHEN 用户查看其他状态的停点，THE SYSTEM SHALL 保持其既有展示内容。",
+          "WHEN 用户查看修复之前已保存、停点中没有意见列表的 DESIGN_REVISION_REQUIRED 停点，THE SYSTEM SHALL 从运行状态中已保存的一致性审查结果展示同样的阻塞意见摘要，且不改写已保存的运行状态。"
         ],
         "so_that": "我能依据意见写出具体的 --replan 理由",
         "title": "展示方案修订阻塞意见",

@@ -13,10 +13,10 @@
   },
   "base_commit": "72f2b51b21df3eb84e3b43f2146fd07912f1dfb4",
   "case_id": "dogfood6-design-revision-findings",
-  "case_revision": "2.2",
+  "case_revision": "2.3",
   "case_version": 2,
-  "contract_sha256": "b5292c98e96f8f7dee730a230669001738146c0850257b3f66ef8c7c5530d707",
-  "gold_sha256": "b24f17bc0b77af8c44031b986a348eb4eea40a18921056d129c89aed0b4e0cac",
+  "contract_sha256": "c85c6b2eaf3b9d95dc35cde4aac6314fff626204b73565d92ece24a5dc19c2f0",
+  "gold_sha256": "2d8f4d2e57a5cdfe2bc89ff0462110c371cfe34d0e4cb45f052f089e121dd535",
   "legacy_seam": false,
   "python": {
     "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
@@ -28,24 +28,24 @@
   "suite_files": [
     {
       "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/bench_design_revision_existing.py",
-      "sha256": "365a81da0b6ca063fa666f136dc58a5b0bbd02ec4946d1e5c189ee4092509e05"
+      "sha256": "8565dcd9989a3b3af56f77e699211b8f68d794d321809d74368a2e6c02655a53"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/bench_design_revision_red.py",
-      "sha256": "2932f897795e375e129fc70a0a588fae7dd6b6cd6d2bd1de38fb690e5fb84473"
+      "sha256": "d0853c8b5b2ffffebcb76d73f7f5c145af5327585d5233c3167cf53ca1febc19"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/manifest.json",
-      "sha256": "aaf82d6fd3fea7aba8a7681a14d7fbc38c0909e09bbffe648d09c2f847020a4e"
+      "sha256": "d867390b081a8e6c8bb110248d1cb90bb4270be07c43d9d7d8c4c908ddc5d268"
     },
     {
       "path": "checks/acceptance/changes/FIX-20261105-design-revision-findings/test_findings.py",
-      "sha256": "167b343746fba540b486244c2e9d93a1ca6d25a5358624f45be41e6c9097b29f"
+      "sha256": "a3b4895a15c9a00227a8c52b120136fc3e1cafc2b404eda95b58d8eedb5bddf5"
     },
     {
       "path": "checks/tests/test_design_revision_findings.py",
       "sha256": "e624c0aa686d6f618e158da907678cf5d4934be2b7da0d7358588a74b36ae7ea"
     }
   ],
-  "suite_sha256": "a86eac07fbe9a3474d46c06eaa8f333c36c2ddcf925c0e8edc5e92d9c4a82465"
+  "suite_sha256": "c287ef266157cd5600cce07cf020d216332611ecfe94c4e1155c48563ac7885b"
 }

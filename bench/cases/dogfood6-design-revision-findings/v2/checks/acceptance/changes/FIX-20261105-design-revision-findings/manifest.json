@@ -9,7 +9,8 @@
       "criteria": [
         "AC-1",
         "AC-2",
-        "AC-5"
+        "AC-5",
+        "AC-6"
       ],
       "entry_ids": [
         "VE-DESIGN-STOP",

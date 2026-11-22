@@ -84,7 +84,7 @@ def evaluate_checklist(product: dict, project: Path | None = None,
             # visible while the draft is reviewed, so approve, run and status agree on the stop.
             add("Clarity", "warning",
                 f"risks.{key} is unknown: judge yes/no from repository evidence or ask it as a question")
-    _nature_items(add, product, project)
+    _nature_items(add, product, project, require_observation)
     _cocreation_items(add, product)
     if project is not None:
         _module_items(add, product, project)
@@ -146,7 +146,7 @@ def _filled(value: object) -> bool:
 IDENTIFIER_LIKE = re.compile(r"\b[a-z]+[A-Z]\w*\b|\b\w+\(\)")
 
 
-def _nature_items(add, product: dict, project: Path | None) -> None:
+def _nature_items(add, product: dict, project: Path | None, new_contract: bool = False) -> None:
     """Checks that follow from the change's nature; legacy contracts (no nature) only get warnings."""
     nature = nature_of(product)
     floor = definition_for(nature).criteria_floor
@@ -158,7 +158,7 @@ def _nature_items(add, product: dict, project: Path | None) -> None:
             "At least one automated criterion asserts new behaviour (must be red before implementation)")
         _row_coverage(add, product, criteria, "error" if strict else "warning")
     if "defect_reproduction_red" in floor:
-        _fix_items(add, product, automated, project)
+        _fix_items(add, product, automated, project, new_contract)
     if "structural_red" in floor:
         _refactor_items(add, product, automated, project)
     _consumer_items(add, product, criteria, "error" if strict else "warning")
@@ -177,8 +177,11 @@ def _row_coverage(add, product: dict, criteria: list, level: str) -> None:
             f"Row type {row} has a criterion or a stated exemption")
 
 
-def _fix_items(add, product: dict, automated: list, project: Path | None) -> None:
+def _fix_items(add, product: dict, automated: list, project: Path | None,
+               new_contract: bool = False) -> None:
     defect = product["defect"]
+    if new_contract:
+        _existing_state_item(add, product, defect)
     add("Coverage", "ok" if any(c.get("reproduces_defect") for c in automated) else "error",
         "An automated criterion reproduces the defect")
     _traceability_items(add, defect, project)
@@ -190,6 +193,22 @@ def _fix_items(add, product: dict, automated: list, project: Path | None) -> Non
     rules = " ".join(rule for story in product["stories"] for rule in story["rules"])
     add("Clarity", "warning" if hypothesis and hypothesis in rules else "ok",
         "The reporter's hypothesis is not copied into the rules as a requirement")
+
+
+def _existing_state_item(add, product: dict, defect: dict) -> None:
+    """A fix that touches saved state must say whether state saved before it is covered.
+
+    Guardrail bench 2026-11-21 (dogfood6): the contract left it open, the design role picked
+    the option that skips stops saved before the fix, and the users the fix was for kept the bug.
+    Clarity: a person decides; the engine never sends it back to the role. New contracts only.
+    """
+    risk = ((product.get("assessment") or {}).get("risks") or {}).get("persistent_state") or {}
+    if risk.get("value") != "yes":
+        return
+    decided = (defect.get("existing_state") or {}).get("decision")
+    add("Clarity", "ok" if decided else "error",
+        "The fix decides whether data or state saved before it is covered "
+        "(defect.existing_state.decision: cover or exclude, with a reason)")
 
 
 def _refactor_items(add, product: dict, automated: list, project: Path | None) -> None:

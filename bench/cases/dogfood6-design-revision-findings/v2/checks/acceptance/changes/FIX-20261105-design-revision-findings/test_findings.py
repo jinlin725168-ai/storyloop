@@ -67,6 +67,18 @@ with tempfile.TemporaryDirectory() as folder:
         raise RuntimeError('log CLI failed: ' + log_call.stderr[-1000:])
     log = json.loads(log_call.stdout)
     after = load_json(run_path)
+    # AC-6: a stop saved before the fix has no review_findings; only the saved review result has them.
+    legacy = load_json(run_path)
+    legacy['stop'].pop('review_findings', None)
+    write_json(run_path, legacy)
+    legacy_before = load_json(run_path)
+    legacy_call = subprocess.run([sys.executable, '-m', 'storyloop', 'status', str(project),
+                                  '--change', change_id, '--json'], cwd=Path.cwd(),
+                                 capture_output=True, text=True, encoding="utf-8", timeout=20)
+    if not legacy_call.stdout.strip():
+        raise RuntimeError('legacy status CLI failed: ' + legacy_call.stderr[-1000:])
+    legacy_view = {'status': json.loads(legacy_call.stdout), 'before': legacy_before,
+                   'after': load_json(run_path)}
     texts = {}
     for name, result in [('run', run), ('status', status)]:
         output = io.StringIO()
@@ -82,7 +94,7 @@ with tempfile.TemporaryDirectory() as folder:
         other[kind] = {'stop': report, 'text': '\n'.join(render_stop(report))}
     print(json.dumps({'run': run, 'status': status, 'log': log,
                       'texts': texts, 'before': before, 'after': after,
-                      'other': other}, ensure_ascii=False))
+                      'other': other, 'legacy': legacy_view}, ensure_ascii=False))
 '''
 
 BASE_KEYS = {'status', 'routing', 'phase', 'completed', 'last_verdict',
@@ -102,7 +114,7 @@ def probe(findings):
     except (OSError, subprocess.TimeoutExpired, ValueError) as error:
         raise HarnessError('Business subprocess/protocol unavailable') from error
     if not isinstance(result, dict) or set(result) != {
-            'run', 'status', 'log', 'texts', 'before', 'after', 'other'}:
+            'run', 'status', 'log', 'texts', 'before', 'after', 'other', 'legacy'}:
         raise HarnessError('Business protocol is invalid')
     precondition(result['run'].get('status') == 'DESIGN_REVISION_REQUIRED',
                  'Run fixture did not reach design revision stop')
@@ -158,7 +170,7 @@ class RedBehavior(unittest.TestCase):
                 self.assertEqual(item['severity'], '阻塞')
                 self.assertEqual(item['message'], message)
                 self.assertEqual(item['location'], location)
-                for value in ('design', '阻塞', message, location, item['summary']):
+                for value in ('design', '阻塞', message, location):
                     self.assertIn(value, result['texts'][consumer])
             self.assertNotIn('非阻塞建议 C', result['texts'][consumer])
 
@@ -187,15 +199,27 @@ class RedBehavior(unittest.TestCase):
                 self.assertEqual(item['severity'], '阻塞')
                 self.assertIsInstance(item['message'], str)
                 self.assertIsInstance(item['location'], str)
-                self.assertIsInstance(item['summary'], str)
-                self.assertIn(item['message'], item['summary'])
-                self.assertIn(item['location'], item['summary'])
-                self.assertIn(item['summary'], rendered)
-                self.assertLessEqual(len(item['summary']), 300)
+                # v2.3: the contract bounds each finding's shown summary to 300 characters; it does
+                # not name a JSON field, so check the four fields and the finding's own text line.
+                total = sum(len(item[key]) for key in ('target', 'severity', 'message', 'location'))
+                self.assertLessEqual(total, 300)
+                line = next((text for text in rendered.splitlines() if item['message'] in text), None)
+                self.assertIsNotNone(line, 'each blocking finding has its own text line')
+                self.assertIn(item['location'], line)
+                self.assertLessEqual(len(line.strip().lstrip('-').strip()), 300)
             self.assertIn('token=[REDACTED]', items[0]['message'])
             self.assertIn('plan:main/constraints/0', items[0]['location'])
             self.assertIn('https://[REDACTED]@example.test/path', items[1]['message'])
             self.assertTrue(items[1]['location'].startswith('plan:main/'))
+
+
+    def test_ac6_a_stop_saved_before_the_fix_shows_the_findings(self):
+        legacy = probe(findings())['legacy']
+        shown = [(item['target'], item['severity'], item['message'], item['location'])
+                 for item in summaries(legacy['status']['stop'])]
+        self.assertEqual(shown, [('design', '阻塞', '修正数据边界 A', 'plan:main/constraints/0'),
+                                 ('design', '阻塞', '补足回滚路径 B', 'plan:main/regression/0')])
+        self.assertEqual(legacy['after'], legacy['before'])  # reading never rewrites the saved run
 
 
 class ExistingBehavior(unittest.TestCase):

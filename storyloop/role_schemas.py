@@ -120,7 +120,9 @@ DEFECT = _obj({"observed": STRING, "expected": STRING, "reproduction": STRINGS,
                "root_cause": {"type": "array", "items": _obj({"statement": STRING, "location": STRING})},
                "confirmed": STRINGS, "unconfirmed": STRINGS,
                "sibling_entries": _nullable(STRINGS), "origin_change": _nullable(STRING),
-               "escape_class": _nullable(STRING), "rules": _nullable(STRINGS)})
+               "escape_class": _nullable(STRING), "rules": _nullable(STRINGS),
+               "existing_state": _nullable(_obj({"decision": {"type": "string", "enum": ["cover", "exclude"]},
+                                                 "reason": STRING}))})
 REFACTOR = _obj({"subtype": {"type": "string", "enum": ["structure", "dependency-swap"]},
                  "scope": STRINGS, "invariants": STRINGS, "structural_goals": STRINGS,
                  "migration_map": _nullable({"type": "array", "items": _obj(

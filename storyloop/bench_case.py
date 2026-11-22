@@ -15,6 +15,11 @@ COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 ID = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 
 
+# v2 revisions that require each automated AC's entry_ids to cover its story entries.
+# 2.3 (2026-11-21): dogfood6 states the pre-fix saved stop and no longer pins a `summary` field.
+ENTRY_REVISIONS = frozenset({"2.1", "2.2", "2.3"})
+
+
 def load_case(source: Path, *, allow_unapproved_v2: bool = False) -> dict:
     """Read one frozen Case and check every declared byte and reference."""
     source = Path(source)
@@ -62,7 +67,7 @@ def _manifest(value: dict, source: Path) -> None:
             "Only v1/v2 Cases are supported")
     version = value["case_version"]
     if "case_revision" in value:
-        require(version == 2 and value["case_revision"] in {"2.1", "2.2"},
+        require(version == 2 and value["case_revision"] in ENTRY_REVISIONS,
                 "Unsupported Case revision")
     require(isinstance(value["case_id"], str) and ID.fullmatch(value["case_id"])
             and source.parent.name == value["case_id"] and source.name == f"v{version}",
@@ -132,7 +137,7 @@ def _v2_contract_and_suite(source: Path, contract: dict, revision: str | None = 
     product = validate_product(contract["product"])
     require(all(story.get("verification_entries") for story in product["stories"]),
             "v2 Case requires story verification_entries")
-    if revision in {"2.1", "2.2"}:
+    if revision in ENTRY_REVISIONS:
         from .verification_entries import validate_criterion_entry_ids
         validate_criterion_entry_ids(product)
     change_id = identifier(contract["change_id"], "change id")

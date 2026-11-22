@@ -40,7 +40,7 @@ FAST = [
     "tests.test_precheck_overrule",
     "tests.test_routing_policy", "tests.test_routing_risks", "tests.test_skill_custom", "tests.test_skill_selection",
     "tests.test_skills", "tests.test_spec_craft", "tests.test_smoke", "tests.test_state_format", "tests.test_stop_report",
-    "tests.test_onboarding", "tests.test_init_detect", "tests.test_status_overview", "tests.test_trial_f_views", "tests.test_attention", "tests.test_workers", "tests.test_github_events", "tests.test_bench_adapter_cli", "tests.test_bench_spot_check", "tests.test_command_boundaries", "tests.test_stop_reachability", "tests.test_onboarding_source_files", "tests.test_onboarding_lock", "tests.test_smoke_harness",
+    "tests.test_onboarding", "tests.test_init_detect", "tests.test_status_overview", "tests.test_trial_f_views", "tests.test_attention", "tests.test_workers", "tests.test_github_events", "tests.test_bench_adapter_cli", "tests.test_bench_spot_check", "tests.test_command_boundaries", "tests.test_stop_reachability", "tests.test_existing_state", "tests.test_onboarding_source_files", "tests.test_onboarding_lock", "tests.test_smoke_harness",
     "tests.test_output_contract",
     "tests.test_smoke_harness_protocol", "tests.test_smoke_harness_scratch",
 ]

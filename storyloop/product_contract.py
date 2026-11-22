@@ -192,7 +192,8 @@ ESCAPE_CLASSES = ("oracle", "characterization", "review", "regression", "environ
 
 def _defect(value: object) -> None:
     fields(value, {"observed", "expected", "reproduction", "root_cause", "confirmed", "unconfirmed"},
-           {"reporter_hypothesis", "sibling_entries", "origin_change", "escape_class", "rules"})
+           {"reporter_hypothesis", "sibling_entries", "origin_change", "escape_class", "rules",
+            "existing_state"})
     for key in ("observed", "expected"):
         text(value[key], key)
     require(bool(strings(value["reproduction"], "reproduction")), "reproduction needs steps")
@@ -217,8 +218,15 @@ def _defect(value: object) -> None:
     if "escape_class" in value:
         require(value["escape_class"] in ESCAPE_CLASSES,
                 "escape_class must be one of " + ", ".join(ESCAPE_CLASSES))
+    if "existing_state" in value:
+        # Whether data or state saved before the fix is covered: a person's call (2026-11-21).
+        fields(value["existing_state"], {"decision", "reason"})
+        require(value["existing_state"]["decision"] in EXISTING_STATE_DECISIONS,
+                "existing_state.decision must be cover or exclude")
+        text(value["existing_state"]["reason"], "existing_state reason")
 
 
+EXISTING_STATE_DECISIONS = ("cover", "exclude")
 ASSUMPTION_STATUSES = ("assumed", "confirmed")
 
 
