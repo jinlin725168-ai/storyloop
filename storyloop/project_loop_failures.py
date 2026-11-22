@@ -334,3 +334,27 @@ def _record_overrule(state: dict, reason: str, keys: set[str]) -> None:
 def _clear_stop(state: dict) -> None:
     for key in ("acceptance", "error", "questions", "next", "stop"):
         state.pop(key, None)
+
+
+def unaddressed_tests_first(state: dict, boundary: dict) -> dict | None:
+    """Issue #62: the last review demanded tests (MUST_FIX from the tests perspective) and this
+    attempt changed no test file, so return it to implement before paying for layers and review.
+
+    Narrow on purpose: whether a change needs tests stays the review's call; only ignoring an
+    explicit demand is caught (dogfood 2026-10-29: three rounds, eight to twelve minutes each).
+    """
+    last = (state.get("failures") or [])[-1:]
+    findings = ((last[0].get("review") or {}).get("findings") or []) if last else []
+    demanded = [item for item in findings if isinstance(item, dict)
+                and item.get("perspective") == "tests" and item.get("disposition") == "MUST_FIX"]
+    if not demanded or any(item.get("category") == "TEST" for item in boundary.get("allowed") or []):
+        return None
+    return {"tests_first": {"status": "FAILED", "reason": "上一轮审查以 MUST_FIX 要求补测试，本轮没有改动任何测试文件",
+                            "unaddressed": [str(item.get("message", ""))[:300] for item in demanded[:3]]}}
+
+
+def reject_ignored_tests_first(project: Path, state: dict, boundary: dict) -> dict | None:
+    failure = unaddressed_tests_first(state, boundary)
+    if failure is None:
+        return None
+    return record_failure(project, state, {"attempt": state["attempt"], **failure}, "implement")

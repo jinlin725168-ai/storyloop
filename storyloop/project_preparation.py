@@ -175,26 +175,37 @@ def reprove_after_base(project: Path, change: dict, state: dict) -> dict | None:
         load_smoke_manifest(project, change)
         _archive_old_evidence(project, state)
         try:
-            red = _ensure_red_evidence(project, change, head, refresh=True)
+            red, failure = _ensure_red_evidence(project, change, head, refresh=True), None
         except StoryLoopError as exc:
             if exc.code not in {"EXISTING_GREEN", "ORACLE_DEFECT"}:
                 raise
-            return pause(project, state, "BASE_CHANGE_REQUIRED", error=str(exc),
-                         acceptance={"status": exc.code, **exc.details},
-                         next=f"新底座的 RED 判据需修正：storyloop acceptance-repair <project> "
-                              f"--change {state['change_id']} --reason <原因>")
+            red, failure = None, exc
+        # The merged base is accepted either way: the contract now binds to it, so a repair
+        # re-proves RED there (issue #80: the old stop re-proved on the pre-base commit).
         for key in ("oracle", "characterization", "design_plan", "verified", "review", "report",
                     "report_commit", "report_sha256", "acceptance_evidence_sha256",
-                    "acceptance", "error", "next", "stop", "cost_candidate", "violations"):
+                    "acceptance", "error", "next", "stop", "cost_candidate", "violations",
+                    "red_evidence_sha256"):
             state.pop(key, None)
         state["contract_commit"] = head
-        state["red_evidence_sha256"] = red["evidence_sha256"]
+        if red is not None:
+            state["red_evidence_sha256"] = red["evidence_sha256"]
         state["base_upgrades"][-1]["voided_attempts"] = state["attempt"]
         state["attempt"] = 0
         if state.get("planning"):
             from .routing_upgrade import invalidate_planning
             invalidate_planning(state, "Base upgrade changed plan inputs")
             state["planning"] = {"history": state["planning"]["history"]}
+        if failure is not None:
+            # ORACLE_DEFECT, which acceptance-repair accepts (BASE_CHANGE_REQUIRED was refused).
+            # An acceptance already green on the new base no longer tells old from new: that too is
+            # a criteria defect; `acceptance.status` keeps what RED actually saw. The lifecycle
+            # kernel (base zone) already allows this stop, so no base change is involved.
+            command = shlex.join(["storyloop", "acceptance-repair", str(project), "--change",
+                                  state["change_id"], "--reason", "<原因>"])
+            return pause(project, state, "ORACLE_DEFECT", error=str(failure),
+                         acceptance={**failure.details, "status": failure.code, "after_base": head},
+                         next=f"新底座上的 RED 判据需修正：{command}")
         save_run(project, state)
     ensure_baseline(project, state, change["product"], run_commands_at_commit)
     save_run(project, state)

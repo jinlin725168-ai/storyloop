@@ -113,8 +113,10 @@ def _arguments(argv: list[str] | None):
     parser.add_argument("--guide", action="append", default=[],
                         help="project guidance file appended to every prompt (repeatable)")
     parser.add_argument("--dry-run", action="store_true", help="print the claude argv and exit")
-    parser.add_argument("--review-perspectives", default="correctness,security,architecture,tests",
-                        help="comma-separated review perspectives run as parallel sub-agents, or 'none'")
+    parser.add_argument("--review-perspectives", default="auto",
+                        help="comma-separated review perspectives run as parallel sub-agents, 'none', or "
+                             "'auto' (by the change's routing tier: light none, standard correctness and "
+                             "tests, heavy all)")
     parser.add_argument("--review-parallel", type=int, default=4, help="max concurrent perspective sessions")
     parser.add_argument("--implement-lanes", default="",
                         help="per-layer implement lanes as name=path-prefix,name=path-prefix (needs a design_plan)")
@@ -156,9 +158,22 @@ def main_with_args(argv: list[str] | None) -> int:
     return _dispatch(request, base, prompt, args, model)
 
 
+def _perspectives(option: str, request: dict) -> list[str]:
+    """An explicit list wins; `auto` follows the engine's tier (role profiles override both below)."""
+    if option != 'auto':
+        return [p for p in option.split(',') if p and p != 'none']
+    from storyloop.role_subagents import REVIEW_BY_TIER
+    tier = (request.get('payload') or {}).get('routing_tier')
+    return list(REVIEW_BY_TIER.get(tier, LEGACY_PERSPECTIVES))
+
+
+# Without a known tier (older engines, other callers) the adapter keeps its former four.
+LEGACY_PERSPECTIVES = ['correctness', 'security', 'architecture', 'tests']
+
+
 def _dispatch(request, base, prompt, args, model):
     role = request['role']
-    perspectives = [p for p in args.review_perspectives.split(',') if p and p != 'none']
+    perspectives = _perspectives(args.review_perspectives, request)
     requested = (request.get('role_profile') or {}).get('subagents') or {}
     if 'role_profile' in request:
         perspectives = requested.get('perspectives', [])
