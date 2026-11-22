@@ -185,6 +185,7 @@
 |  | `bench_worker` | 可变区 | 子进程用指定引擎完成冻结合同的真实流程 | `main` |
 |  | `ci_command` | 可变区 | 执行 CI 并可选记录结果的命令适配器 | `run_ci`、`run_ci_command` |
 |  | `cli` | 可变区 | 提供公共命令行接口与如实反映结果的机器退出码 | `main`、`run_with_answers` |
+|  | `cli_arguments` | 可变区 | 各子命令的参数注册（从 cli.py 拆出，保持入口文件在行数上限内） | `_product_arguments`、`_maintenance_arguments` |
 |  | `product_cli` | 可变区 | 编排产品变更创建、修订与命令处理 | `change`、`dispatch` |
 |  | `cli_output` | 可变区 | 渲染 CLI 人类可读输出与完整 JSON | `display` |
 |  | `memory_cli` | 可变区 | 仓库经验命令的接线与呈现 | `add_memory_arguments`、`dispatch_memory`、`render_memory` |
