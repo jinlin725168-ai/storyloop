@@ -404,9 +404,8 @@ def _redact_value(value: object) -> object:
 
 
 def main(argv: list[str] | None = None) -> int:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
-        sys.stderr.reconfigure(encoding="utf-8")
+    for stream in (sys.stdout, sys.stderr):  # each may be redirected to an object without it
+        getattr(stream, "reconfigure", lambda **_: None)(encoding="utf-8")
     args = parser().parse_args(argv)
     record_touch(args)  # roadmap G: count what a person typed
     try:

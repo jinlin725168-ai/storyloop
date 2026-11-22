@@ -52,6 +52,8 @@ def _identity(change_id: str, head: str, updates: list[dict]) -> str:
 
 
 def _passed_context(project: Path, change_id: str) -> tuple[dict, dict]:
+    require((project / ".storyloop/state/runs" / f"{change_id}.json").is_file(),
+            "Knowledge proposals require a PASSED approved change")
     state = _run_state(project, change_id)
     change = load_change(project, change_id)
     require(state.get("status") == change.get("status") == "PASSED" and change.get("approval"),

@@ -178,9 +178,10 @@ class ParallelLoopTests(unittest.TestCase):
             first = create_change(root, "first", product())["change_id"]
             second = create_change(root, "second", product())["change_id"]
             _adapter(root, folder / "first", first, "modules/first.py")
-            dispatch(parser().parse_args(["workers", "start", str(root), "--change", first]))
+            # Through main, as a person would: the CLI entry records each touch.
+            quiet(["workers", "start", str(root), "--change", first])
             _adapter(root, folder / "second", second, "modules/second.py")
-            dispatch(parser().parse_args(["workers", "start", str(root), "--change", second]))
+            quiet(["workers", "start", str(root), "--change", second])
             for change_id in (first, second):
                 row = _wait(root, change_id)
                 log = (Path(row["worker"]) / ".storyloop/worker.log").read_text(encoding="utf-8")
@@ -197,9 +198,22 @@ class ParallelLoopTests(unittest.TestCase):
                 self.assertTrue((root / "reports/storyloop" / change_id / "report.md").is_file())
                 run = json.loads((root / ".storyloop/state/runs" / f"{change_id}.json").read_text(encoding="utf-8"))
                 self.assertEqual(run["status"], "PASSED")
+            from storyloop.touch_ledger import touches
+            for change_id in (first, second):
+                report = (root / "reports/storyloop" / change_id / "report.md").read_text(encoding="utf-8")
+                self.assertIn("人工触达", report)  # the worker saw the start touch
+                self.assertEqual(touches(root, change_id)["by_kind"]["decision"], 1)  # start, not duplicated
             overview = dispatch(parser().parse_args(["status", str(root)]))
             self.assertEqual(overview["counts"]["done"], 2)
             self.assertEqual({row["state"] for row in workers_status(root)["workers"]}, {"landed"})
+
+
+def quiet(argv: list[str]) -> int:
+    import contextlib
+    import io
+    from storyloop.cli import main
+    with contextlib.redirect_stdout(io.StringIO()):
+        return main(argv)
 
 
 def _adapter(root: Path, folder: Path, change_id: str, created: str) -> None:

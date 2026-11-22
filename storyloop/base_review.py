@@ -38,6 +38,8 @@ def review_base_candidate(project: Path, change: dict, state: dict, restart) -> 
 
 
 def record_human_review(project: Path, change_id: str, verdict: str, note: str) -> dict:
+    # A change that never ran has no run record: say what is needed, not "cannot read JSON".
+    require(run_path(project, change_id).is_file(), "Base review needs a verified green candidate")
     state = load_json(run_path(project, change_id))
     require(state.get("status") == "BASE_REVIEW_REQUIRED",
             "Base review needs a verified green candidate")
