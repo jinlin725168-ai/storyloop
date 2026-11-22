@@ -156,6 +156,27 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.assertEqual(item["status"], "DRAFT")
         self.assertIn("在 worker 中处理停点", item["next"])
 
+    def test_landing_carries_a_persons_readiness_gap_approval(self):
+        # Trial 2026-11-22: after a land the project's readiness still named the old head, so the
+        # next change asked the person to approve the same missing checks/smoke layers again.
+        from storyloop.readiness import approve_readiness, inspect_readiness
+        from storyloop.worker_land import land_worker
+        config = load_project_config(self.root)
+        config["profile"]["unit_commands"] = [["{python}", "-c", "print('Ran 1 test in 0.0s'); print('OK')"]]
+        write_json(self.root / ".storyloop/config.json", config)
+        change_id = create_change(self.root, "idea", product())["change_id"]  # sets the drafting adapter
+        gaps = inspect_readiness(self.root, refresh=True)
+        approved = approve_readiness(self.root, gaps["digest"], "no checks or system smoke in this project")
+        self.assertEqual(approved["status"], "READY")
+        self._start(change_id, QUICK)
+        _wait(self.root, change_id)
+        _fake_pass(self.root, change_id, "modules/new.py", "VALUE = 1\n")
+        result = land_worker(self.root, change_id)
+        self.assertEqual((result["status"], result["readiness"]), ("LANDED", "READY"))
+        after = inspect_readiness(self.root)
+        self.assertEqual(after["status"], "READY")
+        self.assertEqual(after["lineage"]["via"], "workers land")
+
     def test_land_refuses_a_worker_that_has_not_passed(self):
         from storyloop.worker_land import land_worker
         change_id = create_change(self.root, "idea", product())["change_id"]

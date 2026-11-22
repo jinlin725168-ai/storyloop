@@ -188,6 +188,17 @@ class ReviewPerspectiveTests(unittest.TestCase):
         self.assertAlmostEqual(telemetry["cost_usd"], 0.1 * 4 + 0.2)
         self.assertEqual(telemetry["turns"], 2 * 4 + 3)
 
+    def test_auto_perspectives_follow_the_routing_tier(self):
+        # Cost analysis 2026-11-21: review was 44% of real-change cost, four perspectives even on
+        # one-line options. Standard now keeps correctness and tests; heavy keeps all five.
+        def request(tier):
+            return {"role": "review", "payload": {"routing_tier": tier} if tier else {}}
+        self.assertEqual(adapter._perspectives("auto", request("standard")), ["correctness", "tests"])
+        self.assertEqual(len(adapter._perspectives("auto", request("heavy"))), 5)
+        self.assertEqual(adapter._perspectives("auto", request("light")), [])
+        self.assertEqual(adapter._perspectives("auto", request(None)), adapter.LEGACY_PERSPECTIVES)
+        self.assertEqual(adapter._perspectives("security", request("standard")), ["security"])
+
     def test_perspectives_can_be_disabled_for_a_single_review_session(self):
         calls = []
 

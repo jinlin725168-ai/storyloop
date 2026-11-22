@@ -8,7 +8,7 @@ from storyloop.models import StoryLoopError
 
 class RoleSubagentTests(unittest.TestCase):
     def test_three_tiers_and_roles(self):
-        for tier, count in [('light', 0), ('standard', 4), ('heavy', 5)]:
+        for tier, count in [('light', 0), ('standard', 2), ('heavy', 5)]:
             self.assertEqual(len(subagents_for('review', tier, {}, {})['perspectives']), count)
             self.assertEqual(len(subagents_for('design', tier, {}, {})['explore']),
                              {'light': 0, 'standard': 2, 'heavy': 3}[tier])

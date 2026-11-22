@@ -37,6 +37,8 @@ def land_worker(project: Path, change_id: str) -> dict:
     require(_git(project, "branch", "--show-current").strip() == branch, f"Land on {branch}")
     head = _git(project, "rev-parse", "HEAD").strip()
     worker_head = _git(target, "rev-parse", "HEAD").strip()
+    readiness_file = project / ".storyloop/state/readiness.json"
+    previous_readiness = load_json(readiness_file) if readiness_file.is_file() else None
     if head == entry["base_head"]:
         _fast_forward(project, target, worker_head)
         verification = "exact"
@@ -50,8 +52,12 @@ def land_worker(project: Path, change_id: str) -> dict:
     landed = _git(project, "rev-parse", "HEAD").strip()
     _copy_back(project, target, change_id)
     advance_repository_head(project, landed)
+    from .readiness_lineage import carry_after_land
+    run = load_json(project / ".storyloop/state/runs" / f"{change_id}.json")
+    carried = carry_after_land(project, previous_readiness, landed, run)
     save_entry(project, {**entry, "state": "landed", "landed_head": landed, "verification": verification})
     return {"status": "LANDED", "change_id": change_id, "landed_head": landed, "verification": verification,
+            "readiness": (carried or {}).get("status"),
             "report": str(project / "reports/storyloop" / change_id / "report.md")}
 
 

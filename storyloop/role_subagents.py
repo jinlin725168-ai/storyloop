@@ -6,6 +6,10 @@ from .models import require
 from .storage import load_json
 
 PERSPECTIVES = ['correctness', 'security', 'architecture', 'tests', 'oracle-strength']
+# Review perspectives by risk tier. Review was 44% of the cost of ten real changes, a fixed four
+# perspectives even on one-line options (docs/validation/2026-11-21-费用构成.md). Sensitive or
+# breaking changes route to heavy, which keeps every perspective; light keeps one review session.
+REVIEW_BY_TIER = {'light': [], 'standard': ['correctness', 'tests'], 'heavy': PERSPECTIVES}
 EXPLORATIONS = ['similar-features', 'call-chain', 'tests-extension']
 
 
@@ -15,7 +19,7 @@ def subagents_for(role: str, tier: str, payload: dict, capability: dict) -> dict
     if tier == 'light' or payload.get('mode') == 'retrospective':
         return result
     if role == 'review':
-        result['perspectives'] = PERSPECTIVES[:5 if tier == 'heavy' else 4]
+        result['perspectives'] = list(REVIEW_BY_TIER[tier])
     if role == 'design':
         result['explore'] = EXPLORATIONS[:3 if tier == 'heavy' else 2]
     if role == 'implement' and tier == 'heavy':

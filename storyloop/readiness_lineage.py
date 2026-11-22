@@ -7,7 +7,7 @@ from pathlib import Path
 from .baseline import _git
 from .models import StoryLoopError, require
 from .project_profile import layer_commands
-from .readiness import (PATH, LAYERS, COUNTED, _binding, _valid_cached, _record,
+from .readiness import (PATH, LAYERS, COUNTED, _binding, _collect_guarded, _valid_cached, _record,
                         _record_digest, _summarize, _approved, readiness_status)
 from .storage import load_json, write_json
 from .system_smoke import load_system_smoke
@@ -35,6 +35,44 @@ def advance_readiness(project: Path, state: dict) -> dict | None:
         layer['evidence_path'] = evidence.as_posix()
     write_json(project / PATH, record)
     return record
+
+
+def carry_after_land(project: Path, previous: dict | None, landed_head: str, run: dict) -> dict | None:
+    """Carry a person's gap approval across a verified `workers land` (roadmap H).
+
+    The worker advanced readiness in its own clone; the project's record still names the old head,
+    so the next change would ask again (trial 2026-11-22). Every layer is measured afresh on the
+    landed head; the approval carries only for the same gaps, no blockers and unchanged inputs.
+    """
+    from .storage import locked
+    try:
+        require(isinstance(previous, dict) and previous.get('status') == 'READY' and _approved(previous),
+                'No approved READY readiness')
+        with locked(project):
+            binding, config = _binding(project)
+            old = previous['binding']
+            require(binding['source_commit'] == landed_head, 'Readiness is not at the landed head')
+            require(all(old[key] == binding[key] for key in old if key != 'source_commit'), 'Readiness inputs changed')
+            layers = _collect_guarded(project, binding, config)
+            record = _record(binding, layers, None)
+            require(record['gaps'] == previous['gaps'] and not record['blockers'], 'Readiness changed')
+            record['approval'] = deepcopy(previous['approval'])
+            record['lineage'] = {'previous_digest': previous['digest'],
+                                 'approval_digest': previous['approval'].get('digest'),
+                                 'receipt_commit': landed_head,
+                                 'report_commit': run.get('report_commit') or landed_head,
+                                 'change_id': run.get('change_id'), 'via': 'workers land'}
+            record['digest'] = _record_digest(record)
+            record['status'] = readiness_status(layers, _approved(record))
+            require(record['status'] == 'READY', 'Cannot inherit readiness')
+            evidence = Path('.storyloop/evidence/readiness') / (record['digest'] + '.json')
+            write_json(project / evidence, {'version': 1, 'layers': layers, 'lineage': record['lineage']})
+            for layer in record['layers'].values():
+                layer['evidence_path'] = evidence.as_posix()
+            write_json(project / PATH, record)
+            return record
+    except (StoryLoopError, KeyError, TypeError, ValueError, OSError):
+        return None
 
 
 def _verified_report(project, state):

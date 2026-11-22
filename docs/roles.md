@@ -46,7 +46,7 @@ flowchart LR
 
 ## 角色内部的子代理（适配器侧，可选）
 
-- `review`：正确性、安全、架构合规（对照 design_plan、extension.md 与 building-blocks.md）、测试质量（Tests First 是否真实）四个视角并行，主评审汇总 verdict。Claude 适配器已实现（默认开启，`--review-perspectives` 可调）。
+- `review`：正确性、安全、架构合规（对照 design_plan、extension.md 与 building-blocks.md）、判据强度、测试质量（Tests First 是否真实）各为一个视角并行，主评审汇总 verdict。视角数按风险分档：light 只有主评审，standard 为正确性与测试质量两个，heavy 为全部五个（涉及敏感代码或破坏性改动会分流到 heavy）。Claude 适配器默认 `--review-perspectives auto` 按本次变更的档位选择，也可显式给出列表或 `none`。
 - `implement`：全栈变更按方案拆后端、前端、SQL 通道并行，主实现者集成并跑分层检查。Claude 适配器已实现（`--implement-lanes name=前缀,…`，需要 design_plan；少于两条通道自动退回单会话）。
 - `acceptance`：接口用例与浏览器用例分开写（规划中，Claude 适配器尚未实现）。
 
