@@ -331,7 +331,8 @@ class E3MergeTests(unittest.TestCase):
         self.assertIn(saved["status"], REPAIRABLE)
         self.assertEqual(saved["contract_commit"], head)  # a repair re-proves on the merged base
         self.assertNotIn("red_evidence_sha256", saved)
-        self.assertIn(f"storyloop acceptance-repair {self.root}", saved["next"])
+        import shlex  # the hint is shell-quoted; Windows paths with backslashes get quotes
+        self.assertIn(shlex.join(["storyloop", "acceptance-repair", str(self.root)]), saved["next"])
         self.assertNotIn("<project>", saved["next"])
 
     def test_old_red_cannot_open_implementation_after_base_merge(self):
