@@ -312,6 +312,28 @@ class E3MergeTests(unittest.TestCase):
         self.assertEqual(state["attempt"], 1)
         self.assertEqual(state["base_upgrades"][-1]["voided_attempts"], 3)
 
+    def test_red_that_fails_on_the_new_base_stops_somewhere_acceptance_repair_can_continue(self):
+        # Issue #80: the stop was BASE_CHANGE_REQUIRED with "acceptance-repair <project>", a command
+        # that state refused, and a repair would have re-proved on the old contract commit anyway.
+        from unittest.mock import patch
+        from storyloop.run_transitions import REPAIRABLE
+        self.advance_base()
+        state = load_run_state(self.root, self.feature_id)
+        _follow_base_upgrade(self.root, state)
+        change = load_json(self.root / ".storyloop/state/changes" / f"{self.feature_id}.json")
+        head = git(self.root, "rev-parse", "HEAD").strip()
+        green = StoryLoopError("acceptance already passes", code="EXISTING_GREEN", details={"results": []})
+        with patch("storyloop.project_preparation._ensure_red_evidence", side_effect=green):
+            result = reprove_after_base(self.root, change, state)
+        saved = load_run_state(self.root, self.feature_id)
+        self.assertEqual(result["status"], "ORACLE_DEFECT")
+        self.assertEqual(saved["acceptance"]["status"], "EXISTING_GREEN")  # what RED actually saw
+        self.assertIn(saved["status"], REPAIRABLE)
+        self.assertEqual(saved["contract_commit"], head)  # a repair re-proves on the merged base
+        self.assertNotIn("red_evidence_sha256", saved)
+        self.assertIn(f"storyloop acceptance-repair {self.root}", saved["next"])
+        self.assertNotIn("<project>", saved["next"])
+
     def test_old_red_cannot_open_implementation_after_base_merge(self):
         self.advance_base()
         state = load_run_state(self.root, self.feature_id)

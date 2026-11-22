@@ -47,7 +47,7 @@ from .project_loop_gates import characterize_paths, design_plan, uncharacterized
 from .guarded_calls import read_only_call, write_safely  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .project_loop_guards import (require_control_unchanged, require_git_visible,  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
                                   verify_read_only_snapshot)
-from .project_loop_failures import (apply_overrule, epoch_of, record_boundary, record_failure,
+from .project_loop_failures import (apply_overrule, epoch_of, record_boundary, record_failure, reject_ignored_tests_first,
                                     require_routed_choice, route_review)
 from .project_loop_support import control_digest, run_path, save_run  # noqa: F401  # 兼容再导出：阶段 D 拆分后保留旧入口
 from .run_stops import clear_blocked, pause, saving_blocked_stop
@@ -336,6 +336,8 @@ def _judge_attempt(project: Path, change: dict, state: dict, services: LoopServi
 
 
 def _verify_attempt(project, change, state, services, config, boundary):
+    if (ignored := reject_ignored_tests_first(project, state, boundary)) is not None:  # issue #62
+        return ignored
     try:
         layers, boundary = _run_checks_safely(project, change, config, boundary)
     except StoryLoopError as exc:
@@ -419,14 +421,12 @@ def _resume_manual_acceptance(project: Path, change: dict, state: dict) -> dict:
     return resume_manual_acceptance(project, change, state)
 
 
-def _run_checks_safely(project: Path, change: dict, config: dict,
-                       prior_boundary: dict) -> tuple[dict, dict]:
+def _run_checks_safely(project: Path, change: dict, config: dict, prior_boundary: dict) -> tuple[dict, dict]:
     from .run_attempts import run_checks_safely
     return run_checks_safely(project, change, config, prior_boundary)
 
 
-def _perform_review(project: Path, change: dict, state: dict, services: LoopServices,
-                    boundary: dict, layers: dict) -> dict:
+def _perform_review(project: Path, change: dict, state: dict, services: LoopServices, boundary: dict, layers: dict) -> dict:
     from .run_attempts import perform_review
     return perform_review(project, change, state, services, boundary, layers)
 
