@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import os
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import sys
@@ -100,6 +101,11 @@ def start_worker(project: Path, change_id: str, *, launcher=None) -> dict:
         require(not _git(project, "status", "--porcelain=v1", "--untracked-files=all").strip(),
                 "Git worktree must be clean before starting a worker")
         base_head = _clone(project, target)
+        # The change's touches so far (drafting, this start) so the worker's report counts them.
+        ledger = project / ".storyloop/state/touches" / f"{change_id}.jsonl"
+        if ledger.is_file():
+            (target / ".storyloop/state/touches").mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ledger, target / ".storyloop/state/touches" / ledger.name)
     status = _worker_status(target, change_id)
     command = "approve" if status == "DRAFT" else "run"
     argv = (launcher or _launcher)(command, target, change_id)

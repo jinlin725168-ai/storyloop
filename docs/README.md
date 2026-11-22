@@ -24,6 +24,7 @@
 |---|---|
 | [concepts.md](concepts.md) | 解决什么问题、术语表、停点、一次迭代的时序、十条设计理由 |
 | [quickstart.md](quickstart.md) | 在自己的仓库从接入到第一个需求 PASSED：`init --detect`、`status` 总览、摘要报告 |
+| [trial/](trial/README.md) | 真人试用包：试用说明（范围、费用、限制）、反馈模板、维护者观察清单 |
 | [tutorial.md](tutorial.md) | 用 `examples/todo-demo/` 在 30 分钟内跑完一次闭环 |
 | [product-iteration-guide.md](product-iteration-guide.md) | 每个命令、每个停点、每个产物的完整说明 |
 | [roles.md](roles.md) | 七个角色：权限、输入、输出、是否是门 |

@@ -133,8 +133,11 @@ def _copy_back(project: Path, target: Path, change_id: str, *, touches: bool = T
         if ledger.is_file():
             mine = project / ".storyloop/state/touches" / f"{change_id}.jsonl"
             mine.parent.mkdir(parents=True, exist_ok=True)
+            # The worker started from a copy of this ledger: add only the lines it does not have.
+            known = set(mine.read_text(encoding="utf-8").splitlines()) if mine.is_file() else set()
+            new = [line for line in ledger.read_text(encoding="utf-8").splitlines() if line and line not in known]
             with mine.open("a", encoding="utf-8") as handle:
-                handle.write(ledger.read_text(encoding="utf-8"))
+                handle.write("".join(line + "\n" for line in new))
 
 
 def _copy_calls(source: Path, destination: Path, change_id: str) -> None:
