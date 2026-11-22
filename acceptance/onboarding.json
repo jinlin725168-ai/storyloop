@@ -68,6 +68,7 @@
         "storyloop/claude_permissions.py",
         "storyloop/claude_profiles.py",
         "storyloop/cli.py",
+        "storyloop/cli_arguments.py",
         "storyloop/cli_output.py",
         "storyloop/consistency.py",
         "storyloop/consistency_locations.py",
