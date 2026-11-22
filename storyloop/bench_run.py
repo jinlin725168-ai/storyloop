@@ -74,9 +74,9 @@ def run_bench(sources: list[Path], base_engine_commit: str, candidate_engine_com
     versions = {case["manifest"]["case_version"] for case in cases}
     require(len(versions) == 1, "v1 and v2 Cases cannot be mixed")
     revisions = {case["manifest"].get("case_revision") for case in cases}
-    require(len(revisions) == 1 or revisions == {"2.1", "2.2"},
-            "Case revisions cannot be mixed")
-    batch_revision = "2.2" if len(revisions) > 1 else revisions.pop()
+    from .bench_case import ENTRY_REVISIONS
+    require(len(revisions) == 1 or revisions <= ENTRY_REVISIONS, "Case revisions cannot be mixed")
+    batch_revision = max(revisions) if len(revisions) > 1 else revisions.pop()
     result = {"run_id": uuid.uuid4().hex, "created_at": datetime.now(timezone.utc).isoformat(),
               "case_version": versions.pop(), "case_revision": batch_revision,
               "scope": scope, "suite_source": suite_source,
