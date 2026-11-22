@@ -1,4 +1,10 @@
 {
+  "approval": {
+    "approved_at": "2026-11-22",
+    "approved_by": "jinlin725168-ai",
+    "contract_sha256": "cb8f56934bae415b3bd82536d2438baad645f2470dd37f712e669ea6516de9ee",
+    "note": "人确认 Case v2.3：修复前已保存的停点也要展示意见（AC-6），不要求 summary 字段名"
+  },
   "change_id": "FIX-20261105-design-revision-findings",
   "product": {
     "assessment": {
