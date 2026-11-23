@@ -1,0 +1,1057 @@
+{
+  "run_id": "6d0a5921439a4fb683a9375d42259054",
+  "created_at": "2026-11-23T01:03:54.489851+00:00",
+  "case_version": 2,
+  "case_revision": "2.3",
+  "scope": "base-only",
+  "suite_source": "generated",
+  "base_engine_commit": "cab0220b6218b0c2a1bd2c8e461a13657c0c492f",
+  "candidate_engine_commit": "",
+  "adapter": "claude",
+  "model": "opus",
+  "budget": {
+    "max_calls": 20,
+    "max_wall_seconds": 14400
+  },
+  "gold_python": {
+    "path": "/home/jinlin/work/storyloop-dogfood-venv-main/bin/python",
+    "version": "3.11.15",
+    "requirement": {
+      "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
+      "version": "3.11"
+    }
+  },
+  "scoring_contract": {
+    "version": 3,
+    "pass_requires": [
+      "PASSED",
+      "gold_passed"
+    ],
+    "attempts_per_side": 1,
+    "nonroutine_policy": "bounded_recovery",
+    "nonroutine_budget": 1,
+    "missing_evidence": "NOT_COMPARABLE",
+    "cost_policy": "report_separately"
+  },
+  "cases": [
+    {
+      "case_id": "dogfood6-design-revision-findings",
+      "case_version": 2,
+      "case_revision": "2.3",
+      "suite_source": "generated",
+      "case_hash": "99c018a934779f940ff5b05305dbec968a496d751c483159e2944ac9af60b252",
+      "contract_sha256": "c85c6b2eaf3b9d95dc35cde4aac6314fff626204b73565d92ece24a5dc19c2f0",
+      "suite_sha256": "c287ef266157cd5600cce07cf020d216332611ecfe94c4e1155c48563ac7885b",
+      "gold_sha256": "2d8f4d2e57a5cdfe2bc89ff0462110c371cfe34d0e4cb45f052f089e121dd535",
+      "attempts": [
+        {
+          "side": "base",
+          "attempt": 1,
+          "status": "PASSED",
+          "verdict": "PASSED",
+          "gold_passed": true,
+          "gold_checks": [
+            {
+              "check_id": "F2P-acceptance-1",
+              "command": [
+                "/home/jinlin/work/storyloop-dogfood-venv-main/bin/python",
+                "-m",
+                "unittest",
+                "discover",
+                "-s",
+                "acceptance/changes/FIX-20261105-design-revision-findings",
+                "-p",
+                "test_findings.py",
+                "-k",
+                "RedBehavior"
+              ],
+              "returncode": 0,
+              "duration_ms": 5149,
+              "timed_out": false,
+              "contained": true,
+              "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stderr_sha256": "a1c1d6fa002cbbb33fc769afd50f2a161ab222b1a78a70b0391208f44edbcfd0",
+              "failure_evidence": "",
+              "error": "",
+              "passed": true
+            },
+            {
+              "check_id": "P2P-acceptance-2",
+              "command": [
+                "/home/jinlin/work/storyloop-dogfood-venv-main/bin/python",
+                "-m",
+                "unittest",
+                "discover",
+                "-s",
+                "acceptance/changes/FIX-20261105-design-revision-findings",
+                "-p",
+                "test_findings.py",
+                "-k",
+                "ExistingBehavior"
+              ],
+              "returncode": 0,
+              "duration_ms": 2608,
+              "timed_out": false,
+              "contained": true,
+              "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stderr_sha256": "cb04c9321b7fb00c496366ffbd5a606e31fd70f347465031711c5791ca171ef6",
+              "failure_evidence": "",
+              "error": "",
+              "passed": true
+            }
+          ],
+          "engine_commit": "cab0220b6218b0c2a1bd2c8e461a13657c0c492f",
+          "engine_version": "0.1.0",
+          "engine_python": "/home/jinlin/work/storyloop-bench-venv/bin/python",
+          "attempt_python": "/tmp/storyloop-bench-attempt-2ya8at0r/venv/bin/python",
+          "readiness": null,
+          "readiness_evidence_path": null,
+          "stops": [
+            {
+              "status": "DESIGN_APPROVAL_REQUIRED",
+              "detail": {
+                "reason": "DESIGN_APPROVAL_REQUIRED",
+                "stop": {
+                  "status": "DESIGN_APPROVAL_REQUIRED",
+                  "class": "human",
+                  "routing": {
+                    "initial": "heavy",
+                    "effective": "heavy",
+                    "history": [
+                      {
+                        "stage": "L2",
+                        "attempt": 0,
+                        "from_tier": "heavy",
+                        "to_tier": "heavy",
+                        "assessment_digest": "411cc1315b51fbb83e4315d3db7cb1ff5da56deeca87040a5d1f6d15ac663e02",
+                        "reason": [
+                          {
+                            "rule_id": "DEFAULT",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "STANDARD-FLOOR",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "HEAVY-RISK",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          }
+                        ]
+                      }
+                    ],
+                    "rules": [
+                      {
+                        "rule_id": "DEFAULT",
+                        "fields": [
+                          "stories",
+                          "nature",
+                          "existing_files"
+                        ],
+                        "values": [
+                          1,
+                          "fix",
+                          1
+                        ]
+                      },
+                      {
+                        "rule_id": "STANDARD-FLOOR",
+                        "fields": [
+                          "risks.persistent_state"
+                        ],
+                        "values": [
+                          "yes"
+                        ]
+                      },
+                      {
+                        "rule_id": "HEAVY-RISK",
+                        "fields": [
+                          "risks.sensitive",
+                          "risks.external_contract",
+                          "risks.new_interface",
+                          "risks.crosscut"
+                        ],
+                        "values": [
+                          "yes",
+                          "yes",
+                          "yes",
+                          "yes"
+                        ]
+                      }
+                    ],
+                    "budget_source": "tier",
+                    "limit": 4,
+                    "phase": "intake",
+                    "origin": null,
+                    "consumed_attempt": null,
+                    "evidence": [
+                      {
+                        "field": "existing_files",
+                        "value": 1,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "created_files",
+                        "value": 0,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "interfaces",
+                        "value": 4,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "max_references",
+                        "value": 7,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "classification",
+                        "value": {
+                          "kind": "workspace_config",
+                          "digest": "980e10fada486f5f02a73f164aecd3c601c2f0ea00f9c7df970510447896c434",
+                          "commit_bound": false
+                        },
+                        "source": "engine",
+                        "locations": [
+                          ".storyloop/config.json"
+                        ],
+                        "commit": null
+                      },
+                      {
+                        "field": "hotspots",
+                        "value": {
+                          "storyloop/stop_report.py": 1
+                        },
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/processutil.py:23",
+                          "storyloop/processutil.py:40",
+                          "storyloop/stop_report.py:264"
+                        ],
+                        "search_scope": [
+                          "storyloop/processutil.py",
+                          "storyloop/stop_report.py",
+                          "storyloop/role_schemas.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "risks.migration",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:301",
+                          "storyloop/stop_report.py:310"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py",
+                          "storyloop/run_stops.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "risks.external_contract",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:264",
+                          "storyloop/stop_report.py:314"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py",
+                          "storyloop/cli_output.py",
+                          "storyloop/change_log.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "risks.new_interface",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:264"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "risks.crosscut",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:290",
+                          "storyloop/stop_report.py:314"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py",
+                          "storyloop/cli_output.py",
+                          "storyloop/change_log.py",
+                          "storyloop/product_cli.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "risks.principle_deviation",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:258"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "risks.hard_verify_high_cost",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:258"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py",
+                          "tests/test_stop_report.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "risks.dependency_swap",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:7",
+                          "storyloop/processutil.py:15"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py",
+                          "storyloop/processutil.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "risks.persistent_state",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:301",
+                          "storyloop/stop_report.py:310"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py",
+                          "storyloop/run_stops.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "risks.human_choice",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:258"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:258",
+                          "storyloop/processutil.py:23"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py",
+                          "storyloop/processutil.py"
+                        ],
+                        "commit": "4de2ff605bc21e56a8d256da71296dda6f7cead6"
+                      }
+                    ],
+                    "manual_decisions": {
+                      "product": null,
+                      "design": null,
+                      "continue_heavy": null
+                    },
+                    "restore": null,
+                    "restore_history": []
+                  },
+                  "phase": "planning",
+                  "completed": [
+                    "contract",
+                    "acceptance_red"
+                  ],
+                  "last_verdict": null,
+                  "attempts": [],
+                  "blocker": "DESIGN_APPROVAL_REQUIRED",
+                  "evidence": [
+                    "方案选项 stop-report-derived-findings：Change only storyloop/stop_report.py. Add a new private helper, _review_findings(state, details). It reads the source in this order: details['findings'], then state['findings'], then state['planning']['consistency']['findings']. It keeps only dict items with blocking is True and maps each to {target, severity:'阻塞', location, message}. Location and message go through processutil.redact first and are then cut with processutil.redaction_prefix, so that all string fields together stay ≤284 characters (each rendered line then stays ≤300). build_stop adds 'review_findings' only when status == 'DESIGN_REVISION_REQUIRED' and the list is non-empty. stop_of handles a saved DESIGN_REVISION_REQUIRED stop that lacks the key (the legacy case) by returning a new dict {**saved, 'review_findings': derived}, without saving and without changing run. render_stop prints a '方案阻塞意见：' section, one line per item in the form '  - [<target>/<severity>] <location>：<message>'. This section sits after evidence/facts/questions and before '可选操作：'. The run, status and log callers already go through build_stop/stop_of/render_stop, so none of them change.（全文：.storyloop/state/runs/FIX-20261105-design-revision-findings.json → planning.plan）",
+                    "涉及文件：storyloop/stop_report.py、tests/test_design_revision_findings.py",
+                    "Risks：sensitive: yes、migration: no、external_contract: yes、new_interface: yes、crosscut: yes、principle_deviation: no、hard_verify_high_cost: no、dependency_swap: no；共 11 项，完整内容见 .storyloop/state/runs/FIX-20261105-design-revision-findings.json → planning.plan",
+                    "Decisions：1. **Choice:** Compute everything in one new private helper, `_review_findings(state, details)`, in stop_report.py. **Rationale:** run, status and log must produce the same list (AC-2), and stop_report is the place they all share. **Alternatives considered:** changing pause/consistency to pre-build the list. That would not cover legacy stops and would spread the change across more files. 2. **Choi…完整内容见 .storyloop/state/runs/FIX-20261105-design-revision-findings.json → planning.plan"
+                  ],
+                  "facts": [
+                    {
+                      "statement": "build_stop builds the stop dict and does not read details['findings'] or state['findings'].",
+                      "location": "storyloop/stop_report.py:264",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "stop_of returns the saved stop unchanged when saved.status equals run.status. It already applies read-time patches for BASE_CHANGE_REQUIRED and ORACLE_DEFECT.",
+                      "location": "storyloop/stop_report.py:301",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "render_stop renders evidence, facts and questions before the '可选操作：' options section.",
+                      "location": "storyloop/stop_report.py:317",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "processutil.redaction_prefix bounds a prefix without exposing URL userinfo that is cut before its '@'.",
+                      "location": "storyloop/processutil.py:40",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "processutil only imports .models, so stop_report can import redact from it without a cycle.",
+                      "location": "storyloop/processutil.py:15",
+                      "role": "design",
+                      "attempt": 0
+                    }
+                  ],
+                  "questions": [],
+                  "options": [
+                    {
+                      "action": "明确决定后继续",
+                      "command": "storyloop approve /tmp/storyloop-bench-attempt-2ya8at0r/candidate --change FIX-20261105-design-revision-findings --design dc3e7e017693468f25e0f8d4e04954f387a266e54180ec74810aff1983e7b2b4"
+                    }
+                  ],
+                  "resume": "storyloop approve /tmp/storyloop-bench-attempt-2ya8at0r/candidate --change FIX-20261105-design-revision-findings --design dc3e7e017693468f25e0f8d4e04954f387a266e54180ec74810aff1983e7b2b4"
+                },
+                "acceptance": null,
+                "failure": null,
+                "error_details": null
+              }
+            }
+          ],
+          "stop_evidence_path": ".storyloop/bench/evidence/e7e273abdf904553aa332c3e6f0308b8",
+          "candidate_patch_path": null,
+          "termination_reason": null,
+          "agent_error": null,
+          "routine_types": {
+            "contract_approval": 1,
+            "design_approval": 1
+          },
+          "nonroutine_types": {},
+          "nonroutine_count": 0,
+          "unknown_events": 0,
+          "calls": 14,
+          "input_tokens": 21657620,
+          "output_tokens": 406643,
+          "agent_ms": 3556603,
+          "wall_ms": 4424987,
+          "known_cost_usd": 38.412,
+          "cost_coverage": 1.0,
+          "cost_accounting": "COMPLETE"
+        }
+      ],
+      "comparison": {
+        "status": "BASE_ONLY",
+        "reasons": [],
+        "cost_dimension": "COMPARABLE",
+        "base": [
+          "PASSED"
+        ],
+        "candidate": []
+      }
+    },
+    {
+      "case_id": "dogfood10-repair-next-path",
+      "case_version": 2,
+      "case_revision": "2.1",
+      "suite_source": "generated",
+      "case_hash": "d03ee2178566b18d85121c162804aeb57e8a951dbbf1a6a0ee702901a05323a2",
+      "contract_sha256": "bb34887db3b4a02e0d62efb4f8e5abf577fb3ebc45c7bc9db7da0dafd667a9d9",
+      "suite_sha256": "6270e84942c4b56a5dad5376426cfabff426d652988884629f6c943d0d8e6607",
+      "gold_sha256": "1a8c6784faf3137745024389b65f4523d26208b81b8233c0d69c61e974d61a06",
+      "attempts": [
+        {
+          "side": "base",
+          "attempt": 1,
+          "status": "PASSED",
+          "verdict": "PASSED",
+          "gold_passed": true,
+          "gold_checks": [
+            {
+              "check_id": "F2P-acceptance-1",
+              "command": [
+                "/home/jinlin/work/storyloop-dogfood-venv-main/bin/python",
+                "-m",
+                "unittest",
+                "discover",
+                "-s",
+                "acceptance/changes/FIX-20261107-repair-next-path",
+                "-p",
+                "test_repair_next.py",
+                "-k",
+                "test_next_uses_real_path"
+              ],
+              "returncode": 0,
+              "duration_ms": 18891,
+              "timed_out": false,
+              "contained": true,
+              "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stderr_sha256": "aca28daf44297879ce908d0ae26d502fe8e5e4728d0949eed84d8145d27c8bd6",
+              "failure_evidence": "",
+              "error": "",
+              "passed": true
+            },
+            {
+              "check_id": "F2P-acceptance-2",
+              "command": [
+                "/home/jinlin/work/storyloop-dogfood-venv-main/bin/python",
+                "-m",
+                "unittest",
+                "discover",
+                "-s",
+                "acceptance/changes/FIX-20261107-repair-next-path",
+                "-p",
+                "test_repair_next.py",
+                "-k",
+                "test_text_and_json_next_match"
+              ],
+              "returncode": 0,
+              "duration_ms": 8627,
+              "timed_out": false,
+              "contained": true,
+              "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stderr_sha256": "7091918e8ce74b6223e855812834ce2bfa6ebe7cc65f9fa8dcf8b9b0500c6611",
+              "failure_evidence": "",
+              "error": "",
+              "passed": true
+            },
+            {
+              "check_id": "P2P-acceptance-3",
+              "command": [
+                "/home/jinlin/work/storyloop-dogfood-venv-main/bin/python",
+                "-m",
+                "unittest",
+                "discover",
+                "-s",
+                "acceptance/changes/FIX-20261107-repair-next-path",
+                "-p",
+                "test_repair_next.py",
+                "-k",
+                "test_success_fields_and_saved_state"
+              ],
+              "returncode": 0,
+              "duration_ms": 8627,
+              "timed_out": false,
+              "contained": true,
+              "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stderr_sha256": "17070a8a5e80ce306fce6507193672ff3707e258f6e1605baa18642b90ee6a8e",
+              "failure_evidence": "",
+              "error": "",
+              "passed": true
+            },
+            {
+              "check_id": "P2P-acceptance-4",
+              "command": [
+                "/home/jinlin/work/storyloop-dogfood-venv-main/bin/python",
+                "-m",
+                "unittest",
+                "discover",
+                "-s",
+                "acceptance/changes/FIX-20261107-repair-next-path",
+                "-p",
+                "test_repair_next.py",
+                "-k",
+                "test_unproven_repair_keeps_stop"
+              ],
+              "returncode": 0,
+              "duration_ms": 8630,
+              "timed_out": false,
+              "contained": true,
+              "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stderr_sha256": "a8466a94a5103d0f703e15c7c91dc553929ca63c90cbc98f1771b140faf63fd1",
+              "failure_evidence": "",
+              "error": "",
+              "passed": true
+            },
+            {
+              "check_id": "F2P-reference",
+              "command": [
+                "/home/jinlin/work/storyloop-dogfood-venv-main/bin/python",
+                "-m",
+                "unittest",
+                "tests.test_smoke_repair.SmokeRepairTests.test_repair_replaces_suite_reproves_red_at_contract_commit_and_run_passes"
+              ],
+              "returncode": 0,
+              "duration_ms": 18387,
+              "timed_out": false,
+              "contained": true,
+              "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stderr_sha256": "75625c6e822ca3b8e636f086f0c32f988526f0166521159d825190588845ad80",
+              "failure_evidence": "",
+              "error": "",
+              "passed": true
+            }
+          ],
+          "engine_commit": "cab0220b6218b0c2a1bd2c8e461a13657c0c492f",
+          "engine_version": "0.1.0",
+          "engine_python": "/home/jinlin/work/storyloop-bench-venv/bin/python",
+          "attempt_python": "/tmp/storyloop-bench-attempt-94va9b8o/venv/bin/python",
+          "readiness": null,
+          "readiness_evidence_path": null,
+          "stops": [
+            {
+              "status": "DESIGN_APPROVAL_REQUIRED",
+              "detail": {
+                "reason": "DESIGN_APPROVAL_REQUIRED",
+                "stop": {
+                  "status": "DESIGN_APPROVAL_REQUIRED",
+                  "class": "human",
+                  "routing": {
+                    "initial": "heavy",
+                    "effective": "heavy",
+                    "history": [
+                      {
+                        "stage": "L2",
+                        "attempt": 0,
+                        "from_tier": "heavy",
+                        "to_tier": "heavy",
+                        "assessment_digest": "dba8a352fa26bac18726f76125fe99c3fe96001cc1b695fce94847ff7b97b66f",
+                        "reason": [
+                          {
+                            "rule_id": "DEFAULT",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "HEAVY-RISK",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          }
+                        ]
+                      }
+                    ],
+                    "rules": [
+                      {
+                        "rule_id": "DEFAULT",
+                        "fields": [
+                          "stories",
+                          "nature",
+                          "existing_files"
+                        ],
+                        "values": [
+                          1,
+                          "fix",
+                          1
+                        ]
+                      },
+                      {
+                        "rule_id": "HEAVY-RISK",
+                        "fields": [
+                          "risks.external_contract"
+                        ],
+                        "values": [
+                          "yes"
+                        ]
+                      }
+                    ],
+                    "budget_source": "tier",
+                    "limit": 4,
+                    "phase": "intake",
+                    "origin": null,
+                    "consumed_attempt": null,
+                    "evidence": [
+                      {
+                        "field": "existing_files",
+                        "value": 1,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/acceptance_repair.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "created_files",
+                        "value": 0,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/acceptance_repair.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "interfaces",
+                        "value": 2,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/acceptance_repair.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "max_references",
+                        "value": 2,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/acceptance_repair.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/acceptance_repair.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/acceptance_repair.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "classification",
+                        "value": {
+                          "kind": "workspace_config",
+                          "digest": "980e10fada486f5f02a73f164aecd3c601c2f0ea00f9c7df970510447896c434",
+                          "commit_bound": false
+                        },
+                        "source": "engine",
+                        "locations": [
+                          ".storyloop/config.json"
+                        ],
+                        "commit": null
+                      },
+                      {
+                        "field": "hotspots",
+                        "value": {
+                          "storyloop/acceptance_repair.py": 1
+                        },
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/acceptance_repair.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/acceptance_repair.py:107",
+                          "storyloop/acceptance_repair.py:108"
+                        ],
+                        "search_scope": [
+                          "storyloop/acceptance_repair.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "risks.migration",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/acceptance_repair.py:101",
+                          "storyloop/acceptance_repair.py:108"
+                        ],
+                        "search_scope": [
+                          "storyloop/acceptance_repair.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "risks.external_contract",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/acceptance_repair.py:108",
+                          "storyloop/cli_output.py:15",
+                          "storyloop/cli_output.py:30"
+                        ],
+                        "search_scope": [
+                          "storyloop/acceptance_repair.py",
+                          "storyloop/cli_output.py",
+                          "storyloop/product_cli.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "risks.new_interface",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/acceptance_repair.py:89",
+                          "storyloop/acceptance_repair.py:107"
+                        ],
+                        "search_scope": [
+                          "storyloop/acceptance_repair.py",
+                          "storyloop/product_cli.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "risks.crosscut",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/acceptance_repair.py:108",
+                          "storyloop/product_cli.py:129"
+                        ],
+                        "search_scope": [
+                          "storyloop/acceptance_repair.py",
+                          "storyloop/product_cli.py",
+                          "storyloop/run_hints.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "risks.principle_deviation",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:42",
+                          "storyloop/run_hints.py:46"
+                        ],
+                        "search_scope": [
+                          "storyloop/acceptance_repair.py",
+                          "storyloop/run_hints.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "risks.hard_verify_high_cost",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "tests/test_lifecycle_golden.py:161",
+                          "tests/test_lifecycle_golden.py:170",
+                          "tests/lifecycle_support.py:176"
+                        ],
+                        "search_scope": [
+                          "tests/test_lifecycle_golden.py",
+                          "tests/lifecycle_support.py",
+                          "tests/test_smoke_repair.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "risks.dependency_swap",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/acceptance_repair.py:10",
+                          "storyloop/run_hints.py:6"
+                        ],
+                        "search_scope": [
+                          "storyloop/acceptance_repair.py",
+                          "storyloop/run_hints.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "risks.persistent_state",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/acceptance_repair.py:101",
+                          "storyloop/acceptance_repair.py:106",
+                          "storyloop/acceptance_repair.py:108"
+                        ],
+                        "search_scope": [
+                          "storyloop/acceptance_repair.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "risks.human_choice",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/acceptance_repair.py:42",
+                          "storyloop/acceptance_repair.py:108"
+                        ],
+                        "search_scope": [
+                          "storyloop/acceptance_repair.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/acceptance_repair.py:49",
+                          "storyloop/acceptance_repair.py:108"
+                        ],
+                        "search_scope": [
+                          "storyloop/acceptance_repair.py"
+                        ],
+                        "commit": "82203aaad89e7033336829467a30a00ee9785de3"
+                      }
+                    ],
+                    "manual_decisions": {
+                      "product": null,
+                      "design": null,
+                      "continue_heavy": null
+                    },
+                    "restore": null,
+                    "restore_history": []
+                  },
+                  "phase": "planning",
+                  "completed": [
+                    "contract",
+                    "acceptance_red"
+                  ],
+                  "last_verdict": null,
+                  "attempts": [],
+                  "blocker": "DESIGN_APPROVAL_REQUIRED",
+                  "evidence": [
+                    "方案选项 OPT-INLINE-SHLEX：In storyloop/acceptance_repair.py:108 (_prove_repaired_suite), replace the hard-coded `<project>` with `shlex.join([\"storyloop\", \"run\", str(project), \"--change\", change_id])` and add `import shlex`. `project` is already the resolved absolute path from repair_smoke (:42). Update the single golden snapshot tests/fixtures/lifecycle/repair.json so its repair `next` reads `storyloop run <PROJECT> --change <FEAT-1>`.（全文：.storyloop/state/runs/FIX-20261107-repair-next-path.json → planning.plan）",
+                    "涉及文件：storyloop/acceptance_repair.py、tests/fixtures/lifecycle/repair.json",
+                    "Risks：sensitive: no、migration: no、external_contract: yes、new_interface: no、crosscut: no、principle_deviation: no、hard_verify_high_cost: no、dependency_swap: no；共 11 项，完整内容见 .storyloop/state/runs/FIX-20261107-repair-next-path.json → planning.plan",
+                    "Decisions：- **Choice:** Use inline `shlex.join([\"storyloop\",\"run\",str(project),\"--change\",change_id])` in `_prove_repaired_suite`, plus `import shlex`. **Rationale:** It is a one-line fix. It uses the stdlib and the same POSIX quoting convention as run_hints.py:42-46. It needs no signature change, because `project` is already resolved and in scope. **Alternatives considered:** `next_step('IMPLEMENTING', …)`…完整内容见 .storyloop/state/runs/FIX-20261107-repair-next-path.json → planning.plan"
+                  ],
+                  "facts": [
+                    {
+                      "statement": "_prove_repaired_suite returns next hard-coded as 'storyloop run <project> --change {change_id}' on the ACCEPTANCE_REPAIRED path.",
+                      "location": "storyloop/acceptance_repair.py:108",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "repair_smoke resolves project to an absolute path before passing it to _prove_repaired_suite.",
+                      "location": "storyloop/acceptance_repair.py:42",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "Golden lifecycle fixture repair.json records the repair result next as 'storyloop run <project> --change <FEAT-1>'.",
+                      "location": "tests/fixtures/lifecycle/repair.json:1",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "capture_case resolves the temp root before normalizing, and replace_recorded_path maps the root and its shlex.quote variant to the token.",
+                      "location": "tests/lifecycle_support.py:176",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "cli_output.display prints next unchanged in text mode via 'key: value'.",
+                      "location": "storyloop/cli_output.py:30",
+                      "role": "design",
+                      "attempt": 0
+                    }
+                  ],
+                  "questions": [],
+                  "options": [
+                    {
+                      "action": "明确决定后继续",
+                      "command": "storyloop approve /tmp/storyloop-bench-attempt-94va9b8o/candidate --change FIX-20261107-repair-next-path --design 78a3d42059b2870786b6a989a32185f7eaa6bb0e80514392bf92956d8e07a45e"
+                    }
+                  ],
+                  "resume": "storyloop approve /tmp/storyloop-bench-attempt-94va9b8o/candidate --change FIX-20261107-repair-next-path --design 78a3d42059b2870786b6a989a32185f7eaa6bb0e80514392bf92956d8e07a45e"
+                },
+                "acceptance": null,
+                "failure": null,
+                "error_details": null
+              }
+            }
+          ],
+          "stop_evidence_path": ".storyloop/bench/evidence/06abaa0300d24069862e668cc54a7ae1",
+          "candidate_patch_path": null,
+          "termination_reason": null,
+          "agent_error": null,
+          "routine_types": {
+            "contract_approval": 1,
+            "design_approval": 1
+          },
+          "nonroutine_types": {},
+          "nonroutine_count": 0,
+          "unknown_events": 0,
+          "calls": 11,
+          "input_tokens": 14283828,
+          "output_tokens": 191229,
+          "agent_ms": 2403436,
+          "wall_ms": 3385428,
+          "known_cost_usd": 23.9366,
+          "cost_coverage": 1.0,
+          "cost_accounting": "COMPLETE"
+        }
+      ],
+      "comparison": {
+        "status": "BASE_ONLY",
+        "reasons": [],
+        "cost_dimension": "COMPARABLE",
+        "base": [
+          "PASSED"
+        ],
+        "candidate": []
+      }
+    }
+  ]
+}
