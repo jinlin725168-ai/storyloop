@@ -1,0 +1,2591 @@
+{
+  "run_id": "1a1f87a1d5b34475b486b55007e69a58",
+  "created_at": "2026-11-22T10:27:42.492412+00:00",
+  "case_version": 2,
+  "case_revision": "2.3",
+  "scope": "base-only",
+  "suite_source": "generated",
+  "base_engine_commit": "cab0220b6218b0c2a1bd2c8e461a13657c0c492f",
+  "candidate_engine_commit": "",
+  "adapter": "claude",
+  "model": "opus",
+  "budget": {
+    "max_calls": 20,
+    "max_wall_seconds": 14400
+  },
+  "gold_python": {
+    "path": "/home/jinlin/work/storyloop-dogfood-venv-main/bin/python",
+    "version": "3.11.15",
+    "requirement": {
+      "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
+      "version": "3.11"
+    }
+  },
+  "scoring_contract": {
+    "version": 3,
+    "pass_requires": [
+      "PASSED",
+      "gold_passed"
+    ],
+    "attempts_per_side": 1,
+    "nonroutine_policy": "bounded_recovery",
+    "nonroutine_budget": 1,
+    "missing_evidence": "NOT_COMPARABLE",
+    "cost_policy": "report_separately"
+  },
+  "cases": [
+    {
+      "case_id": "dogfood3-stash-git-safe",
+      "case_version": 2,
+      "case_revision": "2.2",
+      "suite_source": "generated",
+      "case_hash": "b40547599fa7b539168afe19a96891d88af2f3ba50490b4e6e63f8239d95b6e0",
+      "contract_sha256": "0c6df9022b4eba8c86c51a74b7927f5636f3c425de1753bb7e8ccf8f7b3a4189",
+      "suite_sha256": "eea42b2726d3271940eb839f775c053c0ce7acbb3d2efb8732ada7738dc7a7d5",
+      "gold_sha256": "16be1b1da59dfa9e155df0e4800524eefae03b9203cc739e9c25dda33ae0e321",
+      "attempts": [
+        {
+          "side": "base",
+          "attempt": 1,
+          "status": "NEEDS_HUMAN",
+          "verdict": "NEEDS_HUMAN",
+          "gold_passed": null,
+          "gold_checks": null,
+          "engine_commit": "cab0220b6218b0c2a1bd2c8e461a13657c0c492f",
+          "engine_version": "0.1.0",
+          "engine_python": "/home/jinlin/work/storyloop-bench-venv/bin/python",
+          "attempt_python": "/tmp/storyloop-bench-attempt-e5o3qzd1/venv/bin/python",
+          "readiness": null,
+          "readiness_evidence_path": null,
+          "stops": [
+            {
+              "status": "DESIGN_APPROVAL_REQUIRED",
+              "detail": {
+                "reason": "DESIGN_APPROVAL_REQUIRED",
+                "stop": {
+                  "status": "DESIGN_APPROVAL_REQUIRED",
+                  "class": "human",
+                  "routing": {
+                    "initial": "heavy",
+                    "effective": "heavy",
+                    "history": [
+                      {
+                        "stage": "L2",
+                        "attempt": 0,
+                        "from_tier": "heavy",
+                        "to_tier": "heavy",
+                        "assessment_digest": "3c786ffba9a02a3e03a47c97760a95778aea54a2447391c811962101c4c0e3d1",
+                        "reason": [
+                          {
+                            "rule_id": "DEFAULT",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "STANDARD-FLOOR",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "HEAVY-RISK",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "GUARD",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          }
+                        ]
+                      }
+                    ],
+                    "rules": [
+                      {
+                        "rule_id": "DEFAULT",
+                        "fields": [
+                          "stories",
+                          "nature",
+                          "existing_files"
+                        ],
+                        "values": [
+                          1,
+                          "fix",
+                          2
+                        ]
+                      },
+                      {
+                        "rule_id": "STANDARD-FLOOR",
+                        "fields": [
+                          "risks.persistent_state",
+                          "risks.human_choice"
+                        ],
+                        "values": [
+                          "yes",
+                          "yes"
+                        ]
+                      },
+                      {
+                        "rule_id": "HEAVY-RISK",
+                        "fields": [
+                          "risks.sensitive",
+                          "risks.external_contract",
+                          "risks.crosscut"
+                        ],
+                        "values": [
+                          "yes",
+                          "yes",
+                          "yes"
+                        ]
+                      },
+                      {
+                        "rule_id": "GUARD",
+                        "fields": [
+                          "risks.guard"
+                        ],
+                        "values": [
+                          "yes"
+                        ]
+                      }
+                    ],
+                    "budget_source": "tier",
+                    "limit": 4,
+                    "phase": "intake",
+                    "origin": null,
+                    "consumed_attempt": null,
+                    "evidence": [
+                      {
+                        "field": "existing_files",
+                        "value": 2,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "created_files",
+                        "value": 0,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "interfaces",
+                        "value": 3,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "max_references",
+                        "value": 24,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "classification",
+                        "value": {
+                          "kind": "workspace_config",
+                          "digest": "980e10fada486f5f02a73f164aecd3c601c2f0ea00f9c7df970510447896c434",
+                          "commit_bound": false
+                        },
+                        "source": "engine",
+                        "locations": [
+                          ".storyloop/config.json"
+                        ],
+                        "commit": null
+                      },
+                      {
+                        "field": "hotspots",
+                        "value": {
+                          "storyloop/run_hints.py": 1,
+                          "storyloop/stop_report.py": 1
+                        },
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:64",
+                          "storyloop/stop_report.py:231"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.migration",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_stops.py:32",
+                          "storyloop/stop_report.py:289"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_stops.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.external_contract",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_stops.py:34",
+                          "storyloop/product_cli.py:120",
+                          "storyloop/change_log.py:38"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_stops.py",
+                          "storyloop/product_cli.py",
+                          "storyloop/change_log.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.new_interface",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:26",
+                          "storyloop/stop_report.py:208"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.crosscut",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:64",
+                          "storyloop/stop_report.py:231",
+                          "storyloop/product_cli.py:122",
+                          "storyloop/change_log.py:38"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py",
+                          "storyloop/product_cli.py",
+                          "storyloop/change_log.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.principle_deviation",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:63",
+                          "storyloop/stop_report.py:225"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.hard_verify_high_cost",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "tests/test_failure_routing.py:304",
+                          "tests/test_stop_report.py:71"
+                        ],
+                        "search_scope": [
+                          "tests/test_failure_routing.py",
+                          "tests/test_stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.dependency_swap",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:5",
+                          "storyloop/stop_report.py:5"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.persistent_state",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_stops.py:32",
+                          "storyloop/run_stops.py:33",
+                          "storyloop/stop_report.py:289"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_stops.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.human_choice",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:70",
+                          "storyloop/stop_report.py:238"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:63",
+                          "storyloop/run_hints.py:64",
+                          "storyloop/stop_report.py:225",
+                          "storyloop/stop_report.py:231"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      }
+                    ],
+                    "manual_decisions": {
+                      "product": null,
+                      "design": null,
+                      "continue_heavy": null
+                    },
+                    "restore": null,
+                    "restore_history": []
+                  },
+                  "phase": "planning",
+                  "completed": [
+                    "contract",
+                    "acceptance_red"
+                  ],
+                  "last_verdict": null,
+                  "attempts": [],
+                  "blocker": "DESIGN_APPROVAL_REQUIRED",
+                  "evidence": [
+                    "方案选项 O1-shared-builder：Add one shared builder in storyloop/run_hints.py for the linked-base BASE_CHANGE_REQUIRED hint. It resolves the project root and emits `git -C <abs> --literal-pathspecs stash push -u -- <quoted paths>`, `git -C <abs> status --short` and `git -C <abs> switch <branch>`, in the same step order with the same approve/run commands. next_step calls it. stop_report._stop_actions calls it for options[0].action. stop_of rebuilds options in memory, without writing anything, for saved BASE_CHANGE_REQUIRED stops that have blocked_by, so old saved reports show the fixed commands. Update the existing unit tests and the lifecycle golden that pin the old wording.（全文：.storyloop/state/runs/FIX-20261104-stash-git-safe.json → planning.plan）",
+                    "涉及文件：storyloop/run_hints.py、storyloop/stop_report.py、tests/fixtures/lifecycle/boundary.json、tests/test_failure_routing.py、tests/test_stop_report.py",
+                    "Risks：sensitive: yes、migration: no、external_contract: yes、new_interface: no、crosscut: yes、principle_deviation: no、hard_verify_high_cost: no、dependency_swap: no；共 11 项，完整内容见 .storyloop/state/runs/FIX-20261104-stash-git-safe.json → planning.plan",
+                    "Decisions：1. **Shared builder.** Choice: add a new helper `base_change_steps(project, change_id, context)` in run_hints.py. This change creates it, so it is not listed among the existing declared symbols. It returns the linked-base hint text, and `next_step` and `stop_report._stop_actions` both call it. Rationale: AC-2 parity then holds by construction. stop_report importing from run_hints creates no cycle,…完整内容见 .storyloop/state/runs/FIX-20261104-stash-git-safe.json → planning.plan"
+                  ],
+                  "facts": [
+                    {
+                      "statement": "stop_of returns the saved stop unchanged when saved.status equals run.status; ORACLE_DEFECT is the only status whose options it rebuilds.",
+                      "location": "storyloop/stop_report.py:289",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "The legacy-path linked-base hint in next_step builds a bare `git stash push -u --` with no -C and no --literal-pathspecs.",
+                      "location": "storyloop/run_hints.py:64",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "_stop_actions builds its own copy of the linked-base legacy-path action text.",
+                      "location": "storyloop/stop_report.py:231",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "The lifecycle golden capture resolves the temp project root before recording, and replace_recorded_path normalizes plain and shlex-quoted path aliases.",
+                      "location": "tests/lifecycle_support.py:176",
+                      "role": "design",
+                      "attempt": 0
+                    }
+                  ],
+                  "questions": [],
+                  "options": [
+                    {
+                      "action": "明确决定后继续",
+                      "command": "storyloop approve /tmp/storyloop-bench-attempt-e5o3qzd1/candidate --change FIX-20261104-stash-git-safe --design 06b7d62576f5d8f8607c4c643e8bcaaf8f90ea873cd45deef522f0c17a256218"
+                    }
+                  ],
+                  "resume": "storyloop approve /tmp/storyloop-bench-attempt-e5o3qzd1/candidate --change FIX-20261104-stash-git-safe --design 06b7d62576f5d8f8607c4c643e8bcaaf8f90ea873cd45deef522f0c17a256218"
+                },
+                "acceptance": null,
+                "failure": null,
+                "error_details": null
+              }
+            },
+            {
+              "status": "DESIGN_REVISION_REQUIRED",
+              "detail": {
+                "reason": "DESIGN_REVISION_REQUIRED",
+                "stop": {
+                  "status": "DESIGN_REVISION_REQUIRED",
+                  "class": "implementation",
+                  "routing": {
+                    "initial": "heavy",
+                    "effective": "heavy",
+                    "history": [
+                      {
+                        "stage": "L2",
+                        "attempt": 0,
+                        "from_tier": "heavy",
+                        "to_tier": "heavy",
+                        "assessment_digest": "3c786ffba9a02a3e03a47c97760a95778aea54a2447391c811962101c4c0e3d1",
+                        "reason": [
+                          {
+                            "rule_id": "DEFAULT",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "STANDARD-FLOOR",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "HEAVY-RISK",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "GUARD",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          }
+                        ]
+                      }
+                    ],
+                    "rules": [
+                      {
+                        "rule_id": "DEFAULT",
+                        "fields": [
+                          "stories",
+                          "nature",
+                          "existing_files"
+                        ],
+                        "values": [
+                          1,
+                          "fix",
+                          2
+                        ]
+                      },
+                      {
+                        "rule_id": "STANDARD-FLOOR",
+                        "fields": [
+                          "risks.persistent_state",
+                          "risks.human_choice"
+                        ],
+                        "values": [
+                          "yes",
+                          "yes"
+                        ]
+                      },
+                      {
+                        "rule_id": "HEAVY-RISK",
+                        "fields": [
+                          "risks.sensitive",
+                          "risks.external_contract",
+                          "risks.crosscut"
+                        ],
+                        "values": [
+                          "yes",
+                          "yes",
+                          "yes"
+                        ]
+                      },
+                      {
+                        "rule_id": "GUARD",
+                        "fields": [
+                          "risks.guard"
+                        ],
+                        "values": [
+                          "yes"
+                        ]
+                      }
+                    ],
+                    "budget_source": "tier",
+                    "limit": 4,
+                    "phase": "intake",
+                    "origin": null,
+                    "consumed_attempt": null,
+                    "evidence": [
+                      {
+                        "field": "existing_files",
+                        "value": 2,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "created_files",
+                        "value": 0,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "interfaces",
+                        "value": 3,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "max_references",
+                        "value": 24,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "classification",
+                        "value": {
+                          "kind": "workspace_config",
+                          "digest": "980e10fada486f5f02a73f164aecd3c601c2f0ea00f9c7df970510447896c434",
+                          "commit_bound": false
+                        },
+                        "source": "engine",
+                        "locations": [
+                          ".storyloop/config.json"
+                        ],
+                        "commit": null
+                      },
+                      {
+                        "field": "hotspots",
+                        "value": {
+                          "storyloop/run_hints.py": 1,
+                          "storyloop/stop_report.py": 1
+                        },
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:64",
+                          "storyloop/stop_report.py:231"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.migration",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_stops.py:32",
+                          "storyloop/stop_report.py:289"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_stops.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.external_contract",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_stops.py:34",
+                          "storyloop/product_cli.py:120",
+                          "storyloop/change_log.py:38"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_stops.py",
+                          "storyloop/product_cli.py",
+                          "storyloop/change_log.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.new_interface",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:26",
+                          "storyloop/stop_report.py:208"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.crosscut",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:64",
+                          "storyloop/stop_report.py:231",
+                          "storyloop/product_cli.py:122",
+                          "storyloop/change_log.py:38"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py",
+                          "storyloop/product_cli.py",
+                          "storyloop/change_log.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.principle_deviation",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:63",
+                          "storyloop/stop_report.py:225"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.hard_verify_high_cost",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "tests/test_failure_routing.py:304",
+                          "tests/test_stop_report.py:71"
+                        ],
+                        "search_scope": [
+                          "tests/test_failure_routing.py",
+                          "tests/test_stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.dependency_swap",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:5",
+                          "storyloop/stop_report.py:5"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.persistent_state",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_stops.py:32",
+                          "storyloop/run_stops.py:33",
+                          "storyloop/stop_report.py:289"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_stops.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.human_choice",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:70",
+                          "storyloop/stop_report.py:238"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:63",
+                          "storyloop/run_hints.py:64",
+                          "storyloop/stop_report.py:225",
+                          "storyloop/stop_report.py:231"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      }
+                    ],
+                    "manual_decisions": {
+                      "product": null,
+                      "design": {
+                        "actor": "user",
+                        "time": "2026-11-22T11:12:46.609319+00:00",
+                        "binding": {
+                          "product_digest": "adf7b50eee821101197d666a97b2282acb4d71de573bc0a695bdc1d5604c7df4",
+                          "source_commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb",
+                          "scope_digest": "63c5d34f6e806b7acf2facd07538687c7bea91121dbf3bb8f99431821dc2d15d",
+                          "suite_digest": "b47f1a5407bdc66c2a4ec1afebd18f6ba4d9b9f8c87f38cb7426f399965c6901",
+                          "policy_digest": "152717bb54cd3949e38cb8aea87616f936d3d21977074283952bc41ba35d827d",
+                          "principles_digest": null,
+                          "baseline_digest": "6b01a93cd664dfbf3ccf82701f96ea2c26830b6eafb5576e0e1b96501f803bb0"
+                        },
+                        "plan_id": "06b7d62576f5d8f8607c4c643e8bcaaf8f90ea873cd45deef522f0c17a256218",
+                        "option_id": "O1-shared-builder",
+                        "selected_option": "O1-shared-builder"
+                      },
+                      "continue_heavy": null
+                    },
+                    "restore": null,
+                    "restore_history": []
+                  },
+                  "phase": "planning",
+                  "completed": [
+                    "contract",
+                    "acceptance_red"
+                  ],
+                  "last_verdict": null,
+                  "attempts": [],
+                  "blocker": "DESIGN_REVISION_REQUIRED",
+                  "evidence": [],
+                  "facts": [
+                    {
+                      "statement": "stop_of returns the saved stop unchanged when saved.status equals run.status; ORACLE_DEFECT is the only status whose options it rebuilds.",
+                      "location": "storyloop/stop_report.py:289",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "The legacy-path linked-base hint in next_step builds a bare `git stash push -u --` with no -C and no --literal-pathspecs.",
+                      "location": "storyloop/run_hints.py:64",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "_stop_actions builds its own copy of the linked-base legacy-path action text.",
+                      "location": "storyloop/stop_report.py:231",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "The lifecycle golden capture resolves the temp project root before recording, and replace_recorded_path normalizes plain and shlex-quoted path aliases.",
+                      "location": "tests/lifecycle_support.py:176",
+                      "role": "design",
+                      "attempt": 0
+                    }
+                  ],
+                  "questions": [],
+                  "options": [
+                    {
+                      "action": "明确决定后继续",
+                      "command": "storyloop run /tmp/storyloop-bench-attempt-e5o3qzd1/candidate --change FIX-20261104-stash-git-safe --replan --reason '<方案修订理由>'"
+                    }
+                  ],
+                  "resume": "storyloop run /tmp/storyloop-bench-attempt-e5o3qzd1/candidate --change FIX-20261104-stash-git-safe --replan --reason '<方案修订理由>'",
+                  "review_findings": [
+                    {
+                      "target": "design",
+                      "severity": "阻塞",
+                      "message": "Decision 4 and the AC-2 constraint rebuild saved BASE_CHANGE_REQUIRED stops by calling `_stop_actions(project, run, status, {})`. The linked-base branch of `_st",
+                      "location": "plan:O1-shared-builder/constraints/1",
+                      "summary": "目标：design；严重度：阻塞；内容：Decision 4 and the AC-2 constraint rebuild saved BASE_CHANGE_REQUIRED stops by calling `_stop_actions(project, run, status, {})`. The linked-base branch of `_st；位置：plan:O1-shared-builder/constraints/1"
+                    }
+                  ]
+                },
+                "acceptance": null,
+                "failure": null,
+                "error_details": null
+              }
+            },
+            {
+              "status": "DESIGN_APPROVAL_REQUIRED",
+              "detail": {
+                "reason": "DESIGN_APPROVAL_REQUIRED",
+                "stop": {
+                  "status": "DESIGN_APPROVAL_REQUIRED",
+                  "class": "human",
+                  "routing": {
+                    "initial": "heavy",
+                    "effective": "heavy",
+                    "history": [
+                      {
+                        "stage": "L2",
+                        "attempt": 0,
+                        "from_tier": "heavy",
+                        "to_tier": "heavy",
+                        "assessment_digest": "3c786ffba9a02a3e03a47c97760a95778aea54a2447391c811962101c4c0e3d1",
+                        "reason": [
+                          {
+                            "rule_id": "DEFAULT",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "STANDARD-FLOOR",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "HEAVY-RISK",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "GUARD",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          }
+                        ]
+                      }
+                    ],
+                    "rules": [
+                      {
+                        "rule_id": "DEFAULT",
+                        "fields": [
+                          "stories",
+                          "nature",
+                          "existing_files"
+                        ],
+                        "values": [
+                          1,
+                          "fix",
+                          2
+                        ]
+                      },
+                      {
+                        "rule_id": "STANDARD-FLOOR",
+                        "fields": [
+                          "risks.persistent_state",
+                          "risks.human_choice"
+                        ],
+                        "values": [
+                          "yes",
+                          "yes"
+                        ]
+                      },
+                      {
+                        "rule_id": "HEAVY-RISK",
+                        "fields": [
+                          "risks.sensitive",
+                          "risks.external_contract",
+                          "risks.crosscut"
+                        ],
+                        "values": [
+                          "yes",
+                          "yes",
+                          "yes"
+                        ]
+                      },
+                      {
+                        "rule_id": "GUARD",
+                        "fields": [
+                          "risks.guard"
+                        ],
+                        "values": [
+                          "yes"
+                        ]
+                      }
+                    ],
+                    "budget_source": "tier",
+                    "limit": 4,
+                    "phase": "intake",
+                    "origin": null,
+                    "consumed_attempt": null,
+                    "evidence": [
+                      {
+                        "field": "existing_files",
+                        "value": 2,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "created_files",
+                        "value": 0,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "interfaces",
+                        "value": 3,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "max_references",
+                        "value": 24,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "classification",
+                        "value": {
+                          "kind": "workspace_config",
+                          "digest": "980e10fada486f5f02a73f164aecd3c601c2f0ea00f9c7df970510447896c434",
+                          "commit_bound": false
+                        },
+                        "source": "engine",
+                        "locations": [
+                          ".storyloop/config.json"
+                        ],
+                        "commit": null
+                      },
+                      {
+                        "field": "hotspots",
+                        "value": {
+                          "storyloop/run_hints.py": 1,
+                          "storyloop/stop_report.py": 1
+                        },
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:64",
+                          "storyloop/stop_report.py:231"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.migration",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_stops.py:32",
+                          "storyloop/stop_report.py:289"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_stops.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.external_contract",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_stops.py:34",
+                          "storyloop/product_cli.py:120",
+                          "storyloop/change_log.py:38"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_stops.py",
+                          "storyloop/product_cli.py",
+                          "storyloop/change_log.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.new_interface",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:26",
+                          "storyloop/stop_report.py:208"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.crosscut",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:64",
+                          "storyloop/stop_report.py:231",
+                          "storyloop/product_cli.py:122",
+                          "storyloop/change_log.py:38"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py",
+                          "storyloop/product_cli.py",
+                          "storyloop/change_log.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.principle_deviation",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:63",
+                          "storyloop/stop_report.py:225"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.hard_verify_high_cost",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "tests/test_failure_routing.py:304",
+                          "tests/test_stop_report.py:71"
+                        ],
+                        "search_scope": [
+                          "tests/test_failure_routing.py",
+                          "tests/test_stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.dependency_swap",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:5",
+                          "storyloop/stop_report.py:5"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.persistent_state",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_stops.py:32",
+                          "storyloop/run_stops.py:33",
+                          "storyloop/stop_report.py:289"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_stops.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.human_choice",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:70",
+                          "storyloop/stop_report.py:238"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:63",
+                          "storyloop/run_hints.py:64",
+                          "storyloop/stop_report.py:225",
+                          "storyloop/stop_report.py:231"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      }
+                    ],
+                    "manual_decisions": {
+                      "product": null,
+                      "design": null,
+                      "continue_heavy": null
+                    },
+                    "restore": null,
+                    "restore_history": []
+                  },
+                  "phase": "planning",
+                  "completed": [
+                    "contract",
+                    "acceptance_red"
+                  ],
+                  "last_verdict": null,
+                  "attempts": [],
+                  "blocker": "DESIGN_APPROVAL_REQUIRED",
+                  "evidence": [
+                    "方案选项 O1-shared-builder：Add one shared text builder in storyloop/run_hints.py for the linked-base BASE_CHANGE_REQUIRED hint, covering both the case with leftover (legacy) files and the case without. It emits `git -C <quoted resolved root> --literal-pathspecs stash push -u -- <quoted paths>`, `git -C <root> status --short` and `git -C <root> switch <branch>`. The step order, the approve/run commands and the wording stay the same. next_step's blocked_by branch calls the builder, and stop_report._stop_actions uses it for options[0].action when legacy_paths is set. stop_of rebuilds options in memory, without writing, for saved BASE_CHANGE_REQUIRED stops that have run.blocked_by. It calls _stop_actions with details={'blocked_by': run['blocked_by']}, because _stop_actions checks details, not state, for blocked_by. Old saved reports therefore show the fixed commands. Update the existing unit tests and the lifecycle golden that pin the old wording.（全文：.storyloop/state/runs/FIX-20261104-stash-git-safe.json → planning.plan）",
+                    "涉及文件：storyloop/run_hints.py、storyloop/stop_report.py、tests/fixtures/lifecycle/boundary.json、tests/test_failure_routing.py、tests/test_stop_report.py",
+                    "Risks：sensitive: yes、migration: no、external_contract: yes、new_interface: no、crosscut: yes、principle_deviation: no、hard_verify_high_cost: no、dependency_swap: no；共 11 项，完整内容见 .storyloop/state/runs/FIX-20261104-stash-git-safe.json → planning.plan",
+                    "Decisions：1. **Shared builder.** - Choice: add a new helper `base_change_steps(project, change_id, context)` in run_hints.py. It returns the linked-base hint text for both cases. `next_step` calls it, and so does `_stop_actions` when legacy_paths is set. - Rationale: AC-2 parity then holds by construction. There is no import cycle, because run_hints imports only routing_report (`run_hints.py:7`). - Alternat…完整内容见 .storyloop/state/runs/FIX-20261104-stash-git-safe.json → planning.plan"
+                  ],
+                  "facts": [
+                    {
+                      "statement": "stop_of returns the saved stop unchanged when saved.status equals run.status; ORACLE_DEFECT is the only status whose options it rebuilds.",
+                      "location": "storyloop/stop_report.py:289",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "The legacy-path linked-base hint in next_step builds a bare `git stash push -u --` with no -C and no --literal-pathspecs.",
+                      "location": "storyloop/run_hints.py:64",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "_stop_actions builds its own copy of the linked-base legacy-path action text.",
+                      "location": "storyloop/stop_report.py:231",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "The lifecycle golden capture resolves the temp project root before recording, and replace_recorded_path normalizes plain and shlex-quoted path aliases.",
+                      "location": "tests/lifecycle_support.py:176",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "_stop_actions applies the linked-base override only when details.get('blocked_by') is set; a stop_of rebuild must pass blocked_by in details, not {}.",
+                      "location": "storyloop/stop_report.py:220",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "run_stops.pause persists stop details (blocked_by, legacy_paths, branches) into the run state before build_stop.",
+                      "location": "storyloop/run_stops.py:31",
+                      "role": "design",
+                      "attempt": 0
+                    }
+                  ],
+                  "questions": [],
+                  "options": [
+                    {
+                      "action": "明确决定后继续",
+                      "command": "storyloop approve /tmp/storyloop-bench-attempt-e5o3qzd1/candidate --change FIX-20261104-stash-git-safe --design 9477ed046fea9a1254c813bfea73de3ca99fa8578042b49f63656deef0d735b7"
+                    }
+                  ],
+                  "resume": "storyloop approve /tmp/storyloop-bench-attempt-e5o3qzd1/candidate --change FIX-20261104-stash-git-safe --design 9477ed046fea9a1254c813bfea73de3ca99fa8578042b49f63656deef0d735b7"
+                },
+                "acceptance": null,
+                "failure": null,
+                "error_details": null
+              }
+            },
+            {
+              "status": "ORACLE_DEFECT",
+              "detail": {
+                "reason": "The AC-3 acceptance parser does not split on the full-width colon, so it drops a git command written directly after '：'. Correctness, security, architecture and tests raised this as an oracle MUST_FIX. The lead reclassified it as ADVISORY: the strictness only fixes a wording form the contract leaves open, an implementation can satisfy it with a space after the colon, and it conflicts with no must-hold behaviour. On the old code it also made RED fail on the command count rather than only on the missing -C.",
+                "stop": {
+                  "status": "ORACLE_DEFECT",
+                  "class": "oracle",
+                  "routing": {
+                    "initial": "heavy",
+                    "effective": "heavy",
+                    "history": [
+                      {
+                        "stage": "L2",
+                        "attempt": 0,
+                        "from_tier": "heavy",
+                        "to_tier": "heavy",
+                        "assessment_digest": "3c786ffba9a02a3e03a47c97760a95778aea54a2447391c811962101c4c0e3d1",
+                        "reason": [
+                          {
+                            "rule_id": "DEFAULT",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "STANDARD-FLOOR",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "HEAVY-RISK",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "GUARD",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          }
+                        ]
+                      }
+                    ],
+                    "rules": [
+                      {
+                        "rule_id": "DEFAULT",
+                        "fields": [
+                          "stories",
+                          "nature",
+                          "existing_files"
+                        ],
+                        "values": [
+                          1,
+                          "fix",
+                          2
+                        ]
+                      },
+                      {
+                        "rule_id": "STANDARD-FLOOR",
+                        "fields": [
+                          "risks.persistent_state",
+                          "risks.human_choice"
+                        ],
+                        "values": [
+                          "yes",
+                          "yes"
+                        ]
+                      },
+                      {
+                        "rule_id": "HEAVY-RISK",
+                        "fields": [
+                          "risks.sensitive",
+                          "risks.external_contract",
+                          "risks.crosscut"
+                        ],
+                        "values": [
+                          "yes",
+                          "yes",
+                          "yes"
+                        ]
+                      },
+                      {
+                        "rule_id": "GUARD",
+                        "fields": [
+                          "risks.guard"
+                        ],
+                        "values": [
+                          "yes"
+                        ]
+                      }
+                    ],
+                    "budget_source": "tier",
+                    "limit": 4,
+                    "phase": "intake",
+                    "origin": null,
+                    "consumed_attempt": null,
+                    "evidence": [
+                      {
+                        "field": "existing_files",
+                        "value": 2,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "created_files",
+                        "value": 0,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "interfaces",
+                        "value": 3,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "max_references",
+                        "value": 24,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "classification",
+                        "value": {
+                          "kind": "workspace_config",
+                          "digest": "980e10fada486f5f02a73f164aecd3c601c2f0ea00f9c7df970510447896c434",
+                          "commit_bound": false
+                        },
+                        "source": "engine",
+                        "locations": [
+                          ".storyloop/config.json"
+                        ],
+                        "commit": null
+                      },
+                      {
+                        "field": "hotspots",
+                        "value": {
+                          "storyloop/run_hints.py": 1,
+                          "storyloop/stop_report.py": 1
+                        },
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:64",
+                          "storyloop/stop_report.py:231"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.migration",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_stops.py:32",
+                          "storyloop/stop_report.py:289"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_stops.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.external_contract",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_stops.py:34",
+                          "storyloop/product_cli.py:120",
+                          "storyloop/change_log.py:38"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_stops.py",
+                          "storyloop/product_cli.py",
+                          "storyloop/change_log.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.new_interface",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:26",
+                          "storyloop/stop_report.py:208"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.crosscut",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:64",
+                          "storyloop/stop_report.py:231",
+                          "storyloop/product_cli.py:122",
+                          "storyloop/change_log.py:38"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py",
+                          "storyloop/product_cli.py",
+                          "storyloop/change_log.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.principle_deviation",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:63",
+                          "storyloop/stop_report.py:225"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.hard_verify_high_cost",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "tests/test_failure_routing.py:304",
+                          "tests/test_stop_report.py:71"
+                        ],
+                        "search_scope": [
+                          "tests/test_failure_routing.py",
+                          "tests/test_stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.dependency_swap",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:5",
+                          "storyloop/stop_report.py:5"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.persistent_state",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_stops.py:32",
+                          "storyloop/run_stops.py:33",
+                          "storyloop/stop_report.py:289"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_stops.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.human_choice",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:70",
+                          "storyloop/stop_report.py:238"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_hints.py:63",
+                          "storyloop/run_hints.py:64",
+                          "storyloop/stop_report.py:225",
+                          "storyloop/stop_report.py:231"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_hints.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb"
+                      }
+                    ],
+                    "manual_decisions": {
+                      "product": null,
+                      "design": {
+                        "actor": "user",
+                        "time": "2026-11-22T11:17:07.923987+00:00",
+                        "binding": {
+                          "product_digest": "adf7b50eee821101197d666a97b2282acb4d71de573bc0a695bdc1d5604c7df4",
+                          "source_commit": "a3e42d2fa736f79e5385355ff6c953acc6af2ebb",
+                          "scope_digest": "63c5d34f6e806b7acf2facd07538687c7bea91121dbf3bb8f99431821dc2d15d",
+                          "suite_digest": "b47f1a5407bdc66c2a4ec1afebd18f6ba4d9b9f8c87f38cb7426f399965c6901",
+                          "policy_digest": "152717bb54cd3949e38cb8aea87616f936d3d21977074283952bc41ba35d827d",
+                          "principles_digest": null,
+                          "baseline_digest": "6b01a93cd664dfbf3ccf82701f96ea2c26830b6eafb5576e0e1b96501f803bb0"
+                        },
+                        "plan_id": "9477ed046fea9a1254c813bfea73de3ca99fa8578042b49f63656deef0d735b7",
+                        "option_id": "O1-shared-builder",
+                        "selected_option": "O1-shared-builder"
+                      },
+                      "continue_heavy": null
+                    },
+                    "restore": null,
+                    "restore_history": []
+                  },
+                  "phase": "verify",
+                  "completed": [
+                    "contract",
+                    "acceptance_red",
+                    "characterization",
+                    "implement:1",
+                    "review:1"
+                  ],
+                  "last_verdict": {
+                    "gate": "review",
+                    "summary": "The AC-3 acceptance parser does not split on the full-width colon, so it drops a git command written directly after '：'. Correctness, security, architecture and tests raised this as an oracle MUST_FIX. The lead reclassified it as ADVISORY: the strictness only fixes a wording form the contract leaves open, an implementation can satisfy it with a space after the colon, and it conflicts with no must-hold behaviour. On the old code it also made RED fail on the command count rather than only on the missing -C."
+                  },
+                  "attempts": [
+                    {
+                      "attempt": 1,
+                      "attribution": "oracle",
+                      "signature": "229ab465",
+                      "summary": "3 finding(s): In the no-legacy linked-base hint, the first `git -C <root> switch <source>` is glued to the full-width colon ('已生成：git'). It cannot be extracted or pasted as its own shell command, so AC-3 ('both switch commands target the project repository') is not observable and the acceptance laye"
+                    }
+                  ],
+                  "blocker": "The AC-3 acceptance parser does not split on the full-width colon, so it drops a git command written directly after '：'. Correctness, security, architecture and tests raised this as an oracle MUST_FIX. The lead reclassified it as ADVISORY: the strictness only fixes a wording form the contract leaves open, an implementation can satisfy it with a space after the colon, and it conflicts with no must-hold behaviour. On the old code it also made RED fail on the command count rather than only on the missing -C.",
+                  "evidence": [
+                    "acceptance/changes/FIX-20261104-stash-git-safe/_support.py:23"
+                  ],
+                  "facts": [
+                    {
+                      "statement": "stop_of returns the saved stop unchanged when saved.status equals run.status; ORACLE_DEFECT is the only status whose options it rebuilds.",
+                      "location": "storyloop/stop_report.py:289",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "The legacy-path linked-base hint in next_step builds a bare `git stash push -u --` with no -C and no --literal-pathspecs.",
+                      "location": "storyloop/run_hints.py:64",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "_stop_actions builds its own copy of the linked-base legacy-path action text.",
+                      "location": "storyloop/stop_report.py:231",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "The lifecycle golden capture resolves the temp project root before recording, and replace_recorded_path normalizes plain and shlex-quoted path aliases.",
+                      "location": "tests/lifecycle_support.py:176",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "_stop_actions applies the linked-base override only when details.get('blocked_by') is set; a stop_of rebuild must pass blocked_by in details, not {}.",
+                      "location": "storyloop/stop_report.py:220",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "run_stops.pause persists stop details (blocked_by, legacy_paths, branches) into the run state before build_stop.",
+                      "location": "storyloop/run_stops.py:31",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "tests/test_architecture.py test_no_new_module_joins_a_cycle fails if stop_report imports run_hints, because stop_report and routing_report are declared cycle members and run_hints imports routing_report; run_hints importing stop_report adds no cycle member.",
+                      "location": "storyloop/architecture.toml:254",
+                      "role": "implement",
+                      "attempt": 1
+                    },
+                    {
+                      "statement": "The full suite (tests/run.py --suite full) runs every tests/test_*.py, including test_failure_routing and the test_char_base_hint_* characterization tests, which are not in the core suite.",
+                      "location": "tests/run.py:33",
+                      "role": "implement",
+                      "attempt": 1
+                    }
+                  ],
+                  "questions": [],
+                  "options": [
+                    {
+                      "action": "修正判据",
+                      "command": "storyloop acceptance-repair /tmp/storyloop-bench-attempt-e5o3qzd1/candidate --change FIX-20261104-stash-git-safe --reason '<原因>'"
+                    },
+                    {
+                      "action": "驳回归属",
+                      "command": "storyloop run /tmp/storyloop-bench-attempt-e5o3qzd1/candidate --change FIX-20261104-stash-git-safe --overrule '<理由>'"
+                    }
+                  ],
+                  "resume": "storyloop acceptance-repair /tmp/storyloop-bench-attempt-e5o3qzd1/candidate --change FIX-20261104-stash-git-safe --reason '<原因>'"
+                },
+                "acceptance": {
+                  "status": "ORACLE_DEFECT",
+                  "source": "review",
+                  "findings": [
+                    {
+                      "id": "F-2-78a41341eb142dec",
+                      "criterion_id": "AC-3",
+                      "target": "oracle",
+                      "disposition": "ADVISORY",
+                      "blocking": false,
+                      "location": "acceptance/changes/FIX-20261104-stash-git-safe/_support.py:23",
+                      "evidence": "SEPARATORS = re.compile(r\"[；，。\\n]\") omits the full-width colon '：'. command_lines and raw_command_lines only start a command on a whole word equal to 'git' (_support.py:157-161, 205-225). So in '已生成：git -C R switch main' the first command is dropped. The '已生成：' wording predates this change. The contract does not fix it, and AC-4 preserves only the approve command and the step order. tests/test_char_base_hint_next_step.py:44 checks only the startswith prefix.",
+                      "message": "The AC-3 acceptance parser does not split on the full-width colon, so it drops a git command written directly after '：'. Correctness, security, architecture and tests raised this as an oracle MUST_FIX. The lead reclassified it as ADVISORY: the strictness only fixes a wording form the contract leaves open, an implementation can satisfy it with a space after the colon, and it conflicts with no must-hold behaviour. On the old code it also made RED fail on the command count rather than only on the missing -C.",
+                      "required_change": "Optional, in a future acceptance-repair: add '：' (and similar full-width punctuation) to SEPARATORS at _support.py:23, so that commands glued to the colon are still extracted.",
+                      "perspective": "tests",
+                      "regression_conflict": false,
+                      "severity": "P2",
+                      "confidence": 80,
+                      "introduced": false,
+                      "trigger": "Any no-legacy linked-base hint where the first git command directly follows '已生成：' with no space.",
+                      "impact": "It forces a small wording change the contract does not require, and it weakens the diagnostic value of the AC-3 RED proof.",
+                      "fix": "Add '：' to SEPARATORS in _support.py:23 if the suite is repaired; for now IMPL-AC-3-01 is enough to turn the layer green.",
+                      "agent_id": "ORACLE-AC-3-01"
+                    }
+                  ]
+                },
+                "failure": {
+                  "attempt": 1,
+                  "unit": {
+                    "status": "PASSED",
+                    "results": [
+                      {
+                        "id": "REGRESSION-001",
+                        "criteria": [],
+                        "command": [
+                          "/tmp/storyloop-bench-attempt-e5o3qzd1/venv/bin/python",
+                          "tests/run.py",
+                          "--suite",
+                          "core",
+                          "--workers",
+                          "8"
+                        ],
+                        "cwd": "/tmp/storyloop-regression-wqag_yg5",
+                        "status": "PASS",
+                        "returncode": 0,
+                        "timed_out": false,
+                        "counts": {
+                          "executed": 922,
+                          "failed": null,
+                          "skipped": null,
+                          "parser": "custom"
+                        },
+                        "stdout": "ok       0.0s  tests.test_acceptance_layout\nok       2.0s  tests.test_adapter_conformance\nok       2.4s  tests.test_architecture\nok       2.6s  tests.test_base_contract\nok       0.0s  tests.test_baseline_api\nok       5.6s  tests.test_baseline_behavior\nok       8.4s  tests.test_adapter_capabilities\nok       0.0s  tests.test_baseline_contract\nok       0.1s  tests.test_boundaries\nok       0.5s  tests.test_candidate_allow\nok       1.0s  tests.test_baseline_cli\nok       7.8s  tests.test_base_supplement\nok       2.5s  tests.test_change_approval\nok       4.2s  tests.test_change_report\nok       0.0s  tests.test_changes_contract\nok       0.1s  tests.test_characterization_baseline\nok       0.0s  tests.test_ci_path_safety\nok       2.2s  tests.test_changes_behavior\nok       1.3s  tests.test_claude_adapter\nok       0.1s  tests.test_claude_adapter_encoding\nok       0.1s  tests.test_claude_role_profiles\nok       2.6s  tests.test_ci_runner\nok       1.7s  tests.test_cli\nok       6.3s  tests.test_codex_adapter\nok       0.1s  tests.test_core\nok       0.1s  tests.test_correction_views\nok      23.5s  tests.test_base_trust\nok       0.1s  tests.test_evidence_root_spelling\nok       6.4s  tests.test_custom_protection\nok       0.0s  tests.test_failure_attribution\nok      19.9s  tests.test_change_types\nok       0.1s  tests.test_forbidden_path_legacy\nok       0.1s  tests.test_foundation_quality\nok      13.4s  tests.test_completion_resilience.CompletionResilienceTests.test_completion_resumes_after_a_crash_following_the_implementation_commit\nok       0.1s  tests.test_git_command\nok       1.6s  tests.test_final_role_boundaries\nok       0.4s  tests.test_git_diff_paths\nok       0.2s  tests.test_init_git_control\nok       0.5s  tests.test_git_identity\nok       1.5s  tests.test_invariants\nok       1.8s  tests.test_lesson_landing.LandingTests.test_base_proposal_paths_detect_renamed_foundation_source\nok       4.7s  tests.test_foundation_survey\nok       1.9s  tests.test_lifecycle_architecture\nok      10.",
+                        "stderr": ""
+                      }
+                    ],
+                    "candidate_sha256": "b14954a81e7c44884e364ec19d995beb4a4839c02a4e2086d1067bffff9a4ed1",
+                    "uncounted": []
+                  },
+                  "integration": {
+                    "status": "SKIPPED",
+                    "reason": "NO_REGRESSION_COMMANDS",
+                    "results": [],
+                    "candidate_sha256": "b14954a81e7c44884e364ec19d995beb4a4839c02a4e2086d1067bffff9a4ed1",
+                    "uncounted": []
+                  },
+                  "acceptance": {
+                    "version": 1,
+                    "change_id": "FIX-20261104-stash-git-safe",
+                    "status": "FAILED",
+                    "expect_red": false,
+                    "started_at": "2026-11-22T12:09:32.823918Z",
+                    "finished_at": "2026-11-22T12:10:09.350216Z",
+                    "head_commit": "82157a0a3a0f829dcc8cfeef4616c86725f55586",
+                    "workspace_sha256": "b14954a81e7c44884e364ec19d995beb4a4839c02a4e2086d1067bffff9a4ed1",
+                    "suite_digests": {
+                      "_support.py": "b6047bfea46d92ad295629d49ebce1fb9f7a41f787ce631d8cc6efe0bac33367",
+                      "build_fixture.py": "528a3e3eda0c165f333a3ced2d1a657510193d5021d583d1233ea0ae2ff190ff",
+                      "manifest.json": "8b6cc645345e33b404d31aa338c8fb66b0eda72ffc77ad746323c9df13479faa",
+                      "test_green_flow.py": "a3de234595e5a62a12613fd79d6d5238d6dc5dc5146f9b9992e5e171d82d75da",
+                      "test_green_state.py": "a55bf97de915e40dd148303d1766ae05711c09f2734b3fd28f0b6691bc363296",
+                      "test_red_stash.py": "d4d042875402ed43021b6d6a1fd2fac9a2edf0131055dd618c631ad8d0efbdc9",
+                      "test_red_switch.py": "d1f4e1b2fcf4dbcc7fc02ca6a3d853c419fbfe8084aac7aae56d1dd40365aff2"
+                    },
+                    "results": [
+                      {
+                        "id": "RED-STASH-LITERAL-PARITY",
+                        "criteria": [
+                          "AC-1",
+                          "AC-2"
+                        ],
+                        "command": [
+                          "/tmp/storyloop-bench-attempt-e5o3qzd1/venv/bin/python",
+                          "acceptance/changes/FIX-20261104-stash-git-safe/test_red_stash.py"
+                        ],
+                        "cwd": "/tmp/storyloop-smoke-ye_twv15",
+                        "status": "PASS",
+                        "returncode": 0,
+                        "timed_out": false,
+                        "counts": {
+                          "executed": 6,
+                          "failed": 0,
+                          "skipped": 0,
+                          "parser": "unittest"
+                        },
+                        "stdout": "",
+                        "stderr": "test_1_ac2_run_status_and_log_show_the_same_fixed_commands (__main__.RunCollisionStashTests.test_1_ac2_run_status_and_log_show_the_same_fixed_commands) ... ok\ntest_2_ac1_run_hint_stash_pasted_in_shell_from_outside_stashes_only_listed_paths (__main__.RunCollisionStashTests.test_2_ac1_run_hint_stash_pasted_in_shell_from_outside_stashes_only_listed_paths) ... ok\ntest_ac1_run_stop_action_stash_pasted_from_outside_stashes_only_listed_paths (__main__.RunStopActionStashTests.test_ac1_run_stop_action_stash_pasted_from_outside_stashes_only_listed_paths) ... ok\ntest_ac1_status_stash_pasted_in_shell_from_outside_stashes_only_listed_paths (__main__.SavedOldStopStashTests.test_ac1_status_stash_pasted_in_shell_from_outside_stashes_only_listed_paths) ... ok\ntest_ac2_saved_old_stop_is_shown_with_fixed_commands_in_status_and_log (__main__.SavedOldStopStashTests.test_ac2_saved_old_stop_is_shown_with_fixed_commands_in_status_and_log) ... ok\ntest_ac1_status_stop_action_stash_pasted_from_outside_stashes_only_listed_paths (__main__.SavedStopActionStashTests.test_ac1_status_stop_action_stash_pasted_from_outside_stashes_only_listed_paths) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 20.510s\n\nOK\n",
+                        "tier": "fast"
+                      },
+                      {
+                        "id": "RED-SWITCH-PROJECT-BOUND",
+                        "criteria": [
+                          "AC-3"
+                        ],
+                        "command": [
+                          "/tmp/storyloop-bench-attempt-e5o3qzd1/venv/bin/python",
+                          "acceptance/changes/FIX-20261104-stash-git-safe/test_red_switch.py"
+                        ],
+                        "cwd": "/tmp/storyloop-smoke-ye_twv15",
+                        "status": "FAIL",
+                        "returncode": 1,
+                        "timed_out": false,
+                        "counts": {
+                          "executed": 1,
+                          "failed": 1,
+                          "skipped": 0,
+                          "parser": "unittest"
+                        },
+                        "stdout": "",
+                        "stderr": "test_ac3_switch_commands_are_project_bound_without_stash (__main__.LinkedBaseWithoutLegacyTests.test_ac3_switch_commands_are_project_bound_without_stash) ... \n  test_ac3_switch_commands_are_project_bound_without_stash (__main__.LinkedBaseWithoutLegacyTests.test_ac3_switch_commands_are_project_bound_without_stash) (surface='status.next') ... FAIL\n  test_ac3_switch_commands_are_project_bound_without_stash (__main__.LinkedBaseWithoutLegacyTests.test_ac3_switch_commands_are_project_bound_without_stash) (surface='log.next') ... FAIL\n  test_ac3_switch_commands_are_project_bound_without_stash (__main__.LinkedBaseWithoutLegacyTests.test_ac3_switch_commands_are_project_bound_without_stash) (surface='run.next') ... FAIL\ntest_ac3_switch_commands_are_project_bound_without_stash (__main__.LinkedBaseWithoutLegacyTests.test_ac3_switch_commands_are_project_bound_without_stash) ... FAIL\n\n======================================================================\nFAIL: test_ac3_switch_commands_are_project_bound_without_stash (__main__.LinkedBaseWithoutLegacyTests.test_ac3_switch_commands_are_project_bound_without_stash) (surface='status.next')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/tmp/storyloop-smoke-ye_twv15/acceptance/changes/FIX-20261104-stash-git-safe/test_red_switch.py\", line 56, in test_ac3_switch_commands_are_project_bound_without_stash\n    self.assertEqual([s.git_parts(c)[2] for c in commands], [\"switch\", \"switch\"], text)\nAssertionError: Lists differ: ['switch'] != ['switch', 'switch']\n\nSecond list contains 1 additional elements.\nFirst extra element 1:\n'switch'\n\n- ['switch']\n+ ['switch', 'switch'] : 底座草案 BASE-20261104-legacy 已生成：git -C /tmp/tmp6fbtpdoq/project switch main；storyloop approve /tmp/tmp6fbtpdoq/project --change BASE-20261104-legacy；storyloop run /tmp/tmp6fbtpdoq/project --change BASE-20261104-legacy --implementer human；base 通过后 git -C /tmp/tmp6fbtpdoq/project switch feature/FEAT-20261104-001，再",
+                        "tier": "fast"
+                      },
+                      {
+                        "id": "GREEN-APPROVAL-ORDER-NO-AUTO-STASH",
+                        "criteria": [
+                          "AC-4",
+                          "AC-6"
+                        ],
+                        "command": [
+                          "/tmp/storyloop-bench-attempt-e5o3qzd1/venv/bin/python",
+                          "acceptance/changes/FIX-20261104-stash-git-safe/test_green_flow.py"
+                        ],
+                        "cwd": "/tmp/storyloop-smoke-ye_twv15",
+                        "status": "PASS",
+                        "returncode": 0,
+                        "timed_out": false,
+                        "counts": {
+                          "executed": 2,
+                          "failed": 0,
+                          "skipped": 0,
+                          "parser": "unittest"
+                        },
+                        "stdout": "",
+                        "stderr": "test_ac4_approval_command_and_step_order_are_kept (__main__.CollisionFlowTests.test_ac4_approval_command_and_step_order_are_kept) ... ok\ntest_ac6_no_stash_is_created_and_the_choice_stays_with_the_user (__main__.CollisionFlowTests.test_ac6_no_stash_is_created_and_the_choice_stays_with_the_user) ... ok\n\n----------------------------------------------------------------------\nRan 2 tests in 9.488s\n\nOK\n",
+                        "tier": "fast"
+                      },
+                      {
+                        "id": "GREEN-READ-ONLY-VIEWS",
+                        "criteria": [
+                          "AC-5"
+                        ],
+                        "command": [
+                          "/tmp/storyloop-bench-attempt-e5o3qzd1/venv/bin/python",
+                          "acceptance/changes/FIX-20261104-stash-git-safe/test_green_state.py"
+                        ],
+                        "cwd": "/tmp/storyloop-smoke-ye_twv15",
+                        "status": "PASS",
+                        "returncode": 0,
+                        "timed_out": false,
+                        "counts": {
+                          "executed": 1,
+                          "failed": 0,
+                          "skipped": 0,
+                          "parser": "unittest"
+                        },
+                        "stdout": "",
+                        "stderr": "test_ac5_reading_views_preserves_state_workspace_and_stash (__main__.ReadOnlyViewsTests.test_ac5_reading_views_preserves_state_workspace_and_stash) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 1.496s\n\nOK\n",
+                        "tier": "fast"
+                      }
+                    ],
+                    "evidence_path": "/tmp/storyloop-bench-attempt-e5o3qzd1/candidate/.storyloop/evidence/FIX-20261104-stash-git-safe/acceptance-result.json",
+                    "evidence_sha256": "de37c31846bb09e981e59f05e07f9f7a58eecdf466fbb9fd3c07e00558ee9041",
+                    "uncounted": []
+                  },
+                  "smoke": {
+                    "status": "PASSED",
+                    "results": [
+                      {
+                        "id": "cli",
+                        "criteria": [],
+                        "command": [
+                          "/tmp/storyloop-bench-attempt-e5o3qzd1/venv/bin/python",
+                          "-I",
+                          "-B",
+                          "/tmp/storyloop-bench-attempt-e5o3qzd1/engine/storyloop/testing/smoke_harness/launcher.py",
+                          "acceptance/tools/python_smoke.py",
+                          "acceptance/smoke/test_cli.py"
+                        ],
+                        "cwd": "/tmp/storyloop-system-smoke-zo1aacvh",
+                        "status": "PASS",
+                        "returncode": 0,
+                        "timed_out": false,
+                        "counts": {
+                          "executed": 2,
+                          "failed": 0,
+                          "errors": 0,
+                          "skipped": 0,
+                          "code": 0,
+                          "diagnostics": [],
+                          "parser": "storyloop_harness_v1"
+                        },
+                        "stdout": "STORYLOOP_HARNESS_V1={\"code\": 0, \"diagnostics\": [], \"errors\": 0, \"executed\": 2, \"failed\": 0, \"skipped\": 0}\n",
+                        "stderr": ""
+                      }
+                    ],
+                    "suite_digests": {
+                      "manifest.json": "65ac01dabed8d1dbcc31cb6609274b250be843aa143701a0dad0c3952105bd13",
+                      "test_cli.py": "4fbeedb96562405f09abae6477a1d66c2b39fe284cee11478122ec1a1b9ed0ca"
+                    },
+                    "uncounted": []
+                  },
+                  "checks": {
+                    "status": "PASSED",
+                    "results": [
+                      {
+                        "id": "REGRESSION-001",
+                        "criteria": [],
+                        "command": [
+                          "/tmp/storyloop-bench-attempt-e5o3qzd1/venv/bin/python",
+                          "-m",
+                          "ruff",
+                          "check",
+                          "storyloop",
+                          "tests",
+                          "examples"
+                        ],
+                        "cwd": "/tmp/storyloop-regression-9bdsennf",
+                        "status": "PASS",
+                        "returncode": 0,
+                        "timed_out": false,
+                        "counts": {
+                          "executed": null,
+                          "failed": null,
+                          "skipped": null,
+                          "parser": null
+                        },
+                        "stdout": "All checks passed!\n",
+                        "stderr": ""
+                      }
+                    ],
+                    "candidate_sha256": "b14954a81e7c44884e364ec19d995beb4a4839c02a4e2086d1067bffff9a4ed1"
+                  },
+                  "review": {
+                    "verdict": "fail",
+                    "summary": "Verdict: fail. The acceptance layer is red. RED-SWITCH-PROJECT-BOUND (AC-3) fails on status.next, log.next and run.next (test_red_switch.py:56) and again on the branch check (test_red_switch.py:67). All other layers pass: unit/core 922 tests, smoke, ruff checks, RED-STASH-LITERAL-PARITY, GREEN-APPROVAL-ORDER-NO-AUTO-STASH and GREEN-READ-ONLY-VIEWS. A pass verdict cannot override a failed layer.\n\nWhat I checked myself: the no-legacy hint is built at storyloop/stop_report.py:62 as `底座草案 {base} 已生成：{git} switch {source}；…`. The full-width colon sits directly against `git`. The suite splits hint text on SEPARATORS `[；，。\\n]` (_support.py:23). That set has no `：`, so shlex returns the word `已生成：git`. command_lines (_support.py:157-161) only starts a command on a token equal to `git`, so the first `git -C <root> switch main` is dropped. Only the feature switch is found, and zip then pairs it with `main`.\n\nWho owns the fix: four reviewers (correctness, security, architecture, tests) raised ORACLE-AC-3-01 as an oracle MUST_FIX. The oracle-strength reviewer raised IMPL-AC-3-01 as an implementation MUST_FIX and kept the oracle point as ADVISORY. I verified the facts and side with oracle-strength. The contract fixes neither this wording nor the colon form. AC-4 (regression) keeps only the approve command and the step order. The only existing lock on the prefix is tests/test_char_base_hint_next_step.py:44, a startswith('底座草案 BASE-1 已生成：') check that still passes if a space follows the colon. tests/test_failure_routing.py:123 and tests/fixtures/lifecycle/boundary.json are already in the approved touched set and are being edited. So the suite is stricter than the contract on form, but a correct implementation can satisfy it without breaking any must-hold behaviour. Under the review skill that strictness is ADVISORY, and the blocking work belongs to the implementation. The change also makes the first switch a separate, copy-pasteable shell command. I kept ORACLE-AC-3-01 with its fo",
+                    "findings": [
+                      {
+                        "id": "F-1-688882ab49e0a58f",
+                        "criterion_id": "AC-3",
+                        "target": "implementation",
+                        "disposition": "MUST_FIX",
+                        "blocking": true,
+                        "location": "storyloop/stop_report.py:62",
+                        "evidence": "Acceptance RED-SWITCH-PROJECT-BOUND fails at test_red_switch.py:56 with \"['switch'] != ['switch', 'switch']\" on status.next, log.next and run.next, and at :67 with 'feature/FEAT-20261104-001' != 'main'. The hint text is '底座草案 BASE-20261104-legacy 已生成：git -C /tmp/.../project switch main；…'. It comes from stop_report.py:62 `f\"底座草案 {base} 已生成：{git} switch {source}；…\"`, which places `：` directly against `git`. Splitting the shell words gives '已生成：git', so the first switch cannot be extracted (_support.py:23, 157-161). The only existing lock, tests/test_char_base_hint_next_step.py:44, is a startswith('底座草案 BASE-1 已生成：') check that a space after the colon still satisfies.",
+                        "message": "In the no-legacy linked-base hint, the first `git -C <root> switch <source>` is glued to the full-width colon ('已生成：git'). It cannot be extracted or pasted as its own shell command, so AC-3 ('both switch commands target the project repository') is not observable and the acceptance layer is red.",
+                        "required_change": "Input: a saved BASE_CHANGE_REQUIRED run with blocked_by set, source branch main, a feature branch and no legacy_paths, read through storyloop status/log --json and a re-run of storyloop run. Assertion: the git commands shell-split from each ；/，-separated segment of `next` on all three surfaces. Expected: exactly two commands, `git -C <resolved root> switch main` then `git -C <resolved root> switch <feature>`, with no stash text. Emit '已生成： {git} switch …' (a space after the colon, so the startswith characterization still holds), and update tests/test_failure_routing.py:123 and tests/fixtures/lifecycle/boundary.json (results[].next and the log 下一步 line) to match.",
+                        "perspective": "oracle-strength",
+                        "regression_conflict": false,
+                        "severity": "P1",
+                        "confidence": 88,
+                        "introduced": false,
+                        "trigger": "Reading the BASE_CHANGE_REQUIRED next hint for a linked base with no legacy paths, through status, log or run.",
+                        "impact": "AC-3 acceptance is red, and a user who copies the first command gets a token glued to CJK text instead of a clean git command.",
+                        "fix": "Add a space after '：' at stop_report.py:62. Update the exact-text expectation at tests/test_failure_routing.py:123 and the boundary.json golden. Then rerun the acceptance suite, test_failure_routing and test_lifecycle_golden.",
+                        "agent_id": "IMPL-AC-3-01"
+                      },
+                      {
+                        "id": "F-2-78a41341eb142dec",
+                        "criterion_id": "AC-3",
+                        "target": "oracle",
+                        "disposition": "ADVISORY",
+                        "blocking": false,
+                        "location": "acceptance/changes/FIX-20261104-stash-git-safe/_support.py:23",
+                        "evidence": "SEPARATORS = re.compile(r\"[；，。\\n]\") omits the full-width colon '：'. command_lines and raw_command_lines only start a command on a whole word equal to 'git' (_support.py:157-161, 205-225). So in '已生成：git -C R switch main' the first command is dropped. The '已生成：' wording predates this change. The contract does not fix it, and AC-4 preserves only the approve command and the step order. tests/test_char_base_hint_next_step.py:44 checks only the startswith prefix.",
+                        "message": "The AC-3 acceptance parser does not split on the full-width colon, so it drops a git command written directly after '：'. Correctness, security, architecture and tests raised this as an oracle MUST_FIX. The lead reclassified it as ADVISORY: the strictness only fixes a wording form the contract leaves open, an implementation can satisfy it with a space after the colon, and it conflicts with no must-hold behaviour. On the old code it also made RED fail on the command count rather than only on the missing -C.",
+                        "required_change": "Optional, in a future acceptance-repair: add '：' (and similar full-width punctuation) to SEPARATORS at _support.py:23, so that commands glued to the colon are still extracted.",
+                        "perspective": "tests",
+                        "regression_conflict": false,
+                        "severity": "P2",
+                        "confidence": 80,
+                        "introduced": false,
+                        "trigger": "Any no-legacy linked-base hint where the first git command directly follows '已生成：' with no space.",
+                        "impact": "It forces a small wording change the contract does not require, and it weakens the diagnostic value of the AC-3 RED proof.",
+                        "fix": "Add '：' to SEPARATORS in _support.py:23 if the suite is repaired; for now IMPL-AC-3-01 is enough to turn the layer green.",
+                        "agent_id": "ORACLE-AC-3-01"
+                      },
+                      {
+                        "id": "F-3-37d2d7d91db17b72",
+                        "criterion_id": "AC-2",
+                        "target": "implementation",
+                        "disposition": "ADVISORY",
+                        "blocking": false,
+                        "location": "storyloop/stop_report.py:39",
+                        "evidence": "Plan O1-shared-builder (summary, the AC-2 constraint, Files) puts base_change_steps in run_hints.py. The implementation defines it at stop_report.py:39, and run_hints imports it. design.md Decision 2 explains that stop_report importing run_hints would add a cycle member and fail test_no_new_module_joins_a_cycle (storyloop/architecture.toml:254). test_architecture passes.",
+                        "message": "The shared builder lives in stop_report rather than in run_hints as the plan specifies. design.md states the reason, and the single-builder guarantee still holds.",
+                        "required_change": "No change needed. Optionally record in the plan or foundation docs that base_change_steps lives in stop_report and is re-exported through run_hints.",
+                        "perspective": "architecture",
+                        "regression_conflict": false,
+                        "severity": "P2",
+                        "confidence": 85,
+                        "introduced": true,
+                        "trigger": "Comparing the implementation against plan O1-shared-builder's Files section and constraints.",
+                        "impact": "No behaviour change. Hint-building logic now sits in the stop-report module, which may surprise future maintainers.",
+                        "fix": "Optionally document where the builder lives.",
+                        "agent_id": "ARCH-AC-2-01",
+                        "attribution_note": "归属证据不足（未知的 target design），按实现问题处理"
+                      }
+                    ],
+                    "questions": [],
+                    "coverage": [
+                      "Implementation: storyloop/stop_report.py base_change_steps (39-63), _stop_actions, stop_of read-time rebuild (309-313); storyloop/run_hints.py next_step delegation",
+                      "Acceptance layer evidence: RED-STASH-LITERAL-PARITY, RED-SWITCH-PROJECT-BOUND (failing), GREEN-APPROVAL-ORDER-NO-AUTO-STASH, GREEN-READ-ONLY-VIEWS",
+                      "Acceptance suite parser: _support.py SEPARATORS, command_lines, raw_command_lines; test_red_switch.py",
+                      "Characterization lock tests/test_char_base_hint_next_step.py:44",
+                      "Regression update diffs: tests/test_failure_routing.py, tests/test_stop_report.py, tests/fixtures/lifecycle/boundary.json",
+                      "Security: shell quoting, --literal-pathspecs placement, no git execution, no writes in stop_of",
+                      "Architecture: import-cycle rationale for builder placement",
+                      "Design record Tests First entries",
+                      "Not re-run: no tests executed by the lead; relied on the supplied layer evidence"
+                    ],
+                    "checklist": [
+                      {
+                        "decision": "{\"criterion_id\":\"AC-1\",\"path\":\"storyloop/run_hints.py\",\"rule\":\"The stash hint must be exactly `git -C <shlex.quote(str(Path(project).resolve()))> --literal-pathspecs stash push -u -- <shlex.quote(path) for each legacy path, in order>`. --literal-pathspecs is a global option and must come before `stash`.\"}",
+                        "status": "pass"
+                      },
+                      {
+                        "decision": "{\"criterion_id\":\"AC-2\",\"path\":\"storyloop/stop_report.py\",\"rule\":\"_stop_actions must get its legacy-path action text from the same run_hints builder that next_step uses. stop_of must rebuild options for saved stops where saved.status == run.status == BASE_CHANGE_REQUIRED and run.get('blocked_by') is set. It calls _stop_actions(project, run, status, {'blocked_by': run['blocked_by']}) and returns {**saved, 'options': rebuilt} without writing.\"}",
+                        "status": "pass"
+                      },
+                      {
+                        "decision": "{\"criterion_id\":\"AC-3\",\"path\":\"storyloop/run_hints.py\",\"rule\":\"When there are no legacy paths, both switch commands become `git -C <quoted resolved root> switch <branch>`, no stash text appears, and no bare `git switch ` substring remains.\"}",
+                        "status": "issue"
+                      },
+                      {
+                        "decision": "{\"criterion_id\":\"AC-4\",\"path\":\"storyloop/stop_report.py\",\"rule\":\"options[0].command stays `storyloop approve <project as given> --change <base>`. The step order stays: stash, status, switch source, approve, run base, switch feature, run change, then the final take-back-or-discard step. The storyloop commands keep shlex.quote(str(project)) and are not resolved.\"}",
+                        "status": "pass"
+                      },
+                      {
+                        "decision": "{\"criterion_id\":\"AC-5\",\"path\":\"storyloop/stop_report.py\",\"rule\":\"stop_of and next_step stay pure reads: no save_run, no state write, no git invocation.\"}",
+                        "status": "pass"
+                      },
+                      {
+                        "decision": "{\"criterion_id\":\"AC-6\",\"path\":\"storyloop/run_hints.py\",\"rule\":\"The builder only produces text. It never runs git or creates a stash, and it keeps the final text 完成后由你决定取回或丢弃暂存的改动, which leaves the decision to the user.\"}",
+                        "status": "pass"
+                      }
+                    ]
+                  },
+                  "attribution": "oracle",
+                  "epoch": 3,
+                  "mode": null,
+                  "signature": "229ab4656cb416694ab3b138fec1edf322a416f84a9395ff4930d3da1118e191"
+                },
+                "error_details": null
+              }
+            }
+          ],
+          "stop_evidence_path": ".storyloop/bench/evidence/919102a5f69c456f864c430be2eea97e",
+          "candidate_patch_path": null,
+          "termination_reason": "ORACLE_DEFECT",
+          "agent_error": null,
+          "routine_types": {
+            "contract_approval": 1,
+            "design_approval": 2
+          },
+          "nonroutine_types": {
+            "replan": 1,
+            "acceptance_repair": 1
+          },
+          "nonroutine_count": 2,
+          "unknown_events": 0,
+          "calls": 16,
+          "input_tokens": 23039318,
+          "output_tokens": 497978,
+          "agent_ms": 5021170,
+          "wall_ms": 5889076,
+          "known_cost_usd": 49.5766,
+          "cost_coverage": 1.0,
+          "cost_accounting": "COMPLETE"
+        }
+      ],
+      "comparison": {
+        "status": "BASE_ONLY",
+        "reasons": [],
+        "cost_dimension": "COMPARABLE",
+        "base": [
+          "NEEDS_HUMAN"
+        ],
+        "candidate": []
+      }
+    },
+    {
+      "case_id": "dogfood6-design-revision-findings",
+      "case_version": 2,
+      "case_revision": "2.3",
+      "suite_source": "generated",
+      "case_hash": "99c018a934779f940ff5b05305dbec968a496d751c483159e2944ac9af60b252",
+      "contract_sha256": "c85c6b2eaf3b9d95dc35cde4aac6314fff626204b73565d92ece24a5dc19c2f0",
+      "suite_sha256": "c287ef266157cd5600cce07cf020d216332611ecfe94c4e1155c48563ac7885b",
+      "gold_sha256": "2d8f4d2e57a5cdfe2bc89ff0462110c371cfe34d0e4cb45f052f089e121dd535",
+      "attempts": [
+        {
+          "side": "base",
+          "attempt": 1,
+          "status": "AGENT_UNAVAILABLE",
+          "verdict": "NOT_COMPARABLE",
+          "gold_passed": null,
+          "gold_checks": null,
+          "engine_commit": "cab0220b6218b0c2a1bd2c8e461a13657c0c492f",
+          "engine_version": "0.1.0",
+          "engine_python": "/home/jinlin/work/storyloop-bench-venv/bin/python",
+          "attempt_python": "/tmp/storyloop-bench-attempt-yebk0kjm/venv/bin/python",
+          "readiness": null,
+          "readiness_evidence_path": null,
+          "stops": [
+            {
+              "status": "AGENT_UNAVAILABLE",
+              "detail": {
+                "reason": "Oracle strength precheck found weak acceptance assertions",
+                "stop": {
+                  "status": "ORACLE_DEFECT",
+                  "class": "oracle",
+                  "routing": {
+                    "initial": "heavy",
+                    "effective": "heavy",
+                    "history": [],
+                    "rules": [
+                      {
+                        "rule_id": "DEFAULT",
+                        "fields": [
+                          "stories",
+                          "nature",
+                          "existing_files"
+                        ],
+                        "values": [
+                          1,
+                          "fix",
+                          1
+                        ]
+                      },
+                      {
+                        "rule_id": "STANDARD-FLOOR",
+                        "fields": [
+                          "risks.persistent_state"
+                        ],
+                        "values": [
+                          "yes"
+                        ]
+                      },
+                      {
+                        "rule_id": "HEAVY-RISK",
+                        "fields": [
+                          "risks.sensitive",
+                          "risks.external_contract",
+                          "risks.new_interface",
+                          "risks.crosscut"
+                        ],
+                        "values": [
+                          "yes",
+                          "yes",
+                          "yes",
+                          "yes"
+                        ]
+                      }
+                    ],
+                    "budget_source": "tier",
+                    "limit": 4,
+                    "phase": "intake",
+                    "origin": null,
+                    "consumed_attempt": null,
+                    "evidence": [],
+                    "manual_decisions": {
+                      "product": null,
+                      "design": null,
+                      "continue_heavy": null
+                    },
+                    "restore": null,
+                    "restore_history": []
+                  },
+                  "phase": "prepare",
+                  "completed": [
+                    "contract"
+                  ],
+                  "last_verdict": null,
+                  "attempts": [],
+                  "blocker": "Oracle strength precheck found weak acceptance assertions",
+                  "evidence": [
+                    "验收套件 digest: d8f073dbb5b0c64d8b695086edb1db2fce08cf79f3c2b9b3f094f0b7162ceb40",
+                    "判据强度预审: Oracle-strength precheck, round 1, merged from five perspective reports. The acceptance suite reads results through the public storyloop_cli.py status and log commands, run in a subprocess, plus the CLI display of the run result. It prepares state through the real code paths (consistency._outcome and run_stops.pause). Fixture failures go through precondition() and are reported as setup errors, not behaviour failures. AC-1, AC-3, AC-4 and AC-6 cover their own branches adequately. AC-3 and AC-4 (r",
+                    "AC-2 does not check that the status, log and run text show the same summary as the JSON. Text that drops target or severity, or prints message and location on unrelated lines, still passes.",
+                    "AC-5 checks the 300-character limit per field instead of per whole summary, and never measures the rendered summary line in the text output.",
+                    "The check that summaries exclude raw call records can never fail, because the fixture contains no raw call content.",
+                    "No location value carries a credential, so an implementation that runs redact() on the message alone passes AC-5.",
+                    "The legacy-stop branch, where findings are rebuilt from the saved planning.consistency, is never checked for redaction or length.",
+                    "No fixture puts a credential across the 300-character cut, so an implementation that truncates before redacting could leak a partial secret.",
+                    "A single-string summary that puts location before message and then truncates would be rejected, which is slight over-specification.",
+                    "AC-4 does not compare the stop's full key set."
+                  ],
+                  "facts": [],
+                  "questions": [],
+                  "options": [
+                    {
+                      "action": "修正判据",
+                      "command": "storyloop acceptance-repair /tmp/storyloop-bench-attempt-yebk0kjm/candidate --change FIX-20261105-design-revision-findings --reason '<原因>'"
+                    },
+                    {
+                      "action": "人工推翻判据强度预审",
+                      "command": "storyloop run /tmp/storyloop-bench-attempt-yebk0kjm/candidate --change FIX-20261105-design-revision-findings --overrule '<理由>'"
+                    }
+                  ],
+                  "resume": "storyloop acceptance-repair /tmp/storyloop-bench-attempt-yebk0kjm/candidate --change FIX-20261105-design-revision-findings --reason '<原因>'"
+                },
+                "acceptance": {
+                  "status": "ORACLE_DEFECT",
+                  "fixture_repairable": true,
+                  "defect_category": "ORACLE_STRENGTH_PRECHECK",
+                  "precheck": {
+                    "verdict": "fail",
+                    "summary": "Oracle-strength precheck, round 1, merged from five perspective reports. The acceptance suite reads results through the public storyloop_cli.py status and log commands, run in a subprocess, plus the CLI display of the run result. It prepares state through the real code paths (consistency._outcome and run_stops.pause). Fixture failures go through precondition() and are reported as setup errors, not behaviour failures. AC-1, AC-3, AC-4 and AC-6 cover their own branches adequately. AC-3 and AC-4 (rows that must already pass) should pass on the pre-fix code, but no reviewer could run the suite (shell was restricted), so the external RED run must confirm this. Five findings block: one for AC-2 and four for AC-5. Four more are advisory.\n\nMerge decisions:\n- The 'raw call record check can never fail' finding was ranked MUST_FIX by correctness and architecture, and ADVISORY by security, tests and oracle-strength. I kept it as MUST_FIX (ORACLE-AC-5-02). AC-5 is a positive row and R4 is a contracted clause; its only assertions (test_ac5_redacted_bounded.py:182, :186) cannot fail because the fixture has no raw-call content.\n- The security reviewer's 'no secret in the location field' finding was renumbered ORACLE-AC-5-03.\n- The security reviewer's legacy-path redaction finding was renumbered ORACLE-AC-5-04 and kept blocking. R7 requires the legacy stop to show the same summary, and R2/R3 apply to it, so it is a contracted output branch that is never tested.\n- No finding was dropped.\n\nPer perspective:\n- correctness: fail, three blocking gaps (AC-2 text target/severity, AC-5 whole-summary length, AC-5 raw-call vacuity).\n- security: fail, location redaction and legacy-path redaction/length are untested, and the 300-character limit is checked per field.\n- architecture: fail, AC-5 length and raw-call gaps and the AC-2 text check; one over-specification advisory.\n- tests: fail, AC-5 length and AC-2 text checks block; the raw-call check and the AC-4 stop key set are advisory.\n- oracle-",
+                    "findings": [
+                      {
+                        "id": "ORACLE-AC-2-01",
+                        "criterion_id": "AC-2",
+                        "target": "oracle",
+                        "disposition": "MUST_FIX",
+                        "blocking": true,
+                        "location": "acceptance/changes/FIX-20261105-design-revision-findings/test_ac2_status_log_parity.py:171",
+                        "evidence": "Lines 169-172 only assertIn each item's message and location in the status, log and run stop text. The JSON side (assert_listed) requires target, 阻塞, message and location. Every stop block starts with '阻塞点：' (stop_report.py render_stop), so a block-wide search for '阻塞' can never fail. AC-2 says '结构化停点与文本均列出相同的阻塞意见摘要'. R2 requires target and severity 阻塞, and R5 requires the same summary on run, status and log.",
+                        "message": "AC-2 does not check that the status, log and run text show the same summary as the JSON. Text that drops target or severity, or prints message and location on unrelated lines, still passes.",
+                        "required_change": {
+                          "input": "Keep the existing AC-2 fixture: two blocking design findings ('Plan skips the legacy stop migration' at plan:main/constraints/0, 'Plan regression list misses log rendering' at plan:main/regression/0) saved through consistency._outcome. Read the stop text blocks from status, log (storyloop_cli.py without --json) and the run display().",
+                          "assertion": "In each stop block, drop the '阻塞点：' header line. For each finding, find its rendered entry (the line or lines containing its message) and check that the entry also contains 'design', '阻塞' and its location. Count exactly two such entries per surface.",
+                          "expected": "On all three surfaces, each of the two findings appears once with target design, severity 阻塞, its message and its location. This fails on pre-fix code and on any renderer that leaves out target or severity."
+                        },
+                        "perspective": "correctness, architecture, tests, oracle-strength",
+                        "regression_conflict": false,
+                        "severity": "P1",
+                        "confidence": 70,
+                        "introduced": true,
+                        "trigger": "An implementation prints only message and location in the terminal text, or prints it differently in log than in status.",
+                        "impact": "The form_parity row passes while the text views differ from the structured summary that R2 and R5 require.",
+                        "fix": "Check the full per-finding summary in each text block, excluding the header line."
+                      },
+                      {
+                        "id": "ORACLE-AC-5-01",
+                        "criterion_id": "AC-5",
+                        "target": "oracle",
+                        "disposition": "MUST_FIX",
+                        "blocking": true,
+                        "location": "acceptance/changes/FIX-20261105-design-revision-findings/test_ac5_redacted_bounded.py:184",
+                        "evidence": "Lines 183-184 assert len(value)<=300 for each value in strings_of(item), so the limit is per field. The text checks only reject 'L'*301 and 'Q'*301 runs. The fixture message is about 955 characters and the location about 510, so truncating each field to 300 gives a summary of about 600 characters that passes. R3 says '将每条新增展示摘要限制在 300 字符以内'.",
+                        "message": "AC-5 checks the 300-character limit per field instead of per whole summary, and never measures the rendered summary line in the text output.",
+                        "required_change": {
+                          "input": "Keep the existing AC-5 fixture: credential text plus a 900×'L' message at plan:main/constraints/0, and a userinfo-URL message at 'plan:main/'+500×'Q'. Read through the run result, status --json, log --json, and the status, log and run text.",
+                          "assertion": "For each stop.review_findings item, measure len(item) if it is a string, or sum(len(s) for s in strings_of(item)) if it is a dict. In each stop text block, measure every line that carries a finding fragment ('Leaked token=[REDACTED] or 'example.com/repo.git'), after removing the leading indent and list marker.",
+                          "expected": "Every structured summary totals 300 characters or fewer, and every rendered finding line is 300 characters or fewer, on run, status and log."
+                        },
+                        "perspective": "correctness, security, architecture, tests, oracle-strength",
+                        "regression_conflict": false,
+                        "severity": "P1",
+                        "confidence": 75,
+                        "introduced": true,
+                        "trigger": "An implementation truncates message and location separately to 300 characters each.",
+                        "impact": "Summaries of about 600 characters pass, so R3 is not enforced.",
+                        "fix": "Assert the length of the whole summary and of each rendered finding line."
+                      },
+                      {
+                        "id": "ORACLE-AC-5-02",
+                        "criterion_id": "AC-5",
+                        "target": "oracle",
+                        "disposition": "MUST_FIX",
+                        "blocking": true,
+                        "location": "acceptance/changes/FIX-20261105-design-revision-findings/test_ac5_redacted_bounded.py:182",
+                        "evidence": "Line 182 (RAW_CALL_KEYS against top-level keys) and line 186 ('.storyloop/calls' absent) assert that something is absent, but the fixture (finding() and consistency_state) holds only target, criterion_id, location, blocking and message. It has no call folder, ledger, call or evidence data. Both assertions pass for any implementation, including one that copies whole stored dicts. AC-5 says '不含…原始调用记录' and R4 says '从新增意见摘要中排除原始代理调用记录'.",
+                        "message": "The check that summaries exclude raw call records can never fail, because the fixture contains no raw call content.",
+                        "required_change": {
+                          "input": "In the AC-5 fixture, add to one blocking design finding the keys 'call':'CALL-raw-01' and 'evidence':'see .storyloop/calls/CALL-raw-01/response.json stdout RAWCALL-MARKER'. Also add a record-level 'transcript':'RAWCALL-MARKER request/response' to planning.consistency. Prepare the stop through the same _outcome path.",
+                          "assertion": "Serialize each stop.review_findings list (run, status, log), check nested keys against RAW_CALL_KEYS, and search the serialized JSON and each stop text block.",
+                          "expected": "No RAW_CALL_KEYS key appears at any depth. 'RAWCALL-MARKER', 'CALL-raw-01' and '.storyloop/calls' appear in no review_findings and no stop text, while the two redacted blocking summaries are still listed."
+                        },
+                        "perspective": "correctness, architecture, security, tests, oracle-strength",
+                        "regression_conflict": false,
+                        "severity": "P1",
+                        "confidence": 65,
+                        "introduced": true,
+                        "trigger": "An implementation copies stored finding dicts, evidence or call data into stop.review_findings.",
+                        "impact": "The R4 ban on raw call records is not verified.",
+                        "fix": "Seed raw call content with a unique marker so the exclusion assertions can fail."
+                      },
+                      {
+                        "id": "ORACLE-AC-5-03",
+                        "criterion_id": "AC-5",
+                        "target": "oracle",
+                        "disposition": "MUST_FIX",
+                        "blocking": true,
+                        "location": "acceptance/changes/FIX-20261105-design-revision-findings/test_ac5_redacted_bounded.py:155",
+                        "evidence": "Lines 151-155: every credential sits in a message. The locations are 'plan:main/constraints/0' and 'plan:main/'+'Q'*500, and neither holds a secret. R2 requires message and location to be shown after redact(). The AC-5 method steps list long locations, and AC-5 requires every summary to be redacted.",
+                        "message": "No location value carries a credential, so an implementation that runs redact() on the message alone passes AC-5.",
+                        "required_change": {
+                          "input": "Add a blocking design finding whose location is 'plan:main/constraints/1 api_key=[REDACTED] https://[REDACTED]@example.com/x' and whose message is a short plain message.",
+                          "assertion": "Search the JSON review_findings and the stop text from run, status and log.",
+                          "expected": "'LocSecretKey77' and 'LocUrlPw88' never appear. That finding's summary contains 'api_key=[REDACTED] and 'https://[REDACTED]@example.com/x'."
+                        },
+                        "perspective": "security",
+                        "regression_conflict": false,
+                        "severity": "P1",
+                        "confidence": 70,
+                        "introduced": true,
+                        "trigger": "An implementation redacts only the message and copies the location verbatim.",
+                        "impact": "A credential in a location leaks into stop output without detection.",
+                        "fix": "Put credential-shaped text in a location and assert it is redacted."
+                      },
+                      {
+                        "id": "ORACLE-AC-5-04",
+                        "criterion_id": "AC-5",
+                        "target": "oracle",
+                        "disposition": "MUST_FIX",
+                        "blocking": true,
+                        "location": "acceptance/changes/FIX-20261105-design-revision-findings/test_ac6_legacy_stop.py:110",
+                        "evidence": "In test_ac6_legacy_stop.py:108-111 the saved findings are plain short messages. test_ac5 reaches only the new-stop path through consistency._outcome. stop_of (stop_report.py around 290-313) is a separate display path for legacy stops. R7 requires legacy stops to show '同样的阻塞意见摘要', so R2 (redacted) and R3 (at most 300 characters) apply there too. The branch where the legacy stop is redacted and bounded is never exercised.",
+                        "message": "The legacy-stop branch, where findings are rebuilt from the saved planning.consistency, is never checked for redaction or length.",
+                        "required_change": {
+                          "input": "A legacy run file (stop without review_findings, written as in test_ac6 legacy_run) whose saved blocking design findings have the message 'Leaked token=[REDACTED] '+'L'*900 and the location 'plan:main/'+'Q'*500, plus a finding whose message is 'Clone https://[REDACTED]@example.com/repo.git'.",
+                          "assertion": "Check stop.review_findings and the stop text from status and log, with and without --json, then compare the run file bytes before and after.",
+                          "expected": "'token=[REDACTED] and 'https://[REDACTED]@example.com' appear and no raw secret appears. Every summary is 300 characters or fewer, and the run file is byte-for-byte unchanged."
+                        },
+                        "perspective": "security",
+                        "regression_conflict": false,
+                        "severity": "P1",
+                        "confidence": 60,
+                        "introduced": true,
+                        "trigger": "The legacy fallback renders saved findings without the same redaction and truncation as new stops.",
+                        "impact": "Users with stops saved before the fix, the population AC-6 targets, could see secrets that were never redacted.",
+                        "fix": "Add a legacy-stop case with secrets and long content to AC-5, or extend AC-6 with these checks."
+                      },
+                      {
+                        "id": "ORACLE-AC-5-05",
+                        "criterion_id": "AC-5",
+                        "target": "oracle",
+                        "disposition": "ADVISORY",
+                        "blocking": false,
+                        "location": "acceptance/changes/FIX-20261105-design-revision-findings/test_ac5_redacted_bounded.py:151",
+                        "evidence": "The secrets sit near the start of the strings, far from the 300-character cut. storyloop/processutil.py:40 provides redaction_prefix for the case where truncation happens before redaction.",
+                        "message": "No fixture puts a credential across the 300-character cut, so an implementation that truncates before redacting could leak a partial secret.",
+                        "required_change": "Optionally add the message 'x'*280+' https://[REDACTED]@example.com', and assert that no prefix of 'BoundarySecret9' longer than 3 characters appears.",
+                        "perspective": "security",
+                        "regression_conflict": false,
+                        "severity": "P2",
+                        "confidence": 45,
+                        "introduced": true,
+                        "trigger": "An implementation truncates to 300 characters and then calls redact().",
+                        "impact": "A partial password could be shown.",
+                        "fix": "Add a credential that straddles the truncation boundary."
+                      },
+                      {
+                        "id": "ORACLE-AC-5-06",
+                        "criterion_id": "AC-5",
+                        "target": "oracle",
+                        "disposition": "ADVISORY",
+                        "blocking": false,
+                        "location": "acceptance/changes/FIX-20261105-design-revision-findings/test_ac5_redacted_bounded.py:145",
+                        "evidence": "LONG_LOCATION='Q'*500, yet the expected tuple requires the full 'Clone https://[REDACTED]@example.com/repo.git before merge' in the same item. The contract does not set field order or how the length budget is split.",
+                        "message": "A single-string summary that puts location before message and then truncates would be rejected, which is slight over-specification.",
+                        "required_change": "Optionally match a shorter message prefix, or accept truncation of either field.",
+                        "perspective": "architecture",
+                        "regression_conflict": false,
+                        "severity": "P2",
+                        "confidence": 45,
+                        "introduced": true,
+                        "trigger": "A summary string with location first, truncated to 300 characters.",
+                        "impact": "Implementations must budget the length explicitly; this is easy to satisfy.",
+                        "fix": "Relax the message match to a prefix."
+                      },
+                      {
+                        "id": "ORACLE-AC-4-01",
+                        "criterion_id": "AC-4",
+                        "target": "oracle",
+                        "disposition": "ADVISORY",
+                        "blocking": false,
+                        "location": "acceptance/changes/FIX-20261105-design-revision-findings/test_ac4_other_stops_unchanged.py:134",
+                        "evidence": "Selected fields (blocker, options, resume, evidence, facts, questions, attempts) are compared one by one, and a MARKER search covers the rest.",
+                        "message": "AC-4 does not compare the stop's full key set.",
+                        "required_change": "Optionally assert that the stop's key set equals the pre-fix key set.",
+                        "perspective": "tests",
+                        "regression_conflict": false,
+                        "severity": "P2",
+                        "confidence": 50,
+                        "introduced": true,
+                        "trigger": "New keys are added to other stop statuses.",
+                        "impact": "Minor, because the MARKER check already catches leaked findings.",
+                        "fix": "Add a key-set equality assertion."
+                      }
+                    ],
+                    "questions": [],
+                    "suite_digests": {
+                      "manifest.json": "31db683b9e4ad49ecf1b3fbeb180fe3ae06a8b67fbb9a25a8555be500ae8a69e",
+                      "test_ac1_status_findings.py": "8c80c730c2beb9964e8b8c3ae8e70d57a0c8c0a6f2f3dd8319f1f59f868d83e7",
+                      "test_ac2_status_log_parity.py": "0c660ddce3c9ac7a5df1c3123424cbfc065f1d96df3d332358ec8485111f035f",
+                      "test_ac3_state_preserved.py": "476279ddfd1eb450a916712917c096bfede5b01f95b085b14edc7d90955bf541",
+                      "test_ac4_other_stops_unchanged.py": "648d422df57c40488a6dfd71c84a3c2737310f4d2fd387f00e1f698bf11b47d2",
+                      "test_ac5_redacted_bounded.py": "caa9031e37b3587637c9b3b506ee566f9d9dd9fe534f4d37fe30ad24374d0f0d",
+                      "test_ac6_legacy_stop.py": "c5c5cf7e8795c7e4f2125546cd80b7b62822cd6e5c046e5d784dbba381251cb4"
+                    }
+                  },
+                  "suite_digest": "d8f073dbb5b0c64d8b695086edb1db2fce08cf79f3c2b9b3f094f0b7162ceb40"
+                },
+                "failure": null,
+                "error_details": {
+                  "role": "acceptance"
+                }
+              }
+            }
+          ],
+          "stop_evidence_path": null,
+          "candidate_patch_path": null,
+          "termination_reason": "AGENT_UNAVAILABLE",
+          "agent_error": "Project agent process failed safely (exit 1 | claude acceptance ended with success: You've hit your 5-hour limit · resets 4:50am (America/Los_Angeles))",
+          "routine_types": {
+            "contract_approval": 1
+          },
+          "nonroutine_types": {},
+          "nonroutine_count": 0,
+          "unknown_events": 0,
+          "calls": 3,
+          "input_tokens": null,
+          "output_tokens": null,
+          "agent_ms": 786258,
+          "wall_ms": 956972,
+          "known_cost_usd": 9.1064,
+          "cost_coverage": 0.6666666666666666,
+          "cost_accounting": "PARTIAL"
+        }
+      ],
+      "comparison": {
+        "status": "NOT_COMPARABLE",
+        "reasons": [
+          "incomplete evidence"
+        ],
+        "cost_dimension": "NOT_COMPARABLE"
+      }
+    },
+    {
+      "case_id": "dogfood10-repair-next-path",
+      "case_version": 2,
+      "case_revision": "2.1",
+      "suite_source": "generated",
+      "case_hash": "d03ee2178566b18d85121c162804aeb57e8a951dbbf1a6a0ee702901a05323a2",
+      "contract_sha256": "bb34887db3b4a02e0d62efb4f8e5abf577fb3ebc45c7bc9db7da0dafd667a9d9",
+      "suite_sha256": "6270e84942c4b56a5dad5376426cfabff426d652988884629f6c943d0d8e6607",
+      "gold_sha256": "1a8c6784faf3137745024389b65f4523d26208b81b8233c0d69c61e974d61a06",
+      "attempts": [
+        {
+          "side": "base",
+          "attempt": 1,
+          "status": "AGENT_UNAVAILABLE",
+          "verdict": "NOT_COMPARABLE",
+          "gold_passed": null,
+          "gold_checks": null,
+          "engine_commit": "cab0220b6218b0c2a1bd2c8e461a13657c0c492f",
+          "engine_version": "0.1.0",
+          "engine_python": "/home/jinlin/work/storyloop-bench-venv/bin/python",
+          "attempt_python": "/tmp/storyloop-bench-attempt-z2v36yrk/venv/bin/python",
+          "readiness": null,
+          "readiness_evidence_path": null,
+          "stops": [
+            {
+              "status": "AGENT_UNAVAILABLE",
+              "detail": {
+                "reason": "Project agent process failed safely (exit 1 | claude acceptance ended with success: You've hit your 5-hour limit · resets 4:50am (America/Los_Angeles))",
+                "stop": {},
+                "acceptance": null,
+                "failure": null,
+                "error_details": {
+                  "role": "acceptance"
+                }
+              }
+            }
+          ],
+          "stop_evidence_path": null,
+          "candidate_patch_path": null,
+          "termination_reason": "AGENT_UNAVAILABLE",
+          "agent_error": "Project agent process failed safely (exit 1 | claude acceptance ended with success: You've hit your 5-hour limit · resets 4:50am (America/Los_Angeles))",
+          "routine_types": {
+            "contract_approval": 1
+          },
+          "nonroutine_types": {},
+          "nonroutine_count": 0,
+          "unknown_events": 0,
+          "calls": 1,
+          "input_tokens": null,
+          "output_tokens": null,
+          "agent_ms": 2538,
+          "wall_ms": 178697,
+          "known_cost_usd": null,
+          "cost_coverage": 0.0,
+          "cost_accounting": "UNAVAILABLE"
+        }
+      ],
+      "comparison": {
+        "status": "NOT_COMPARABLE",
+        "reasons": [
+          "incomplete evidence"
+        ],
+        "cost_dimension": "NOT_COMPARABLE"
+      }
+    }
+  ],
+  "aborted": {
+    "reason": "AGENT_UNAVAILABLE",
+    "case_id": "dogfood10-repair-next-path",
+    "attempt": 1,
+    "detail": "Project agent process failed safely (exit 1 | claude acceptance ended with success: You've hit your 5-hour limit · resets 4:50am (America/Los_Angeles))",
+    "agent_reason": "quota"
+  }
+}

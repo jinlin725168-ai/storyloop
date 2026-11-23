@@ -1,0 +1,974 @@
+{
+  "run_id": "c8c24d1b565e4f1da1896f001aeb2b39",
+  "created_at": "2026-11-22T16:38:05.154830+00:00",
+  "case_version": 2,
+  "case_revision": "2.3",
+  "scope": "base-only",
+  "suite_source": "generated",
+  "base_engine_commit": "cab0220b6218b0c2a1bd2c8e461a13657c0c492f",
+  "candidate_engine_commit": "",
+  "adapter": "claude",
+  "model": "opus",
+  "budget": {
+    "max_calls": 20,
+    "max_wall_seconds": 14400
+  },
+  "gold_python": {
+    "path": "/home/jinlin/work/storyloop-dogfood-venv-main/bin/python",
+    "version": "3.11.15",
+    "requirement": {
+      "dependencies": "Python standard library and the frozen StoryLoop source tree; no extra Gold package",
+      "version": "3.11"
+    }
+  },
+  "scoring_contract": {
+    "version": 3,
+    "pass_requires": [
+      "PASSED",
+      "gold_passed"
+    ],
+    "attempts_per_side": 1,
+    "nonroutine_policy": "bounded_recovery",
+    "nonroutine_budget": 1,
+    "missing_evidence": "NOT_COMPARABLE",
+    "cost_policy": "report_separately"
+  },
+  "cases": [
+    {
+      "case_id": "dogfood6-design-revision-findings",
+      "case_version": 2,
+      "case_revision": "2.3",
+      "suite_source": "generated",
+      "case_hash": "99c018a934779f940ff5b05305dbec968a496d751c483159e2944ac9af60b252",
+      "contract_sha256": "c85c6b2eaf3b9d95dc35cde4aac6314fff626204b73565d92ece24a5dc19c2f0",
+      "suite_sha256": "c287ef266157cd5600cce07cf020d216332611ecfe94c4e1155c48563ac7885b",
+      "gold_sha256": "2d8f4d2e57a5cdfe2bc89ff0462110c371cfe34d0e4cb45f052f089e121dd535",
+      "attempts": [
+        {
+          "side": "base",
+          "attempt": 1,
+          "status": "AGENT_UNAVAILABLE",
+          "verdict": "NOT_COMPARABLE",
+          "gold_passed": null,
+          "gold_checks": null,
+          "engine_commit": "cab0220b6218b0c2a1bd2c8e461a13657c0c492f",
+          "engine_version": "0.1.0",
+          "engine_python": "/home/jinlin/work/storyloop-bench-venv/bin/python",
+          "attempt_python": "/tmp/storyloop-bench-attempt-f0ibt9c7/venv/bin/python",
+          "readiness": null,
+          "readiness_evidence_path": null,
+          "stops": [
+            {
+              "status": "DESIGN_APPROVAL_REQUIRED",
+              "detail": {
+                "reason": "DESIGN_APPROVAL_REQUIRED",
+                "stop": {
+                  "status": "DESIGN_APPROVAL_REQUIRED",
+                  "class": "human",
+                  "routing": {
+                    "initial": "heavy",
+                    "effective": "heavy",
+                    "history": [
+                      {
+                        "stage": "L2",
+                        "attempt": 0,
+                        "from_tier": "heavy",
+                        "to_tier": "heavy",
+                        "assessment_digest": "70cd492f0a93240a2bead5bee23a7bcd13da87e5abeeaa3dd1e5862a82abfc77",
+                        "reason": [
+                          {
+                            "rule_id": "DEFAULT",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "STANDARD-FLOOR",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "HEAVY-RISK",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          }
+                        ]
+                      }
+                    ],
+                    "rules": [
+                      {
+                        "rule_id": "DEFAULT",
+                        "fields": [
+                          "stories",
+                          "nature",
+                          "existing_files"
+                        ],
+                        "values": [
+                          1,
+                          "fix",
+                          1
+                        ]
+                      },
+                      {
+                        "rule_id": "STANDARD-FLOOR",
+                        "fields": [
+                          "risks.persistent_state"
+                        ],
+                        "values": [
+                          "yes"
+                        ]
+                      },
+                      {
+                        "rule_id": "HEAVY-RISK",
+                        "fields": [
+                          "risks.sensitive",
+                          "risks.external_contract",
+                          "risks.new_interface",
+                          "risks.crosscut"
+                        ],
+                        "values": [
+                          "yes",
+                          "yes",
+                          "yes",
+                          "yes"
+                        ]
+                      }
+                    ],
+                    "budget_source": "tier",
+                    "limit": 4,
+                    "phase": "intake",
+                    "origin": null,
+                    "consumed_attempt": null,
+                    "evidence": [
+                      {
+                        "field": "existing_files",
+                        "value": 1,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "created_files",
+                        "value": 0,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "interfaces",
+                        "value": 4,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "max_references",
+                        "value": 7,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "classification",
+                        "value": {
+                          "kind": "workspace_config",
+                          "digest": "980e10fada486f5f02a73f164aecd3c601c2f0ea00f9c7df970510447896c434",
+                          "commit_bound": false
+                        },
+                        "source": "engine",
+                        "locations": [
+                          ".storyloop/config.json"
+                        ],
+                        "commit": null
+                      },
+                      {
+                        "field": "hotspots",
+                        "value": {
+                          "storyloop/stop_report.py": 1
+                        },
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/processutil.py:23",
+                          "storyloop/processutil.py:40",
+                          "storyloop/stop_report.py:264",
+                          "storyloop/run_stops.py:31"
+                        ],
+                        "search_scope": [
+                          "storyloop/processutil.py",
+                          "storyloop/stop_report.py",
+                          "storyloop/run_stops.py",
+                          "storyloop/role_schemas.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.migration",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:301",
+                          "storyloop/stop_report.py:310",
+                          "storyloop/project_loop.py:191"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py",
+                          "storyloop/project_loop.py",
+                          "storyloop/run_stops.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.external_contract",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/cli_output.py:31",
+                          "storyloop/stop_report.py:264",
+                          "storyloop/change_log.py:34"
+                        ],
+                        "search_scope": [
+                          "storyloop/cli_output.py",
+                          "storyloop/stop_report.py",
+                          "storyloop/change_log.py",
+                          "storyloop/product_cli.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.new_interface",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:264",
+                          "storyloop/stop_report.py:314"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py",
+                          "storyloop/cli_output.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.crosscut",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/product_cli.py:117",
+                          "storyloop/change_log.py:34",
+                          "storyloop/change_log.py:85",
+                          "storyloop/cli_output.py:31",
+                          "storyloop/run_stops.py:32"
+                        ],
+                        "search_scope": [
+                          "storyloop/product_cli.py",
+                          "storyloop/change_log.py",
+                          "storyloop/cli_output.py",
+                          "storyloop/run_stops.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.principle_deviation",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:258",
+                          "storyloop/stop_report.py:304"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.hard_verify_high_cost",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "tests/test_stop_report.py:22",
+                          "tests/test_stop_report.py:136"
+                        ],
+                        "search_scope": [
+                          "tests/test_stop_report.py",
+                          "acceptance/changes/FIX-20261105-design-revision-findings/support.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.dependency_swap",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:5",
+                          "storyloop/stop_report.py:7"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.persistent_state",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_stops.py:31",
+                          "storyloop/run_stops.py:32",
+                          "storyloop/stop_report.py:301"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_stops.py",
+                          "storyloop/stop_report.py",
+                          "storyloop/project_loop.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.human_choice",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/routing_report.py:27",
+                          "storyloop/routing_report.py:28"
+                        ],
+                        "search_scope": [
+                          "storyloop/routing_report.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:258",
+                          "storyloop/processutil.py:23"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py",
+                          "storyloop/processutil.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      }
+                    ],
+                    "manual_decisions": {
+                      "product": null,
+                      "design": null,
+                      "continue_heavy": null
+                    },
+                    "restore": null,
+                    "restore_history": []
+                  },
+                  "phase": "planning",
+                  "completed": [
+                    "contract",
+                    "acceptance_red"
+                  ],
+                  "last_verdict": null,
+                  "attempts": [],
+                  "blocker": "DESIGN_APPROVAL_REQUIRED",
+                  "evidence": [
+                    "方案选项 conditional-key-stop-report：Change only storyloop/stop_report.py. A new private helper (named in the design prose; it is not declared as an existing symbol) projects the saved consistency findings: it keeps only blocking==True items and maps each one to exactly {target, severity:'阻塞', message, location}. message and location go through processutil.redact and are then bounded with redaction_prefix so that target+severity+message+location stay within 300 characters. build_stop adds stop['review_findings'] only when status is DESIGN_REVISION_REQUIRED and the list is non-empty. stop_of adds the same key in memory to legacy saved DESIGN_REVISION_REQUIRED stops that lack it, taken from run.planning.consistency, and never saves. render_stop adds a '方案阻塞意见：' section, one line per finding, between questions and options. run, status and log already share these three functions, so every view gets the same summary.（全文：.storyloop/state/runs/FIX-20261105-design-revision-findings.json → planning.plan）",
+                    "涉及文件：storyloop/stop_report.py、tests/test_design_revision_findings.py",
+                    "Risks：sensitive: yes、migration: no、external_contract: yes、new_interface: yes、crosscut: yes、principle_deviation: no、hard_verify_high_cost: no、dependency_swap: no；共 11 项，完整内容见 .storyloop/state/runs/FIX-20261105-design-revision-findings.json → planning.plan",
+                    "Decisions：1. **Choice:** change only storyloop/stop_report.py. **Rationale:** every consumer meets there. **Alternatives considered:** adding the list in consistency.py or cli_output.py, which spreads one change over several modules and misses the log view or the old saved stops. 2. **Choice:** add review_findings only when status == DESIGN_REVISION_REQUIRED and at least one blocking finding exists. **Ratio…完整内容见 .storyloop/state/runs/FIX-20261105-design-revision-findings.json → planning.plan"
+                  ],
+                  "facts": [
+                    {
+                      "statement": "build_stop assembles the stop with fixed keys and never reads details['findings'].",
+                      "location": "storyloop/stop_report.py:264",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "stop_of returns a saved stop unchanged when its status matches the run status (legacy path for AC-6).",
+                      "location": "storyloop/stop_report.py:310",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "An existing unit test asserts that build_stop's key set equals KEYS for every display stop status, built from a state without findings.",
+                      "location": "tests/test_stop_report.py:140",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "redaction_prefix bounds a prefix without exposing URL userinfo that is cut before its @.",
+                      "location": "storyloop/processutil.py:40",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "The acceptance fixture builds stops through storyloop.run_stops.pause with findings=, and the severity literal must equal '阻塞' as a string value.",
+                      "location": "acceptance/changes/FIX-20261105-design-revision-findings/support.py:253",
+                      "role": "design",
+                      "attempt": 0
+                    }
+                  ],
+                  "questions": [],
+                  "options": [
+                    {
+                      "action": "明确决定后继续",
+                      "command": "storyloop approve /tmp/storyloop-bench-attempt-f0ibt9c7/candidate --change FIX-20261105-design-revision-findings --design f4ef459eaf56e29fed6ffabda46fcc9d7c10adcedc8a6dcfc39c092fb6b5eda6"
+                    }
+                  ],
+                  "resume": "storyloop approve /tmp/storyloop-bench-attempt-f0ibt9c7/candidate --change FIX-20261105-design-revision-findings --design f4ef459eaf56e29fed6ffabda46fcc9d7c10adcedc8a6dcfc39c092fb6b5eda6"
+                },
+                "acceptance": null,
+                "failure": null,
+                "error_details": null
+              }
+            },
+            {
+              "status": "AGENT_UNAVAILABLE",
+              "detail": {
+                "reason": "Project agent process failed safely (exit 1 | claude implement ended with success: API Error: Request blocked before it reached Anthropic's API (HTTP 403) · the network this request came from isn't allowed: usually an unsupported region, or a VPN, proxy or hosting network · signing in again won't change this · check your VPN or network and retry · supported regions: https://anthropic.com/supported-countries)",
+                "stop": {
+                  "status": "AGENT_UNAVAILABLE",
+                  "class": "infrastructure",
+                  "reason": "network",
+                  "routing": {
+                    "initial": "heavy",
+                    "effective": "heavy",
+                    "history": [
+                      {
+                        "stage": "L2",
+                        "attempt": 0,
+                        "from_tier": "heavy",
+                        "to_tier": "heavy",
+                        "assessment_digest": "70cd492f0a93240a2bead5bee23a7bcd13da87e5abeeaa3dd1e5862a82abfc77",
+                        "reason": [
+                          {
+                            "rule_id": "DEFAULT",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "STANDARD-FLOOR",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          },
+                          {
+                            "rule_id": "HEAVY-RISK",
+                            "fields": "[TRUNCATED]",
+                            "values": "[TRUNCATED]"
+                          }
+                        ]
+                      }
+                    ],
+                    "rules": [
+                      {
+                        "rule_id": "DEFAULT",
+                        "fields": [
+                          "stories",
+                          "nature",
+                          "existing_files"
+                        ],
+                        "values": [
+                          1,
+                          "fix",
+                          1
+                        ]
+                      },
+                      {
+                        "rule_id": "STANDARD-FLOOR",
+                        "fields": [
+                          "risks.persistent_state"
+                        ],
+                        "values": [
+                          "yes"
+                        ]
+                      },
+                      {
+                        "rule_id": "HEAVY-RISK",
+                        "fields": [
+                          "risks.sensitive",
+                          "risks.external_contract",
+                          "risks.new_interface",
+                          "risks.crosscut"
+                        ],
+                        "values": [
+                          "yes",
+                          "yes",
+                          "yes",
+                          "yes"
+                        ]
+                      }
+                    ],
+                    "budget_source": "tier",
+                    "limit": 4,
+                    "phase": "intake",
+                    "origin": null,
+                    "consumed_attempt": null,
+                    "evidence": [
+                      {
+                        "field": "existing_files",
+                        "value": 1,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "created_files",
+                        "value": 0,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "interfaces",
+                        "value": 4,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "max_references",
+                        "value": 7,
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "no",
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "classification",
+                        "value": {
+                          "kind": "workspace_config",
+                          "digest": "980e10fada486f5f02a73f164aecd3c601c2f0ea00f9c7df970510447896c434",
+                          "commit_bound": false
+                        },
+                        "source": "engine",
+                        "locations": [
+                          ".storyloop/config.json"
+                        ],
+                        "commit": null
+                      },
+                      {
+                        "field": "hotspots",
+                        "value": {
+                          "storyloop/stop_report.py": 1
+                        },
+                        "source": "engine",
+                        "locations": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.sensitive",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/processutil.py:23",
+                          "storyloop/processutil.py:40",
+                          "storyloop/stop_report.py:264",
+                          "storyloop/run_stops.py:31"
+                        ],
+                        "search_scope": [
+                          "storyloop/processutil.py",
+                          "storyloop/stop_report.py",
+                          "storyloop/run_stops.py",
+                          "storyloop/role_schemas.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.migration",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:301",
+                          "storyloop/stop_report.py:310",
+                          "storyloop/project_loop.py:191"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py",
+                          "storyloop/project_loop.py",
+                          "storyloop/run_stops.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.external_contract",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/cli_output.py:31",
+                          "storyloop/stop_report.py:264",
+                          "storyloop/change_log.py:34"
+                        ],
+                        "search_scope": [
+                          "storyloop/cli_output.py",
+                          "storyloop/stop_report.py",
+                          "storyloop/change_log.py",
+                          "storyloop/product_cli.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.new_interface",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:264",
+                          "storyloop/stop_report.py:314"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py",
+                          "storyloop/cli_output.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.crosscut",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/product_cli.py:117",
+                          "storyloop/change_log.py:34",
+                          "storyloop/change_log.py:85",
+                          "storyloop/cli_output.py:31",
+                          "storyloop/run_stops.py:32"
+                        ],
+                        "search_scope": [
+                          "storyloop/product_cli.py",
+                          "storyloop/change_log.py",
+                          "storyloop/cli_output.py",
+                          "storyloop/run_stops.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.principle_deviation",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:258",
+                          "storyloop/stop_report.py:304"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.hard_verify_high_cost",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "tests/test_stop_report.py:22",
+                          "tests/test_stop_report.py:136"
+                        ],
+                        "search_scope": [
+                          "tests/test_stop_report.py",
+                          "acceptance/changes/FIX-20261105-design-revision-findings/support.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.dependency_swap",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:5",
+                          "storyloop/stop_report.py:7"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.persistent_state",
+                        "value": "yes",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/run_stops.py:31",
+                          "storyloop/run_stops.py:32",
+                          "storyloop/stop_report.py:301"
+                        ],
+                        "search_scope": [
+                          "storyloop/run_stops.py",
+                          "storyloop/stop_report.py",
+                          "storyloop/project_loop.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.human_choice",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/routing_report.py:27",
+                          "storyloop/routing_report.py:28"
+                        ],
+                        "search_scope": [
+                          "storyloop/routing_report.py",
+                          "storyloop/stop_report.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      },
+                      {
+                        "field": "risks.guard",
+                        "value": "no",
+                        "source": "role",
+                        "locations": [
+                          "storyloop/stop_report.py:258",
+                          "storyloop/processutil.py:23"
+                        ],
+                        "search_scope": [
+                          "storyloop/stop_report.py",
+                          "storyloop/processutil.py"
+                        ],
+                        "commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9"
+                      }
+                    ],
+                    "manual_decisions": {
+                      "product": null,
+                      "design": {
+                        "actor": "user",
+                        "time": "2026-11-22T17:11:14.511632+00:00",
+                        "binding": {
+                          "product_digest": "cb8f56934bae415b3bd82536d2438baad645f2470dd37f712e669ea6516de9ee",
+                          "source_commit": "8a909687387f6d9edd0fcf3c09f29c159cbba3c9",
+                          "scope_digest": "40f868f2ba2a89948d81a9d5520ffa2a401c460dd37ed0da11121be959c12b64",
+                          "suite_digest": "3dd78f57bbb5036e72a87e7d5c5aba58934d618c0d3ed9a889be895de9c5280e",
+                          "policy_digest": "152717bb54cd3949e38cb8aea87616f936d3d21977074283952bc41ba35d827d",
+                          "principles_digest": null,
+                          "baseline_digest": "b7b0c557ad86cc91d914efb4ef29319d56e87e12bbfcf1aada2667398e3b6404"
+                        },
+                        "plan_id": "f4ef459eaf56e29fed6ffabda46fcc9d7c10adcedc8a6dcfc39c092fb6b5eda6",
+                        "option_id": "conditional-key-stop-report",
+                        "selected_option": "conditional-key-stop-report"
+                      },
+                      "continue_heavy": null
+                    },
+                    "restore": null,
+                    "restore_history": []
+                  },
+                  "phase": "prepare",
+                  "completed": [
+                    "contract",
+                    "acceptance_red",
+                    "characterization"
+                  ],
+                  "last_verdict": null,
+                  "attempts": [],
+                  "blocker": "Project agent process failed safely (exit 1 | claude implement ended with success: API Error: Request blocked before it reached Anthropic's API (HTTP 403) · the network this request came from isn't allowed: usually an unsupported region, or a VPN, proxy or hosting network · signing in again won't change this · check your VPN or network and retry · supported regions: https://anthropic.com/supported-countries)",
+                  "evidence": [
+                    "AGENT_UNAVAILABLE；role=implement；attempt=1；Project agent process failed safely (exit 1 | claude implement ended with success: API Error: Request blocked before it reached Anthropic's API (HTTP 403) · the network this request came from isn't allowed: usually an unsupported region, or a VPN, proxy or hosting network · signing in again won't change this · check your VPN or network and retry · supported regions: https://anthropic.com/supported-countries)"
+                  ],
+                  "facts": [
+                    {
+                      "statement": "build_stop assembles the stop with fixed keys and never reads details['findings'].",
+                      "location": "storyloop/stop_report.py:264",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "stop_of returns a saved stop unchanged when its status matches the run status (legacy path for AC-6).",
+                      "location": "storyloop/stop_report.py:310",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "An existing unit test asserts that build_stop's key set equals KEYS for every display stop status, built from a state without findings.",
+                      "location": "tests/test_stop_report.py:140",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "redaction_prefix bounds a prefix without exposing URL userinfo that is cut before its @.",
+                      "location": "storyloop/processutil.py:40",
+                      "role": "design",
+                      "attempt": 0
+                    },
+                    {
+                      "statement": "The acceptance fixture builds stops through storyloop.run_stops.pause with findings=, and the severity literal must equal '阻塞' as a string value.",
+                      "location": "acceptance/changes/FIX-20261105-design-revision-findings/support.py:253",
+                      "role": "design",
+                      "attempt": 0
+                    }
+                  ],
+                  "questions": [],
+                  "options": [
+                    {
+                      "action": "处理后重试",
+                      "command": "storyloop run /tmp/storyloop-bench-attempt-f0ibt9c7/candidate --change FIX-20261105-design-revision-findings"
+                    }
+                  ],
+                  "resume": "storyloop run /tmp/storyloop-bench-attempt-f0ibt9c7/candidate --change FIX-20261105-design-revision-findings"
+                },
+                "acceptance": null,
+                "failure": null,
+                "error_details": {
+                  "role": "implement"
+                }
+              }
+            }
+          ],
+          "stop_evidence_path": ".storyloop/bench/evidence/6d484bcb3b6b4030b977cc868eaa4372",
+          "candidate_patch_path": null,
+          "termination_reason": "AGENT_UNAVAILABLE",
+          "agent_error": "Project agent process failed safely (exit 1 | claude implement ended with success: API Error: Request blocked before it reached Anthropic's API (HTTP 403) · the network this request came from isn't allowed: usually an unsupported region, or a VPN, proxy or hosting network · signing in again won't change this · check your VPN or network and retry · supported regions: https://anthropic.com/supported-countries)",
+          "routine_types": {
+            "contract_approval": 1,
+            "design_approval": 1
+          },
+          "nonroutine_types": {},
+          "nonroutine_count": 0,
+          "unknown_events": 0,
+          "calls": 12,
+          "input_tokens": null,
+          "output_tokens": null,
+          "agent_ms": 1793931,
+          "wall_ms": 2520887,
+          "known_cost_usd": 28.3118,
+          "cost_coverage": 0.8333333333333334,
+          "cost_accounting": "PARTIAL"
+        }
+      ],
+      "comparison": {
+        "status": "NOT_COMPARABLE",
+        "reasons": [
+          "incomplete evidence"
+        ],
+        "cost_dimension": "NOT_COMPARABLE"
+      }
+    },
+    {
+      "case_id": "dogfood10-repair-next-path",
+      "case_version": 2,
+      "case_revision": "2.1",
+      "suite_source": "generated",
+      "case_hash": "d03ee2178566b18d85121c162804aeb57e8a951dbbf1a6a0ee702901a05323a2",
+      "contract_sha256": "bb34887db3b4a02e0d62efb4f8e5abf577fb3ebc45c7bc9db7da0dafd667a9d9",
+      "suite_sha256": "6270e84942c4b56a5dad5376426cfabff426d652988884629f6c943d0d8e6607",
+      "gold_sha256": "1a8c6784faf3137745024389b65f4523d26208b81b8233c0d69c61e974d61a06",
+      "attempts": [
+        {
+          "side": "base",
+          "attempt": 1,
+          "status": "AGENT_UNAVAILABLE",
+          "verdict": "NOT_COMPARABLE",
+          "gold_passed": null,
+          "gold_checks": null,
+          "engine_commit": "cab0220b6218b0c2a1bd2c8e461a13657c0c492f",
+          "engine_version": "0.1.0",
+          "engine_python": "/home/jinlin/work/storyloop-bench-venv/bin/python",
+          "attempt_python": "/tmp/storyloop-bench-attempt-pdu6w3b1/venv/bin/python",
+          "readiness": null,
+          "readiness_evidence_path": null,
+          "stops": [
+            {
+              "status": "AGENT_UNAVAILABLE",
+              "detail": {
+                "reason": "Project agent process failed safely (exit 1 | claude acceptance ended with success: API Error: Request blocked before it reached Anthropic's API (HTTP 403) · the network this request came from isn't allowed: usually an unsupported region, or a VPN, proxy or hosting network · signing in again won't change this · check your VPN or network and retry · supported regions: https://anthropic.com/supported-countries)",
+                "stop": {},
+                "acceptance": null,
+                "failure": null,
+                "error_details": {
+                  "role": "acceptance"
+                }
+              }
+            }
+          ],
+          "stop_evidence_path": null,
+          "candidate_patch_path": null,
+          "termination_reason": "AGENT_UNAVAILABLE",
+          "agent_error": "Project agent process failed safely (exit 1 | claude acceptance ended with success: API Error: Request blocked before it reached Anthropic's API (HTTP 403) · the network this request came from isn't allowed: usually an unsupported region, or a VPN, proxy or hosting network · signing in again won't change this · check your VPN or network and retry · supported regions: https://anthropic.com/supported-countries)",
+          "routine_types": {
+            "contract_approval": 1
+          },
+          "nonroutine_types": {},
+          "nonroutine_count": 0,
+          "unknown_events": 0,
+          "calls": 2,
+          "input_tokens": null,
+          "output_tokens": null,
+          "agent_ms": 4312,
+          "wall_ms": 212845,
+          "known_cost_usd": null,
+          "cost_coverage": 0.0,
+          "cost_accounting": "UNAVAILABLE"
+        }
+      ],
+      "comparison": {
+        "status": "NOT_COMPARABLE",
+        "reasons": [
+          "incomplete evidence"
+        ],
+        "cost_dimension": "NOT_COMPARABLE"
+      }
+    }
+  ],
+  "aborted": {
+    "reason": "AGENT_UNAVAILABLE",
+    "case_id": "dogfood10-repair-next-path",
+    "attempt": 1,
+    "detail": "Project agent process failed safely (exit 1 | claude acceptance ended with success: API Error: Request blocked before it reached Anthropic's API (HTTP 403) · the network this request came from isn't allowed: usually an unsupported region, or a VPN, proxy or hosting network · signing in again won't change this · check your VPN or network and retry · supported regions: https://anthropic.com/supported-countries)",
+    "agent_reason": "network"
+  }
+}

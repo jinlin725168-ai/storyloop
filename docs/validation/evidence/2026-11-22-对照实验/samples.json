@@ -1,0 +1,19 @@
+{
+  "query-stdin": {
+    "source": "/home/jinlin/work/l3/sqlite-utils", "solution": "619770b", "kind": "feature",
+    "test_files": ["tests/test_cli.py"], "f2p": ["tests/test_cli.py::test_query_sql_from_stdin"],
+    "requirement": "sqlite-utils query 命令：当 SQL 参数是单个 `-` 时，从标准输入读取 SQL 并执行（例如 `echo \"select * from dogs\" | sqlite-utils query dogs.db -`），输出与直接在命令行传入同一条 SQL 时完全相同（默认 JSON）。同步更新文档（docs/cli.rst 与由 cog 生成的 docs/cli-reference.rst）。"
+  },
+  "convert-dryrun-quote": {
+    "source": "/home/jinlin/work/l3/sqlite-utils", "solution": "c5063f6", "kind": "fix",
+    "test_files": ["tests/test_cli_convert.py"],
+    "f2p": ["tests/test_cli_convert.py::test_convert_dryrun_table_and_column_names_containing_closing_bracket"],
+    "requirement": "修复 sqlite-utils convert --dry-run：当表名或列名里含有 `]` 等需要转义的字符时（例如表 `table]name`、列 `column]name`），预览会因 SQL 标识符没有正确转义而出错。改为使用正确转义的 SQL 标识符，使预览正常显示（原值、` --- becomes:`、转换后的值，以及 `Would affect N row(s)`），且 --dry-run 不修改任何数据。"
+  },
+  "insert-type-option": {
+    "source": "/home/jinlin/work/l3/sqlite-utils", "solution": "d2ac376", "kind": "feature",
+    "test_files": ["tests/test_cli_insert.py"],
+    "f2p": ["tests/test_cli_insert.py::test_insert_upsert_csv_type_overrides_detected_types"],
+    "requirement": "sqlite-utils insert 和 upsert 新增可重复使用的 `--type 列名 类型` 选项：命令创建新表时，用指定类型覆盖自动检测出的列类型（例如 CSV 里的 zipcode `01234` 应存为 TEXT 以保留前导零，`--type zipcode text`）。类型取 TEXT、INTEGER、FLOAT、REAL、BLOB 之一，不区分大小写；表已存在时不改变已有列的类型。同步更新文档（docs/cli.rst 与由 cog 生成的 docs/cli-reference.rst）。"
+  }
+}
